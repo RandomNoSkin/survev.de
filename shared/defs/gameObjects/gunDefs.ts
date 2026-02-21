@@ -2141,7 +2141,7 @@ export const BaseDefs: Record<string, GunDef> = {
         reloadTime: 3,
         fireDelay: 0.25,
         switchDelay: 0.15,
-        barrelLength: 2.3,
+        barrelLength: 2,
         barrelOffset: 0,
         recoilTime: 1e10,
         moveSpread: 9,
@@ -2150,7 +2150,7 @@ export const BaseDefs: Record<string, GunDef> = {
         jitter: 1,
         bulletType: "bullet_buckshot_origin",
         headshotMult: 1,
-        speed: { equip: 0, attack: 6 },
+        speed: { equip: 0, attack: 7 },
         lootImg: {
             sprite: "loot-weapon-origin12.img",
             tint: 65280,
