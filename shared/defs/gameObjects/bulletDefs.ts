@@ -260,11 +260,11 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_buckshot_origin: {
         type: "bullet",
-        damage: 9,
+        damage: 8,
         obstacleDamage: 1.5,
         falloff: 0.95,
         speed: 125,
-        distance: 23,
+        distance: 10,
         variance: 0,
         shrapnel: false,
         tracerColor: "12gauge",
