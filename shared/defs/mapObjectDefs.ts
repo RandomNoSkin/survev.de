@@ -8708,6 +8708,233 @@ function createWarehouse2<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
+                type: "crate_09",
+                pos: v2.create(0, 0),
+                scale: 1,
+                ori: 0,
+                inheritOri: false,
+            },
+            {
+                type: "crate_01",
+                pos: v2.create(0, 5),
+                scale: 1,
+                ori: 0,
+                inheritOri: false,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: "crate_01",
+                pos: v2.create(0, -5),
+                scale: 1,
+                ori: 0,
+                inheritOri: false,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: "crate_06",
+                pos: v2.create(4, -5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "crate_06",
+                pos: v2.create(-4, 5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barrel_01",
+                pos: v2.create(4.5, 0),
+                scale: 0.9,
+                ori: 0,
+                inheritOri: false,
+            },
+            {
+                type: "barrel_01",
+                pos: v2.create(-4.5, 0),
+                scale: 0.9,
+                ori: 0,
+                inheritOri: false,
+            },
+        ],
+    };
+    return util.mergeDeep(t, e || {});
+}
+function createWarehouse2_guaranteed_oceancrate<T extends BuildingDef>(e: Partial<T>): T {
+    const t = {
+        type: "building",
+        map: {
+            display: true,
+            shapes: [
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(25, 0),
+                        v2.create(3, 12.25),
+                    ),
+                    color: 0x999999,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(-25, 0),
+                        v2.create(3, 12.25),
+                    ),
+                    color: 0x999999,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, 0),
+                        v2.create(22.5, 12.25),
+                    ),
+                    color: 2240064,
+                },
+            ],
+        },
+        zIdx: 1,
+        terrain: { grass: true, beach: false },
+        floor: {
+            surfaces: [
+                {
+                    type: "warehouse",
+                    collision: [
+                        collider.createAabbExtents(
+                            v2.create(0, 0),
+                            v2.create(27.5, 12.5),
+                        ),
+                    ],
+                },
+            ],
+            imgs: [
+                {
+                    sprite: "map-building-warehouse-floor-02.img",
+                    pos: v2.create(-13.72, 0),
+                    scale: 0.5,
+                    alpha: 1,
+                    tint: 0xffffff,
+                    rot: 0,
+                },
+                {
+                    sprite: "map-building-warehouse-floor-02.img",
+                    pos: v2.create(13.72, 0),
+                    scale: 0.5,
+                    alpha: 1,
+                    tint: 0xffffff,
+                    rot: 2,
+                },
+            ],
+        },
+        ceiling: {
+            zoomRegions: [
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(0, 0),
+                        v2.create(22, 12.25),
+                    ),
+                    zoomOut: collider.createAabbExtents(
+                        v2.create(0, 0),
+                        v2.create(27.5, 12.5),
+                    ),
+                },
+            ],
+            vision: { dist: 8, width: 5 },
+            imgs: [
+                {
+                    sprite: "map-building-warehouse-ceiling-02.img",
+                    scale: 1,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+            ],
+        },
+        mapObjects: [
+            {
+                type: "metal_wall_ext_43",
+                pos: v2.create(0, 12),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "metal_wall_ext_8",
+                pos: v2.create(-21.9, 8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "metal_wall_ext_8",
+                pos: v2.create(21.9, 8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "metal_wall_ext_43",
+                pos: v2.create(0, -12),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "metal_wall_ext_8",
+                pos: v2.create(-21.9, -8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "metal_wall_ext_8",
+                pos: v2.create(21.9, -8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "crate_01",
+                pos: v2.create(-18.75, 8.75),
+                scale: 1,
+                ori: 0,
+                inheritOri: false,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: "barrel_01",
+                pos: v2.create(-14, 8.75),
+                scale: 0.9,
+                ori: 0,
+            },
+            {
+                type: "crate_06",
+                pos: v2.create(-18.75, -6),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ loot_tier_1: 1, "": 1 }),
+                pos: v2.create(-19.5, -9.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "crate_06",
+                pos: v2.create(18.75, 6),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ loot_tier_1: 1, "": 1 }),
+                pos: v2.create(19.5, 9.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "crate_01",
+                pos: v2.create(18.75, -8.75),
+                scale: 1,
+                ori: 0,
+                inheritOri: false,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: "barrel_01",
+                pos: v2.create(14, -8.75),
+                scale: 0.9,
+                ori: 0,
+            },
+            {
                 type: randomObstacleType({ crate_08: 3, crate_09: 1 }),
                 pos: v2.create(0, 0),
                 scale: 1,
