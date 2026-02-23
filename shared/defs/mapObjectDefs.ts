@@ -8708,7 +8708,7 @@ function createWarehouse2<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "crate_09",
+                type:  randomObstacleType({ crate_08: 3, crate_09: 1 }),
                 pos: v2.create(0, 0),
                 scale: 1,
                 ori: 0,
@@ -8935,7 +8935,7 @@ function createWarehouse2_guaranteed_oceancrate<T extends BuildingDef>(e: Partia
                 ori: 0,
             },
             {
-                type: randomObstacleType({ crate_08: 3, crate_09: 1 }),
+                type: "crate_09",
                 pos: v2.create(0, 0),
                 scale: 1,
                 ori: 0,
@@ -14939,6 +14939,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         },
     } as unknown as Partial<BuildingDef>),
     warehouse_02: createWarehouse2({}),
+    warehouse_02_guaranteed_oceancrate: createWarehouse2_guaranteed_oceancrate({}),
     warehouse_02x: createWarehouse2({
         ceiling: {
             imgs: [
@@ -15270,7 +15271,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         ceiling: { zoomRegions: [], imgs: [] },
         mapObjects: [
             {
-                type: "warehouse_02",
+                type: "warehouse_02_guaranteed_oceancrate",
                 pos: v2.create(5, 0),
                 scale: 1,
                 ori: 0,

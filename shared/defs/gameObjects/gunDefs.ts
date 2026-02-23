@@ -2925,7 +2925,7 @@ export const BaseDefs: Record<string, GunDef> = {
         particle: { shellScale: 1, shellOffset: 0.225 },
         sound: {
             shoot: "ots38_01",
-            reload: "ot38_reload_01",
+            reload: "ots38_reload_01",
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "ot38_switch_01",
@@ -2975,7 +2975,7 @@ export const BaseDefs: Record<string, GunDef> = {
         particle: { shellScale: 1, shellOffset: 0.225 },
         sound: {
             shoot: "ots38_01",
-            reload: "ot38_reload_02",
+            reload: "ots38_reload_02",
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "ot38_switch_01",
