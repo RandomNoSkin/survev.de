@@ -464,7 +464,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             cooldownTime: 0.7,
         },
         speed: {
-            equip: 1,
+            equip: 0.8,
         },
         anim: {
             idlePose: "machete",
@@ -849,7 +849,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             },
             rad: 1,
             damageTimes: [0.075],
-            cooldownTime: 0.175,
+            cooldownTime: 0.125,
         },
         speed: {
             equip: 1,
@@ -979,11 +979,11 @@ const BaseDefs: Record<string, MeleeDef> = {
         name: "Spade",
         type: "melee",
         quality: 1,
-        cleave: false,
+        cleave: true,
         autoAttack: false,
         switchDelay: 0.25,
         damage: 40,
-        obstacleDamage: 1,
+        obstacleDamage: 1.5,
         noPotatoSwap: true,
         attack: {
             offset: {
@@ -995,7 +995,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             cooldownTime: 0.35,
         },
         speed: {
-            equip: 1,
+            equip: 1.3,
         },
         anim: {
             idlePose: "fists",
@@ -1033,22 +1033,24 @@ const BaseDefs: Record<string, MeleeDef> = {
         name: "Crowbar",
         type: "melee",
         quality: 1,
-        cleave: false,
+        armorPiercing: true,
+        cleave: true,
         autoAttack: false,
         switchDelay: 0.25,
         damage: 33,
         obstacleDamage: 1.4,
+        noPotatoSwap: true,
         attack: {
             offset: {
                 x: 1.25,
                 y: 0,
             },
             rad: 1.25,
-            damageTimes: [0.12],
-            cooldownTime: 0.3,
+            damageTimes: [0.08],
+            cooldownTime: 0.22,
         },
         speed: {
-            equip: 1,
+            equip: 1.3,
         },
         anim: {
             idlePose: "fists",
@@ -1057,11 +1059,11 @@ const BaseDefs: Record<string, MeleeDef> = {
         sound: {
             pickup: "frag_pickup_01",
             swing: "knife_swing_01",
-            deploy: "stow_weapon_01",
+            deploy: "frag_pickup_01",
             playerHit: "crowbar_hit_01",
         },
         lootImg: {
-            sprite: "loot-melee-crowbar.img",
+            sprite: "loot-melee-crowbar-recon.img",
             tint: 0xffffff,
             border: "loot-circle-outer-02.img",
             borderTint: 0xffffff,
@@ -1069,7 +1071,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             rot: 0.785,
         },
         worldImg: {
-            sprite: "loot-melee-crowbar.img",
+            sprite: "loot-melee-crowbar-recon.img",
             pos: {
                 x: -1,
                 y: -10,
