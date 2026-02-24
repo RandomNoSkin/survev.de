@@ -1826,6 +1826,28 @@ export class Player extends BaseGameObject {
                         target.setGroupStatuses();
                         this.game.pluginManager.emit("playerRevived", target);
                     });
+                } else if (
+                    this.actionType === GameConfig.Action.InstantRevive &&
+                    this.playerBeingRevived
+                ) {
+                    this.applyActionFunc((target: Player) => {
+                        if (!target.downed) return;
+                        target.downed = false;
+                        target.downedBy = undefined;
+                        target.downedDamageTicker = 0;
+                        target.health = 100;
+                        target.weaponManager.instantReload();
+                        target.setDefaultInv();
+
+                        // checks 2 conditions in one, player has pan AND has it selected
+                        if (target.weapons[target.curWeapIdx].type === "pan") {
+                            target.wearingPan = false;
+                        }
+
+                        target.setDirty();
+                        target.setGroupStatuses();
+                        this.game.pluginManager.emit("playerRevived", target);
+                    });
                 }
 
                 // Prevent cancelAction from being called by revived players at the end of revive
@@ -3120,7 +3142,18 @@ export class Player extends BaseGameObject {
                 if (killCreditSource.hasPerk("arena") && groupKill) {
                     killCreditSource.health = 100;
                     if(killCreditSource.group){
-                        killCreditSource.group?.getAlivePlayers().forEach(p =>{ 
+                        killCreditSource.group?.getAlivePlayers().forEach(p =>{
+                            
+                            if(p.downed){
+                                p.playerBeingRevived = p;
+                                p.revivedBy = p;
+                                p.doAction(
+                                    "",
+                                    GameConfig.Action.InstantRevive,
+                                    0,
+                                    p.__id,
+                                );
+                            }
                             p.health = 100;
                             p.weaponManager.instantReload();
                             p.setDefaultInv();
