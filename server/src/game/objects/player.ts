@@ -1009,11 +1009,11 @@ export class Player extends BaseGameObject {
         this.inventoryDirty = true;
         this.setDirty();
 
-        // for savannah the hunted indicator
+        /*// for savannah the hunted indicator
         if (roleDef.mapIndicator) {
             this.mapIndicator?.kill();
             this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
-        }
+        }*/
 
         const msg = new net.RoleAnnouncementMsg();
         msg.role = role;
@@ -1022,6 +1022,18 @@ export class Player extends BaseGameObject {
         this.game.broadcastMsg(net.MsgType.RoleAnnouncement, msg);
 
         switch (role) {
+            case "the_hunted":
+                if (roleDef.mapIndicator) {
+                    this.mapIndicator?.kill();
+                    this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
+                }
+                break;
+                case "indicator":
+                if (roleDef.mapIndicator) {
+                    this.mapIndicator?.kill();
+                    this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
+                }
+                break;
             case "leader":
                 if (this.game.map.factionMode && !this.team!.leader) {
                     this.team!.leader = this;
@@ -2356,6 +2368,37 @@ export class Player extends BaseGameObject {
         }
     }
 
+    setDefaultInv(): void {
+        function assertType(type: string, category: string, acceptNoItem: boolean) {
+            if (!type && acceptNoItem) return;
+            const def = GameObjectDefs[type];
+            assert(def, `Invalid item type for ${category}: ${type}`);
+            assert(
+                def.type === category,
+                `Invalid type ${type}, expected ${category} item`,
+            );
+        }
+
+        let defaultItems = (this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems);
+
+        this.chest = defaultItems.chest;
+        assertType(this.chest, "chest", true);
+
+        this.scope = defaultItems.scope;
+        assertType(this.scope, "scope", false);
+        this.invManager.set(this.scope as InventoryItem, 1);
+
+        this.helmet = defaultItems.helmet;
+        assertType(this.helmet, "helmet", true);
+
+        this.backpack = defaultItems.backpack;
+        assertType(this.backpack, "backpack", false);
+
+        for (const [item, amount] of Object.entries(defaultItems.inventory)) {
+            this.invManager.set(item as InventoryItem, amount);
+        }
+    }
+
     moveObjUpdate(occupiedBuilding?: Building): void {
         if (!this.debug.moveObjMode.enabled) return;
         const mouseCollider = collider.createCircle(this.mousePos, 1);
@@ -3070,6 +3113,24 @@ export class Player extends BaseGameObject {
                     killCreditSource.health += 25;
                     killCreditSource.boost += 25;
                     killCreditSource.giveHaste(GameConfig.HasteType.Takedown, 3);
+                }
+
+                const groupKill = this.group?.allDeadOrDisconnected ?? true;
+
+                if (killCreditSource.hasPerk("arena") && groupKill) {
+                    killCreditSource.health = 100;
+                    if(killCreditSource.group){
+                        killCreditSource.group?.getAlivePlayers().forEach(p =>{ 
+                            p.health = 100;
+                            p.weaponManager.instantReload();
+                            p.setDefaultInv();
+                            
+                        });
+                    }else{
+                        killCreditSource.health = 100;
+                        killCreditSource.weaponManager.instantReload();
+                        killCreditSource.setDefaultInv();
+                    }
                 }
 
                 // Pirate's Bounty (Cutlass-specific)

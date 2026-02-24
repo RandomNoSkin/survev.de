@@ -868,7 +868,7 @@ export class UiManager2 {
         const fe =
             weaponDef.type == "gun"
                 ? weaponDef.ammoInfinite ||
-                  (activePlayer.m_hasPerk("endless_ammo") && !weaponDef.ignoreEndlessAmmo)
+                  ((activePlayer.m_hasPerk("endless_ammo") || activePlayer.m_hasPerk("arena")) && !weaponDef.ignoreEndlessAmmo)
                     ? Number.MAX_VALUE
                     : activePlayer.m_localData.m_inventory[weaponDef.ammo]
                 : 0;

@@ -63,6 +63,7 @@ export const TwoVsTwo: MapDef = {
         pickup: false,
         indicator: true,
         canDespawn: false,
+        betterStats: true,
 
         edgeBuffer: 0, // distance to maps border (to prevent pakistani spawns)
         centerNoSpawnRadius: 0, // no spawn zone in the center of the map
@@ -114,7 +115,7 @@ export const TwoVsTwo: MapDef = {
             helmet: "helmet03",
             chest: "chest03",
             scope: "4xscope",
-            perks: ["takedown", "endless_ammo"],
+            perks: [],
             inventory: {
                 "9mm": 0,
                 "762mm": 0,

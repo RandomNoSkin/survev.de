@@ -746,6 +746,8 @@
   "game-final_bugle-desc": "When you die, nearby allies are bloodlusted for a short period of time.",
   "game-high_velocity": "High-Velocity Rounds",
   "game-high_velocity-desc": "All your bullets travel significantly faster & further.",
+  "game-arena": "Arena Player",
+  "game-arena-desc": "You are an arena player. Full reset when killing a team.",
   "game-halloween_mystery": "Trick or Treat?",
   "game-halloween_mystery-desc": "Could be either.",
   "game-trick_nothing": "One With Nothing",
