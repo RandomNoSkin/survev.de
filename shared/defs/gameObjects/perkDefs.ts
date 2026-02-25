@@ -546,6 +546,19 @@ export const PerkDefs: Record<string, PerkDef> = {
         },
         sound: { pickup: "perk_pickup_01" },
     },
+    //arena perk
+    arena: {
+        name: "Arena",
+        type: "perk",
+        lootImg: {
+            sprite: "loot-perk-hunted.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-03.img",
+            borderTint: 0xffffff,
+            scale: 0.275,
+        },
+        sound: { pickup: "perk_pickup_01" },
+    },
 
     // Halloween Perks
     halloween_mystery: {
