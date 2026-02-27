@@ -3641,7 +3641,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-bugle-01.img",
-            scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.55, y: 0.55 },
             tint: 0xffffff,
             leftHandOffset: { x: 12, y: 0 },
             recoil: 4,
