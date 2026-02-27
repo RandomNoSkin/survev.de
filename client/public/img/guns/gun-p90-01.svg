@@ -1,26 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
    version="1.1"
-   viewBox="0 0 57.3031 310.9472"
+   viewBox="0 0 26.927793 146.11989"
    fill="none"
    stroke="none"
    stroke-linecap="square"
    stroke-miterlimit="10"
    id="svg29"
-   width="57.303101"
-   height="310.9472"
+   width="26.927794"
+   height="146.11989"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs29">
-    <linearGradient
-       id="swatch36">
-      <stop
-         style="stop-color:#000000;stop-opacity:1;"
-         offset="0"
-         id="stop36" />
-    </linearGradient>
-  </defs>
+     id="defs29" />
   <clipPath
      id="p.0">
     <path
@@ -31,7 +23,7 @@
   <g
      clip-path="url(#p.0)"
      id="g29"
-     transform="translate(-27.34674,-151.35528)">
+     transform="matrix(0.46991863,0,0,0.46991863,-12.850743,-71.124664)">
     <path
        fill="#323743"
        d="m 66.98672,155.68861 v 94.43021 H 44.153232 v -94.43021 z"
