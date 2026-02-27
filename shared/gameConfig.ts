@@ -236,8 +236,8 @@ export const GameConfig = {
         /* STRIP_FROM_PROD_CLIENT:START */
         defaultItems: {
             weapons: [
-                { type: "p90", ammo: 330 },
-                { type: "ak74", ammo: 300 },
+                { type: "", ammo: 0 },
+                { type: "", ammo: 0 },
                 { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
@@ -250,7 +250,7 @@ export const GameConfig = {
             inventory: {
                 "9mm": 0,
                 "762mm": 0,
-                "556mm": 500,
+                "556mm": 0,
                 "12gauge": 0,
                 "50AE": 0,
                 "308sub": 0,

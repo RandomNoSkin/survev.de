@@ -13,6 +13,7 @@ export interface BulletDef {
     suppressed?: boolean;
     flareColor?: number;
     addFlare?: boolean;
+    addSupplyFlare?: boolean;
     maxFlareScale?: number;
     skipCollision?: boolean;
     onHit?: string;
@@ -775,6 +776,23 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 1.2,
         flareColor: 16733184,
         addFlare: true,
+        maxFlareScale: 2,
+        skipCollision: true,
+    },
+    bullet_supply_flare: {
+        type: "bullet",
+        damage: 0,
+        obstacleDamage: 1,
+        falloff: 10,
+        distance: 16,
+        speed: 4,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "flare",
+        tracerWidth: 0.3,
+        tracerLength: 1.2,
+        flareColor: 23551,
+        addSupplyFlare: true,
         maxFlareScale: 2,
         skipCollision: true,
     },

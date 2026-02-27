@@ -26,7 +26,7 @@ export function createBullet(
     playerBarn: PlayerBarn,
     renderer: Renderer,
 ) {
-    if (BulletDefs[bullet.bulletType].addFlare) {
+    if (BulletDefs[bullet.bulletType].addFlare || BulletDefs[bullet.bulletType].addSupplyFlare) {
         flareBarn.addFlare(bullet, playerBarn);
     } else {
         bulletBarn.addBullet(bullet, playerBarn, renderer);

@@ -9939,7 +9939,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         },
         sound: { explode: "crate_break_01" },
     } as unknown as Partial<ObstacleDef>),
-    /*EU-Comp Special Supply Drop
+    /*EU-Comp Special Supply Drop*/
     crate_supply_01: createCrate({
         health: 100,
         scale: { destroy: 0.75 },
@@ -9958,7 +9958,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         },
         sound: { explode: "crate_break_01" },
     } as unknown as Partial<ObstacleDef>),
-     */
+
     crate_11: createCrate({
         scale: { destroy: 0.75 },
         health: 200,
@@ -10288,6 +10288,19 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             residue: "none",
         },
         destroyType: "crate_10",
+        explodeParticle: "airdropCrate02",
+    } as unknown as Partial<ObstacleDef>),
+    supply_crate_01: createAirdrop({
+        button: {
+            useImg: "map-supply-02.img",
+            useParticle: "airdropCrate01",
+            sound: { on: "airdrop_open_01", off: "" },
+        },
+        img: {
+            sprite: "map-supply-01.img",
+            residue: "none",
+        },
+        destroyType: "crate_supply_01",
         explodeParticle: "airdropCrate02",
     } as unknown as Partial<ObstacleDef>),
     airdrop_crate_02: createAirdrop({
@@ -11238,7 +11251,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     stone_02: createStone({ //ak stone
         map: { display: false },
         img: { tint: 0xe5e5e5 },
-        loot: [tierLoot("tier_surviv", 2, 3), tierLoot("tier_medical", 1, 1), autoLoot("flare_gun", 1)],
+        loot: [tierLoot("tier_surviv", 2, 3), tierLoot("tier_medical", 1, 1), tierLoot("tier_flare", 1, 1)],
     }),
     stone_02sv: createStone({
         map: { display: false },

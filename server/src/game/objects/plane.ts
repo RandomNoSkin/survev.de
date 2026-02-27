@@ -20,6 +20,12 @@ interface ScheduledAirDrop {
     collider: Collider;
 }
 
+interface ScheduledSupplyDrop {
+    type: string;
+    pos: Vec2;
+    collider: Collider;
+}
+
 // amount of seconds to travel to target
 const AIRDROP_PLANE_SPAWN_DIST = GameConfig.airdrop.planeVel * 15;
 const AIRSTRIKE_PLANE_SPAWN_DIST = GameConfig.airstrike.planeVel * 2.5;
@@ -41,6 +47,7 @@ export class PlaneBarn {
         time: number;
         options: PlaneOptions;
     }> = [];
+    placedAirDrops: ScheduledAirDrop[] = [];
 
     newAirstrikeZones: {
         pos: Vec2;
@@ -95,11 +102,64 @@ export class PlaneBarn {
                 const options = scheduledPlane.options;
                 switch (options.type) {
                     case GameConfig.Plane.Airdrop: {
+                        
+                        
+                        let pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                        let tryCount = 0;
+
+                        for (let i = 0; i < this.placedAirDrops.length; i++) {
+                            const existing = this.placedAirDrops[i];
+                            const d2 = v2.distance(existing.pos, pos);
+                            let airdropMinDistance = this.game.map.mapDef.gameMode.airdropMinDistance ?? 0;
+                            if(airdropMinDistance!=0 && this.game.gas.circleIdx !=0) airdropMinDistance = airdropMinDistance/this.game.gas.circleIdx;
+                            //console.log("AirdropMinDistance",airdropMinDistance, "distance", d2)
+                            if (d2 < airdropMinDistance || this.game.map.isOnWater(pos, 0)) {
+                                //console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
+                                if (tryCount >= 1000) {
+                                    pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                                    console.log(`Resetting position after too many tries`);
+                                    continue;
+                                }
+                                pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                                tryCount++;
+                                i = -1; // restart the loop
+                            }
+                        }
+                        
+                        
                         this.addAirdrop(
-                            v2.add(
-                                this.game.gas.posNew,
-                                util.randomPointInCircle(this.game.gas.radNew),
-                            ),
+                            pos,
+                            false,
+                            options.airdropType
+                        );
+                        break;
+                    }
+                    case GameConfig.Plane.SupplyDrop: {
+
+
+                        let pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                        let tryCount = 0;
+
+                        for (let i = 0; i < this.placedAirDrops.length; i++) {
+                            const existing = this.placedAirDrops[i];
+                            const d2 = v2.distance(existing.pos, pos);
+                            const airdropMinDistance = this.game.map.mapDef.gameMode.airdropMinDistance ?? 0;
+                            if (d2 < airdropMinDistance) {
+                                console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
+                                if (tryCount >= 1000) {
+                                    pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                                    console.log(`Resetting position after too many tries`);
+                                    continue;
+                                }
+                                pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                                tryCount++;
+                                i = -1; // restart the loop
+                            }
+                        }
+
+                        this.addSupplyDrop(
+                            pos,
+                            false,
                             options.airdropType,
                         );
                         break;
@@ -274,7 +334,7 @@ export class PlaneBarn {
         }, players[0]);
 
         const pos = v2.add(furthestLosingTeamPlayer.pos, v2.mul(v2.randomUnit(), 5));
-        this.game.planeBarn.addAirdrop(pos, "airdrop_crate_04"); // golden airdrop
+        this.game.planeBarn.addAirdrop(pos, false, "airdrop_crate_04"); // golden airdrop
 
         this.sentHelp = true;
 
@@ -294,8 +354,9 @@ export class PlaneBarn {
         );
     }
 
-    addAirdrop(pos: Vec2, type?: string) {
+    addAirdrop(pos: Vec2, playerCalled: boolean, type?: string) {
         let id = 1;
+        
         if (this.idNext < MAX_ID) {
             id = this.idNext++;
         } else {
@@ -418,6 +479,13 @@ export class PlaneBarn {
                     break;
             }
 
+            if(!playerCalled)
+            this.placedAirDrops.push({
+                type,
+                pos: airdropPos,
+                collider: collider.transform(def.collision, airdropPos, 0, 1),
+            });
+
             this.game.map.clampToMapBounds(airdropPos, rad);
         }
 
@@ -434,6 +502,154 @@ export class PlaneBarn {
         let dir = len > 0.00001 ? v2.div(toPlanePos, len) : v2.create(1, 0);
 
         const plane = new AirdropPlane(this.game, id, planePos, dir, airdrop);
+        this.planes.push(plane);
+    }
+
+    addSupplyDrop(pos: Vec2, playerCalled: boolean, type?: string) {
+        let id = 1;
+        if (this.idNext < MAX_ID) {
+            id = this.idNext++;
+        } else {
+            if (this.freeIds.length > 0) {
+                id = this.freeIds.shift()!;
+            } else {
+                assert(false, `Ran out of plane ids`);
+            }
+        }
+
+        if (!id) {
+            this.game.logger.warn("Plane Barn: ran out of IDs");
+            return;
+        }
+
+        type ||= util.weightedRandom(this.game.map.mapDef.gameConfig.planes.crates).name;
+
+        const def = MapObjectDefs[type] as ObstacleDef;
+
+        let collided = true;
+        let airdropPos = v2.copy(pos);
+
+        let attemps = 0;
+
+        while (collided && attemps < 10000) {
+            collided = false;
+            attemps++;
+
+            let coll = collider.transform(def.collision, airdropPos, 0, 1);
+            const objs = this.game.grid.intersectCollider(coll);
+
+            for (let i = 0; i < objs.length && !collided; i++) {
+                const obj = objs[i];
+                if (obj.layer !== 0) continue;
+                if (obj.__type === ObjectType.Obstacle && !obj.destructible) {
+                    const intersection = collider.intersect(coll, obj.collider);
+                    if (intersection) {
+                        coll = collider.transform(
+                            coll,
+                            v2.mul(intersection.dir, -intersection.pen),
+                            0,
+                            1,
+                        );
+                        collided = true;
+                        break;
+                    }
+                } else if (obj.__type === ObjectType.Building) {
+                    if (obj.wallsToDestroy < Infinity) continue;
+                    for (const zoomRegion of obj.zoomRegions) {
+                        if (!zoomRegion.zoomIn) continue;
+                        const intersection = collider.intersect(coll, zoomRegion.zoomIn);
+                        if (intersection) {
+                            coll = collider.transform(
+                                coll,
+                                v2.mul(intersection.dir, -intersection.pen),
+                                0,
+                                1,
+                            );
+                            collided = true;
+                            break;
+                        }
+                    }
+                    if (collided) {
+                        break;
+                    }
+                } else if (obj.__type === ObjectType.Airdrop) {
+                    const intersection = collider.intersect(coll, obj.crateCollision);
+                    if (intersection) {
+                        coll = collider.transform(
+                            coll,
+                            v2.mul(intersection.dir, -intersection.pen),
+                            0,
+                            1,
+                        );
+                        collided = true;
+                        break;
+                    }
+                }
+            }
+            for (let i = 0; i < this.planes.length && !collided; i++) {
+                const plane = this.planes[i];
+                if (plane.action !== GameConfig.Plane.SupplyDrop) continue;
+                if (plane.actionComplete) continue;
+                const airdrop = (plane as SupplyDropPlane).airDrop;
+
+                const intersection = collider.intersect(coll, airdrop.collider);
+                if (intersection) {
+                    coll = collider.transform(
+                        coll,
+                        v2.mul(intersection.dir, -intersection.pen),
+                        0,
+                        1,
+                    );
+                    collided = true;
+                    break;
+                }
+            }
+
+            if (attemps % 100 === 99) {
+                coll = collider.transform(coll, v2.randomUnit(), 0, 1);
+                attemps = 0;
+            }
+
+            let rad: number;
+            switch (coll.type) {
+                case collider.Type.Aabb:
+                    const width = coll.max.x - coll.min.x;
+                    const height = coll.max.y - coll.min.y;
+                    airdropPos = v2.create(
+                        coll.min.x + width / 2,
+                        coll.min.y + height / 2,
+                    );
+                    rad = math.max(width, height);
+                    break;
+                case collider.Type.Circle:
+                    airdropPos = coll.pos;
+                    rad = coll.rad;
+                    break;
+            }
+
+            if(!playerCalled)
+            this.placedAirDrops.push({
+                type,
+                pos: airdropPos,
+                collider: collider.transform(def.collision, airdropPos, 0, 1),
+            });
+
+            this.game.map.clampToMapBounds(airdropPos, rad);
+        }
+
+        const airdrop: ScheduledSupplyDrop = {
+            type,
+            pos: airdropPos,
+            collider: collider.transform(def.collision, airdropPos, 0, 1),
+        };
+
+        const planePos = v2.add(pos, v2.mul(v2.randomUnit(), AIRDROP_PLANE_SPAWN_DIST));
+
+        const toPlanePos = v2.sub(airdropPos, planePos);
+        let len = v2.length(toPlanePos);
+        let dir = len > 0.00001 ? v2.div(toPlanePos, len) : v2.create(1, 0);
+
+        const plane = new SupplyDropPlane(this.game, id, planePos, dir, airdrop);
         this.planes.push(plane);
     }
 
@@ -620,10 +836,12 @@ abstract class Plane {
         this.targetPos = targetPos;
         this.id = id;
         this.planeDir = dir;
-        this.config =
-            this.action == GameConfig.Plane.Airdrop
-                ? GameConfig.airdrop
-                : GameConfig.airstrike;
+
+        const isDrop =
+        this.action === GameConfig.Plane.Airdrop ||
+        this.action === GameConfig.Plane.SupplyDrop;
+
+        this.config = isDrop ? GameConfig.airdrop : GameConfig.airstrike;
 
         this.rad = this.config.planeRad;
     }
@@ -646,6 +864,23 @@ class AirdropPlane extends Plane {
         if (!this.actionComplete && v2.distance(this.pos, this.targetPos) < 5) {
             this.actionComplete = true;
             this.game.airdropBarn.addAirdrop(this.targetPos, this.airDrop.type);
+        }
+    }
+}
+
+class SupplyDropPlane extends Plane {
+    airDrop: ScheduledSupplyDrop;
+
+    constructor(game: Game, id: number, pos: Vec2, dir: Vec2, airdrop: ScheduledSupplyDrop) {
+        super(game, id, GameConfig.Plane.SupplyDrop, pos, airdrop.pos, dir);
+        this.airDrop = airdrop;
+    }
+
+    update(dt: number): void {
+        super.update(dt);
+        if (!this.actionComplete && v2.distance(this.pos, this.targetPos) < 5) {
+            this.actionComplete = true;
+            this.game.airdropBarn.addSupplyDrop(this.targetPos, this.airDrop.type);
         }
     }
 }

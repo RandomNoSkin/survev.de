@@ -22,6 +22,13 @@ export class AirdropBarn {
         this.game.objectRegister.register(airdrop);
     }
 
+    addSupplyDrop(pos: Vec2, type: string) {
+        const airdrop = new Airdrop(this.game, pos, type);
+        this.airdrops.push(airdrop);
+        this.game.playerBarn.addMapPing("ping_supplydrop", pos);
+        this.game.objectRegister.register(airdrop);
+    }
+
     update(dt: number) {
         for (let i = 0; i < this.airdrops.length; i++) {
             const airdrop = this.airdrops[i];
