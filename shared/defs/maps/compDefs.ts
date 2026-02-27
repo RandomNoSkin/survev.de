@@ -1072,6 +1072,7 @@ export const Comp: MapDef = {
         ],
         spawnReplacements: [{}],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01"],
+        spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };

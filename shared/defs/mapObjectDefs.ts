@@ -23786,7 +23786,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 1,
             },
         ],
-        group: { id: BuildingGroups.SVSpawns, minDistance: 200, noSpawnRadius: NoSpawnRadius.SniperSpawns },
+        group: { id: BuildingGroups.SVSpawns, minDistance: 300, noSpawnRadius: NoSpawnRadius.SniperSpawns },
     },
     bunker_egg_01: {
         type: "building",

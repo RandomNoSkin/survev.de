@@ -1144,7 +1144,11 @@ export class GameMap {
         const def = MapObjectDefs[type];
 
         const rot = math.oriToRad(ori);
-
+        const betterMapGen = this.mapDef.gameMode.betterMapGen ?? false;
+        let spawnOnRiver = false;
+        if(betterMapGen && this.mapDef.mapGen.spawnOnRiver){
+            spawnOnRiver = (def.type === "building" || def.type === "structure") && this.mapDef.mapGen.spawnOnRiver.includes(type);
+        }
         if (!def.terrain?.river && !def.terrain?.waterEdge) {
             const mapBound = def.terrain?.beach ? this.beachBounds : this.grassBounds;
             if (!coldet.testPointAabb(pos, mapBound.min, mapBound.max)) {
@@ -1152,7 +1156,7 @@ export class GameMap {
             }
         }
 
-        const betterMapGen = this.mapDef.gameMode.betterMapGen ?? false;
+        
         let buildingBounds: ReturnType<typeof getBuildingBounds> | undefined = undefined;
 
         if(betterMapGen){
@@ -1310,7 +1314,9 @@ export class GameMap {
             }
         }
 
-        if (!def.terrain?.river && !def.terrain?.bridge) {
+
+
+        if (!spawnOnRiver && !def.terrain?.river && !def.terrain?.bridge) {
             let bounds = buildingBounds;
             if (!bounds) {
                 bounds = [
