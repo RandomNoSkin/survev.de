@@ -1048,7 +1048,7 @@ export const Comp: MapDef = {
                 cache_01: 1, // flare stone
                 cache_02: { small: 1, large: 1,}, // mosin tree
                 cache_07: 1, //barrel
-                bunker_structure_01: { odds: 0.15 }, // ak74 bunker
+                bunker_structure_01: { odds: 0.4 }, // ak74 bunker
                 bunker_structure_02: 1, // vector bunker
                 bunker_structure_03: 1, // storm bunker
                 bunker_structure_04: 1, // sea bunker
