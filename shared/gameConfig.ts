@@ -237,7 +237,7 @@ export const GameConfig = {
         defaultItems: {
             weapons: [
                 { type: "p90", ammo: 33 },
-                { type: "", ammo: 0 },
+                { type: "ak74", ammo: 0 },
                 { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
