@@ -127,7 +127,7 @@ export class Loot implements AbstractObject {
                 this.container.texture = PIXI.Texture.from("loot-circle-outer-06.img");
             }
             const ammo = GameObjectDefs[(itemDef as GunDef).ammo] as AmmoDef;
-            if (ammo) {
+            if (ammo && itemDef.lootImg.borderTint == 0) {
                 this.container.tint = ammo.lootImg.tintDark!;
             } else if (itemDef.lootImg.borderTint) {
                 this.container.tint = itemDef.lootImg.borderTint;

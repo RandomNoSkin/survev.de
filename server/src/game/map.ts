@@ -1144,7 +1144,11 @@ export class GameMap {
         const def = MapObjectDefs[type];
 
         const rot = math.oriToRad(ori);
-
+        const betterMapGen = this.mapDef.gameMode.betterMapGen ?? false;
+        let spawnOnRiver = false;
+        if(betterMapGen && this.mapDef.mapGen.spawnOnRiver){
+            spawnOnRiver = (def.type === "building" || def.type === "structure") && this.mapDef.mapGen.spawnOnRiver.includes(type);
+        }
         if (!def.terrain?.river && !def.terrain?.waterEdge) {
             const mapBound = def.terrain?.beach ? this.beachBounds : this.grassBounds;
             if (!coldet.testPointAabb(pos, mapBound.min, mapBound.max)) {
@@ -1152,7 +1156,7 @@ export class GameMap {
             }
         }
 
-        const betterMapGen = this.mapDef.gameMode.betterMapGen ?? false;
+        
         let buildingBounds: ReturnType<typeof getBuildingBounds> | undefined = undefined;
 
         if(betterMapGen){
@@ -1163,7 +1167,7 @@ export class GameMap {
                     if (def.group.noSpawnRadius && def.group.noSpawnRadius != 0) {
                         const radiusObject = this.intersectNoSpawnRadius(pos, def.group.noSpawnRadius ?? 0, def);
                         if (radiusObject.length > 0) {
-                            console.log(`Failed to spawn ${type}`);
+                            //console.log(`Failed to spawn ${type}`);
                             return false;
                         }
                     }
@@ -1310,7 +1314,9 @@ export class GameMap {
             }
         }
 
-        if (!def.terrain?.river && !def.terrain?.bridge) {
+
+
+        if (!spawnOnRiver && !def.terrain?.river && !def.terrain?.bridge) {
             let bounds = buildingBounds;
             if (!bounds) {
                 bounds = [
@@ -2325,7 +2331,7 @@ export class GameMap {
                         return false;
                     }
 
-                    console.log("spawn pos candidate:", pos);
+                    //console.log("spawn pos candidate:", pos);
 
                     for (let i = 0; i < this.game.playerBarn.livingPlayers.length; i++) {
                         const player = this.game.playerBarn.livingPlayers[i];
@@ -2335,7 +2341,7 @@ export class GameMap {
                         const minSpawnRad = this.mapDef.gameMode.minSpawnRad ?? GameConfig.player.minSpawnRad;
 
                         if (v2.distance(player.pos, pos) < minSpawnRad) {
-                            console.log("too close to player:", v2.distance(player.pos, pos));
+                            //console.log("too close to player:", v2.distance(player.pos, pos));
                             return false;
                         }
                     }
