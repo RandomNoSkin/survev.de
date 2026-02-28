@@ -55,7 +55,7 @@ export const Comp: MapDef = {
     gameMode: {
         maxPlayers: 8,
         killLeaderEnabled: true,
-        freezeTime: 0,
+        freezeTime: 10,
         joinTime: 10, // time until players can move after game start
         airdropMinDistance: 300, // minimum distance between airdrops
         betterSpawn: true,
