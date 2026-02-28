@@ -915,7 +915,6 @@ export const Comp: MapDef = {
             { name: "colt45_dual", count: 1, weight: 0.16 },
             { name: "m1911", count: 1, weight: 0.13 },
             { name: "m1911_dual", count: 1, weight: 0.25 },
-            { name: "p90", count: 1, weight: 0.25 },  
         ],
         tier_supply_scopes: [
             { name: "4xscope", count: 1, weight: 1 },
