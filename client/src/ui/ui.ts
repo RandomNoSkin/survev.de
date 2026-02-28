@@ -1413,7 +1413,7 @@ export class UiManager {
         // don't display the stats screen again.
 
         if (!betterStats){
-            if (!spectating && !betterStats || teamId == localTeamId && !betterStats || gameOver && !betterStats) {
+            if (!spectating || teamId == localTeamId || gameOver) {
                 console.log("Not showing better stats screen");
                 this.toggleEscMenu(true);
                 this.displayingStats = true;

@@ -444,7 +444,7 @@ export class WeaponManager {
     isInfinite(weaponDef: GunDef): boolean {
         return (
             !weaponDef.ignoreEndlessAmmo &&
-            (weaponDef.ammoInfinite || this.player.hasPerk("endless_ammo"))
+            (weaponDef.ammoInfinite || this.player.hasPerk("endless_ammo") || this.player.hasPerk("arena"))
         );
     }
 
@@ -562,6 +562,40 @@ export class WeaponManager {
 
         this.player.weapsDirty = true;
         this.bursts.length = 0;
+    }
+
+    instantReload(): void {
+        for (let i = 0; i < this.weapons.length; i++) {
+            const weapon = this.weapons[i];
+            if (!weapon?.type) continue;
+
+            const weaponDef = GameObjectDefs[weapon.type] as GunDef;
+            const ammoStats = this.getAmmoStats(weaponDef);
+
+            const maxClip = ammoStats.maxClip;
+            const curAmmo = weapon.ammo ?? 0;
+
+            const need = maxClip - curAmmo;
+            if (need <= 0) continue;
+
+            const isInfinite = this.isInfinite(weaponDef);
+
+            let add = need;
+
+            //checken ob ammo im inv
+            if (!isInfinite && this.player.invManager.isValid(weaponDef.ammo)) {
+                add = this.player.invManager.take(weaponDef.ammo, add);
+                if (add <= 0) continue;
+            }
+
+            weapon.ammo = curAmmo + add;
+            if (weapon.ammo > maxClip) weapon.ammo = maxClip;
+        }
+
+        this.player.reloadAgain = false;
+        this.player.weapsDirty = true;
+        this.bursts.length = 0;
+
     }
 
     private _dropGun(weapIdx: number): void {

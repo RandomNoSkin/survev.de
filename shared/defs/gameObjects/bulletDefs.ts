@@ -13,6 +13,7 @@ export interface BulletDef {
     suppressed?: boolean;
     flareColor?: number;
     addFlare?: boolean;
+    addSupplyFlare?: boolean;
     maxFlareScale?: number;
     skipCollision?: boolean;
     onHit?: string;
@@ -264,7 +265,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         obstacleDamage: 1.5,
         falloff: 0.95,
         speed: 125,
-        distance: 23,
+        distance: 10,
         variance: 0,
         shrapnel: false,
         tracerColor: "12gauge",
@@ -524,6 +525,19 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerWidth: 0.1,
         tracerLength: 0.7,
     },
+    bullet_p90: {
+        type: "bullet",
+        damage: 8.5,
+        obstacleDamage: 3.5,
+        falloff: 0.75,
+        distance: 35,
+        speed: 88,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "556mm",
+        tracerWidth: 0.08,
+        tracerLength: 0.9,
+    },
     bullet_vector45: {
         type: "bullet",
         damage: 12, 
@@ -762,6 +776,23 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 1.2,
         flareColor: 16733184,
         addFlare: true,
+        maxFlareScale: 2,
+        skipCollision: true,
+    },
+    bullet_supply_flare: {
+        type: "bullet",
+        damage: 0,
+        obstacleDamage: 1,
+        falloff: 10,
+        distance: 16,
+        speed: 4,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "flare",
+        tracerWidth: 0.3,
+        tracerLength: 1.2,
+        flareColor: 23551,
+        addSupplyFlare: true,
         maxFlareScale: 2,
         skipCollision: true,
     },

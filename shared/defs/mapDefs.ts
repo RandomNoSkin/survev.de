@@ -314,5 +314,6 @@ export interface MapDef {
         }>;
         spawnReplacements: [Record<string, string>];
         importantSpawns: string[];
+        spawnOnRiver?: string[];
     };
 }

@@ -73,13 +73,13 @@ export const Comp: MapDef = {
                     wait: 10,
                     options: { type: GameConfig.Plane.Airdrop },
                 },
-                /* EU-Comp Special Supply Drop
+                /* EU-Comp Special Supply Drop*/
                 {
                     circleIdx: 1,
                     wait: 50,
                     options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
                 },
-                */
+                
                 {
                     circleIdx: 3,
                     wait: 2,
@@ -235,6 +235,10 @@ export const Comp: MapDef = {
         tier_fragtastic: [
             { name: "", count: 1, weight: 1 },
             { name: "outfitFragtastic", count: 1, weight: 0.15 },
+        ],
+        tier_flare:[
+            {name: "flare_gun", count: 1, weight: 0.75},
+            {name: "supply_flare_gun", count: 1, weight: 0.25},
         ],
         tier_turkey_outfit: [
             { name: "", count: 1, weight: 1 },
@@ -909,7 +913,7 @@ export const Comp: MapDef = {
             { name: "colt45", count: 1, weight: 0.13 },
             { name: "colt45_dual", count: 1, weight: 0.16 },
             { name: "m1911", count: 1, weight: 0.13 },
-            { name: "m1911_dual", count: 1, weight: 0.25 }, 
+            { name: "m1911_dual", count: 1, weight: 0.25 },
         ],
         tier_supply_scopes: [
             { name: "4xscope", count: 1, weight: 1 },
@@ -1047,7 +1051,7 @@ export const Comp: MapDef = {
                 cache_01: 1, // flare stone
                 cache_02: { small: 1, large: 1,}, // mosin tree
                 cache_07: 1, //barrel
-                bunker_structure_01: { odds: 0.15 }, // ak74 bunker
+                bunker_structure_01: { odds: 0.4 }, // ak74 bunker
                 bunker_structure_02: 1, // vector bunker
                 bunker_structure_03: 1, // storm bunker
                 bunker_structure_04: 1, // sea bunker
@@ -1071,6 +1075,7 @@ export const Comp: MapDef = {
         ],
         spawnReplacements: [{}],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01"],
+        spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };
