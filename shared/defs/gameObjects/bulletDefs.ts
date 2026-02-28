@@ -316,7 +316,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_slug: {
         type: "bullet",
-        damage: 69, 
+        damage: 75, 
         obstacleDamage: 1,
         falloff: 0.85,
         speed: 105, 
@@ -370,7 +370,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_m93r: {
         type: "bullet",
-        damage: 12,
+        damage: 16,
         obstacleDamage: 1,
         falloff: 0.7,
         speed: 85,
@@ -409,7 +409,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_ots38: {
         type: "bullet",
-        damage: 36,
+        damage: 34,
         obstacleDamage: 1,
         falloff: 0.92,
         speed: 140,
@@ -555,7 +555,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         type: "bullet",
         damage: 19,
         obstacleDamage: 1,
-        falloff: 0.77,
+        falloff: 0.85,
         distance: 120,
         speed: 100,
         variance: 0,
@@ -659,7 +659,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_famas: {
         type: "bullet",
-        damage: 20,
+        damage: 22,
         obstacleDamage: 1,
         falloff: 0.8,
         distance: 150,
