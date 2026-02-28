@@ -131,6 +131,14 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             maxInstances: 5,
         },
+        ots38_reload_02: {
+            path: "audio/guns/ots38_reload_02.mp3",
+            volume: 1,
+        },
+        ots38_reload_01: {
+            path: "audio/guns/ots38_reload_01.mp3",
+            volume: 1,
+        },
         colt45_01: {
             path: "audio/guns/colt45_01.mp3",
             volume: 1,
