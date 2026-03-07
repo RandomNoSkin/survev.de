@@ -10520,7 +10520,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     supply_crate_01: createAirdrop({
         button: {
             useImg: "map-supply-02.img",
-            useParticle: "airdropCrate01",
+            useParticle: "supplyCrate01",
             sound: { on: "airdrop_open_01", off: "" },
         },
         img: {

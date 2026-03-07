@@ -50,6 +50,7 @@ export const Comp: MapDef = {
             planeImg: "map-plane-01.img",
             planeSound: "plane_01",
             airdropImg: "map-chute-01.img",
+            supplyImg: "map-supply-chute-01.img",
         },
     },
     gameMode: {
@@ -76,7 +77,7 @@ export const Comp: MapDef = {
                 /* EU-Comp Special Supply Drop*/
                 {
                     circleIdx: 1,
-                    wait: 50,
+                    wait: 40,
                     options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
                 },
                 
