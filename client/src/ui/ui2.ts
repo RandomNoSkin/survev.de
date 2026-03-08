@@ -1504,6 +1504,15 @@ export class UiManager2 {
     }
 
     getRoleAnnouncementText(role: string, teamId: number) {
+
+        switch(role){
+            case("camper"):
+                return `${this.localization.translate(
+                    "game-why-are-you-camping",
+                )} ${this.getRoleTranslation(role, teamId)}!`;
+                break;
+        }
+
         return `${this.localization.translate(
             "game-youve-been-promoted-to",
         )} ${this.getRoleTranslation(role, teamId)}!`;
@@ -1511,6 +1520,15 @@ export class UiManager2 {
 
     getRoleAssignedKillFeedText(role: string, teamId: number, playerName: string) {
         const roleTxt = this.getRoleTranslation(role, teamId);
+
+        switch(role){
+            case("camper"):
+                return `${playerName} ${this.localization.translate(
+                    "game-punished-for",
+                )} ${roleTxt}!`;
+                break;
+        }
+
         return `${playerName} ${this.localization.translate(
             "game-promoted-to",
         )} ${roleTxt}!`;

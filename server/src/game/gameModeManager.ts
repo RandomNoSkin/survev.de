@@ -76,7 +76,7 @@ export class GameModeManager {
                     .map((player, idx) => {
                         return {
                             player,
-                            rank: idx + 1,
+                            rank: player.spectator ? 999 : idx + 1,
                         };
                     });
             }
@@ -107,7 +107,16 @@ export class GameModeManager {
                     for (const player of groups[i].players) {
                         data.push({
                             player,
-                            rank: i + 1,
+                            rank: player.spectator ? 999 : i + 1,
+                        });
+                    }
+                }
+
+                for (const player of this.game.playerBarn.players) {
+                    if (player.spectator && !data.some((d) => d.player === player)) {
+                        data.push({
+                            player,
+                            rank: 999,
                         });
                     }
                 }
