@@ -1028,7 +1028,13 @@ export class Player extends BaseGameObject {
                     this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
                 }
                 break;
-                case "indicator":
+            case "indicator":
+                if (roleDef.mapIndicator) {
+                    this.mapIndicator?.kill();
+                    this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
+                }
+                break;
+            case "camper":
                 if (roleDef.mapIndicator) {
                     this.mapIndicator?.kill();
                     this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
@@ -1199,7 +1205,7 @@ export class Player extends BaseGameObject {
         this.setDirty();
     }
 
-    removeRole(): void {
+    removeRole(role?: string): void {
         const def = GameObjectDefs[this.role] as RoleDef;
         if (!def) return;
         this.role = "";
@@ -1435,6 +1441,15 @@ export class Player extends BaseGameObject {
     weaponManager = new WeaponManager(this);
     recoilTicker = 0;
 
+    lastPos = v2.create(0, 0);
+    currentTime = Date.now();
+    camper = false;
+    distanceMoved = 0;
+
+    ticks = 0;
+    underCoverTime = 0;
+    overCoverTime = 0;
+
     // to disable auto pickup for some seconds after dropping something
     mobileDropTicker = 0;
 
@@ -1647,6 +1662,37 @@ export class Player extends BaseGameObject {
             this.setPartDirty();
         }
         this.mousePos = v2.add(this.pos, v2.mul(this.dir, this.toMouseLen));
+
+        const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
+
+        if(this.game.startedTime > freezeTime){
+
+        // update distance moved to add the distance between current and last position
+        this.distanceMoved += v2.distance(this.lastPos, this.pos);
+        this.lastPos = v2.copy(this.pos);
+
+        // check if player moved a min distance of 20 in the last 10 seconds
+            if (this.currentTime + GameConfig.player.camperDecayTime < Date.now() || this.camper && this.currentTime + GameConfig.player.camperPunishmentTime < Date.now()) {
+                // if player is using a heal item or reviving also skip the decay
+                if (this.lastPos && this.distanceMoved < GameConfig.player.camperPunishmentDistance && this.actionType !== GameConfig.Action.UseItem && this.actionType !== GameConfig.Action.Revive) {
+                    this.camper = true;
+                }else {
+                    this.camper = false;
+                    this.removeRole();
+                }
+                // reset the distance moved and last position
+                this.distanceMoved = 0;
+                this.currentTime = Date.now();
+            }
+        }
+
+        if (this.camper) {
+            // No punishment method. Player starts moving -> no more decay
+            if (!GameConfig.player.camperPunishment && this.distanceMoved >= GameConfig.player.camperPunishmentDistance) {
+                this.camper = false;
+            }
+            this.promoteToRole("camper");
+        }
 
         //
         // Boost logic

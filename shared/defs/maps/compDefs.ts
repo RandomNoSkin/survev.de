@@ -276,7 +276,7 @@ export const Comp: MapDef = {
         ],
         tier_eye_02: [{ name: "stonehammer", count: 1, weight: 1 }],
         tier_eye_block: [
-            { name: "flare_gun", count: 1, weight: 0.12 }, // 12%
+            { name: "tier_flare", count: 1, weight: 0.12 }, // 12%
             { name: "an94", count: 1, weight: 0.23 }, // 20%
             { name: "tier_hawk", count: 1, weight: 0.16 }, // 16%
             { name: "sv98", count: 1, weight: 0.1 }, // 10%
@@ -337,7 +337,7 @@ export const Comp: MapDef = {
             //{ name: "sv98", count: 1, weight: 0.01 },
             { name: "spas12", count: 1, weight: 0.8 },
             { name: "qbb97", count: 1, weight: 0.03 },
-            { name: "flare_gun", count: 1, weight: 0.145 }, // !
+            { name: "tier_flare", count: 1, weight: 0.145 }, // !
             //{ name: "flare_gun_dual", count: 1, weight: 0.0025 }, // !
             { name: "groza", count: 1, weight: 0.8 },
             //{ name: "scout_elite", count: 1, weight: 0.05 },
@@ -724,7 +724,7 @@ export const Comp: MapDef = {
             { name: "m4a1", count: 1, weight: 1 },
             { name: "garand", count: 1, weight: 1 },
             { name: "grozas", count: 1, weight: 1 },
-            { name: "flare_gun", count: 1, weight: 1 },
+            { name: "tier_flare", count: 1, weight: 1 },
             { name: "awc", count: 1, weight: 1 },
             { name: "scarssr", count: 1, weight: 1 },
             { name: "pkp", count: 1, weight: 1 },
@@ -775,7 +775,7 @@ export const Comp: MapDef = {
             { name: "vector", count: 1, weight: 1 },
             { name: "tier_hawk", count: 1, weight: 1 },
             //{ name: "m9", count: 1, weight: 0.01 },
-            { name: "flare_gun", count: 1, weight: 0.5 },
+            { name: "tier_flare", count: 1, weight: 0.5 },
             { name: "blr", count: 1, weight: 1 },
             { name: "an94", count: 1, weight: 2 }, // !
         ],
