@@ -9755,7 +9755,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     chest_02: createChest({
         img: { sprite: "map-chest-02.img" },
         loot: [tierLoot("tier_chest_sniper", 0, 1), 
-            tierLoot("tier_chest_ar", 1, 2),
+            tierLoot("tier_chest_ar", 2, 2),
             tierLoot("tier_chest_armor", 1, 1),],
         map: { display: true, color: 7025920, scale: 0.85 },
     }),
