@@ -62,6 +62,8 @@ export interface ObjectsPartialData {
     [ObjectType.Airdrop]: {
         fallT: number;
         landed: boolean;
+        // obstacle type ("airdrop_crate_01", "supply_crate_01", etc.)
+        type: string;
     };
 }
 
@@ -172,6 +174,7 @@ export interface ObjectsFullData {
     };
     [ObjectType.Airdrop]: {
         pos: Vec2;
+        type: string;
     };
 }
 
@@ -618,18 +621,22 @@ export const ObjectSerializeFns: {
         serializePart: (s, data) => {
             s.writeFloat(data.fallT, 0, 1, 7);
             s.writeBoolean(data.landed);
+            s.writeMapType((data as any).type);
         },
         serializeFull: (s, data) => {
             s.writeMapPos(data.pos);
+            s.writeMapType((data as any).type);
         },
         /* STRIP_FROM_PROD_CLIENT:END */
 
         deserializePart: (s, data) => {
             data.fallT = s.readFloat(0, 1, 7);
             data.landed = s.readBoolean();
+            (data as any).type = s.readMapType();
         },
         deserializeFull: (s, data) => {
             data.pos = s.readMapPos();
+            (data as any).type = s.readMapType();
         },
     },
     // * to please ts

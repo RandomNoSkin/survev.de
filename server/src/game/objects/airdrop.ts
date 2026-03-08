@@ -58,11 +58,14 @@ export class Airdrop extends BaseGameObject {
     landed = false;
 
     obstacleType: string;
+    // network field, alias of obstacleType so serialization can write it
+    type: string;
     crateCollision: Collider;
 
     constructor(game: Game, pos: Vec2, obstacleType: string) {
         super(game, pos);
         this.obstacleType = obstacleType;
+        this.type = obstacleType;
         const def = MapObjectDefs[this.obstacleType] as ObstacleDef;
         this.crateCollision = collider.transform(def.collision, this.pos, 0, 1);
     }

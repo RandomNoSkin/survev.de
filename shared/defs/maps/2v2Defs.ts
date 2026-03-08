@@ -50,6 +50,7 @@ export const TwoVsTwo: MapDef = {
             planeImg: "map-plane-01.img",
             planeSound: "plane_01",
             airdropImg: "map-chute-01.img",
+            supplyImg: "map-supply-chute-01.img",
         },
     },
     gameMode: {

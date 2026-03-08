@@ -120,6 +120,8 @@ export interface MapDef {
             planeImg: string;
             planeSound: string;
             airdropImg: string;
+            // optional override for supply drops (falls from a SupplyDrop plane)
+            supplyImg?: string;
         };
         frozenSprites?: string[];
     };

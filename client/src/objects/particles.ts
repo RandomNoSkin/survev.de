@@ -2100,6 +2100,23 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         color: 0xffffff,
     },
+    supplyCrate01: {
+        image: ["part-supply-01.img"],
+        life: new Range(0.85, 1.15),
+        drag: new Range(2, 2.25),
+        rotVel: new Range(Math.PI * 1, Math.PI * 2),
+        scale: {
+            start: 0.5,
+            end: 0.4,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: 0xffffff,
+    },
     airdropCrate01h: {
         image: ["part-airdrop-01h.img"],
         life: new Range(0.85, 1.15),

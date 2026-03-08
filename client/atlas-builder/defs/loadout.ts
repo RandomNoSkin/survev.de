@@ -587,6 +587,7 @@ export const LoadoutAtlas: AtlasDef = {
         "map/map-gun-mount-05.svg",
         "map/map-gun-mount-06.svg",
         "particles/part-airdrop-01.svg",
+        "particles/part-supply-01.svg",
         "particles/part-airdrop-01x.svg",
         "particles/part-airdrop-02.svg",
         "particles/part-airdrop-02x.svg",

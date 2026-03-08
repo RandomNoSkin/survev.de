@@ -31,6 +31,8 @@ class AirDrop implements AbstractObject {
     isNew!: boolean;
     fallTicker!: number;
     rad!: number;
+    // obstacle type received from server; used to choose correct chute image
+    type!: string;
 
     constructor() {
         this.sprite.anchor.set(0.5, 0.5);
@@ -63,7 +65,17 @@ class AirDrop implements AbstractObject {
         if (isNew) {
             this.isNew = true;
             this.fallTicker = data.fallT * GameConfig.airdrop.fallTime;
-            const img = ctx.map.getMapDef().biome.airdrop.airdropImg;
+            // record type for future use
+            this.type = (data as any).type;
+            const mapAirdrop = ctx.map.getMapDef().biome.airdrop;
+            let img = mapAirdrop.airdropImg;
+            if (
+                this.type &&
+                this.type.startsWith("supply_") &&
+                mapAirdrop.supplyImg !== undefined
+            ) {
+                img = mapAirdrop.supplyImg;
+            }
             this.sprite.texture = PIXI.Texture.from(img);
         }
         if (fullUpdate) {
@@ -195,7 +207,9 @@ export class AirdropBarn {
             const screenScale = camera.m_pixels((2.0 * airdrop.rad) / camera.m_ppu);
             airdrop.sprite.position.set(screenPos.x, screenPos.y);
             airdrop.sprite.scale.set(screenScale, screenScale);
-            airdrop.sprite.tint = 0xffff00;
+            // The sprite is tinted for airdrops, but supply drop chutes are already coloured.
+            // Tinting them (e.g. with 0xffff00) turns blue regions into green.
+            airdrop.sprite.tint = airdrop.type?.startsWith("supply_") ? 0xffffff : 0xffff00;
             airdrop.sprite.alpha = 1.0;
             airdrop.sprite.visible = !airdrop.landed;
 

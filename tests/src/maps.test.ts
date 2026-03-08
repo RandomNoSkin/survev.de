@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import { Atlases } from "../../client/atlas-builder/atlasDefs";
 import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
 import { Constants } from "../../shared/net/net";
+import { GameConfig } from "../../shared/gameConfig";
 
 const maps = Object.keys(MapDefs);
 
@@ -34,6 +35,19 @@ describe.for(maps)("Map %s", (map) => {
     describe("Airdrop Crates", () => {
         test.for(mapDef.gameConfig.planes.crates)("Crate %$", (crate) => {
             expect(crate.name).toBeValidMapObj();
+        });
+    });
+
+    describe("Airdrop Images", () => {
+        // if the map defines any SupplyDrop plane timing, it should provide a supplyImg
+        test("supply chute defined when supply drops exist", () => {
+            const timings = mapDef.gameConfig.planes.timings || [];
+            const hasSupply = timings.some(
+                (t) => t.options?.type === GameConfig.Plane.SupplyDrop,
+            );
+            if (hasSupply) {
+                expect(mapDef.biome.airdrop.supplyImg).toBeDefined();
+            }
         });
     });
 
