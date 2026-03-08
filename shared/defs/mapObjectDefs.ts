@@ -1112,7 +1112,7 @@ function createPlanter<T extends ObstacleDef>(e: Partial<T>): T {
         hitParticle: "woodChip",
         explodeParticle: "woodPlank",
         reflectBullets: false,
-        loot: [tierLoot("tier_world", 1, 1)],
+        loot: [tierLoot("tier_world", 2, 2)],
         map: { display: true, color: 0x663300, scale: 0.875 },
         terrain: { grass: true, beach: true, riverShore: true },
         img: {
@@ -1574,7 +1574,7 @@ function createToilet<T extends ObstacleDef>(e: Partial<T>): T {
         reflectBullets: false,
         hitParticle: "whiteChip",
         explodeParticle: "toiletBreak",
-        loot: [tierLoot("tier_toilet", 2, 3), tierLoot("tier_outfits", 0, 1)],
+        loot: [tierLoot("tier_toilet", 0, 2), tierLoot("tier_adren", 1, 1), tierLoot("tier_health", 1, 1), tierLoot("tier_outfits", 0, 1)],
         map: { display: false, color: 0xb3b3b3, scale: 1 },
         img: {
             sprite: "map-toilet-01.img",
@@ -9700,7 +9700,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     case_06: createCase({
         health: 140,
         img: { sprite: "map-case-chrys-01.img" },
-        loot: [tierLoot("tier_chest_sniper_tea", 1, 1), tierLoot("tier_chest_ar", 1, 2), tierLoot("tier_chest_armor", 0 , 2), 
+        loot: [tierLoot("tier_chest_sniper_tea", 1, 1), tierLoot("tier_chest_ar", 2, 2), tierLoot("tier_chest_armor", 0 , 2), 
             tierLoot("tier_chrys_case", 1, 1)],
         hitParticle: "blackChip",
         map: { display: false, color: 0x6b3500, scale: 0.85 },
@@ -11096,7 +11096,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-locker-03.img" },
                 loot: [tierLoot("tier_ak_locker", 1, 1), 
                     autoLoot("backpack02", 1), 
-                    tierLoot("tier_scopes", 1, 1)],
+                    autoLoot("4xscope", 1)],
     }),
     oven_01: createOven({}),
     piano_01: {
@@ -13435,25 +13435,25 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 1,
             },
             {
-                type: randomObstacleType({ crate_01: 2, crate_04: 1 }),
+                type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }),
                 pos: v2.create(1.5, 5),
                 scale: 1,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ crate_01: 2, crate_04: 1 }),
+                type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }),
                 pos: v2.create(1.5, 0),
                 scale: 1,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ crate_01: 2, crate_04: 1 }),
+                type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }),
                 pos: v2.create(6.5, 5),
                 scale: 1,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ crate_01: 2, crate_04: 1 }),
+                type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }), 
                 pos: v2.create(6.5, 0),
                 scale: 1,
                 ori: 0,
@@ -15312,10 +15312,10 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             },
             {
                 type: randomObstacleType({
-                    container_01: 0.2967,
-                    container_02: 0.2967,
-                    container_03: 0.2967,
-                    container_06: 0.11,
+                    container_01: 0.3067,
+                    container_02: 0.3067,
+                    container_03: 0.3067,
+                    container_06: 0.08,
                 }),
                 pos: v2.create(-37.5, 38),
                 scale: 1,
@@ -19494,7 +19494,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             {
                 type: randomObstacleType({
                     case_01: 1,
-                    case_02: 0.025,
+                    case_02: 0.1,
                     chest_02: 1,
                 }),
                 pos: v2.create(2.5, 0),
