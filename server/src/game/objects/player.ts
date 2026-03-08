@@ -4,6 +4,7 @@ import {
     type LootDef,
     WeaponTypeToDefs,
 } from "../../../../shared/defs/gameObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
 import { type EmoteDef, EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs";
 import {
     type BackpackDef,
@@ -1221,6 +1222,120 @@ export class Player extends BaseGameObject {
         this.setDirty();
     }
 
+    /**
+     * Determines whether the player is currently standing under cover.
+     * This is used by the anti-camp logic to only trigger when the player
+     * is hiding under trees/tables/bushes (etc.), not when standing in the open.
+     */
+    isUnderCover(): boolean {
+        const pos = this.pos;
+        const layer = this.layer;
+
+        const nearby = this.game.grid.intersectPos(pos);
+        for (let i = 0; i < nearby.length; i++) {
+            const obj: any = nearby[i];
+
+            // Only obstacles and buildings count as cover.
+            if (obj.__type !== ObjectType.Obstacle && obj.__type !== ObjectType.Building) continue;
+
+            // Only specific object types should provide cover.
+            if (!this.isCoverType(obj.type)) continue;
+
+            // Must be on the same layer (stairs / multi-layer buildings)
+            if (!util.sameLayer(obj.layer, layer)) continue;
+
+            // 1) If the object has a collider, use it directly for point testing.
+            if (obj.collider) {
+                if (collider.intersectCircle(obj.collider, pos, 0.0001)) {
+                    return true;
+                }
+            }
+
+            // 2) Buildings can provide cover via their floor surfaces / obstacle bounds.
+            if (obj.__type === ObjectType.Building) {
+                // Floor surfaces (used for stuff like grassy cover areas)
+                if (obj.surfaces) {
+                    for (let j = 0; j < obj.surfaces.length; j++) {
+                        const surface = obj.surfaces[j];
+                        for (let k = 0; k < surface.colliders.length; k++) {
+                            if (collider.intersectCircle(surface.colliders[k], pos, 0.0001)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                // Some cover buildings define mapObstacleBounds rather than surfaces.
+                const def: any = MapObjectDefs[obj.type];
+                const bounds = def?.mapObstacleBounds as Array<any> | undefined;
+                if (bounds) {
+                    for (const b of bounds) {
+                        if (coldet.testPointAabb(pos, b.min, b.max)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // 3) Fallback: check bounding box from definition (good for obstacles whose visual cover isn't the same
+            //    as their collision collider, like trees).
+            const def: any = MapObjectDefs[obj.type];
+            if (def?.aabb) {
+                const s = obj.scale ?? 1;
+
+                // Some defs store AABBs as { min, max } (e.g. tree defs), others as { center, extents }.
+                if (def.aabb.min && def.aabb.max) {
+                    const min = v2.add(v2.mul(def.aabb.min, s), obj.pos);
+                    const max = v2.add(v2.mul(def.aabb.max, s), obj.pos);
+                    if (coldet.testPointAabb(pos, min, max)) {
+                        return true;
+                    }
+                } else if (def.aabb.extents) {
+                    const cx = (def.aabb.center?.x ?? 0) * s + obj.pos.x;
+                    const cy = (def.aabb.center?.y ?? 0) * s + obj.pos.y;
+                    const ex = (def.aabb.extents.x ?? 0) * s;
+                    const ey = (def.aabb.extents.y ?? 0) * s;
+
+                    if (Math.abs(pos.x - cx) <= ex && Math.abs(pos.y - cy) <= ey) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private isCoverType(type: string): boolean {
+        const def: any = MapObjectDefs[type];
+        if (!def) return false;
+
+        // Trees/bushes are explicitly marked in their defs.
+        if (def.isTree || def.isBush) return true;
+
+        // Tables and similar furniture can act as cover.
+        if (def.obstacleType === "furniture") return true;
+
+        // Containers (e.g. crates) are also considered cover (for camping checks).
+        if (type.startsWith("container")) return true;
+
+        // Map objects that are explicitly used as cover (grassy cover / brush clumps)
+        if (type.startsWith("grassy_cover") || type.startsWith("brush_clump")) return true;
+
+        return false;
+    }
+
+    private coverFactor(type: string): number {
+        const def: any = MapObjectDefs[type];
+        if (!def) return 1;
+
+        // Trees tend to be larger cover; bushes a bit smaller.
+        if (def.isTree) return 1.2;
+        if (def.isBush) return 1.1;
+
+        return 1;
+    }
+
     promoteToKillLeader() {
         if (this.isKillLeader) return;
 
@@ -1442,6 +1557,7 @@ export class Player extends BaseGameObject {
     recoilTicker = 0;
 
     lastPos = v2.create(0, 0);
+    camperAnchorPos = v2.create(0, 0);
     currentTime = Date.now();
     camper = false;
     distanceMoved = 0;
@@ -1481,6 +1597,10 @@ export class Player extends BaseGameObject {
         loadout?: Loadout,
     ) {
         super(game, pos);
+
+        // start the camper anchor at spawn position so the first check isn't influenced
+        // by the default (0,0) init value.
+        this.camperAnchorPos = v2.copy(this.pos);
 
         this.matchDataId = game.playerBarn.nextMatchDataId++;
 
@@ -1665,33 +1785,62 @@ export class Player extends BaseGameObject {
 
         const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
 
-        if(this.game.startedTime > freezeTime){
+        if (this.game.startedTime > freezeTime) {
+            // Determine how far the player has strayed from the last “anchor” point.
+            // This is more stable than accumulating movement deltas (which can jitter).
+            const distFromAnchor = v2.distance(this.pos, this.camperAnchorPos);
+            this.distanceMoved = distFromAnchor;
 
-        // update distance moved to add the distance between current and last position
-        this.distanceMoved += v2.distance(this.lastPos, this.pos);
-        this.lastPos = v2.copy(this.pos);
+            // Reset the timer/anchor if the player moves far enough.
+            if (distFromAnchor > GameConfig.player.camperPunishmentDistance) {
+                this.camperAnchorPos = v2.copy(this.pos);
+                this.currentTime = Date.now();
+                this.camper = false;
+                this.removeRole();
+            }
 
-        // check if player moved a min distance of 20 in the last 10 seconds
-            if (this.currentTime + GameConfig.player.camperDecayTime < Date.now() || this.camper && this.currentTime + GameConfig.player.camperPunishmentTime < Date.now()) {
+            // check if enough time has passed to evaluate camping state
+            if (
+                this.currentTime + GameConfig.player.camperDecayTime < Date.now() ||
+                (this.camper && this.currentTime + GameConfig.player.camperPunishmentTime < Date.now())
+            ) {
                 // if player is using a heal item or reviving also skip the decay
-                if (this.lastPos && this.distanceMoved < GameConfig.player.camperPunishmentDistance && this.actionType !== GameConfig.Action.UseItem && this.actionType !== GameConfig.Action.Revive) {
+                if (
+                    distFromAnchor < GameConfig.player.camperPunishmentDistance &&
+                    this.actionType !== GameConfig.Action.UseItem &&
+                    this.actionType !== GameConfig.Action.Revive &&
+                    this.isUnderCover()
+                ) {
                     this.camper = true;
-                }else {
+                } else {
                     this.camper = false;
                     this.removeRole();
                 }
-                // reset the distance moved and last position
-                this.distanceMoved = 0;
+
+                // restart the timer / anchor
+                this.camperAnchorPos = v2.copy(this.pos);
                 this.currentTime = Date.now();
             }
         }
 
+        if (this.camper && !this.isUnderCover()) {
+            // if the player leaves cover while marked as camper, remove the role
+            this.camper = false;
+            this.removeRole();
+        }
+
         if (this.camper) {
             // No punishment method. Player starts moving -> no more decay
-            if (!GameConfig.player.camperPunishment && this.distanceMoved >= GameConfig.player.camperPunishmentDistance) {
+            if (
+                !GameConfig.player.camperPunishment ||
+                this.downed ||
+                this.distanceMoved >= GameConfig.player.camperPunishmentDistance
+            ) {
                 this.camper = false;
+                this.removeRole();
+            } else {
+                this.promoteToRole("camper");
             }
-            this.promoteToRole("camper");
         }
 
         //
