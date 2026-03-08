@@ -232,6 +232,7 @@ export const GameConfig = {
         boostDecayAmount: 1.5, // amount of boost to decay per boostDecayDistance
         camperPunishment: true, // if true, player will have enhanced decay for boostDecayTime after not moving for boostDecayTime
         camperPunishmentTime: 5000, // time in ms after boost decay to punish player for not moving
+        camperGracePeriod: 40000, // time in ms after spawn before camping checks start
 
         /* STRIP_FROM_PROD_CLIENT:START */
         defaultItems: {
