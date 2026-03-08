@@ -9755,7 +9755,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     chest_02: createChest({
         img: { sprite: "map-chest-02.img" },
         loot: [tierLoot("tier_chest_sniper", 0, 1), 
-            tierLoot("tier_chest_ar", 1, 2),
+            tierLoot("tier_chest_ar", 2, 2),
             tierLoot("tier_chest_armor", 1, 1),],
         map: { display: true, color: 7025920, scale: 0.85 },
     }),
@@ -11755,7 +11755,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     })({}),
     toilet_01: createToilet({
         img: { sprite: "map-toilet-01.img" },
-        loot: [tierLoot("tier_toilet", 2, 3), tierLoot("tier_outfits", 0, 1), tierLoot("tier_playtest", 0, 0)], // checkpoint testing
+        loot: [tierLoot("tier_toilet", 0, 2), tierLoot("tier_adren", 1, 1), tierLoot("tier_health", 1, 1), tierLoot("tier_outfits", 0, 1), tierLoot("tier_playtest", 0, 0)], // checkpoint testing
     }),
     toilet_02: createToilet({
         img: { sprite: "map-toilet-02.img" }, 
