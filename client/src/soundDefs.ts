@@ -537,6 +537,10 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             maxInstances: 5,
         },
+        p90_reload_01: {
+            path: "audio/guns/p90_reload_01.mp3",
+            volume: 3,
+        },
         vector_reload_01: {
             path: "audio/guns/vector_reload_01.mp3",
             volume: 1,

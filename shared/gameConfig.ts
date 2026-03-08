@@ -227,11 +227,11 @@ export const GameConfig = {
         minPosSpawnRad: 100, // spawn radius from other spawn locations
         
         //boost decay settings to disable boostDecayAmount -> 0
-        boostDecayDistance: 10, // distance player has to move to not decay boost
-        boostDecayTime: 6000, // time in ms until boost decays
+        camperPunishmentDistance: 10, // distance player has to move to not decay boost
+        camperDecayTime: 6000, // time in ms until boost decays
         boostDecayAmount: 1.5, // amount of boost to decay per boostDecayDistance
         camperPunishment: true, // if true, player will have enhanced decay for boostDecayTime after not moving for boostDecayTime
-        boostPunishmentTime: 5000, // time in ms after boost decay to punish player for not moving
+        camperPunishmentTime: 5000, // time in ms after boost decay to punish player for not moving
 
         /* STRIP_FROM_PROD_CLIENT:START */
         defaultItems: {

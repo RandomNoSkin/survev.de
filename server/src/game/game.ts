@@ -529,7 +529,7 @@ export class Game {
         player.dirNew = v2.create(1, 0);
         player.setPartDirty();
 
-        if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn) {
+        if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn || !this.started) {
             player.game.playerBarn.removePlayer(player);
         }else {
             player.kill({
@@ -645,7 +645,7 @@ export class Game {
         const values: SaveGameBody["matchData"] = players.map(({ player, rank }) => {
             return {
                 // *NOTE: userId is optional; we save the game stats for non logged users too
-                userId: player.userId,
+                userId: !player.spectator ? player.userId : null,
                 region: Config.gameServer.thisRegion,
                 username: player.name,
                 playerId: player.matchDataId,
