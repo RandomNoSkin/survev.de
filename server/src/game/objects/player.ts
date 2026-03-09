@@ -1608,7 +1608,8 @@ export class Player extends BaseGameObject {
         // by the default (0,0) init value.
         this.camperAnchorPos = v2.copy(this.pos);
         // Give players a short grace period after spawning to move before being flagged as a camper.
-        this.camperGraceUntil = Date.now() + GameConfig.player.camperGracePeriod;
+        const camperGracePeriode = this.game.map.mapDef.gameMode.camperGracePeriod ?? GameConfig.player.camperGracePeriod;
+        this.camperGraceUntil = Date.now() + camperGracePeriode;
 
         this.matchDataId = game.playerBarn.nextMatchDataId++;
 
@@ -1791,79 +1792,95 @@ export class Player extends BaseGameObject {
         }
         this.mousePos = v2.add(this.pos, v2.mul(this.dir, this.toMouseLen));
 
-        const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
+        const antiCamp = this.game.map.mapDef.gameMode.camperPunishment ?? GameConfig.player.camperPunishment;
 
-        if (this.game.startedTime > freezeTime) {
-            const now = Date.now();
+        if(antiCamp){
+                const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
 
-            // Allow a short grace period at spawn so players who start under cover
-            // won't be immediately flagged as campers.
-            if (now < this.camperGraceUntil) {
-                if (this.camper) {
-                    this.camper = false;
-                    this.removeRole();
-                }
-                this.camperAnchorPos = v2.copy(this.pos);
-                this.currentTime = now;
-            } else {
-                // Determine how far the player has strayed from the last “anchor” point.
-                // This is more stable than accumulating movement deltas (which can jitter).
-                const distFromAnchor = v2.distance(this.pos, this.camperAnchorPos);
-                this.distanceMoved = distFromAnchor;
+                if (this.game.startedTime > freezeTime) {
+                    const now = Date.now();
 
-                // Reset the timer/anchor if the player moves far enough.
-                if (distFromAnchor > GameConfig.player.camperPunishmentDistance) {
-                    this.camperAnchorPos = v2.copy(this.pos);
-                    this.currentTime = now;
-                    this.camper = false;
-                    this.removeRole();
-                }
-
-                // check if enough time has passed to evaluate camping state
-                if (
-                    this.currentTime + GameConfig.player.camperDecayTime < now ||
-                    (this.camper && this.currentTime + GameConfig.player.camperPunishmentTime < now)
-                ) {
-                    // if player is using a heal item or reviving also skip the decay
-                    if (
-                        distFromAnchor < GameConfig.player.camperPunishmentDistance &&
-                        this.actionType !== GameConfig.Action.UseItem &&
-                        this.actionType !== GameConfig.Action.Revive &&
-                        this.isUnderCover()
-                    ) {
-                        this.camper = true;
+                    // Allow a short grace period at spawn so players who start under cover
+                    // won't be immediately flagged as campers.
+                    if (now < this.camperGraceUntil) {
+                        if (this.camper) {
+                            this.camper = false;
+                            if(this.role === "camper")
+                            this.removeRole();
+                        }
+                        this.camperAnchorPos = v2.copy(this.pos);
+                        this.currentTime = now;
                     } else {
-                        this.camper = false;
-                        this.removeRole();
+                        // Determine how far the player has strayed from the last “anchor” point.
+                        // This is more stable than accumulating movement deltas (which can jitter).
+                        const distFromAnchor = v2.distance(this.pos, this.camperAnchorPos);
+                        this.distanceMoved = distFromAnchor;
+
+                        // Reset the timer/anchor if the player moves far enough.
+
+                        const camperPunishmentDistance = this.game.map.mapDef.gameMode.camperPunishmentDistance ?? GameConfig.player.camperPunishmentDistance;
+
+                        if (distFromAnchor > camperPunishmentDistance) {
+                            this.camperAnchorPos = v2.copy(this.pos);
+                            this.currentTime = now;
+                            this.camper = false;
+                            if(this.role === "camper")
+                            this.removeRole();
+                        }
+
+                        // check if enough time has passed to evaluate camping state
+                        const camperDecayTime = this.game.map.mapDef.gameMode.camperDecayTime ?? GameConfig.player.camperDecayTime;
+                        const camperPunishmentTime = this.game.map.mapDef.gameMode.camperPunishmentTime ?? GameConfig.player.camperPunishmentTime;
+
+                        if (
+                            this.currentTime + camperDecayTime < now || 
+                            (this.camper && this.currentTime + camperPunishmentTime < now)
+                        ) {
+                            // if player is using a heal item or reviving also skip the decay
+                            if (
+                                distFromAnchor < camperPunishmentDistance &&
+                                this.actionType !== GameConfig.Action.UseItem &&
+                                this.actionType !== GameConfig.Action.Revive &&
+                                this.isUnderCover()
+                            ) {
+                                this.camper = true;
+                            } else {
+                                this.camper = false;
+                                if(this.role === "camper")
+                                this.removeRole();
+                            }
+
+                            // restart the timer / anchor
+                            this.camperAnchorPos = v2.copy(this.pos);
+                            this.currentTime = now;
+                        }
                     }
-
-                    // restart the timer / anchor
-                    this.camperAnchorPos = v2.copy(this.pos);
-                    this.currentTime = now;
                 }
-            }
-        }
 
-        if (this.camper && !this.isUnderCover()) {
-            // if the player leaves cover while marked as camper, remove the role
-            this.camper = false;
-            this.removeRole();
-        }
+                if (this.camper && !this.isUnderCover()) {
+                    // if the player leaves cover while marked as camper, remove the role
+                    this.camper = false;
+                    if(this.role === "camper")
+                    this.removeRole();
+                }
 
-        if (this.camper) {
-            // No punishment method. Player starts moving -> no more decay
-            if (
-                !GameConfig.player.camperPunishment ||
-                this.downed ||
-                this.distanceMoved >= GameConfig.player.camperPunishmentDistance
-            ) {
-                this.camper = false;
-                this.removeRole();
-            } else {
-                this.promoteToRole("camper");
-            }
+                const camperPunishmentDistance = this.game.map.mapDef.gameMode.camperPunishmentDistance ?? GameConfig.player.camperPunishmentDistance;
+                if (this.camper) {
+                    // No punishment method. Player starts moving -> no more decay
+                    if (
+                        this.downed ||
+                        this.distanceMoved >= camperPunishmentDistance
+                    ) {
+                        this.camper = false;
+                        if(this.role === "camper")
+                        this.removeRole();
+                        if(this.game.map.mapDef.gameMode.indicator)
+                            this.promoteToRole("arena");
+                    } else {
+                        this.promoteToRole("camper");
+                    }
+                }
         }
-
         //
         // Boost logic
         //
