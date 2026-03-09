@@ -64,6 +64,8 @@ export const Comp: MapDef = {
 
         betterStats: true,
         canDespawn: false,
+
+        camperPunishment: true,
     },
     /* STRIP_FROM_PROD_CLIENT:START */
     gameConfig: {
