@@ -3603,9 +3603,9 @@ function createCabin<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                     randomObstacleType({
                         gun_mount_01: 50,
                         gun_mount_05: 50,
-                        gun_mount_04: 10,
+                        gun_mount_04: 1,
                         gun_mount_02: 10,
-                        gun_mount_03: 1,
+                        gun_mount_03: 10,
                     }),
                 pos: v2.create(4, 10.65),
                 scale: 1,
@@ -9788,7 +9788,7 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 2,
             },
             {
-                type: randomObstacleType({ gun_mount_07: 3, gun_mount_05: 2, gun_mount_04: 1 }),
+                type: randomObstacleType({ gun_mount_07: 3, gun_mount_05: 2, gun_mount_03: 1 }),
                 pos: v2.create(-23.75, 12),
                 scale: 1,
                 ori: 1,
@@ -10649,7 +10649,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     crate_01x: createCrate({ img: { sprite: "map-crate-01x.img" } }),
     crate_02: createCrate({
         health: 140,
-        loot: [tierLoot("tier_soviet", 3, 5)],
+        loot: [tierLoot("tier_soviet", 3, 5), tierLoot("tier_imbel", 1, 1)],
         map: { display: false },
         terrain: { grass: true, beach: false },
         img: { sprite: "map-crate-02.img" },

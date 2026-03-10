@@ -409,6 +409,10 @@ export const Comp: MapDef = {
             { name: "hawk", count: 1, weight: 0.9999 },
             { name: "special_shotgun", count: 1, weight: 0.0001 },
         ],
+        tier_imbel: [
+            { name: "imbel", count: 1, weight: 0.03 },
+            { name: "", count: 1, weight: 0.97 },
+        ],
         tier_weaker_lmgs: [
             { name: "dp28", count: 1, weight: 0.25 },
             { name: "p90", count: 1, weight: 0.25 }, // ?
@@ -434,9 +438,9 @@ export const Comp: MapDef = {
         tier_ak_military_crate: [
             { name: "groza", count: 1, weight: 0.2 }, 
             { name: "spas12", count: 1, weight: 0.1 },
-            { name: "m870", count: 1, weight: 0.13 },
+            { name: "m870", count: 1, weight: 0.1 },
             { name: "mp220", count: 1, weight: 0.08 },
-            { name: "mp220", count: 1, weight: 0.06 },
+            { name: "imbel", count: 1, weight: 0.09 },
             { name: "ots38", count: 1, weight: 0.2 },
             { name: "saiga", count: 1, weight: 0.05 },
             { name: "tier_hawk", count: 1, weight: 0.05 },
@@ -782,11 +786,11 @@ export const Comp: MapDef = {
         ],
         tier_airdrop_uncommon: [
             { name: "l86", count: 1, weight: 2.5 },
-            { name: "scar", count: 1, weight: 0.75 },
+            { name: "imbel", count: 1, weight: 1.5 },
             { name: "mosin", count: 1, weight: 1.5 },
             { name: "svd", count: 1, weight: 2.5 },
             { name: "m1014", count: 1, weight: 1.5 },
-            { name: "deagle", count: 1, weight: 1 },
+            { name: "spas16", count: 1, weight: 1.5 },
             { name: "vector", count: 1, weight: 1 },
             { name: "tier_hawk", count: 1, weight: 1 },
             //{ name: "m9", count: 1, weight: 0.01 },
