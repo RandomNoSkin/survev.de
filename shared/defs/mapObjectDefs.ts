@@ -1444,7 +1444,7 @@ function createSafe<T extends ObstacleDef>(e: Partial<T>): T {
         reflectBullets: false,
         hitParticle: "rockEyeChip",
         explodeParticle: "rockEyeBreak",
-        loot: [tierLoot("tier_safe_throwables", 1, 1), tierLoot("tier_safe", 1, 1)],
+        loot: [tierLoot("tier_safe", 1, 1)],
         map: { display: true, color: 0x171412, scale: 1 },
         terrain: { grass: true, beach: false, riverShore: true },
         img: {
@@ -9712,13 +9712,13 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 1,
             },
             {
-                type: randomObstacleType({ bookshelf_01: 6, bookshelf_02: 1 }),
+                type: randomObstacleType({ bookshelf_01: 2, bookshelf_02: 1 }),
                 pos: v2.create(-12.5, 11),
                 scale: 1,
                 ori: 0,
             },
             {
-                type: "chest_02",
+                type: randomObstacleType({ mil_crate_04: 3, chest_02: 1 }),
                 pos: v2.create(13, 0.5),
                 scale: 1,
                 ori: 1,
@@ -9729,7 +9729,6 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 ori: 3,
             },
-
             {
                 type: "crate_01",
                 pos: v2.create(21, -11.5),
@@ -9770,7 +9769,7 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "crate_19",
+                type: "crate_08",
                 pos: v2.create(19.25, -16.75),
                 scale: 1,
                 ori: 0,
@@ -9789,7 +9788,7 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 2,
             },
             {
-                type: "gun_mount_07",
+                type: randomObstacleType({ gun_mount_07: 3, gun_mount_05: 2, gun_mount_04: 1 }),
                 pos: v2.create(-23.75, 12),
                 scale: 1,
                 ori: 1,
@@ -9817,6 +9816,12 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 pos: v2.create(-23, -8.5),
                 scale: 1,
                 ori: 1,
+            },
+            {
+                type: "vending_01",
+                pos: v2.create(-15, -8.8),
+                scale: 1,
+                ori: 2,
             },
             {
                 type: "safe_01",
