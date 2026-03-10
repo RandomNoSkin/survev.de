@@ -150,6 +150,12 @@ export interface MapDef {
         minPosSpawnRad?: number, // spawn radius away from other spawn points |default: 100
         spawnCenter?: boolean, // spawn in the center of the map
 
+        camperPunishmentDistance?: number, // distance player has to move to not get punished || default: 10
+        camperDecayTime?: number, // time in ms until punishment || default: 6000
+        camperPunishment?: boolean, // enables camper bunishment || default false
+        camperPunishmentTime?: number, // time in ms how long punishment lasts || default: 5000
+        camperGracePeriod?: number, // time in ms after spawn before camping checks start || default: 40000
+
         desertMode?: boolean;
         factionMode?: boolean;
         factions?: number;

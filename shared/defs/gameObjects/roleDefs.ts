@@ -494,7 +494,7 @@ export const RoleDefs: Record<string, RoleDef> = {
         }),
         announce: false,
         sound: { assign: "spawn_01" },
-        perks: ["field_medic", "windwalk"],
+        perks: ["field_medic", "self_revive"],
         visorImg: {
             baseSprite: "player-visor-healer.img",
             spriteScale: 0.3,

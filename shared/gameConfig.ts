@@ -155,7 +155,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1011,
+    protocolVersion: 1012,
     Input,
     EmoteSlot,
     WeaponSlot,
@@ -230,7 +230,7 @@ export const GameConfig = {
         camperPunishmentDistance: 10, // distance player has to move to not decay boost
         camperDecayTime: 6000, // time in ms until boost decays
         boostDecayAmount: 1.5, // amount of boost to decay per boostDecayDistance
-        camperPunishment: true, // if true, player will have enhanced decay for boostDecayTime after not moving for boostDecayTime
+        camperPunishment: false, // if true, player will have enhanced decay for boostDecayTime after not moving for boostDecayTime
         camperPunishmentTime: 5000, // time in ms after boost decay to punish player for not moving
         camperGracePeriod: 40000, // time in ms after spawn before camping checks start
 

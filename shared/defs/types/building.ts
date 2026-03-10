@@ -32,6 +32,7 @@ export interface BuildingDef {
             zoomIn?: AABB;
             zoomOut?: AABB;
             zoom?: number;
+            noZoom?: boolean;
         }>;
         vision?: {
             dist?: number;
@@ -63,7 +64,7 @@ export interface BuildingDef {
     }>;
     porch_01?: string;
     stand?: string;
-    tree?: string;
+    tree?: string | Record<string, number>;
     tree_scale?: number;
     tree_loot?: string;
     bush_chance?: number;
