@@ -1205,7 +1205,6 @@ export class Player extends BaseGameObject {
         // Reset camper tracking to avoid false positives right after spawning
         this.camperAnchorPos = v2.copy(this.pos);
         this.currentTime = Date.now();
-        this.camperGraceUntil = Date.now() + GameConfig.player.camperGracePeriod;
 
         this.game.grid.updateObject(this);
         this.setDirty();
@@ -1565,7 +1564,6 @@ export class Player extends BaseGameObject {
     camperAnchorPos = v2.create(0, 0);
     currentTime = Date.now();
     camper = false;
-    camperGraceUntil = 0;
     distanceMoved = 0;
 
     ticks = 0;
@@ -1607,9 +1605,6 @@ export class Player extends BaseGameObject {
         // start the camper anchor at spawn position so the first check isn't influenced
         // by the default (0,0) init value.
         this.camperAnchorPos = v2.copy(this.pos);
-        // Give players a short grace period after spawning to move before being flagged as a camper.
-        const camperGracePeriode = this.game.map.mapDef.gameMode.camperGracePeriod ?? GameConfig.player.camperGracePeriod;
-        this.camperGraceUntil = Date.now() + camperGracePeriode;
 
         this.matchDataId = game.playerBarn.nextMatchDataId++;
 
@@ -1796,13 +1791,16 @@ export class Player extends BaseGameObject {
 
         if(antiCamp){
                 const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
+                
+                // Give players a short grace period after spawning to move before being flagged as a camper.
+                const camperGracePeriode = this.game.map.mapDef.gameMode.camperGracePeriod ?? GameConfig.player.camperGracePeriod;
 
                 if (this.game.startedTime > freezeTime) {
                     const now = Date.now();
 
                     // Allow a short grace period at spawn so players who start under cover
                     // won't be immediately flagged as campers.
-                    if (now < this.camperGraceUntil) {
+                    if (this.game.startedTime < camperGracePeriode + freezeTime) {
                         if (this.camper) {
                             this.camper = false;
                             if(this.role === "camper")
