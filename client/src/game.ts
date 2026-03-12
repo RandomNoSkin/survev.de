@@ -475,7 +475,7 @@ export class Game {
         this.debugHUD.m_update(dt, this);
 
         if (IS_DEV) {
-            if (this.m_input.keyPressed(Key.Tilde)) {
+            if (this.m_input.keyPressed(Key.F2)) {
                 this.editor.setEnabled(!this.editor.enabled);
             }
             if (this.editor.enabled) {
