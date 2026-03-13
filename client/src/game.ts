@@ -805,6 +805,16 @@ export class Game {
                 );
                 this.m_config.set("perkModeRole", roleSelectMessage.role);
             }
+            if (this.m_uiManager.roleArenaSelected) {
+                const roleSelectMessage = new net.RoleSelectMsg();
+                roleSelectMessage.role = this.m_uiManager.roleArenaSelected;
+                this.m_sendMessage(
+                    net.MsgType.RoleSelect,
+                    roleSelectMessage,
+                    128,
+                );
+                this.m_config.set("arenaModeRole", roleSelectMessage.role);
+            }
         }
 
         //this.m_spectateCooldown -= dt;
@@ -1388,6 +1398,23 @@ export class Game {
                 }
                 break;
             }
+            case net.MsgType.ArenaRoles: {
+                const msg = new net.ArenaRolesMsg;
+                    msg.deserialize(stream);
+                    console.log("id:", this.m_activeId, "activePlayer:", msg.activePlayer);
+                if(this.m_activeId !== msg.activePlayer) return;
+                if(this.m_map.arenaMode){
+                    const role = this.m_config.get("arenaModeRole")!;
+                    this.m_uiManager.setArenaRoleMenuOptions(
+                        role,
+                        msg.availableGroupRoles,
+                    );
+                    this.m_uiManager.setArenaRoleMenuActive(true);
+                } else {
+                    this.m_uiManager.setArenaRoleMenuActive(false);
+                }
+                break;
+            }
             case net.MsgType.Update: {
                 const msg = new net.UpdateMsg();
                 msg.deserialize(stream, this.m_objectCreator);
@@ -1527,7 +1554,7 @@ export class Game {
                             // The intent here is to not play the role-specific assignment sounds in perkMode unless you're the player selecting a role.
                             msg.role == "kill_leader" ||
                             !this.m_map.perkMode ||
-                            this.m_localId == msg.playerId
+                            this.m_localId == msg.playerId || !this.m_map.arenaMode
                         ) {
                             this.m_audioManager.playSound(roleDef.sound.assign, {
                                 channel: "ui",
@@ -1535,6 +1562,9 @@ export class Game {
                         }
                     }
                     if (this.m_map.perkMode && this.m_localId == msg.playerId) {
+                        this.m_uiManager.setRoleMenuActive(false);
+                    }
+                    if (this.m_map.arenaMode && this.m_localId == msg.playerId) {
                         this.m_uiManager.setRoleMenuActive(false);
                     }
                     if (roleDef.killFeed?.assign) {

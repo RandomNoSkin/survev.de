@@ -30,6 +30,7 @@ import type { Localization } from "./localization";
 import { PieTimer } from "./pieTimer";
 import type { Touch } from "./touch";
 import type { UiManager2 } from "./ui2";
+import { TeamColor } from "../../../shared/defs/maps/factionDefs";
 
 function humanizeTime(time: number) {
     const hours = Math.floor(time / 3600);
@@ -86,6 +87,7 @@ export class UiManager {
     statsLogo = $("#ui-stats-logo");
     escMenuElem = $("#ui-game-menu");
     escMenuDisplayed = false;
+    //roleMenu
     roleMenuElemWrapper = $("#ui-role-menu-wrapper");
     roleMenuElem = $("#ui-role-menu");
     roleMenuFooterEnterElem = $("#ui-role-footer-enter");
@@ -97,7 +99,20 @@ export class UiManager {
     roleSelected = "";
     roleMenuConfirm = $("#ui-role-footer-enter");
 
+    //roleMenuArena
+    roleMenuArenaElemWrapper = $("#ui-arena-role-menu-wrapper");
+    roleMenuArenaElem = $("#ui-arena-role-menu");
+    roleMenuArenaFooterEnterElem = $("#ui-arena-role-footer-enter");
+    roleMenuArenaFooterHtml = "";
+    roleMenuArenaActive = false;
+    roleMenuArenaDisplayed = false;
+    roleMenuArenaTicker = 0;
+    roleArenaDisplayed = "";
+    roleArenaSelected = "";
+    roleMenuArenaConfirm = $("#ui-arena-role-footer-enter");
+
     roleMenuInst: SoundHandle | null = null;
+    roleMenuArenaInst: SoundHandle | null = null;
     topLeft = $("#ui-top-left");
     waitingForPlayers = true;
     waitingText = $("#ui-waiting-text");
@@ -290,6 +305,12 @@ export class UiManager {
             e.stopPropagation();
             this.roleSelected = this.roleDisplayed;
             this.setRoleMenuActive(false);
+        });
+
+        this.roleMenuArenaConfirm.on("click", (e) => {
+            e.stopPropagation();
+            this.roleArenaSelected = this.roleArenaDisplayed;
+            this.setArenaRoleMenuActive(false);
         });
 
         $("#ui-map-wrapper").css("display", "block");
@@ -570,7 +591,9 @@ export class UiManager {
         this.clearUI();
 
         this.roleMenuConfirm.off("click");
+        this.roleMenuArenaConfirm.off("click");
         $(".ui-role-option").off("click");
+        $(".ui-arena-role-option").off("click");
         $(".ui-map-expand").off("mousedown");
         $(".ui-map-expand").off("click");
         $("#ui-map-minimize").off("mousedown");
@@ -619,6 +642,7 @@ export class UiManager {
         this.m_pieTimer.destroy();
         this.clearStatsElems();
         this.setRoleMenuActive(false);
+        this.setArenaRoleMenuActive(false);
         this.init();
     }
 
@@ -958,6 +982,28 @@ export class UiManager {
             if (this.roleMenuTicker <= 0) {
                 this.roleSelected = this.roleDisplayed;
                 this.setRoleMenuActive(false);
+            }
+        }
+        if (this.roleMenuArenaActive) {
+            this.roleMenuArenaTicker -= dt;
+
+            const seconds = Math.ceil(this.roleMenuArenaTicker);
+            const html = `${this.localization.translate("game-enter-game")} (${seconds})`;
+            if (html != this.roleMenuArenaFooterHtml) {
+                this.roleMenuArenaFooterEnterElem.html(html);
+                this.roleMenuArenaFooterHtml = html;
+            }
+            if (
+                !this.roleMenuArenaInst &&
+                this.audioManager.isSoundLoaded("ambient_lab_01", "ambient")
+            ) {
+                this.roleMenuArenaInst = this.audioManager.playSound("ambient_lab_01", {
+                    channel: "ambient",
+                });
+            }
+            if (this.roleMenuArenaTicker <= 0) {
+                this.roleArenaSelected = this.roleArenaDisplayed;
+                this.setArenaRoleMenuActive(false);
             }
         }
     }
@@ -2450,6 +2496,10 @@ export class UiManager {
             "transform",
             `translateX(-50%) translateY(-50%) scale(${roleMenuScale})`,
         );
+        this.roleMenuArenaElem.css(
+            "transform",
+            `translateX(-50%) translateY(-50%) scale(${roleMenuScale})`,
+        );
 
         this.redraw(camera);
     }
@@ -2574,6 +2624,9 @@ export class UiManager {
                 if (this.roleMenuActive) {
                     this.displayRoleMenu();
                 }
+                if (this.roleMenuArenaActive) {
+                    this.displayRoleMenuArena();
+                }
             } else if (this.bigmapDisplayed) {
                 this.displayMapLarge(true);
             } else {
@@ -2592,6 +2645,9 @@ export class UiManager {
                 this.inputBinds.menuHovered = false;
                 if (this.roleMenuActive) {
                     this.hideRoleMenu();
+                }
+                if (this.roleMenuArenaActive) {
+                    this.hideRoleMenuArena();
                 }
             }
         }
@@ -2623,13 +2679,34 @@ export class UiManager {
             this.hideRoleMenu();
         }
     }
+    setArenaRoleMenuActive(active: boolean) {
+        this.roleMenuArenaActive = active;
+        if (this.roleMenuArenaActive) {
+            this.roleMenuArenaTicker = GameConfig.player.perkModeRoleSelectDuration;
+            this.displayRoleMenuArena();
+        } else {
+            if (this.roleMenuArenaInst) {
+                this.audioManager.stopSound(this.roleMenuArenaInst);
+                this.roleMenuArenaInst = null;
+            }
+            this.hideRoleMenuArena();
+        }
+    }
 
     displayRoleMenu() {
         this.roleMenuElemWrapper.css("display", "block");
     }
 
+    displayRoleMenuArena() {
+        this.roleMenuArenaElemWrapper.css("display", "block");
+    }
+
     hideRoleMenu() {
         this.roleMenuElemWrapper.css("display", "none");
+    }
+
+    hideRoleMenuArena() {
+        this.roleMenuArenaElemWrapper.css("display", "none");
     }
 
     setRoleMenuOptions(role: string, roles: string[]) {
@@ -2659,6 +2736,35 @@ export class UiManager {
             selectedRole = role;
         }
         this.setRoleMenuInfo(selectedRole);
+    }
+
+    setArenaRoleMenuOptions(role: string, roles: string[]) {
+        $("#ui-arena-role-header").html("");
+
+        for (let a = 0; a < roles.length; a++) {
+            const role = roles[a];
+            const roleDef = GameObjectDefs[role] as RoleDef;
+            const roleOption = $("<div/>", {
+                class: "ui-arena-role-option",
+                "data-role": role,
+            });
+            roleOption.css({
+                "background-image": `url('${roleDef.guiImg}')`,
+            });
+            $("#ui-arena-role-header").append(roleOption);
+        }
+
+        $(".ui-arena-role-option").on("click", (e) => {
+            e.stopPropagation();
+            const el = $(e.currentTarget);
+            this.setArenaRoleMenuInfo(el.data("role"));
+        });
+
+        let selectedRole = roles[0];
+        if (roles.includes(role)) {
+            selectedRole = role;
+        }
+        this.setArenaRoleMenuInfo(selectedRole);
     }
 
     setRoleMenuInfo(role: string) {
@@ -2727,5 +2833,78 @@ export class UiManager {
         }
         $("#ui-role-body").html("").append(roleBodyLeft).append(roleBodyRight);
         this.roleDisplayed = role;
+    }
+
+    setArenaRoleMenuInfo(role: string) {
+        const roleDef = GameObjectDefs[role] as RoleDef;
+        $(".ui-arena-role-option").css({
+            "background-size": 132,
+            opacity: 0.5,
+        });
+        $("#ui-arena-role-header").find(`[data-role=${role}]`).css({
+            "background-size": 164,
+            opacity: 1,
+        });
+        const roleBodyLeft = $("<div/>", {
+            class: "ui-arena-role-body-left",
+        });
+        const roleBodyName = $("<div/>", {
+            class: "ui-arena-role-body-name",
+        });
+        const roleBodyImg = $("<div/>", {
+            class: "ui-arena-role-body-image",
+        });
+
+        const roleName = this.localization.translate(`game-${role}`);
+        roleBodyName.html(roleName);
+        roleBodyImg.css({
+            "background-image": `url('${roleDef.guiImg}')`,
+        });
+        const borderColor = roleDef.color
+            ? helpers.colorToHexString(roleDef.color)
+            : "default";
+        this.roleMenuArenaElem.css("border-color", borderColor);
+
+        roleBodyLeft.append(roleBodyName).append(roleBodyImg);
+
+        const roleBodyRight = $("<div/>", {
+            class: "ui-arena-role-body-right",
+        });
+        const roleGuns = roleDef.defaultItems?.weapons;
+        if(roleGuns)
+        for (let i = 0; i < 2; i++) {
+            const gun = roleGuns[i];
+            const perkElem = $("<div/>", {
+                class: "ui-arena-role-body-perk",
+            });
+            const perkElemImg = $("<div/>", {
+                class: "ui-arena-role-body-perk-image-wrapper",
+            }).append(
+                $("<div/>", {
+                    class: "ui-arena-role-body-perk-image-icon",
+                }),
+            );
+            const perkElemName = $("<div/>", {
+                class: "ui-arena-role-body-perk-name",
+            });
+
+             const rawWeapon = typeof gun === "function" ? null : gun;
+            if (!rawWeapon) continue;
+
+            const weaponType = rawWeapon.type;
+
+
+            const weaponImg = helpers.getSvgFromGameType(weaponType);
+            perkElemImg.find(".ui-arena-role-body-perk-image-icon").css({
+                "background-image": `url('${weaponImg}')`,
+            });
+
+            const perkName = this.localization.translate(`game-${weaponType}`);
+            perkElemName.html(perkName);
+            perkElem.append(perkElemImg).append(perkElemName);
+            roleBodyRight.append(perkElem);
+        }
+        $("#ui-arena-role-body").html("").append(roleBodyLeft).append(roleBodyRight);
+        this.roleArenaDisplayed = role;
     }
 }

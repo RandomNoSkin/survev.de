@@ -164,6 +164,8 @@ export interface MapDef {
         sniperMode?: boolean;
         perkMode?: boolean;
         perkModeRoles?: string[];
+        arenaMode?: boolean;
+        arenaModeRoles?: string[];
         turkeyMode?: boolean;
         spookyKillSounds?: boolean;
     };
