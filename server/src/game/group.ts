@@ -1,7 +1,7 @@
 import { GameConfig } from "../../../shared/gameConfig";
 import { util } from "../../../shared/utils/util";
 import type { Vec2 } from "../../../shared/utils/v2";
-import type { Game } from "./game";
+import { Game } from "./game";
 import type { Player } from "./objects/player";
 
 class BasePlayerGroup {
@@ -16,6 +16,7 @@ class BasePlayerGroup {
     livingPlayers: Player[] = [];
 
     allDeadOrDisconnected = true; // only set to false when first player is added to the group
+    arenaRoles: string[] = [];
 
     constructor(id: number, type: BasePlayerGroup["type"]) {
         this.id = id;
@@ -43,6 +44,10 @@ class BasePlayerGroup {
         this.livingPlayers.push(player);
         this.allDeadOrDisconnected = false;
         this.checkPlayers();
+    }
+
+    setArenaRoles(roles: string[]){
+        this.arenaRoles = roles;
     }
 
     removePlayer(player: Player) {

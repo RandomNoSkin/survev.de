@@ -19,7 +19,7 @@ import type { GunDef } from "../../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../../shared/defs/gameObjects/meleeDefs";
 import type { OutfitDef } from "../../../../shared/defs/gameObjects/outfitDefs";
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs";
-import type { RoleDef } from "../../../../shared/defs/gameObjects/roleDefs";
+import { RoleDefs, type RoleDef } from "../../../../shared/defs/gameObjects/roleDefs";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import {
@@ -52,6 +52,7 @@ import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject
 import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
+import { TeamColor } from "../../../../shared/defs/maps/factionDefs";
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -351,7 +352,22 @@ export class PlayerBarn {
         }
         this.game.pluginManager.emit("playerJoin", player);
 
-        this.game.updateData();       
+        this.game.updateData();   
+
+        //acitvating role choice
+        //needs to be after initializing player -> we need player ID
+        if(player.game.map.arenaMode && !player.spectator && !player.role){
+            player.roleMenuTicker = GameConfig.player.perkModeRoleSelectDuration + 5;
+            const roles = group?.arenaRoles ?? this.game.map.mapDef.gameMode.arenaModeRoles ?? [];
+            if(roles.length>=2){
+                let arenaRolesMsg = new net.ArenaRolesMsg;
+                arenaRolesMsg.availableGroupRoles = roles;
+                arenaRolesMsg.activePlayer = player.__id;
+                this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg);
+            }else if(roles.length == 1){
+                player.promoteToRole(roles[0]);
+            }
+        }    
     }
 
     testPlayerCount = 0;
@@ -627,6 +643,8 @@ export class PlayerBarn {
         const hash = Math.random().toString(16).slice(2);
         const groupId = this.groupIdAllocator.getNextId();
         const group = new Group(hash, groupId, autoFill, this.game.teamMode, isSpectator);
+        group.arenaRoles = this.game.map.mapDef.gameMode.arenaModeRoles ?? [];
+        console.log(group.arenaRoles);
         if(!group.isSpectatorGroup)
         this.groups.push(group);
         this.groupsByHash.set(hash, group);
@@ -1024,11 +1042,8 @@ export class Player extends BaseGameObject {
 
         switch (role) {
             case "the_hunted":
-                if (roleDef.mapIndicator) {
-                    this.mapIndicator?.kill();
-                    this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
-                }
-                break;
+            case "arena1":
+            case "arena2":
             case "indicator":
                 if (roleDef.mapIndicator) {
                     this.mapIndicator?.kill();
@@ -1205,6 +1220,41 @@ export class Player extends BaseGameObject {
         // Reset camper tracking to avoid false positives right after spawning
         this.camperAnchorPos = v2.copy(this.pos);
         this.currentTime = Date.now();
+
+        this.game.grid.updateObject(this);
+        this.setDirty();
+    }
+
+    playerRoleSelect(role: string): void {
+
+        // so the client can't be manipulated to send lone survivr or something and 2 people cant get same role in the team
+        if (!this.group?.arenaRoles.includes(role)){
+            if(this.group){
+                let arenaRolesMsg = new net.ArenaRolesMsg;
+                arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
+                arenaRolesMsg.activePlayer = this.__id;
+                this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg)
+            }
+            return;
+        } 
+
+        this.roleMenuTicker = 0;
+        this.promoteToRole(role);
+        if(this.group){
+            this.group.arenaRoles = this.group.arenaRoles.filter(r => r !== role);
+            for(const player of this.group.getAlivePlayers()){
+                if(!player.role){
+                    let arenaRolesMsg = new net.ArenaRolesMsg;
+                    arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
+                    arenaRolesMsg.activePlayer = player.__id;
+                    this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg)
+                }
+            }
+        }
+
+        // Reset camper tracking to avoid false positives right after spawning
+        this.camperAnchorPos = v2.copy(this.pos);
+        this.currentTime = this.game.startedTime;
 
         this.game.grid.updateObject(this);
         this.setDirty();
@@ -1764,7 +1814,7 @@ export class Player extends BaseGameObject {
             }
         }
 
-        if (this.roleMenuTicker > 0) {
+        if (this.roleMenuTicker > 0 && this.game.map.mapDef.gameMode.perkMode) {
             this.roleMenuTicker -= dt;
             if (this.roleMenuTicker <= 0) {
                 this.roleMenuTicker = 0;
@@ -1774,8 +1824,19 @@ export class Player extends BaseGameObject {
             }
         }
 
+        if (this.roleMenuTicker > 0 && this.game.map.mapDef.gameMode.arenaMode) {
+            this.roleMenuTicker -= dt;
+            if (this.roleMenuTicker <= 0) {
+                this.roleMenuTicker = 0;
+                const roleChoices = this.game.map.mapDef.gameMode.arenaModeRoles!;
+                const randomRole = roleChoices[util.randomInt(0, roleChoices.length - 1)];
+                this.playerRoleSelect(randomRole);
+            }
+        }
+
         // players are still choosing a perk from the perk select menu
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         //
         // Direction
@@ -2630,16 +2691,17 @@ export class Player extends BaseGameObject {
             );
         }
 
-        let defaultItems = (this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems);
+        let defaultItems = (RoleDefs[this.role].defaultItems || GameConfig.player.defaultItems);
 
         this.chest = defaultItems.chest;
         assertType(this.chest, "chest", true);
 
-        this.scope = defaultItems.scope;
-        assertType(this.scope, "scope", false);
-        this.invManager.set(this.scope as InventoryItem, 1);
+        const tc = 0 as TeamColor;
 
-        this.helmet = defaultItems.helmet;
+        this.helmet =
+            typeof defaultItems.helmet === "function"
+            ? defaultItems.helmet(tc)
+            : defaultItems.helmet;
         assertType(this.helmet, "helmet", true);
 
         this.backpack = defaultItems.backpack;
@@ -3070,6 +3132,7 @@ export class Player extends BaseGameObject {
         if (this.downed && this.downedDamageTicker > 0) return;
         // cobalt players on role picker menu
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         const playerSource =
             params.source?.__type === ObjectType.Player
@@ -3959,6 +4022,7 @@ export class Player extends BaseGameObject {
 
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         this.dirNew = v2.normalizeSafe(msg.toMouseDir);
 
@@ -4797,6 +4861,7 @@ export class Player extends BaseGameObject {
         if (!pickup) return;
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         const itemDef = GameObjectDefs[dropMsg.item] as LootDef;
         if (!itemDef) return;
@@ -4936,6 +5001,7 @@ export class Player extends BaseGameObject {
     emoteFromMsg(msg: net.EmoteMsg) {
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
         if (this.emoteHardTicker > 0) return;
 
         const emoteMsg = msg as net.EmoteMsg;

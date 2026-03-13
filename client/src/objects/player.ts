@@ -728,7 +728,7 @@ export class Player implements AbstractObject {
     }
 
     canInteract(map: Map) {
-        return !this.m_netData.m_dead && (!map.perkMode || this.m_netData.m_role);
+        return !this.m_netData.m_dead && (!map.perkMode || this.m_netData.m_role || !map.arenaMode);
     }
 
     m_updatePerks(

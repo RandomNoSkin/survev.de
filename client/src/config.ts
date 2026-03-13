@@ -92,6 +92,7 @@ const defaultConfig = {
     regionSelected: false,
     lastNewsTimestamp: 0,
     perkModeRole: "",
+    arenaModeRole: "",
     loadout: loadout.defaultLoadout(),
     sessionCookie: "" as string | null,
     binds: "",

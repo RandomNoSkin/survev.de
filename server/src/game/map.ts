@@ -199,6 +199,7 @@ export class GameMap {
 
     factionMode: boolean;
     perkMode: boolean;
+    arenaMode: boolean;
     turkeyMode: boolean;
     woodsMode: boolean;
     desertMode: boolean;
@@ -290,6 +291,7 @@ export class GameMap {
         );
         this.factionMode = !!this.mapDef.gameMode.factionMode;
         this.perkMode = !!this.mapDef.gameMode.perkMode;
+        this.arenaMode = !!this.mapDef.gameMode.arenaMode;
         this.turkeyMode = !!this.mapDef.gameMode.turkeyMode;
         this.woodsMode = !!this.mapDef.gameMode.woodsMode;
         this.desertMode = !!this.mapDef.gameMode.desertMode;
