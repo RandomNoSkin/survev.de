@@ -320,10 +320,6 @@ export class PlayerBarn {
             } else {
                 player.groupId = player.teamId = this.groupIdAllocator.getNextId();
             }
-
-            let joinFeedMsg = new net.JoinFeedMsg;
-            joinFeedMsg.name = player.name;
-            this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         
 
         if (player.game.map.perkMode) {
@@ -352,6 +348,10 @@ export class PlayerBarn {
                 this.livingPlayers.sort((a, b) => a.teamId - b.teamId);
             }
             this.aliveCountDirty = true;
+
+            let joinFeedMsg = new net.JoinFeedMsg;
+            joinFeedMsg.name = player.name;
+            this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         
         }
         this.game.pluginManager.emit("playerJoin", player);
