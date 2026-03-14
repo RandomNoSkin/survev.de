@@ -354,6 +354,7 @@ export enum MsgType {
     RoleSelect,
     ArenaRoles,
     JoinAsSpectator,
+    JoinFeed,
 }
 
 export enum PickupMsgType {
@@ -384,6 +385,7 @@ export { MapMsg } from "./mapMsg";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg";
 export { RoleSelectMsg } from "./roleSelectMsg";
 export { ArenaRolesMsg } from "./arenaRolesMsg";
+export { JoinFeedMsg } from "./joinFeedMsg";
 export { PickupMsg } from "./pickupMsg";
 export { PlayerStatsMsg } from "./playerStatsMsg";
 export { RoleAnnouncementMsg } from "./roleAnnouncementMsg";

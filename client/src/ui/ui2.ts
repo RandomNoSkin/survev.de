@@ -1620,6 +1620,20 @@ export class UiManager2 {
         return `${killerTxt} knocked ${youTxt} out`;
     }
 
+    getJoinedText(name: string){
+        const joinTxt = this.localization.translate("game-joined");
+        return `${name} ${joinTxt}`;
+    }
+
+    getEnemieText(enemies: string[]){
+        const txt = this.localization.translate("game-your-enemies-are");
+        let enemiesTxt = "";
+        for(const e of enemies){
+            enemiesTxt = enemiesTxt + " " + e;
+        }
+        return `${txt}${enemiesTxt}`;
+    }
+
     getPickupMessageText(type: PickupMsgType) {
         const typeMap: Record<number, string> = {
             [PickupMsgType.Full]: "game-not-enough-space",

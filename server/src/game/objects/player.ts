@@ -320,6 +320,10 @@ export class PlayerBarn {
             } else {
                 player.groupId = player.teamId = this.groupIdAllocator.getNextId();
             }
+
+            let joinFeedMsg = new net.JoinFeedMsg;
+            joinFeedMsg.name = player.name;
+            this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         
 
         if (player.game.map.perkMode) {
@@ -745,6 +749,7 @@ export class Player extends BaseGameObject {
     group: Group | undefined = undefined;
 
     spectator: boolean = false;
+    announcedEnemies: boolean = false;
 
     /**
      * set true if any member on the team changes health or disconnects
@@ -2289,6 +2294,21 @@ export class Player extends BaseGameObject {
         let freezeTimer = this.game.map.mapDef.gameMode.freezeTime || 0;
         if(this.game.startedTime <= freezeTimer && freezeTimer != 0){
             return;
+        }else if(this.game.startedTime >= freezeTimer && !this.announcedEnemies){
+
+            const enemieGroups = this.game.playerBarn.getAliveGroups().filter(g => g !== this.group);
+            let enemies: string[] = [];
+            for(const g of enemieGroups){
+                const enemiePlayers = g.getAlivePlayers();
+                for(const p of enemiePlayers){
+                    enemies.push(p.name);
+                }
+            }
+            this.announcedEnemies = true;
+
+            let joinFeedMsg = new net.JoinFeedMsg;
+            joinFeedMsg.enemieNames = enemies;
+            this.sendMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
 
 
