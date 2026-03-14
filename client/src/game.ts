@@ -46,6 +46,7 @@ import type { Localization } from "./ui/localization";
 import { Touch } from "./ui/touch";
 import { UiManager } from "./ui/ui";
 import { UiManager2 } from "./ui/ui2";
+import { name } from "ejs";
 
 export interface Ctx {
     audioManager: AudioManager;
@@ -1528,6 +1529,21 @@ export class Game {
                 }
 
                 break;
+            }
+            case net.MsgType.JoinFeed: {
+                const msg = new net.JoinFeedMsg();
+                msg.deserialize(stream);
+                const playerName = msg.name;
+                const enemieNames = msg.enemieNames;
+                if(enemieNames.length <=0){
+                    const text = this.m_ui2Manager.getJoinedText(playerName);
+                    this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
+                }else{
+                    const text = this.m_ui2Manager.getEnemieText(enemieNames);
+                    this.m_ui2Manager.addKillFeedMessage(text, "#ff00f2");
+                }
+                
+                break
             }
             case net.MsgType.RoleAnnouncement: {
                 const msg = new net.RoleAnnouncementMsg();
