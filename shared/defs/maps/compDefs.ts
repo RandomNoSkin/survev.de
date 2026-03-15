@@ -366,9 +366,9 @@ export const Comp: MapDef = {
         ],
         tier_ring_case: [
             { name: "grozas", count: 1, weight: 0.67 }, 
-            { name: "ots38_dual", count: 1, weight: 0.11 }, 
-            { name: "pkp", count: 1, weight: 0.11 },
-            { name: "sv98", count: 1, weight: 0.11 }, 
+            { name: "ots38_dual", count: 1, weight: 0.12 }, 
+            { name: "pkp", count: 1, weight: 0.13 },
+            { name: "sv98", count: 1, weight: 0.08 }, 
         ],
         tier_chest: [
             { name: "mk12", count: 1, weight: 0.3 },
@@ -497,14 +497,14 @@ export const Comp: MapDef = {
         tier_chest_sniper_tea: [
             { name: "mosin", count: 1, weight: 0.16 },  // 8%
             //{ name: "sv98", count: 1, weight: 0.0662 },   // 1.75%
-            { name: "scout_elite", count: 1, weight: 0.5 },
-            { name: "saiga", count: 1, weight: 0.3 },
+            { name: "scout_elite", count: 1, weight: 0.3 },
+            { name: "saiga", count: 1, weight: 0.35 },
             { name: "blr", count: 1, weight: 0.45 },
             { name: "spas12", count: 1, weight: 0.7 },
-            { name: "deagle", count: 1, weight: 0.15 },
-            { name: "vector", count: 1, weight: 0.1 },
+            { name: "deagle", count: 1, weight: 0.2 },
+            { name: "vector", count: 1, weight: 0.2 },
             // { name: "awc", count: 1, weight: 0.074 },
-            { name: "", count: 1, weight: 0.4 },
+            { name: "", count: 1, weight: 0.3 },
         ],
         tier_chest_sniper: [
             { name: "garand", count: 1, weight: 0.25 },  // 8%
@@ -791,7 +791,7 @@ export const Comp: MapDef = {
         tier_airdrop_uncommon: [
             { name: "l86", count: 1, weight: 2.5 },
             { name: "imbel", count: 1, weight: 1.5 },
-            { name: "mosin", count: 1, weight: 1.5 },
+            { name: "mosin", count: 1, weight: 1 },
             { name: "svd", count: 1, weight: 2.5 },
             { name: "m1014", count: 1, weight: 1.5 },
             { name: "spas16", count: 1, weight: 1.5 },
@@ -799,7 +799,7 @@ export const Comp: MapDef = {
             { name: "tier_hawk", count: 1, weight: 1 },
             //{ name: "m9", count: 1, weight: 0.01 },
             { name: "tier_flare", count: 1, weight: 0.5 },
-            { name: "blr", count: 1, weight: 1 },
+            { name: "blr", count: 1, weight: 1.5 },
             { name: "an94", count: 1, weight: 2 }, // !
         ],
         tier_airdrop_rare: [
@@ -1140,7 +1140,7 @@ export const Comp: MapDef = {
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
                 cache_01: 1, // flare stone
-                cache_02: { small: 1, large: 1,}, // mosin tree
+                cache_02: { odds: 0.66 }, // mosin tree
                 cache_07: 1, //barrel
                 bunker_structure_01: { odds: 0.4 }, // ak74 bunker
                 bunker_structure_02: 1, // vector bunker
