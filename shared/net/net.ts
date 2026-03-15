@@ -351,7 +351,10 @@ export enum MsgType {
     UpdatePass,
     AliveCounts,
     PerkModeRoleSelect,
+    RoleSelect,
+    ArenaRoles,
     JoinAsSpectator,
+    JoinFeed,
 }
 
 export enum PickupMsgType {
@@ -380,6 +383,9 @@ export { JoinMsg } from "./joinMsg";
 export { KillMsg } from "./killMsg";
 export { MapMsg } from "./mapMsg";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg";
+export { RoleSelectMsg } from "./roleSelectMsg";
+export { ArenaRolesMsg } from "./arenaRolesMsg";
+export { JoinFeedMsg } from "./joinFeedMsg";
 export { PickupMsg } from "./pickupMsg";
 export { PlayerStatsMsg } from "./playerStatsMsg";
 export { RoleAnnouncementMsg } from "./roleAnnouncementMsg";

@@ -19,7 +19,7 @@ import type { GunDef } from "../../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../../shared/defs/gameObjects/meleeDefs";
 import type { OutfitDef } from "../../../../shared/defs/gameObjects/outfitDefs";
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs";
-import type { RoleDef } from "../../../../shared/defs/gameObjects/roleDefs";
+import { RoleDefs, type RoleDef } from "../../../../shared/defs/gameObjects/roleDefs";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import {
@@ -52,6 +52,7 @@ import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject
 import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
+import { TeamColor } from "../../../../shared/defs/maps/factionDefs";
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -347,11 +348,30 @@ export class PlayerBarn {
                 this.livingPlayers.sort((a, b) => a.teamId - b.teamId);
             }
             this.aliveCountDirty = true;
+
+            let joinFeedMsg = new net.JoinFeedMsg;
+            joinFeedMsg.name = player.name;
+            this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         
         }
         this.game.pluginManager.emit("playerJoin", player);
 
-        this.game.updateData();       
+        this.game.updateData();   
+
+        //acitvating role choice
+        //needs to be after initializing player -> we need player ID
+        if(player.game.map.arenaMode && !player.spectator && !player.role){
+            player.roleMenuTicker = GameConfig.player.perkModeRoleSelectDuration + 5;
+            const roles = group?.arenaRoles ?? this.game.map.mapDef.gameMode.arenaModeRoles ?? [];
+            if(roles.length>=2){
+                let arenaRolesMsg = new net.ArenaRolesMsg;
+                arenaRolesMsg.availableGroupRoles = roles;
+                arenaRolesMsg.activePlayer = player.__id;
+                this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg);
+            }else if(roles.length == 1){
+                player.promoteToRole(roles[0]);
+            }
+        }    
     }
 
     testPlayerCount = 0;
@@ -627,6 +647,8 @@ export class PlayerBarn {
         const hash = Math.random().toString(16).slice(2);
         const groupId = this.groupIdAllocator.getNextId();
         const group = new Group(hash, groupId, autoFill, this.game.teamMode, isSpectator);
+        group.arenaRoles = this.game.map.mapDef.gameMode.arenaModeRoles ?? [];
+        console.log(group.arenaRoles);
         if(!group.isSpectatorGroup)
         this.groups.push(group);
         this.groupsByHash.set(hash, group);
@@ -727,6 +749,7 @@ export class Player extends BaseGameObject {
     group: Group | undefined = undefined;
 
     spectator: boolean = false;
+    announcedEnemies: boolean = false;
 
     /**
      * set true if any member on the team changes health or disconnects
@@ -1024,11 +1047,8 @@ export class Player extends BaseGameObject {
 
         switch (role) {
             case "the_hunted":
-                if (roleDef.mapIndicator) {
-                    this.mapIndicator?.kill();
-                    this.mapIndicator = this.game.mapIndicatorBarn.allocIndicator(role, true);
-                }
-                break;
+            case "arena1":
+            case "arena2":
             case "indicator":
                 if (roleDef.mapIndicator) {
                     this.mapIndicator?.kill();
@@ -1205,7 +1225,41 @@ export class Player extends BaseGameObject {
         // Reset camper tracking to avoid false positives right after spawning
         this.camperAnchorPos = v2.copy(this.pos);
         this.currentTime = Date.now();
-        this.camperGraceUntil = Date.now() + GameConfig.player.camperGracePeriod;
+
+        this.game.grid.updateObject(this);
+        this.setDirty();
+    }
+
+    playerRoleSelect(role: string): void {
+
+        // so the client can't be manipulated to send lone survivr or something and 2 people cant get same role in the team
+        if (!this.group?.arenaRoles.includes(role)){
+            if(this.group){
+                let arenaRolesMsg = new net.ArenaRolesMsg;
+                arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
+                arenaRolesMsg.activePlayer = this.__id;
+                this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg)
+            }
+            return;
+        } 
+
+        this.roleMenuTicker = 0;
+        this.promoteToRole(role);
+        if(this.group){
+            this.group.arenaRoles = this.group.arenaRoles.filter(r => r !== role);
+            for(const player of this.group.getAlivePlayers()){
+                if(!player.role){
+                    let arenaRolesMsg = new net.ArenaRolesMsg;
+                    arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
+                    arenaRolesMsg.activePlayer = player.__id;
+                    this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg)
+                }
+            }
+        }
+
+        // Reset camper tracking to avoid false positives right after spawning
+        this.camperAnchorPos = v2.copy(this.pos);
+        this.currentTime = this.game.startedTime;
 
         this.game.grid.updateObject(this);
         this.setDirty();
@@ -1564,8 +1618,8 @@ export class Player extends BaseGameObject {
     lastPos = v2.create(0, 0);
     camperAnchorPos = v2.create(0, 0);
     currentTime = Date.now();
+    punishmentTime = this.game.startedTime;
     camper = false;
-    camperGraceUntil = 0;
     distanceMoved = 0;
 
     ticks = 0;
@@ -1607,9 +1661,6 @@ export class Player extends BaseGameObject {
         // start the camper anchor at spawn position so the first check isn't influenced
         // by the default (0,0) init value.
         this.camperAnchorPos = v2.copy(this.pos);
-        // Give players a short grace period after spawning to move before being flagged as a camper.
-        const camperGracePeriode = this.game.map.mapDef.gameMode.camperGracePeriod ?? GameConfig.player.camperGracePeriod;
-        this.camperGraceUntil = Date.now() + camperGracePeriode;
 
         this.matchDataId = game.playerBarn.nextMatchDataId++;
 
@@ -1768,7 +1819,7 @@ export class Player extends BaseGameObject {
             }
         }
 
-        if (this.roleMenuTicker > 0) {
+        if (this.roleMenuTicker > 0 && this.game.map.mapDef.gameMode.perkMode) {
             this.roleMenuTicker -= dt;
             if (this.roleMenuTicker <= 0) {
                 this.roleMenuTicker = 0;
@@ -1778,8 +1829,19 @@ export class Player extends BaseGameObject {
             }
         }
 
+        if (this.roleMenuTicker > 0 && this.game.map.mapDef.gameMode.arenaMode) {
+            this.roleMenuTicker -= dt;
+            if (this.roleMenuTicker <= 0) {
+                this.roleMenuTicker = 0;
+                const roleChoices = this.game.map.mapDef.gameMode.arenaModeRoles!;
+                const randomRole = roleChoices[util.randomInt(0, roleChoices.length - 1)];
+                this.playerRoleSelect(randomRole);
+            }
+        }
+
         // players are still choosing a perk from the perk select menu
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         //
         // Direction
@@ -1796,17 +1858,24 @@ export class Player extends BaseGameObject {
 
         if(antiCamp){
                 const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
+                
+                // Give players a short grace period after spawning to move before being flagged as a camper.
+                const camperGracePeriode = this.game.map.mapDef.gameMode.camperGracePeriod ?? GameConfig.player.camperGracePeriod;
+                const camperPunishmentDistance = this.game.map.mapDef.gameMode.camperPunishmentDistance ?? GameConfig.player.camperPunishmentDistance;
+                const camperDecayTime = this.game.map.mapDef.gameMode.camperDecayTime ?? GameConfig.player.camperDecayTime;
+                const camperPunishmentTime = this.game.map.mapDef.gameMode.camperPunishmentTime ?? GameConfig.player.camperPunishmentTime;
 
-                if (this.game.startedTime > freezeTime) {
-                    const now = Date.now();
+                const now = this.game.startedTime;
 
                     // Allow a short grace period at spawn so players who start under cover
                     // won't be immediately flagged as campers.
-                    if (now < this.camperGraceUntil) {
+                    if (this.game.startedTime < camperGracePeriode + freezeTime) {
                         if (this.camper) {
                             this.camper = false;
                             if(this.role === "camper")
                             this.removeRole();
+                            if(this.game.map.mapDef.gameMode.indicator)
+                            this.promoteToRole("arena");
                         }
                         this.camperAnchorPos = v2.copy(this.pos);
                         this.currentTime = now;
@@ -1818,36 +1887,40 @@ export class Player extends BaseGameObject {
 
                         // Reset the timer/anchor if the player moves far enough.
 
-                        const camperPunishmentDistance = this.game.map.mapDef.gameMode.camperPunishmentDistance ?? GameConfig.player.camperPunishmentDistance;
-
                         if (distFromAnchor > camperPunishmentDistance) {
                             this.camperAnchorPos = v2.copy(this.pos);
                             this.currentTime = now;
-                            this.camper = false;
-                            if(this.role === "camper")
-                            this.removeRole();
+                            if(this.camper && this.punishmentTime + camperPunishmentTime < now){
+                                this.camper = false;
+                                if(this.role === "camper")
+                                this.removeRole();
+                                if(this.game.map.mapDef.gameMode.indicator)
+                                this.promoteToRole("arena");
+                            }
                         }
 
                         // check if enough time has passed to evaluate camping state
-                        const camperDecayTime = this.game.map.mapDef.gameMode.camperDecayTime ?? GameConfig.player.camperDecayTime;
-                        const camperPunishmentTime = this.game.map.mapDef.gameMode.camperPunishmentTime ?? GameConfig.player.camperPunishmentTime;
-
                         if (
                             this.currentTime + camperDecayTime < now || 
-                            (this.camper && this.currentTime + camperPunishmentTime < now)
+                            (this.camper && this.punishmentTime + camperPunishmentTime < now)
                         ) {
                             // if player is using a heal item or reviving also skip the decay
                             if (
                                 distFromAnchor < camperPunishmentDistance &&
                                 this.actionType !== GameConfig.Action.UseItem &&
-                                this.actionType !== GameConfig.Action.Revive &&
+                                this.actionType !== GameConfig.Action.Revive && !this.downed &&
                                 this.isUnderCover()
                             ) {
                                 this.camper = true;
+                                this.punishmentTime = this.game.startedTime;
                             } else {
-                                this.camper = false;
-                                if(this.role === "camper")
-                                this.removeRole();
+                                if(this.camper && this.punishmentTime + camperPunishmentTime < now){
+                                    this.camper = false;
+                                    if(this.role === "camper")
+                                    this.removeRole();
+                                    if(this.game.map.mapDef.gameMode.indicator)
+                                    this.promoteToRole("arena");
+                                }
                             }
 
                             // restart the timer / anchor
@@ -1855,30 +1928,19 @@ export class Player extends BaseGameObject {
                             this.currentTime = now;
                         }
                     }
-                }
+                
 
-                if (this.camper && !this.isUnderCover()) {
+                if (this.camper && !this.isUnderCover() && this.punishmentTime + camperPunishmentTime < now) {
                     // if the player leaves cover while marked as camper, remove the role
                     this.camper = false;
                     if(this.role === "camper")
                     this.removeRole();
+                    if(this.game.map.mapDef.gameMode.indicator)
+                    this.promoteToRole("arena");
                 }
 
-                const camperPunishmentDistance = this.game.map.mapDef.gameMode.camperPunishmentDistance ?? GameConfig.player.camperPunishmentDistance;
-                if (this.camper) {
-                    // No punishment method. Player starts moving -> no more decay
-                    if (
-                        this.downed ||
-                        this.distanceMoved >= camperPunishmentDistance
-                    ) {
-                        this.camper = false;
-                        if(this.role === "camper")
-                        this.removeRole();
-                        if(this.game.map.mapDef.gameMode.indicator)
-                            this.promoteToRole("arena");
-                    } else {
+                if (this.camper) {            
                         this.promoteToRole("camper");
-                    }
                 }
         }
         //
@@ -2232,6 +2294,21 @@ export class Player extends BaseGameObject {
         let freezeTimer = this.game.map.mapDef.gameMode.freezeTime || 0;
         if(this.game.startedTime <= freezeTimer && freezeTimer != 0){
             return;
+        }else if(this.game.startedTime >= freezeTimer && !this.announcedEnemies){
+
+            const enemieGroups = this.game.playerBarn.getAliveGroups().filter(g => g !== this.group);
+            let enemies: string[] = [];
+            for(const g of enemieGroups){
+                const enemiePlayers = g.getAlivePlayers();
+                for(const p of enemiePlayers){
+                    enemies.push(p.name);
+                }
+            }
+            this.announcedEnemies = true;
+
+            let joinFeedMsg = new net.JoinFeedMsg;
+            joinFeedMsg.enemieNames = enemies;
+            this.sendMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
 
 
@@ -2634,16 +2711,17 @@ export class Player extends BaseGameObject {
             );
         }
 
-        let defaultItems = (this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems);
+        let defaultItems = (RoleDefs[this.role].defaultItems || GameConfig.player.defaultItems);
 
         this.chest = defaultItems.chest;
         assertType(this.chest, "chest", true);
 
-        this.scope = defaultItems.scope;
-        assertType(this.scope, "scope", false);
-        this.invManager.set(this.scope as InventoryItem, 1);
+        const tc = 0 as TeamColor;
 
-        this.helmet = defaultItems.helmet;
+        this.helmet =
+            typeof defaultItems.helmet === "function"
+            ? defaultItems.helmet(tc)
+            : defaultItems.helmet;
         assertType(this.helmet, "helmet", true);
 
         this.backpack = defaultItems.backpack;
@@ -3074,6 +3152,7 @@ export class Player extends BaseGameObject {
         if (this.downed && this.downedDamageTicker > 0) return;
         // cobalt players on role picker menu
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         const playerSource =
             params.source?.__type === ObjectType.Player
@@ -3963,6 +4042,7 @@ export class Player extends BaseGameObject {
 
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         this.dirNew = v2.normalizeSafe(msg.toMouseDir);
 
@@ -4801,6 +4881,7 @@ export class Player extends BaseGameObject {
         if (!pickup) return;
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
 
         const itemDef = GameObjectDefs[dropMsg.item] as LootDef;
         if (!itemDef) return;
@@ -4940,6 +5021,7 @@ export class Player extends BaseGameObject {
     emoteFromMsg(msg: net.EmoteMsg) {
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
+        if (this.game.map.arenaMode && !this.role) return;
         if (this.emoteHardTicker > 0) return;
 
         const emoteMsg = msg as net.EmoteMsg;

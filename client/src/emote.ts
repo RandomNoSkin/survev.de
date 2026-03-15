@@ -1038,6 +1038,167 @@ export class EmoteBarn {
             }
         }
 
+        const arenaModeDisable = map.arenaMode && !player.m_netData.m_role;
+
+        if (!this.disable && !arenaModeDisable) {
+            this.wheelKeyTriggered = this.pingKeyTriggered || this.emoteMouseTriggered;
+
+            // Manage emote throttle
+            this.emoteSoftTicker -= dt;
+            if (
+                this.emoteCounter >= GameConfig.player.emoteThreshold &&
+                this.emoteHardTicker > 0.0
+            ) {
+                this.emoteHardTicker -= dt;
+                if (this.emoteHardTicker < 0.0) {
+                    this.emoteCounter = 0;
+                }
+            } else if (this.emoteSoftTicker < 0.0 && this.emoteCounter > 0) {
+                this.emoteCounter--;
+                this.emoteSoftTicker = GameConfig.player.emoteSoftCooldown * 1.5;
+            }
+
+            if (
+                (this.pingMouseTriggered || this.emoteMouseTriggered) &&
+                !this.wheelDisplayed
+            ) {
+                this.parentDisplayed = this.pingMouseTriggered
+                    ? this.teamPingWheel
+                    : this.emoteWheel;
+                this.parentDisplayed.css({
+                    display: "block",
+                    left: this.emoteScreenPos.x,
+                    top: this.emoteScreenPos.y,
+                });
+                this.displayWheel(this.parentDisplayed, true);
+                this.wheelDisplayed = true;
+                this.displayedSelectors = this.pingMouseTriggered
+                    ? this.teamPingSelectors
+                    : this.emoteWheelSelectors;
+                this.worldPos = camera.m_screenToPoint(this.emoteScreenPos);
+            }
+
+            if (this.wheelDisplayed) {
+                // Update emote timeout
+                this.emoteTimeoutTicker += dt;
+
+                if (this.emoteTimeoutTicker > emoteTimeout) {
+                    this.inputReset();
+                } else {
+                    // Grey out all wheels if we're on cooldown
+                    if (this.emoteHardTicker > 0.0 && !this.emoteWheelsGreyed) {
+                        this.emoteWheels.css("opacity", 0.5);
+                        this.emoteWheelsGreyed = true;
+                    } else if (this.emoteHardTicker <= 0.0 && this.emoteWheelsGreyed) {
+                        this.emoteWheels.css("opacity", 1.0);
+                        this.emoteWheelsGreyed = false;
+                    }
+
+                    // Grey out team emotes in solo
+                    if (!this.teamEmotesGreyed && teamMode == 1) {
+                        this.teamEmotes.css("opacity", this.teamEmoteOpacityReset);
+                        this.teamEmotesGreyed = true;
+                    }
+
+                    let selector = null;
+
+                    if (device.touch) {
+                        mousePos = this.emoteTouchedPos!;
+                    }
+
+                    if (mousePos) {
+                        const vB = v2.sub(mousePos, this.emoteScreenPos);
+                        vB.y *= -1;
+
+                        const distToCenter = v2.length(vB);
+                        // Arbitrary length to highlight a wedge
+                        const angleB = vectorToDegreeAngle(vB);
+                        const distMinLength = 35;
+
+                        const equippedWeapon =
+                            player.m_localData.m_weapons[player.m_localData.m_curWeapIdx];
+                        const weapDef = GameObjectDefs[equippedWeapon.type] as GunDef;
+                        let ammoType = "";
+                        if (weapDef && weapDef.ammo) {
+                            ammoType = weapDef.ammo;
+                        }
+
+                        for (let i = 0; i < this.displayedSelectors.length; i++) {
+                            const s = this.displayedSelectors[i];
+
+                            if (s.ammoEmote) {
+                                const AmmoTypeToEmote = {
+                                    "9mm": "emote_ammo9mm",
+                                    "12gauge": "emote_ammo12gauge",
+                                    "762mm": "emote_ammo762mm",
+                                    "556mm": "emote_ammo556mm",
+                                    "50AE": "emote_ammo50ae",
+                                    "308sub": "emote_ammo308sub",
+                                    flare: "emote_ammoflare",
+                                    "45acp": "emote_ammo45acp",
+                                } as Record<string, string>;
+
+                                const oldEmote = s.emote;
+                                s.emote = AmmoTypeToEmote[ammoType] || "emote_ammo";
+                                s.texture = EmotesDefs[s.emote].texture;
+
+                                if (oldEmote != s.emote) {
+                                    // Change the image background to our chosen emotes
+                                    const imageElem = s.parent.find(".ui-emote-image");
+                                    const imgUrl = getImgUrlFromSelector(s);
+                                    imageElem.css("background-image", `url(${imgUrl})`);
+                                }
+                            }
+
+                            const highlight = s.ping || s.emote;
+                            const emoteData = EmotesDefs[s.emote];
+                            const teamOnly = emoteData && emoteData.teamOnly;
+
+                            const disableInSolo = teamOnly && teamMode == 1;
+                            if (
+                                distToCenter <= distMinLength &&
+                                !highlight &&
+                                this.emoteHardTicker <= 0.0 &&
+                                !disableInSolo
+                            ) {
+                                selector = s;
+                                continue;
+                            }
+                            if (
+                                isAngleBetween(angleB, s.angleC, s.angleA) &&
+                                distToCenter > distMinLength &&
+                                highlight &&
+                                this.emoteHardTicker <= 0.0 &&
+                                !disableInSolo
+                            ) {
+                                selector = s;
+                                continue;
+                            }
+                            if (s.highlightDisplayed) {
+                                s.parent.css("opacity", this.wedgeOpacityReset);
+                                s.highlight.css("display", "none");
+                                s.highlightDisplayed = false;
+                            }
+                        }
+                    }
+
+                    if (selector) {
+                        this.emoteSelector = selector;
+                        if (!selector.highlightDisplayed) {
+                            selector.parent.css("opacity", 1.0);
+                            selector.highlight.css("display", "block");
+                            selector.highlightDisplayed = true;
+                        }
+                        if (device.touch && this.emoteTouchedPos) {
+                            this.pingMouseTriggered
+                                ? this.triggerPing()
+                                : this.triggerEmote();
+                        }
+                    }
+                }
+            }
+        }
+
         // Update emotes (player positioned)
         for (let i = 0; i < this.emotes.length; i++) {
             const emote = this.emotes[i];

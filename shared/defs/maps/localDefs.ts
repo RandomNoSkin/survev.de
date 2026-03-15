@@ -56,13 +56,15 @@ export const Local: MapDef = {
     gameMode: {
         maxPlayers: 80,
         killLeaderEnabled: true,
+        arenaMode: true,
+        arenaModeRoles: ["indicator"],
 
         freezeTime: 0,
         joinTime: 30, // time until players can move after game start
         airdropMinDistance: 300,
         unlimitedAdren: true,
         pickup: false,
-        indicator: true,
+        indicator: false,
         canDespawn: false,
         betterStats: true,
 
@@ -102,48 +104,6 @@ export const Local: MapDef = {
         bleedDamage: 2,
         bleedDamageMult: 1,
     },
-
-    //default items
-    defaultItems: {
-            weapons: [
-                { type: "spas12", ammo: 9 },
-                { type: "mosin", ammo: 5 },
-                { type: "fists", ammo: 0 },
-                { type: "", ammo: 0 },
-            ],
-            outfit: "outfitDarkShirt",
-            backpack: "backpack03",
-            helmet: "helmet03",
-            chest: "chest03",
-            scope: "4xscope",
-            perks: [],
-            inventory: {
-                "9mm": 0,
-                "762mm": 0,
-                "556mm": 0,
-                "12gauge": 0,
-                "50AE": 0,
-                "308sub": 0,
-                flare: 0,
-                "45acp": 0,
-                frag: 8,
-                smoke: 4,
-                strobe: 1,
-                mirv: 4,
-                snowball: 0,
-                potato: 0,
-                coconut: 12,
-                bandage: 30,
-                healthkit: 4,
-                soda: 0,
-                painkiller: 0,
-                "1xscope": 1,
-                "2xscope": 1,
-                "4xscope": 1,
-                "8xscope": 0,
-                "15xscope": 0,
-            },
-        },
 
 
     // NOTE: this loot table is not the original one so its not accurate

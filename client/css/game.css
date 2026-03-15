@@ -237,6 +237,160 @@ img {
   vertical-align: top;
 }
 
+#ui-arena-role-menu-wrapper {
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  display: none;
+  height: 100vh;
+  left: 0;
+  top: 0;
+  pointer-events: all;
+  position: absolute;
+  width: 100vw;
+  z-index: 11;
+}
+
+#ui-arena-role-menu {
+  background-color: rgba(158, 63, 63, 0.75);
+  border: 8px solid #191919;
+  border-radius: 5px;
+  box-sizing: border-box;
+  cursor: default;
+  left: 50%;
+  margin: 0px auto;
+  position: absolute;
+  top: 50%;
+  transform: translateX(-50%) translateY(-50%) scale(1);
+  width: 1200px;
+}
+
+#ui-arena-role-header {
+  background: rgba(0, 0, 0, 0.6);
+  height: 200px;
+  overflow: hidden;
+  text-align: center;
+}
+
+#ui-arena-role-header .ui-arena-role-option {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 132px;
+  cursor: pointer;
+  display: inline-block;
+  height: 160px;
+  margin: 20px 10px;
+  opacity: 0.5;
+  width: 160px;
+}
+
+#ui-arena-role-body {
+  background-color: rgba(118, 146, 176, 0);
+  height: 450px;
+}
+
+.ui-arena-role-body-left {
+  display: inline-block;
+  margin-top: 48px;
+  vertical-align: top;
+  width: 40%;
+}
+
+.ui-arena-role-body-name {
+  font-size: 80px;
+  font-weight: bold;
+  margin-top: 10px;
+  text-align: center;
+  text-shadow: 3px 3px black;
+}
+
+.ui-arena-role-body-image {
+  background-image: url(/img/loot/player-visor-tank.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 240px;
+  height: 240px;
+  margin: auto;
+  width: 240px;
+}
+
+.ui-arena-role-body-right {
+  display: inline-block;
+  margin-top: 48px;
+  vertical-align: top;
+  width: 55%;
+}
+
+.ui-arena-role-body-perk {
+  margin-bottom: 24px;
+  margin-top: 24px;
+}
+
+.ui-arena-role-body-perk-image-wrapper {
+  background-image: url(/img/loot/loot-circle-outer-03.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 96px;
+  border-radius: 48px;
+  display: inline-block;
+  height: 96px;
+  width: 96px;
+}
+
+.ui-arena-role-body-perk-image-icon {
+  background-image: url(/img/loot/loot-perk-steelskin.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 64px;
+  height: 64px;
+  left: 50%;
+  position: relative;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+}
+
+.ui-arena-role-body-perk-name {
+  display: inline-block;
+  font-size: 56px;
+  font-weight: bold;
+  margin-left: 24px;
+  margin-top: 12px;
+  text-shadow: 3px 3px black;
+  vertical-align: top;
+}
+
+#ui-arena-role-footer {
+  background: rgba(0, 0, 0, 0.6);
+  height: 120px;
+}
+
+#ui-arena-role-footer-desc {
+  display: inline-block;
+  font-size: 64px;
+  font-weight: bold;
+  margin-top: 24px;
+  text-align: center;
+  text-shadow: 3px 3px black;
+  width: 60%;
+  vertical-align: top;
+}
+
+#ui-arena-role-footer-enter {
+  background: rgba(0, 0, 0, 0.75);
+  color: #00ff00;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 40px;
+  font-weight: bold;
+  height: 72px;
+  line-height: 72px;
+  margin-top: 22px;
+  text-align: center;
+  text-shadow: 3px 3px black;
+  width: 36%;
+  vertical-align: top;
+}
+
 #ui-game-menu {
   background-color: rgba(0, 0, 0, 0.5);
   border-radius: 5px;

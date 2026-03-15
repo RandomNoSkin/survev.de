@@ -33,6 +33,7 @@ import { ProjectileBarn } from "./objects/projectile";
 import { SmokeBarn } from "./objects/smoke";
 import { PluginManager } from "./pluginManager";
 import { Profiler } from "./profiler";
+import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 
 export interface JoinTokenData {
     expiresAt: number;
@@ -359,6 +360,7 @@ export class Game {
             | net.DropItemMsg
             | net.SpectateMsg
             | net.PerkModeRoleSelectMsg
+            | net.RoleSelectMsg
             | net.EditMsg
             | undefined = undefined;
 
@@ -426,6 +428,10 @@ export class Game {
                 break;
             case net.MsgType.PerkModeRoleSelect:
                 msg = new net.PerkModeRoleSelectMsg();
+                msg.deserialize(stream);
+                break;
+            case net.MsgType.RoleSelect:
+                msg = new net.RoleSelectMsg();
                 msg.deserialize(stream);
                 break;
             case net.MsgType.Edit:
@@ -512,6 +518,11 @@ export class Game {
                 player.roleSelect((msg as net.PerkModeRoleSelectMsg).role);
                 break;
             }
+            case net.MsgType.RoleSelect: {
+                if(player.role)return;
+                player.playerRoleSelect((msg as net.RoleSelectMsg).role);
+                break;
+            }
             case net.MsgType.Edit: {
                 player.processEditMsg(msg as net.EditMsg);
                 break;
@@ -531,6 +542,7 @@ export class Game {
 
         if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn || !this.started) {
             player.game.playerBarn.removePlayer(player);
+            player.mapIndicator?.kill();
         }else {
             player.kill({
                 damageType: GameConfig.DamageType.Disconnect,
