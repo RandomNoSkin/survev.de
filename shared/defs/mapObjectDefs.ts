@@ -10147,7 +10147,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     barrel_04: createWoodBarrel({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(1.25, 0.5)),
         health: 20,
-        loot: [tierLoot("tier_soviet", 2, 4)],
+        loot: [tierLoot("tier_soviet", 2, 4), tierLoot("tier_additional_scopes", 1, 1)],
         img: {
             sprite: "map-barrel-04.img",
             residue: "map-barrel-res-03.img",
@@ -10214,7 +10214,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     bookshelf_02: createBookShelf({
         img: { sprite: "map-bookshelf-02.img" },
-        loot: [tierLoot("tier_soviet", 2, 3)],
+        loot: [tierLoot("tier_soviet", 2, 3), tierLoot("tier_additional_scopes", 1, 1)],
     }),
     bush_01: createBush({}),
     bush_01b: createBush({ img: { alpha: 1 } }),
@@ -10649,7 +10649,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     crate_01x: createCrate({ img: { sprite: "map-crate-01x.img" } }),
     crate_02: createCrate({
         health: 140,
-        loot: [tierLoot("tier_soviet", 3, 5), tierLoot("tier_imbel", 1, 1)],
+        loot: [tierLoot("tier_soviet", 3, 5), tierLoot("tier_imbel", 1, 1), tierLoot("tier_additional_scopes", 1, 1)],
         map: { display: false },
         terrain: { grass: true, beach: false },
         img: { sprite: "map-crate-02.img" },
@@ -11574,7 +11574,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     mil_crate_02: createCrate({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(2.7, 1.25)),
         health: 100,
-                loot: [tierLoot("tier_ot_military_crate", 4, 4),],
+                loot: [tierLoot("tier_ot_military_crate", 3, 3),],
         map: { display: false },
         terrain: { grass: true, beach: true },
         img: { sprite: "map-crate-mil-02.img" },
@@ -11734,7 +11734,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     drawers_02: createDrawer({
         img: { sprite: "map-drawers-02.img" },
-        loot: [tierLoot("tier_soviet", 2, 3)],
+        loot: [tierLoot("tier_soviet", 2, 3),  tierLoot("tier_additional_scopes", 1, 1)],
     }),
     fire_ext_01: {
         type: "obstacle",
@@ -12495,7 +12495,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     toilet_02: createToilet({
         img: { sprite: "map-toilet-02.img" }, 
-        loot: [tierLoot("tier_soviet", 4, 5)],
+        loot: [tierLoot("tier_soviet", 3, 5),  tierLoot("tier_additional_scopes", 1, 1)],
     }),
     toilet_02b: createToilet({
         img: {

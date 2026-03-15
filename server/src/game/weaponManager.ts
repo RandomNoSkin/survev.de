@@ -114,7 +114,7 @@ export class WeaponManager {
             | GunDef
             | MeleeDef
             | ThrowableDef;
-
+/*  Code that prevents switching guns mid burst, commented out to allow the player more control over burst guns
         if (
             curWeaponDef?.type === "gun" &&
             curWeaponDef.fireMode === "burst" &&
@@ -122,7 +122,7 @@ export class WeaponManager {
             !forceSwitch
         )
             return;
-
+*/
         this.player.cancelAnim();
 
         if (cancelSlowdown) {
