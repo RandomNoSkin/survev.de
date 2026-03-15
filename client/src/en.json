@@ -266,6 +266,7 @@
   "game-disconnected": "tried to avoid death by committing alt+f4",
   "game-joined": "joined the game.",
   "game-your-enemies-are": "You are fighting against:",
+  "game-vs": "VERSUS",
   "game-waiting-for-players": "Waiting for players",
   "game-spectating": "Spectating",
   "game-red-zone-advances": "Red zone advances in",

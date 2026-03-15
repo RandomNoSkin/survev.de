@@ -156,6 +156,8 @@ export interface MapDef {
         camperPunishmentTime?: number, // time in ms how long punishment lasts || default: 5000
         camperGracePeriod?: number, // time in ms after spawn before camping checks start || default: 40000
 
+        announceTeams?: boolean;
+
         desertMode?: boolean;
         factionMode?: boolean;
         factions?: number;
