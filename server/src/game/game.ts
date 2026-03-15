@@ -200,7 +200,8 @@ export class Game {
         if (this.started) this.startedTime += dt;
 
         let freezeTimer = this.map.mapDef.gameMode.freezeTime || 0;
-        if(this.started && !this.teamsAnnounced && this.map.mapDef.gameMode.announceTeams && this.startedTime >= freezeTimer ){
+        const alivePlayers = this.playerBarn.livingPlayers;
+        if(alivePlayers.length > 0 && !this.teamsAnnounced && this.map.mapDef.gameMode.announceTeams && this.startedTime >= freezeTimer ){
                     const enemieGroups = this.playerBarn.getAliveGroups();
                     let group1: string[] = [];
                     let group2: string[] = [];
