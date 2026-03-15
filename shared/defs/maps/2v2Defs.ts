@@ -75,6 +75,9 @@ export const mapDef: PartialMapDef = {
         centerNoSpawnRadius: 0, // no spawn zone in the center of the map
         minSpawnRad: 0, // spawn radius away from alive players
         minPosSpawnRad: 0,
+
+        announceTeams: false,
+        betterMapGen: false,
     },
     /* STRIP_FROM_PROD_CLIENT:START */
     gameConfig: {

@@ -2292,10 +2292,7 @@ export class Player extends BaseGameObject {
         const movement = v2.create(0, 0);
 
         let freezeTimer = this.game.map.mapDef.gameMode.freezeTime || 0;
-        if(this.game.startedTime <= freezeTimer && freezeTimer != 0){
-            return;
-        }
-
+        if(this.game.startedTime <= freezeTimer && freezeTimer != 0)return;
 
         if (this.touchMoveActive && this.touchMoveLen) {
             movement.x = this.touchMoveDir.x;
