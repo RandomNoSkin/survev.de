@@ -139,8 +139,8 @@ export const Comp: MapDef = {
         ],
         tier_soviet: [
             { name: "tier_guns", count: 1, weight: 1.5 }, // ?
-            { name: "tier_armor", count: 1, weight: 2.5 }, // ?
-            { name: "tier_packs", count: 1, weight: 2 }, // ?
+            { name: "tier_armor", count: 1, weight: 3 }, // ?
+            { name: "tier_packs", count: 1, weight: 1.5 }, // ?
         ],
         tier_toilet: [
             { name: "tier_guns", count: 1, weight: 0.1 },
