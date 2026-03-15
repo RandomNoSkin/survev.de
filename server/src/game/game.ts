@@ -113,6 +113,7 @@ export class Game {
     start = Date.now();
 
     profiler = new Profiler();
+    teamsAnnounced: boolean = false;
 
     constructor(
         id: string,
@@ -197,6 +198,28 @@ export class Game {
         }
 
         if (this.started) this.startedTime += dt;
+
+        let freezeTimer = this.map.mapDef.gameMode.freezeTime || 0;
+        if(this.started && !this.teamsAnnounced && this.map.mapDef.gameMode.announceTeams && this.startedTime >= freezeTimer ){
+                    const enemieGroups = this.playerBarn.getAliveGroups();
+                    let group1: string[] = [];
+                    let group2: string[] = [];
+                    
+                        
+                        for(const p of enemieGroups[0].getAlivePlayers()){
+                            group1.push(p.name);
+                        }
+                        for(const p of enemieGroups[1].getAlivePlayers()){
+                            group2.push(p.name);
+                        }
+                    
+                    this.teamsAnnounced = true;
+
+                    let joinFeedMsg = new net.JoinFeedMsg;
+                    joinFeedMsg.group1 = group1;
+                    joinFeedMsg.group2 = group2;
+                    this.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
+        }
 
         //
         // Update modules

@@ -2294,21 +2294,6 @@ export class Player extends BaseGameObject {
         let freezeTimer = this.game.map.mapDef.gameMode.freezeTime || 0;
         if(this.game.startedTime <= freezeTimer && freezeTimer != 0){
             return;
-        }else if(this.game.startedTime >= freezeTimer && !this.announcedEnemies){
-
-            const enemieGroups = this.game.playerBarn.getAliveGroups().filter(g => g !== this.group);
-            let enemies: string[] = [];
-            for(const g of enemieGroups){
-                const enemiePlayers = g.getAlivePlayers();
-                for(const p of enemiePlayers){
-                    enemies.push(p.name);
-                }
-            }
-            this.announcedEnemies = true;
-
-            let joinFeedMsg = new net.JoinFeedMsg;
-            joinFeedMsg.enemieNames = enemies;
-            this.sendMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
 
 

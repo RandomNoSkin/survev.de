@@ -1625,13 +1625,23 @@ export class UiManager2 {
         return `${name} ${joinTxt}`;
     }
 
-    getEnemieText(enemies: string[]){
-        const txt = this.localization.translate("game-your-enemies-are");
-        let enemiesTxt = "";
-        for(const e of enemies){
-            enemiesTxt = enemiesTxt + " " + e;
+    getEnemieText(group1: string[], group2: string[]){
+        const txt = this.localization.translate("game-vs");
+        let group1Txt = "";
+        let group2Txt = "";
+        for(const e of group1){
+            if(group1Txt === ""){
+                group1Txt = e;
+            }else
+            group1Txt = group1Txt + ", " + e;
         }
-        return `${txt}${enemiesTxt}`;
+        for(const e of group2){
+            if(group2Txt === ""){
+                group2Txt = e;
+            }else
+            group2Txt = group2Txt + ", " + e;
+        }
+        return `${group1Txt} ${txt} ${group2}`;
     }
 
     getPickupMessageText(type: PickupMsgType) {
