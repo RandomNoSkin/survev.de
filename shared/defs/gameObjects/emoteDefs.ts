@@ -1695,6 +1695,16 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         teamOnly: false,
         category: EmoteCategory.Faces,
     },
+    emote_ohnah: {
+        type: "emote",
+        name: "Ohnah",
+        rarity: Rarity.Mythic,
+        texture: "ohnah.img",
+        sound: "ohnah",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
     emote_pooface: {
         type: "emote",
         name: "Poo Face",

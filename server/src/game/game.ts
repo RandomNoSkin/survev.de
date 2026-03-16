@@ -115,6 +115,9 @@ export class Game {
     profiler = new Profiler();
     teamsAnnounced: boolean = false;
 
+    arenaRoles: string[] = [];
+    choosenArenaRoles: string[] = [];
+
     constructor(
         id: string,
         config: ServerGameConfig,

@@ -134,6 +134,9 @@ export class GameModeManager {
                 const winner = this.game.playerBarn.livingPlayers[0];
                 winner.rank = 1;
                 winner.addGameOverMsg(winner.teamId);
+                for(const p of this.game.playerBarn.players.filter(p => p !== winner)){
+                    p.addGameOverMsg();
+                }
                 return true;
             }
             case GameMode.Team: {
@@ -143,6 +146,9 @@ export class GameModeManager {
                 }
                 for (const player of winner.getAlivePlayers()) {
                     player.addGameOverMsg(winner.id);
+                }
+                for(const p of this.game.playerBarn.players.filter(p => !winner.getAlivePlayers().includes(p))){
+                    p.addGameOverMsg();
                 }
                 return true;
             }

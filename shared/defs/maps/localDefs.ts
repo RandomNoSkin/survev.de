@@ -57,8 +57,10 @@ export const mapDef: PartialMapDef = {
     gameMode: {
         maxPlayers: 80,
         killLeaderEnabled: true,
+
         arenaMode: true,
-        arenaModeRoles: ["indicator"],
+        arenaModeRoles: ["indicator", "arena1", "arena2"],
+        arenaLobbyRoles: 1,
 
         freezeTime: 0,
         joinTime: 30, // time until players can move after game start
@@ -75,6 +77,7 @@ export const mapDef: PartialMapDef = {
         minPosSpawnRad: 0,
 
         announceTeams: false,
+        camperPunishment: false,
         
         betterMapGen: false,
     },
