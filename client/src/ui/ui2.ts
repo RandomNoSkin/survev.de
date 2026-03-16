@@ -1638,6 +1638,13 @@ export class UiManager2 {
         return `${group1Txt}`;
     }
 
+    getItemPingText(player: string, item: string){
+        const itemTxt = this.localization.translate(`game-${item}`);
+        const txt = this.localization.translate("pinged-item");
+        
+        return `${player} ${txt} ${itemTxt}`;
+    }
+
     getPickupMessageText(type: PickupMsgType) {
         const typeMap: Record<number, string> = {
             [PickupMsgType.Full]: "game-not-enough-space",

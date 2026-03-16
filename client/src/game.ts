@@ -189,26 +189,6 @@ export class Game {
                     this.m_sendMessage(net.MsgType.Join, joinMessage, 8192);
                 };
                 this.m_ws.onmessage = (e) => {
-                    // Try to parse as JSON for custom notifications (supports ArrayBuffer)
-                    let data = null;
-                    if (typeof e.data === "string") {
-                        try {
-                            data = JSON.parse(e.data);
-                        } catch {}
-                    } else if (e.data instanceof ArrayBuffer) {
-                        try {
-                            const str = new TextDecoder().decode(e.data);
-                            data = JSON.parse(str);
-                        } catch {}
-                    }
-                    if (data && data.t === "lootPingNotification") {
-                        // Show loot ping notification in killfeed
-                        this.m_ui2Manager.addKillFeedMessage(
-                            `${data.playerName} pinged a ${data.itemName}`,
-                            "#B4A3FC"
-                        );
-                        return;
-                    }
                     const msgStream = new net.MsgStream(e.data);
                     while (true) {
                         const type = msgStream.deserializeMsgType();
@@ -1762,6 +1742,18 @@ export class Game {
                 const msg = new net.DisconnectMsg();
                 msg.deserialize(stream);
                 this.m_disconnectMsg = msg.reason;
+                break;
+            }
+            case net.MsgType.KillFeed: {
+                const msg = new net.KillFeedMsg();
+                msg.deserialize(stream);
+                if(msg.type === net.KillFeedMsgType.Ping){
+                    const item = msg.string;
+                    const player = msg.player;
+
+                    const txt = this.m_ui2Manager.getItemPingText(player, item);
+                    this.m_ui2Manager.addKillFeedMessage(txt, "#B4A3FC");
+                }
             }
         }
     }
