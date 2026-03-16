@@ -1540,8 +1540,11 @@ export class Game {
                     const text = this.m_ui2Manager.getJoinedText(playerName);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 }else{
-                    const text = this.m_ui2Manager.getEnemieText(group1, group2);
-                    this.m_uiManager.displayAnnouncement(text, "#ff00f2", 5000);
+                    const group1Text = this.m_ui2Manager.getEnemieText(group1);
+                    const group2Text = this.m_ui2Manager.getEnemieText(group2);
+                    this.m_ui2Manager.addKillFeedMessage(group1Text, "#ff00f2");
+                    this.m_ui2Manager.addKillFeedMessage("VERSUS", "#1100ff");
+                    this.m_ui2Manager.addKillFeedMessage(group2Text, "#ff00f2");
                 }
                 
                 break

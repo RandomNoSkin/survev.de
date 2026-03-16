@@ -166,8 +166,17 @@ export interface MapDef {
         sniperMode?: boolean;
         perkMode?: boolean;
         perkModeRoles?: string[];
+
         arenaMode?: boolean;
         arenaModeRoles?: string[];
+        arenaModePools?: Record<
+            string,
+            Array<{
+                name: string;
+            }>
+        >;
+        arenaLobbyRoles?: number;
+
         turkeyMode?: boolean;
         spookyKillSounds?: boolean;
     };

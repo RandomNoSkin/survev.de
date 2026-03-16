@@ -288,13 +288,17 @@ export class Application {
             const a = new Date(r).getTime();
             $(".right-column-toggle").on("click", () => {
                 if (this.newsDisplayed) {
-                    $("#news-wrapper").fadeOut(250);
-                    $("#pass-wrapper").fadeIn(250);
+                    //$("#news-wrapper").fadeOut(250);
+                    //$("#pass-wrapper").fadeIn(250);
+                    $("#news-wrapper").css("display", "none");
+                    $("#pass-wrapper").css("display", "block");
                 } else {
                     this.config.set("lastNewsTimestamp", a);
                     $(".news-toggle").find(".account-alert").css("display", "none");
-                    $("#news-wrapper").fadeIn(250);
-                    $("#pass-wrapper").fadeOut(250);
+                    //$("#news-wrapper").fadeIn(250);
+                    //$("#pass-wrapper").fadeOut(250);
+                    $("#news-wrapper").css("display", "block");
+                    $("#pass-wrapper").css("display", "none");
                 }
                 this.newsDisplayed = !this.newsDisplayed;
             });

@@ -77,6 +77,7 @@ export const mapDef: PartialMapDef = {
         minPosSpawnRad: 0,
 
         announceTeams: false,
+        camperPunishment: false,
         betterMapGen: false,
     },
     /* STRIP_FROM_PROD_CLIENT:START */

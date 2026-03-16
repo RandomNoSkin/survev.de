@@ -362,7 +362,11 @@ export class PlayerBarn {
         //needs to be after initializing player -> we need player ID
         if(player.game.map.arenaMode && !player.spectator && !player.role){
             player.roleMenuTicker = GameConfig.player.perkModeRoleSelectDuration + 5;
-            const roles = group?.arenaRoles ?? this.game.map.mapDef.gameMode.arenaModeRoles ?? [];
+            const roles =
+                group?.arenaRoles?.length ? group.arenaRoles :
+                this.game.arenaRoles?.length ? this.game.arenaRoles :
+                this.game.map.mapDef.gameMode.arenaModeRoles?.length ? this.game.map.mapDef.gameMode.arenaModeRoles :
+                [];
             if(roles.length>=2){
                 let arenaRolesMsg = new net.ArenaRolesMsg;
                 arenaRolesMsg.availableGroupRoles = roles;
@@ -647,8 +651,10 @@ export class PlayerBarn {
         const hash = Math.random().toString(16).slice(2);
         const groupId = this.groupIdAllocator.getNextId();
         const group = new Group(hash, groupId, autoFill, this.game.teamMode, isSpectator);
-        group.arenaRoles = this.game.map.mapDef.gameMode.arenaModeRoles ?? [];
-        console.log(group.arenaRoles);
+        group.arenaRoles = group?.arenaRoles?.length ? group.arenaRoles :
+                this.game.arenaRoles?.length ? this.game.arenaRoles :
+                this.game.map.mapDef.gameMode.arenaModeRoles?.length ? this.game.map.mapDef.gameMode.arenaModeRoles :
+                [];
         if(!group.isSpectatorGroup)
         this.groups.push(group);
         this.groupsByHash.set(hash, group);
@@ -1232,8 +1238,13 @@ export class Player extends BaseGameObject {
 
     playerRoleSelect(role: string): void {
 
+        const roles = this.group?.arenaRoles?.length ? this.group.arenaRoles :
+                this.game.arenaRoles?.length ? this.game.arenaRoles :
+                this.game.map.mapDef.gameMode.arenaModeRoles?.length ? this.game.map.mapDef.gameMode.arenaModeRoles :
+                [];
+
         // so the client can't be manipulated to send lone survivr or something and 2 people cant get same role in the team
-        if (!this.group?.arenaRoles.includes(role)){
+        if (!roles.includes(role)){
             if(this.group){
                 let arenaRolesMsg = new net.ArenaRolesMsg;
                 arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
@@ -1245,17 +1256,33 @@ export class Player extends BaseGameObject {
 
         this.roleMenuTicker = 0;
         this.promoteToRole(role);
-        if(this.group){
-            this.group.arenaRoles = this.group.arenaRoles.filter(r => r !== role);
-            for(const player of this.group.getAlivePlayers()){
+        if(!this.game.choosenArenaRoles.includes(role))this.game.choosenArenaRoles.push(role);
+
+        const maxRoles = this.game.map.mapDef.gameMode.arenaLobbyRoles ?? 100;
+        if(this.game.choosenArenaRoles.length >= maxRoles){
+            this.game.arenaRoles = this.game.choosenArenaRoles;
+            for(const player of this.game.playerBarn.livingPlayers){
                 if(!player.role){
                     let arenaRolesMsg = new net.ArenaRolesMsg;
-                    arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
+                    arenaRolesMsg.availableGroupRoles = this.game.arenaRoles;
                     arenaRolesMsg.activePlayer = player.__id;
                     this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg)
                 }
             }
+        }else{
+            if(this.group){
+                this.group.arenaRoles = this.group.arenaRoles.filter(r => r !== role);
+                for(const player of this.group.getAlivePlayers()){
+                    if(!player.role){
+                        let arenaRolesMsg = new net.ArenaRolesMsg;
+                        arenaRolesMsg.availableGroupRoles = this.group.arenaRoles;
+                        arenaRolesMsg.activePlayer = player.__id;
+                        this.game.broadcastMsg(net.MsgType.ArenaRoles, arenaRolesMsg)
+                    }
+                }
+            }
         }
+        
 
         // Reset camper tracking to avoid false positives right after spawning
         this.camperAnchorPos = v2.copy(this.pos);
@@ -1833,7 +1860,10 @@ export class Player extends BaseGameObject {
             this.roleMenuTicker -= dt;
             if (this.roleMenuTicker <= 0) {
                 this.roleMenuTicker = 0;
-                const roleChoices = this.game.map.mapDef.gameMode.arenaModeRoles!;
+                const roleChoices = this.group?.arenaRoles?.length ? this.group.arenaRoles :
+                this.game.arenaRoles?.length ? this.game.arenaRoles :
+                this.game.map.mapDef.gameMode.arenaModeRoles?.length ? this.game.map.mapDef.gameMode.arenaModeRoles :
+                [];
                 const randomRole = roleChoices[util.randomInt(0, roleChoices.length - 1)];
                 this.playerRoleSelect(randomRole);
             }
@@ -3248,7 +3278,6 @@ export class Player extends BaseGameObject {
                 teamId: player.teamId,
             })
             );
-            console.log("Spectator:", this.spectator);
 
             const gameOverMsg = new net.GameOverMsg();
             gameOverMsg.playerStats = allPlayerStats;

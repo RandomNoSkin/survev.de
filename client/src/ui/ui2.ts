@@ -1625,7 +1625,7 @@ export class UiManager2 {
         return `${name} ${joinTxt}`;
     }
 
-    getEnemieText(group1: string[], group2: string[]){
+    getEnemieText(group1: string[]){
         const txt = this.localization.translate("game-vs");
         let group1Txt = "";
         let group2Txt = "";
@@ -1633,15 +1633,9 @@ export class UiManager2 {
             if(group1Txt === ""){
                 group1Txt = e;
             }else
-            group1Txt = group1Txt + ", " + e;
+            group1Txt = group1Txt + " || " + e;
         }
-        for(const e of group2){
-            if(group2Txt === ""){
-                group2Txt = e;
-            }else
-            group2Txt = group2Txt + ", " + e;
-        }
-        return `${group1Txt} ${txt} ${group2}`;
+        return `${group1Txt}`;
     }
 
     getPickupMessageText(type: PickupMsgType) {
