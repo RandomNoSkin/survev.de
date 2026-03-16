@@ -5073,9 +5073,8 @@ export class Player extends BaseGameObject {
 
         // Extract itemType from emoteMsg if present (some items have weird and hard to understand names)
         let itemType = "";
-        if (typeof (emoteMsg as any).itemType === "string") {
-            itemType = (emoteMsg as any).itemType;
-        }
+
+        itemType = this.game.lootBarn.getLootAtPos(msg.pos, this.pos, this.zoom) ?? "";
 
         this.emoteCounter++;
         if (this.emoteCounter >= GameConfig.player.emoteThreshold) {
@@ -5086,15 +5085,23 @@ export class Player extends BaseGameObject {
         }
         // Emit pingDidOccur event for plugins if this is a ping
         if (emoteMsg.isPing) {
-            this.game.pluginManager.emit("pingDidOccur", {
-                ping: {
-                    playerId: this.__id,
-                    pos: emoteMsg.pos,
-                    type: emoteMsg.type,
-                    isPing: true,
-                    itemType,
-                },
-            });
+            if(itemType !== ""){
+                if(this.group){
+                    for(const p of this.group?.getAlivePlayers()){
+                        const msg = new net.KillFeedMsg;
+                        msg.string = itemType;
+                        msg.type = net.KillFeedMsgType.Ping;
+                        msg.player = this.name;
+                        p.sendMsg(net.MsgType.KillFeed, msg);
+                    }
+                }else{
+                    const msg = new net.KillFeedMsg;
+                        msg.string = itemType;
+                        msg.type = net.KillFeedMsgType.Ping;
+                        msg.player = this.name;
+                        this.sendMsg(net.MsgType.KillFeed, msg);
+                }
+            }
         }
     }
 

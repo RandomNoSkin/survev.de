@@ -207,6 +207,34 @@ export class LootBarn {
         return fn();
     }
 
+    getLootAtPos(pos: Vec2, playerPos: Vec2, radius: number) {
+    let bestLoot: string | undefined;
+    let bestDist = Infinity;
+
+    const dx = pos.x - playerPos.x;
+    const dy = pos.y - playerPos.y;
+
+    if (dx * dx + dy * dy > radius * radius) {
+        return;
+    }
+
+    for (const loot of this.game.lootBarn.loots) {
+        if (loot.destroyed) continue;
+
+        const dx = loot.pos.x - pos.x;
+        const dy = loot.pos.y - pos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // etwas Toleranz, weil ping.pos nicht immer 100% exakt sein muss
+        if (dist <= loot.rad + 0.5 && dist < bestDist) {
+            bestDist = dist;
+            bestLoot = loot.type;
+        }
+    }
+
+    return bestLoot;
+}
+
     getLootTable(tier: string): LootTierItem | undefined {
         assert(
             this.game.map.mapDef.lootTable[tier],
