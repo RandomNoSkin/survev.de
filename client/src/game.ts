@@ -189,6 +189,26 @@ export class Game {
                     this.m_sendMessage(net.MsgType.Join, joinMessage, 8192);
                 };
                 this.m_ws.onmessage = (e) => {
+                    // Try to parse as JSON for custom notifications (supports ArrayBuffer)
+                    let data = null;
+                    if (typeof e.data === "string") {
+                        try {
+                            data = JSON.parse(e.data);
+                        } catch {}
+                    } else if (e.data instanceof ArrayBuffer) {
+                        try {
+                            const str = new TextDecoder().decode(e.data);
+                            data = JSON.parse(str);
+                        } catch {}
+                    }
+                    if (data && data.t === "lootPingNotification") {
+                        // Show loot ping notification in killfeed
+                        this.m_ui2Manager.addKillFeedMessage(
+                            `${data.playerName} pinged a ${data.itemName}`,
+                            "#B4A3FC"
+                        );
+                        return;
+                    }
                     const msgStream = new net.MsgStream(e.data);
                     while (true) {
                         const type = msgStream.deserializeMsgType();

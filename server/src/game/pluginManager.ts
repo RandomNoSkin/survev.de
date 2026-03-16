@@ -3,6 +3,16 @@ import path from "path";
 import type { Game } from "./game";
 import type { DamageParams } from "./objects/gameObject";
 import type { Player } from "./objects/player";
+import { pathToFileURL } from "node:url";
+
+// Define Ping type (adjust fields as needed for your game)
+export interface Ping {
+    playerId: number;
+    pos: { x: number; y: number };
+    type: string;
+    isPing: boolean;
+    itemType?: string;
+}
 
 interface PlayerDamageEvent extends DamageParams {
     player: Player;
@@ -14,6 +24,7 @@ export interface Events {
     playerDamage: PlayerDamageEvent;
     playerKill: Omit<PlayerDamageEvent, "amount">;
     gameCreated: Game;
+    pingDidOccur: { ping: Ping };
 }
 
 export type EventType = keyof Events;
@@ -42,7 +53,7 @@ export function readDirectory(dir: string): string[] {
     return results;
 }
 
-export const pluginDir = path.join(import.meta.dirname, "./plugins/");
+export const pluginDir = path.join(import.meta.dirname, "./../plugins/");
 
 let pluginPaths: string[] = [];
 if (fs.existsSync(pluginDir)) {
@@ -88,8 +99,9 @@ export class PluginManager {
     async loadPlugins() {
         for (const path of pluginPaths) {
             this.game.logger.info("Loading plugin", path);
-            const plugin = ((await import(path)) as { default: new () => GamePlugin })
-                .default;
+            const plugin = (
+            (await import(pathToFileURL(path).href)) as { default: new () => GamePlugin }
+        ).default;
 
             this.loadPlugin(plugin);
         }
