@@ -47,6 +47,7 @@ import { Touch } from "./ui/touch";
 import { UiManager } from "./ui/ui";
 import { UiManager2 } from "./ui/ui2";
 import { name } from "ejs";
+import { ChatUi } from "./ui/chat";
 
 export interface Ctx {
     audioManager: AudioManager;
@@ -113,6 +114,7 @@ export class Game {
 
     editor!: Editor;
     debugHUD!: DebugHUD;
+    chatUi: ChatUi;
 
     seq!: number;
     seqInFlight!: boolean;
@@ -148,6 +150,7 @@ export class Game {
         if (IS_DEV) {
             this.editor = new Editor(this.m_config);
         }
+        this.chatUi = new ChatUi(this, this.m_input);
     }
 
     tryJoinGame(
@@ -484,6 +487,16 @@ export class Game {
             }
         }
 
+        if(this.m_input.keyPressed(Key.Enter)){
+            const style = window.getComputedStyle(this.chatUi.chatInput[0]);
+            if(style.display === "none"){
+                this.chatUi.joinChat();
+            }else{
+                this.chatUi.sendChatMessage();
+            }
+            
+        }
+
         let debug: DebugRenderOpts;
         if (IS_DEV) {
             debug = this.m_config.get("debugRenderer")!;
@@ -537,7 +550,12 @@ export class Game {
         );
         this.m_audioManager.cameraPos = v2.copy(this.m_camera.m_pos);
         if (this.m_input.keyPressed(Key.Escape)) {
-            this.m_uiManager.toggleEscMenu();
+            const style = window.getComputedStyle(this.chatUi.chatInput[0]);
+            if(style.display !== "none"){
+                this.chatUi.leaveChat();
+            }else{
+                this.m_uiManager.toggleEscMenu();
+            }
         }
         // Large Map
         if (
@@ -1753,6 +1771,12 @@ export class Game {
 
                     const txt = this.m_ui2Manager.getItemPingText(player, item);
                     this.m_ui2Manager.addKillFeedMessage(txt, "#B4A3FC");
+                } else if(msg.type === net.KillFeedMsgType.ChatMsg){
+                    const text = msg.string;
+                    const player = msg.player;
+
+                    const txt = this.m_ui2Manager.getChatMessage(player, text);
+                    this.m_ui2Manager.addKillFeedMessage(txt, "#000000");
                 }
             }
         }

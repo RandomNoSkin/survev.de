@@ -1645,6 +1645,11 @@ export class UiManager2 {
         return `${player} ${txt} ${itemTxt}`;
     }
 
+    getChatMessage(player: string, text:string){
+
+        return `[${player}]: ${text}`;
+    }
+
     getPickupMessageText(type: PickupMsgType) {
         const typeMap: Record<number, string> = {
             [PickupMsgType.Full]: "game-not-enough-space",

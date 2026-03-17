@@ -36,6 +36,7 @@ import { TeamMenu } from "./ui/teamMenu";
 import { loadStaticDomImages } from "./ui/ui2";
 import { MatchData, SpectatorMenu } from "./ui/spectatorMenu";
 import { GameInfo } from "./gameInfo";
+import { ChatUi } from "./ui/chat";
 
 export class Application {
     nameInput = $("#player-name-input-solo");
@@ -343,7 +344,7 @@ export class Application {
                 this.config,
             );
             this.resourceManager.loadMapAssets("main");
-            this.input = new InputHandler(document.getElementById("game-touch-area")!);
+            this.input = new InputHandler(document.getElementById("game-touch-area")!, this.game?.chatUi);
             this.inputBinds = new InputBinds(this.input, this.config);
             this.inputBindUi = new InputBindUi(
                 this.input,

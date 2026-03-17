@@ -389,6 +389,7 @@ export class Game {
             | net.PerkModeRoleSelectMsg
             | net.RoleSelectMsg
             | net.EditMsg
+            | net.KillFeedMsg
             | undefined = undefined;
 
         switch (type) {
@@ -464,6 +465,10 @@ export class Game {
             case net.MsgType.Edit:
                 if (!Config.debug.allowEditMsg) break;
                 msg = new net.EditMsg();
+                msg.deserialize(stream);
+                break;
+            case net.MsgType.KillFeed:
+                msg = new net.KillFeedMsg();
                 msg.deserialize(stream);
                 break;
         }
@@ -552,6 +557,10 @@ export class Game {
             }
             case net.MsgType.Edit: {
                 player.processEditMsg(msg as net.EditMsg);
+                break;
+            }
+            case net.MsgType.KillFeed: {
+                player.processKillFeedMsg(msg as net.KillFeedMsg);
                 break;
             }
         }

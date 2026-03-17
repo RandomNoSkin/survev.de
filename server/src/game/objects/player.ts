@@ -4532,7 +4532,7 @@ export class Player extends BaseGameObject {
                         !freeGunSlot.isDual &&
                         this.curWeapIdx === GameConfig.WeaponSlot.Melee
                     ) {
-                        this.weaponManager.setCurWeapIndex(newGunIdx); // primary
+                        this.weaponManager.setCurWeapIndex(newGunIdx, false); // primary
                     }
                 }
                 break;
@@ -5158,6 +5158,14 @@ export class Player extends BaseGameObject {
             } else if (this.role) {
                 this.removeRole();
             }
+        }
+    }
+
+    processKillFeedMsg(msg: net.KillFeedMsg){
+        if(msg.type === net.KillFeedMsgType.ChatMsg){
+
+            this.game.broadcastMsg(net.MsgType.KillFeed, msg);
+            
         }
     }
 

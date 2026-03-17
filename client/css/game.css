@@ -3432,6 +3432,30 @@ span.ui-stats-header-value {
   padding: 8px;
 }
 
+  #ui-chat-wrapper {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    pointer-events: all; /* wichtig wegen click-through */
+}
+
+#ui-chat-input {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+}
+
+#ui-chat-send {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+
 /*
 * Profiler
 */
