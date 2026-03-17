@@ -1,4 +1,5 @@
-import { AbstractMsg, BitStream, KillFeedMsgType } from "./net";
+import type { AbstractMsg, BitStream } from "./net";
+import { KillFeedMsgType } from "./net";
 
 export class KillFeedMsg implements AbstractMsg {
     player: string = "";
