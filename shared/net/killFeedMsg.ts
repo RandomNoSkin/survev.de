@@ -7,11 +7,9 @@ export class KillFeedMsg implements AbstractMsg {
     
 
     serialize(s: BitStream) {
-        /* STRIP_FROM_PROD_CLIENT:START */
         s.writeString(this.player);
         s.writeString(this.string);
         s.writeUint8(this.type);
-        /* STRIP_FROM_PROD_CLIENT:END */
     }
 
     deserialize(s: BitStream) {
