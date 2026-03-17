@@ -841,7 +841,7 @@ abstract class Plane {
         this.action === GameConfig.Plane.Airdrop ||
         this.action === GameConfig.Plane.SupplyDrop;
 
-        this.config = isDrop ? GameConfig.airdrop : GameConfig.airstrike;
+        this.config = this.action === GameConfig.Plane.Airdrop ? GameConfig.airdrop : GameConfig.airstrike;
 
         this.rad = this.config.planeRad;
     }

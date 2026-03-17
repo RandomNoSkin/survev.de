@@ -226,7 +226,8 @@ export class LootBarn {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         // etwas Toleranz, weil ping.pos nicht immer 100% exakt sein muss
-        if (dist <= loot.rad + 0.5 && dist < bestDist) {
+        // 1.5 ist PERFEKT. Loot wird gepinged wenn ping loot berührt
+        if (dist <= loot.rad + 1.5 && dist < bestDist) {
             bestDist = dist;
             bestLoot = loot.type;
         }

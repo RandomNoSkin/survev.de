@@ -187,7 +187,7 @@ export class WeaponManager {
             this.player.wearingPan = true;
         }
 
-        if (GameConfig.WeaponType[idx] === "gun" && this.weapons[idx].ammo <= 0) {
+        if (GameConfig.WeaponType[idx] === "gun" && this.weapons[idx].ammo <= 0 && this.player.actionType !== GameConfig.Action.UseItem) {
             this.scheduledReload = true;
         }
 
