@@ -45,12 +45,10 @@ export class ChatUi{
         msg.player = this.game.m_activePlayer.nameText.text;
         msg.type = net.KillFeedMsgType.ChatMsg;
 
-        this.game.m_sendMessage(net.MsgType.KillFeed, msg);
+        this.game.m_sendMessage(net.MsgType.KillFeed, msg, 128);
 
-        // 🔥 Input leeren
         this.input.value = "";
 
-        // optional: Fokus behalten (sehr nice fürs Chatten)
         this.input.focus();
 
     }
@@ -59,6 +57,7 @@ export class ChatUi{
     joinChat(){
         this.chatInput.css("display", "block");
         this.inputHandler.isTyping = true;
+        this.input.focus();
     }
 
     leaveChat(){
