@@ -40,7 +40,7 @@ export class ChatUi{
         const text = this.input.value.trim();
         if (!text) return;
 
-        const msg = new net.KillFeedMsg;
+        const msg = new net.KillFeedMsg();
         msg.string = text;
         msg.player = this.game.m_activePlayer.nameText.text;
         msg.type = net.KillFeedMsgType.ChatMsg;
