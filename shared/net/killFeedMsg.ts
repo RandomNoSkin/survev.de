@@ -14,8 +14,8 @@ export class KillFeedMsg implements AbstractMsg {
     }
 
     deserialize(s: BitStream) {
-        this.player = s.readString();
-        this.string = s.readString();
+        this.player = s.readString(16);
+        this.string = s.readString(64);
         this.type = s.readUint8();
     }
 }
