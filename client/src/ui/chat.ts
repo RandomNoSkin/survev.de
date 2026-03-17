@@ -20,7 +20,7 @@ export class ChatUi{
         this.inputHandler = input;
         // Button click
         this.button?.addEventListener("click", () => {
-            this.sendChatMessage.call(this);
+            //this.sendChatMessage.call(this);
         });
         // don't want to trigger keybinds (like L to fullscreen) while typing
             this.input.addEventListener("keyup", (e) => e.stopPropagation());
@@ -28,7 +28,7 @@ export class ChatUi{
                 e.stopPropagation();
 
                 if (e.key == "Enter" ) {
-                    this.sendChatMessage();
+                    //this.sendChatMessage();
                 }
                 if(e.key == "Escape" || e.key == "<"){
                     this.leaveChat();
