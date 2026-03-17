@@ -8,9 +8,13 @@ export class KillFeedMsg implements AbstractMsg {
     
 
     serialize(s: BitStream) {
-        s.writeString(this.player);
-        s.writeString(this.string);
-        s.writeUint8(this.type);
+        console.log("KILLFEED SERIALIZE", this.player, this.string, this.type);
+
+    s.writeString(this.player);
+    s.writeString(this.string);
+    s.writeUint8(this.type);
+
+    console.log("AFTER SERIALIZE INDEX", s.index, "BYTEINDEX", s.byteIndex);
     }
 
     deserialize(s: BitStream) {
