@@ -45,7 +45,7 @@ export class ChatUi{
         msg.player = this.game.m_activePlayer.nameText.text;
         msg.type = net.KillFeedMsgType.ChatMsg;
 
-        this.game.m_sendMessage(net.MsgType.KillFeed, msg, 128);
+        this.game.m_sendMessage(net.MsgType.KillFeed, msg);
 
         this.input.value = "";
 
