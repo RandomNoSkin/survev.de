@@ -271,6 +271,7 @@
   "chat-not-allowed": "Chat is currently disabled.",
   "chat-no-team": "You can't send a message to a none existant team.",
   "chat-bad-word": "You used a slur. You can get banned for that!",
+  "chat-cooldown": "STOP SPAMMING!",
   "game-waiting-for-players": "Waiting for players",
   "game-spectating": "Spectating",
   "game-red-zone-advances": "Red zone advances in",
