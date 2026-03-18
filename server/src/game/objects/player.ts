@@ -1817,6 +1817,9 @@ export class Player extends BaseGameObject {
                     this.sentDeathEmote = true;
                 }
             }
+            if(this.chatCooldown >0){
+            this.chatCooldown -= dt;
+        }
             return;
         }
 
