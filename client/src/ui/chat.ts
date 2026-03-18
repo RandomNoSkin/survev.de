@@ -10,6 +10,7 @@ export class ChatUi{
     button = document.getElementById("ui-chat-send");
     game: Game;
     inputHandler: InputHandler;
+    chatShown = false;
 
     constructor(
         game: Game,
@@ -29,6 +30,14 @@ export class ChatUi{
 
                 if (e.key == "Enter" ) {
                     this.sendChatMessage();
+                }
+            });
+            window.addEventListener("mousedown", (e) =>{
+                this.leaveChat();
+            });
+            window.addEventListener("keydown", (e) => {
+                if(e.key === "Enter" && !this.chatShown){
+                    this.joinChat();
                 }
                 if(e.key == "Escape" || e.key == "<"){
                     this.leaveChat();

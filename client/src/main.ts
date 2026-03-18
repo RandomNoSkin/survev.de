@@ -344,7 +344,7 @@ export class Application {
                 this.config,
             );
             this.resourceManager.loadMapAssets("main");
-            this.input = new InputHandler(document.getElementById("game-touch-area")!, this.game?.chatUi);
+            this.input = new InputHandler(document.getElementById("game-touch-area")!);
             this.inputBinds = new InputBinds(this.input, this.config);
             this.inputBindUi = new InputBindUi(
                 this.input,

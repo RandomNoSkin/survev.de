@@ -468,7 +468,6 @@ export class Game {
                 msg.deserialize(stream);
                 break;
             case net.MsgType.KillFeed:
-                console.log("MESSAGE");
                 msg = new net.KillFeedMsg();
                 msg.deserialize(stream);
                 break;
