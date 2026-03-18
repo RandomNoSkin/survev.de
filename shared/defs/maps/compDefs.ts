@@ -67,6 +67,7 @@ export const Comp: MapDef = {
 
         camperPunishment: true,
         announceTeams: true,
+        enableChat: true,
     },
     /* STRIP_FROM_PROD_CLIENT:START */
     gameConfig: {

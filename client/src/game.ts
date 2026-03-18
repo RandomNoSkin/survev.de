@@ -1764,9 +1764,22 @@ export class Game {
                 } else if(msg.type === net.KillFeedMsgType.ChatMsg){
                     const text = msg.string;
                     const player = msg.player;
+                    let color = "#ffe600";
+                    switch(msg.chatType){
+                        case(1):{
+                            color = "#00f7ff"
+                            break;
+                        }
+                    }
 
-                    const txt = this.m_ui2Manager.getChatMessage(player, text);
-                    this.m_ui2Manager.addKillFeedMessage(txt, "#ffe600");
+                    const txt = this.m_ui2Manager.getChatMessage(player, text, msg.chatType);
+                    this.m_ui2Manager.addChatMessage(txt, color, "#000000");
+                } else if(msg.type === net.KillFeedMsgType.AdminMsg){
+                    const text = msg.string;
+                    const player = msg.player;
+                    const txt = this.m_ui2Manager.getAdminChatMessage(player, text);
+
+                    this.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
                 }
             }
         }

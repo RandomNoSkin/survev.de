@@ -370,6 +370,7 @@ export enum PickupMsgType {
 export enum KillFeedMsgType {
     Ping,
     ChatMsg,
+    AdminMsg,
 }
 
 export class UpdatePassMsg {
