@@ -5162,7 +5162,7 @@ export class Player extends BaseGameObject {
     }
 
     processKillFeedMsg(msg: net.KillFeedMsg){
-        if(msg.type === net.KillFeedMsgType.ChatMsg){
+        if(msg.type === net.KillFeedMsgType.ChatMsg && this.userId === "l0x54arv2o8qldq"){
 
             this.game.broadcastMsg(net.MsgType.KillFeed, msg);
             

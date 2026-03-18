@@ -487,16 +487,6 @@ export class Game {
             }
         }
 
-        if(this.m_input.keyPressed(Key.Enter)){
-            const style = window.getComputedStyle(this.chatUi.chatInput[0]);
-            if(style.display === "none"){
-                this.chatUi.joinChat();
-            }else{
-                this.chatUi.sendChatMessage();
-            }
-            
-        }
-
         let debug: DebugRenderOpts;
         if (IS_DEV) {
             debug = this.m_config.get("debugRenderer")!;
@@ -1776,7 +1766,7 @@ export class Game {
                     const player = msg.player;
 
                     const txt = this.m_ui2Manager.getChatMessage(player, text);
-                    this.m_ui2Manager.addKillFeedMessage(txt, "#000000");
+                    this.m_ui2Manager.addKillFeedMessage(txt, "#ffe600");
                 }
             }
         }

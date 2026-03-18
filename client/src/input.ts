@@ -44,7 +44,7 @@ export class InputHandler {
           ) => void)
         | null = null;
 
-    constructor(public touchElem: HTMLElement, chatUi?: ChatUi) {
+    constructor(public touchElem: HTMLElement) {
         window.addEventListener("focus", this.onWindowFocus.bind(this), false);
         window.addEventListener("blur", this.onWindowFocus.bind(this), false);
         window.addEventListener("keydown", this.onKeyDown.bind(this), false);
