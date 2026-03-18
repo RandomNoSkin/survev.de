@@ -11,6 +11,7 @@ export class ChatUi{
     game: Game;
     inputHandler: InputHandler;
     chatShown = false;
+    chatType = 0; // 0 = all | 1 = team | 3 = spectator
 
     constructor(
         game: Game,
@@ -31,6 +32,12 @@ export class ChatUi{
                 if (e.key == "Enter" ) {
                     this.sendChatMessage();
                 }
+                if(e.key == "Tab"){
+                    e.preventDefault();
+                    this.switchChat();
+                    this.input.focus();
+                }
+                console.log(e.key);
             });
             window.addEventListener("mousedown", (e) =>{
                 this.leaveChat();
@@ -43,6 +50,7 @@ export class ChatUi{
                     this.leaveChat();
                 }
             });
+            this.input.placeholder = "[ALL]";
     }
 
     sendChatMessage() {
@@ -52,13 +60,15 @@ export class ChatUi{
         const msg = new net.KillFeedMsg();
         msg.string = text;
         msg.player = this.game.m_activePlayer.nameText.text;
+        msg.chatType = this.chatType;
         msg.type = net.KillFeedMsgType.ChatMsg;
 
         this.game.m_sendMessage(net.MsgType.KillFeed, msg);
 
         this.input.value = "";
 
-        this.input.focus();
+        //this.input.focus();
+        this.leaveChat();
 
     }
 
@@ -72,5 +82,24 @@ export class ChatUi{
     leaveChat(){
         this.chatInput.css("display", "none");
         this.inputHandler.isTyping = false;
+    }
+
+    switchChat(){
+        const currentChat = this.chatType;
+        switch(currentChat){
+            case(0):{
+                this.chatType = 1
+                this.input.placeholder = "[TEAM]";
+                this.input.focus();
+                break;
+            }
+            case(1):{
+                this.chatType = 0
+                this.input.placeholder = "[ALL]";
+                this.input.focus();
+                break;
+            }
+        }
+        this.input.focus();
     }
 }

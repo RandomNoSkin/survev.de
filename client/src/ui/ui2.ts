@@ -149,6 +149,8 @@ class UiState {
         offset: 0,
         opacity: 0,
         ticker: Number.MAX_VALUE,
+        outline: false,
+        outlineColor: "",
     }));
 
     ammo = {
@@ -1386,6 +1388,7 @@ export class UiManager2 {
         const oldest = killFeed[killFeed.length - 1];
         oldest.text = text;
         oldest.color = color;
+        oldest.outline = false;
         oldest.ticker = 0;
         killFeed.sort((a, b) => {
             return a.ticker - b.ticker;
@@ -1645,9 +1648,45 @@ export class UiManager2 {
         return `${player} ${txt} ${itemTxt}`;
     }
 
-    getChatMessage(player: string, text:string){
+    addChatMessage(text: string, color: string, outlineColor: string) {
+        const killFeed = this.newState.killFeed;
+        const oldest = killFeed[killFeed.length - 1];
+        oldest.text = text;
+        oldest.color = color;
+        oldest.outline = true;
+        oldest.outlineColor = outlineColor
+        oldest.ticker = 0;
+        killFeed.sort((a, b) => {
+            return a.ticker - b.ticker;
+        });
+    }
 
+    getChatMessage(player: string, text:string, chatType?: number){
+
+        let channel = "";
+        switch(chatType){
+            case(0):{
+                channel = "ALL";
+                break;
+            }
+            case(1):{
+                channel = "TEAM";
+                break;
+            }
+            case(2):{
+                channel = "SPEC";
+                break;
+            }
+        }
+        if(channel !== "") return `[${channel}]  [${player}]: ${text}`;
         return `[${player}]: ${text}`;
+    }
+
+    getAdminChatMessage(player: string, text:string){
+
+        const txt = this.localization.translate(`${text}`);
+
+        return `[${player}]: ${txt}`;
     }
 
     getPickupMessageText(type: PickupMsgType) {

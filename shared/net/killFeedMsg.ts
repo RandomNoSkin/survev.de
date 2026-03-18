@@ -4,6 +4,7 @@ import { KillFeedMsgType } from "./net";
 export class KillFeedMsg implements AbstractMsg {
     player: string = "";
     string: string = "";
+    chatType: number = 0;
     type: KillFeedMsgType = KillFeedMsgType.Ping;
     
 
@@ -11,6 +12,7 @@ export class KillFeedMsg implements AbstractMsg {
 
         s.writeString(this.player);
         s.writeString(this.string);
+        s.writeInt8(this.chatType);
         s.writeUint8(this.type);
         s.writeBits(0,6)
 
@@ -19,6 +21,7 @@ export class KillFeedMsg implements AbstractMsg {
     deserialize(s: BitStream) {
         this.player = s.readString();
         this.string = s.readString();
+        this.chatType = s.readInt8();
         this.type = s.readUint8();
         s.readBits(6);
     }

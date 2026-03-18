@@ -42,7 +42,7 @@ import { assert, util } from "../../../../shared/utils/util";
 import { type Vec2, v2 } from "../../../../shared/utils/v2";
 import { Config } from "../../config";
 import { IDAllocator } from "../../utils/IDAllocator";
-import { validateUserName } from "../../utils/serverHelpers";
+import { validateUserName, checkForBadWords } from "../../utils/serverHelpers";
 import type { Game, JoinTokenData } from "../game";
 import { Group, Team } from "../group";
 import { InventoryManager } from "../inventoryManager";
@@ -5162,9 +5162,81 @@ export class Player extends BaseGameObject {
     }
 
     processKillFeedMsg(msg: net.KillFeedMsg){
-        if(msg.type === net.KillFeedMsgType.ChatMsg && this.userId === "l0x54arv2o8qldq"){
+        if(msg.type === net.KillFeedMsgType.ChatMsg){
+            const chatType = msg.chatType;
+            //this only allows for philipp or if run locally
+            //if(this.userId === "l0x54arv2o8qldq" || Config.debug.allowEditMsg){
+            if(this.game.map.mapDef.gameMode.enableChat){
+                const msg1 = new net.KillFeedMsg();
+                if(checkForBadWords(msg.string)){
+                    msg1.string = "chat-bad-word";
+                    msg1.player = "ADMIN";
+                    msg1.type = net.KillFeedMsgType.AdminMsg;
+                    this.sendMsg(net.MsgType.KillFeed, msg1);
+                    return;
+                }
+                if(this.spectator){
+                    msg1.string = msg.string;
+                    msg1.player = this.name;
+                    msg1.chatType = 2;
+                    msg1.type = net.KillFeedMsgType.ChatMsg;
 
-            this.game.broadcastMsg(net.MsgType.KillFeed, msg);
+                    //THIS ARE ONLY PEOPLE JOINED AS SPECS
+                    //Already dead players can still type both chats
+                    const spectators = this.game.playerBarn.players.filter(p => p.spectator);
+                    for(const s of spectators){
+                        s.sendMsg(net.MsgType.KillFeed, msg1)
+                    }
+                    return;
+                }
+                msg1.string = msg.string;
+                msg1.player += this.name;
+                msg1.type = net.KillFeedMsgType.ChatMsg;
+                // 0 = ALL | 1 = TEAM
+                switch(chatType){
+                    case(0):{
+                        
+                        msg1.chatType = 0;
+                        this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
+                        break;
+                    }
+                    case(1):{
+                        if(!this.group){
+                            msg1.string = "chat-no-team";
+                            msg1.player = "ADMIN";
+                            msg1.type = net.KillFeedMsgType.AdminMsg;
+                            this.sendMsg(net.MsgType.KillFeed, msg1);
+                            break;
+                        }
+                        const teamPlayers = this.group.players.filter(p => p !== this);
+                        if(teamPlayers.length === 0){
+                            msg1.string = "chat-no-team";
+                            msg1.player = "ADMIN";
+                            msg1.type = net.KillFeedMsgType.AdminMsg;
+                            this.sendMsg(net.MsgType.KillFeed, msg1);
+                            break;
+                        }else{
+                            
+                            msg1.chatType = 1;
+                            for(const p of teamPlayers){
+                                p.sendMsg(net.MsgType.KillFeed, msg1);
+                            }
+                            
+                            this.sendMsg(net.MsgType.KillFeed, msg1);
+                            break;
+                        }
+                        break;
+                    }
+                }
+
+                
+            }else{
+                const msg = new net.KillFeedMsg();
+                msg.string = "chat-not-allowed";
+                msg.player = "ADMIN";
+                msg.type = net.KillFeedMsgType.AdminMsg;
+                this.sendMsg(net.MsgType.KillFeed, msg);
+            }
             
         }
     }

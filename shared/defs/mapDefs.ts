@@ -157,6 +157,7 @@ export interface MapDef {
         camperGracePeriod?: number, // time in ms after spawn before camping checks start || default: 40000
 
         announceTeams?: boolean;
+        enableChat?: boolean;
 
         desertMode?: boolean;
         factionMode?: boolean;
