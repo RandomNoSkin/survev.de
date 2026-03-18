@@ -492,7 +492,7 @@ export class Game {
             if(style.display === "none"){
                 this.chatUi.joinChat();
             }else{
-                //this.chatUi.sendChatMessage();
+                this.chatUi.sendChatMessage();
             }
             
         }
