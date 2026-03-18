@@ -748,6 +748,8 @@ export class Player extends BaseGameObject {
     hasFiredFlare = false;
     flareTimer = 0;
 
+    chatCooldown = 0;
+
     sendDeathEmoteTicker = 0;
     sentDeathEmote = false;
 
@@ -1819,6 +1821,9 @@ export class Player extends BaseGameObject {
         }
 
         this.timeAlive += dt;
+        if(this.chatCooldown >0){
+            this.chatCooldown -= dt;
+        }
 
         if (this.game.map.factionMode && this.timeUntilHidden > 0) {
             this.timeUntilHidden -= dt;
@@ -5168,6 +5173,14 @@ export class Player extends BaseGameObject {
             //if(this.userId === "l0x54arv2o8qldq" || Config.debug.allowEditMsg){
             if(this.game.map.mapDef.gameMode.enableChat){
                 const msg1 = new net.KillFeedMsg();
+
+                if(this.chatCooldown >0){
+                    msg1.string = "chat-cooldown";
+                    msg1.player = "ADMIN";
+                    msg1.type = net.KillFeedMsgType.AdminMsg;
+                    this.sendMsg(net.MsgType.KillFeed, msg1);
+                    return;
+                }
                 if(checkForBadWords(msg.string)){
                     msg1.string = "chat-bad-word";
                     msg1.player = "ADMIN";
@@ -5187,6 +5200,7 @@ export class Player extends BaseGameObject {
                     for(const s of spectators){
                         s.sendMsg(net.MsgType.KillFeed, msg1)
                     }
+                    this.chatCooldown = 2;
                     return;
                 }
                 msg1.string = msg.string;
@@ -5198,6 +5212,7 @@ export class Player extends BaseGameObject {
                         
                         msg1.chatType = 0;
                         this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
+                        this.chatCooldown = 2;
                         break;
                     }
                     case(1):{
@@ -5223,6 +5238,7 @@ export class Player extends BaseGameObject {
                             }
                             
                             this.sendMsg(net.MsgType.KillFeed, msg1);
+                            this.chatCooldown = 2;
                             break;
                         }
                         break;
