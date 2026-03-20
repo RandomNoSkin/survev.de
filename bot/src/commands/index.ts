@@ -8,6 +8,7 @@ import {
     zBanAccountParams,
     zBanIpParams,
     zFindDiscordUserSlugParams,
+    zGetUserParams,
     zGiveItemParams,
     zRemoveItemParams,
     zSetAccountNameParams,
@@ -18,6 +19,7 @@ import {
 import { Command } from "../utils";
 import { createCommand, createSlashCommand, genericExecute } from "./helpers";
 import { searchPlayersHandler } from "./search-player";
+import { getPlayerHandler } from "./getPlayerCmd"
 
 /**
  * for generic commands that only makes an api call and return it's meessage
@@ -290,6 +292,7 @@ export const commandHandlers: CommandHandlers = (
     {
         // add non generic commands here
         [Command.SearchPlayer]: searchPlayersHandler.execute,
+        [Command.GetPlayer]: getPlayerHandler.execute,
     } as CommandHandlers,
 );
 

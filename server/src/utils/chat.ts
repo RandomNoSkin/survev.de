@@ -224,6 +224,7 @@ export class Chat{
             return;
         }
         this.game.closeSocket(player.socketId, "kicked_by_admin");
+        this.game.checkGameOver();
     }
 
 }

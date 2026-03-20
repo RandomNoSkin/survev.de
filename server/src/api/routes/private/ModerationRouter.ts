@@ -272,6 +272,7 @@ export const ModerationRouter = new Hono()
                 teamMode: ipLogsTable.teamMode,
                 createdAt: ipLogsTable.createdAt,
                 mapId: ipLogsTable.mapId,
+                gameId: ipLogsTable.gameId,
             })
             .from(ipLogsTable)
             .where(
