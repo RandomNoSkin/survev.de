@@ -12,6 +12,7 @@ import { SingleThreadGameManager } from "./game/gameManager";
 import { GameProcessManager } from "./game/gameProcessManager";
 import { GIT_VERSION } from "./utils/gitRevision";
 import { ServerLogger } from "./utils/logger";
+import { gameLogger } from "./utils/betterLogger";
 import {
     apiPrivateRouter,
     cors,

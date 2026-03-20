@@ -29,9 +29,13 @@ export const errorLogger = winston.createLogger({
         })
     ),
     transports: [
-        new winston.transports.File({ filename: "logs/error.log", level: "error",
-            maxsize: 5*1024*1024,
-            maxFiles: 5, }),
+        new DailyRotateFile({
+            filename: "logs/error-%DATE%.log",
+            datePattern: "YYYY-MM-DD",
+            level: "info",
+            maxSize: "10m",
+            maxFiles: "14d", // logs der letzten 14 Tage
+        }),
     ],
 });
 
@@ -44,9 +48,13 @@ export const gameLogger = winston.createLogger({
         })
     ),
     transports: [
-        new winston.transports.File({ filename: "logs/game.log",
-            maxsize: 5*1024*1024,
-            maxFiles: 5, }),
+        new DailyRotateFile({
+            filename: "logs/game-%DATE%.log",
+            datePattern: "YYYY-MM-DD",
+            level: "info",
+            maxSize: "10m",
+            maxFiles: "14d", // logs der letzten 14 Tage
+        }),
     ],
 });
 

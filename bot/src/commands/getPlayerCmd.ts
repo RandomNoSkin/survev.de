@@ -25,7 +25,7 @@ export const getPlayerHandler = {
             });
             return;
         }
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ ephemeral: false });
 
         const name = interaction.options.getString("name", true);
         const gameId = interaction.options.getString("game_id", false);
@@ -86,7 +86,6 @@ export const getPlayerHandler = {
                 ? new Date(player.createdAt).toLocaleString()
                 : "unknown time";
 
-                console.log("GameId:", player.gameId);
             return {
                 label: `${player.username ?? name}`.slice(0, 100),
                 description: `${date} | ${player.teamMode ?? "unknown"}`.slice(0, 100),
@@ -118,8 +117,6 @@ export const getPlayerHandler = {
             });
 
             const selectedGameId = componentInteraction.values[0];
-            console.log("selectedGameId", selectedGameId);
-            console.log("first search data", data);
 
             const detailsRes = await honoClient.moderation.get_player_ip.$post({
                 json: {
@@ -147,7 +144,6 @@ export const getPlayerHandler = {
                     `Game ID: \`${player.gameId ?? selectedGameId}\``,
                     `Encoded IP: \`${player.ip ?? "unknown"}\``,
                     `Account Slug: \`${player.slug ?? "none"}\``,
-                    `Account Discord ID: \`${player.linkedDiscord ?? "none"}\``
                 ].join("\n"),
                 components: [],
             });
