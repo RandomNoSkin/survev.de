@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ChatInputCommandInteraction, ComponentType, SlashCommandBuilder, StringSelectMenuBuilder } from "discord.js";
-import { Command, honoClient } from "../utils";
+import { Command, hasBotPermission, honoClient, isAdmin } from "../utils";
 
 export const getPlayerHandler = {
     command: new SlashCommandBuilder()
@@ -19,6 +19,12 @@ export const getPlayerHandler = {
         ),
 
     async execute(interaction: ChatInputCommandInteraction) {
+        if(!hasBotPermission(interaction)){
+            interaction.reply({
+                content: "No Permission",
+            });
+            return;
+        }
         await interaction.deferReply({ ephemeral: true });
 
         const name = interaction.options.getString("name", true);
