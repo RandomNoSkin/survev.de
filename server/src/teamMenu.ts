@@ -70,13 +70,16 @@ class Player {
     disconnectTimeout: ReturnType<typeof setTimeout>;
 
     encodedIp: string;
+    admin: boolean;
 
     constructor(
         public socket: WSContext<SocketData>,
         public teamMenu: TeamMenu,
         public userId: string | null,
         public ip: string,
+        admin = false,
     ) {
+        this.admin = admin;
         this.encodedIp = hashIp(ip);
         // disconnect if didn't join a room in 5 seconds
         this.disconnectTimeout = setTimeout(() => {
@@ -271,6 +274,7 @@ class Room {
                 token,
                 userId: p.userId,
                 ip: p.ip,
+                admin: p.admin,
                 loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
             } satisfies FindGamePrivateBody["playerData"][0];
         });
@@ -444,15 +448,18 @@ export class TeamMenu {
                 }
 
                 let userId: string | null = null;
+                let admin = false;
                 const sessionId = getCookie(c, "session") ?? null;
 
                 if (sessionId) {
                     try {
                         const account = await validateSessionToken(sessionId);
                         userId = account.user?.id || null;
+                        admin = account.user?.admin ?? false;
 
                         if (account.user?.banned) {
                             userId = null;
+                            admin = false;
                         }
                     } catch (err) {
                         this.logger.error(`Failed to validate session:`, err);
@@ -487,7 +494,7 @@ export class TeamMenu {
                             ws.close();
                             return;
                         }
-                        teamMenu.onOpen(ws as WSContext<SocketData>, userId, ip!);
+                        teamMenu.onOpen(ws as WSContext<SocketData>, userId, ip!, admin);
                     },
 
                     onMessage(event, ws) {
@@ -521,8 +528,8 @@ export class TeamMenu {
         );
     }
 
-    onOpen(ws: WSContext<SocketData>, userId: string | null, ip: string) {
-        const player = new Player(ws, this, userId, ip);
+    onOpen(ws: WSContext<SocketData>, userId: string | null, ip: string, admin: boolean) {
+        const player = new Player(ws, this, userId, ip, admin);
         ws.raw!.player = player;
 
         let players = this.playersByIp.get(player.encodedIp);

@@ -2278,7 +2278,7 @@ export class UiManager {
     }
 
     displayAnnouncement(message: string, color?: string, stayTime?: number) {
-        const timeout = stayTime ?? 3000;
+        const timeout = Number.isNaN(stayTime) ? 3000 : (stayTime ?? 3000);
         if (message) {
             if(color){
                 this.announcement.css("color", color);

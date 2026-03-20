@@ -68,3 +68,4 @@ Temporary Items
 *.vsix
 
 todo.md
+*.log

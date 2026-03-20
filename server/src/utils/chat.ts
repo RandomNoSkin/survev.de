@@ -1,0 +1,229 @@
+import { Game } from "../game/game";
+import { Player } from "../game/objects/player";
+
+import * as net from "../../../shared/net/net";
+import { chatLogger } from "./betterLogger";
+import { checkForBadWords } from "./serverHelpers";
+import { Config } from "../config";
+
+
+
+export class Chat{
+
+    player: Player;
+    game: Game;
+    isAdmin: boolean;
+
+    constructor(player: Player, game: Game, isAdmin: boolean){
+        this.player = player;
+        this.game = game;
+        this.isAdmin = isAdmin;
+    }
+
+    handleChatMessage(msg: net.KillFeedMsg){
+         const chatType = msg.chatType;
+            const originalMsg = msg.string;
+            //this only allows for philipp or if run locally
+            //if(this.userId === "l0x54arv2o8qldq" || Config.debug.allowEditMsg){
+            if(this.game.map.mapDef.gameMode.enableChat){
+                const msg1 = new net.KillFeedMsg();
+                if((this.isAdmin || Config.debug.allowEditMsg) && originalMsg.startsWith("/")){
+                    //ADMIN CMD
+                    this.handleAdminCmds(originalMsg);
+
+                    return;
+                }
+                if(this.player.chatCooldown >0){
+                    msg1.string = "chat-cooldown";
+                    msg1.player = "ADMIN";
+                    msg1.type = net.KillFeedMsgType.AdminMsg;
+                    this.player.sendMsg(net.MsgType.KillFeed, msg1);
+                    this.logChat(originalMsg, true, false, msg1.string);
+                    return;
+                }
+                if(checkForBadWords(msg.string)){
+                    msg1.string = "chat-bad-word";
+                    msg1.player = "ADMIN";
+                    msg1.type = net.KillFeedMsgType.AdminMsg;
+                    this.player.sendMsg(net.MsgType.KillFeed, msg1);
+                    this.logChat(originalMsg, true, false, msg1.string);
+                    return;
+                }
+                if(this.player.spectator){
+                    msg1.string = msg.string;
+                    msg1.player = this.player.name;
+                    msg1.chatType = 2;
+                    msg1.type = net.KillFeedMsgType.ChatMsg;
+
+                    //THIS ARE ONLY PEOPLE JOINED AS SPECS
+                    //Already dead players can still type both chats
+                    const spectators = this.game.playerBarn.players.filter(p => p.spectator);
+                    for(const s of spectators){
+                        s.sendMsg(net.MsgType.KillFeed, msg1)
+                    }
+                    this.logChat(originalMsg);
+                    this.player.chatCooldown = 2;
+                    return;
+                }
+                msg1.string = msg.string;
+                msg1.player += this.player.name;
+                msg1.type = net.KillFeedMsgType.ChatMsg;
+                // 0 = ALL | 1 = TEAM
+                switch(chatType){
+                    case(0):{
+                        
+                        msg1.chatType = 0;
+                        this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
+                        this.logChat(originalMsg);
+                        this.player.chatCooldown = 2;
+                        break;
+                    }
+                    case(1):{
+                        if(!this.player.group){
+                            msg1.string = "chat-no-team";
+                            msg1.player = "ADMIN";
+                            msg1.type = net.KillFeedMsgType.AdminMsg;
+                            this.player.sendMsg(net.MsgType.KillFeed, msg1); 
+                            this.logChat(originalMsg, true, false, msg1.string);
+                            break;
+                        }
+                        const teamPlayers = this.player.group.players.filter(p => p !== this.player);
+                        if(teamPlayers.length === 0){
+                            msg1.string = "chat-no-team";
+                            msg1.player = "ADMIN";
+                            msg1.type = net.KillFeedMsgType.AdminMsg;
+                            this.player.sendMsg(net.MsgType.KillFeed, msg1);  
+                            this.logChat(originalMsg, true, false, msg1.string);
+                            break;
+                        }else{
+                            
+                            msg1.chatType = 1;
+                            for(const p of teamPlayers){
+                                p.sendMsg(net.MsgType.KillFeed, msg1);
+                            }
+                            
+                            this.player.sendMsg(net.MsgType.KillFeed, msg1);
+                            this.logChat(originalMsg);
+                            this.player.chatCooldown = 2;
+                            break;
+                        }
+                        break;
+                    }
+                }
+
+                
+            }else{
+                const msg1 = new net.KillFeedMsg();
+                msg1.string = "chat-not-allowed";
+                msg1.player = "ADMIN";
+                msg1.type = net.KillFeedMsgType.AdminMsg;
+                this.player.sendMsg(net.MsgType.KillFeed, msg1);
+                this.logChat(originalMsg, true, false, msg1.string);
+                return;
+            }
+            
+    }
+
+    logChat(originalMsg: string, adminMsg?: boolean, cmd?: boolean, msg?: string,){
+        if(adminMsg){
+            const log = `[CHAT-${this.game.id}] || [${this.player.name}]: ${originalMsg} => [Response]: ${msg}`;
+            chatLogger.info(log);
+            return;
+        }else if(cmd){
+            const log = `[CHAT-${this.game.id}] || [${this.player.name}]: ${originalMsg}`;
+            chatLogger.warn(log);
+            return;
+        }
+
+        const log = `[CHAT-${this.game.id}] || [${this.player.name}]: ${originalMsg}`;
+        chatLogger.info(log);
+    }
+
+    adminCommands: Record<string, (args: string[]) => void> = {
+        announce: (args) => {
+            const text = args[0];
+            const color = args[2];
+            const time = Number(args[1]);
+
+        if (!text) {
+            const msg = new net.KillFeedMsg;
+            msg.type = net.KillFeedMsgType.AdminMsg;
+            msg.string = "chat-missing-text";
+            msg.player = "Philipp";
+            this.player.sendMsg(net.MsgType.KillFeed, msg);
+            return;
+        }
+
+        this.sendAnnouncementMsg(text, color, time);
+        },
+        kick: (args) => {
+            const player = args[0];
+            const reason = args[1];
+            this.kickPlayer(player, reason);
+        },
+    };
+
+    handleAdminCmds(originalMsg: string){
+
+        const parts = originalMsg.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+        const cmd = parts[0]?.replace(/^\//, "");
+        const args = parts.slice(1).map((arg: string) => arg.replace(/^"|"$/g, ""));
+        const msg = new net.KillFeedMsg;
+
+        if(!cmd){
+            msg.type = net.KillFeedMsgType.AdminMsg;
+            msg.string = "chat-no-cmd";
+            msg.player = "Philipp";
+            this.player.sendMsg(net.MsgType.KillFeed, msg);
+            this.logChat(originalMsg, false, true);
+            return;
+        }
+
+        const handler = this.adminCommands[cmd];
+
+        if (!handler) {
+            msg.type = net.KillFeedMsgType.AdminMsg;
+            msg.string = "chat-unknown-cmd";
+            msg.player = "Philipp";
+            this.player.sendMsg(net.MsgType.KillFeed, msg);
+            console.log(cmd);
+            return;
+        }
+
+        this.logChat(originalMsg, false, true);
+
+        handler(args);
+
+
+    }
+
+    sendAnnouncementMsg(content: string, color?: string, time?: number){
+        const c = color ?? "#ff0000";
+        const t = time ?? 3000;
+        const msg = new net.KillFeedMsg;
+        msg.type = net.KillFeedMsgType.CmdMsg;
+        msg.player = this.player.name;
+        msg.cmd = "announce";
+        msg.string = content;
+        msg.args.push(c);
+        msg.args.push(t.toString());
+        
+
+
+        this.game.broadcastMsg(net.MsgType.KillFeed, msg);
+    }
+
+    kickPlayer(playerName: string, reason: string){
+        const player = this.game.playerBarn.players.filter(p => p.name === playerName)[0];
+        if(!player){
+            const msg = new net.KillFeedMsg;
+            msg.type = net.KillFeedMsgType.AdminMsg;
+            msg.string = "chat-player-not-found";
+            msg.player = "Philipp";
+            this.player.sendMsg(net.MsgType.KillFeed, msg);
+            return;
+        }
+        this.game.closeSocket(player.socketId, "kicked_by_admin");
+    }
+
+}
