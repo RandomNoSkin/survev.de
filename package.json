@@ -30,7 +30,9 @@
   "dependencies": {
     "enquirer": "^2.4.1",
     "hjson": "^3.2.2",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "workspaces": [
     "client",

@@ -37,7 +37,6 @@ export class ChatUi{
                     this.switchChat();
                     this.input.focus();
                 }
-                console.log(e.key);
             });
             window.addEventListener("mousedown", (e) =>{
                 this.leaveChat();
@@ -101,5 +100,26 @@ export class ChatUi{
             }
         }
         this.input.focus();
+    }
+
+    adminCommands: Record<string, (admin: string, content: string, args: string[]) => void> = {
+        announce: (admin, content, args) => {
+            this.sendAnnouncementMsg(admin, content, args);
+        },
+    };
+
+    handleAdminCmds(cmd: string, admin: string, content: string, args: string[]){
+        const handler = this.adminCommands[cmd];
+
+        if (!handler) return;
+
+        handler(admin, content, args);
+    }
+
+    sendAnnouncementMsg(admin: string, content: string, args: string[]){
+        const msg = `[${admin}]: ${content}`;
+        const color = args[0];
+        const time = Number(args[1]);
+        this.game.m_uiManager.displayAnnouncement(msg, color, time);
     }
 }

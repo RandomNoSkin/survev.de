@@ -53,6 +53,8 @@ import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
 import { TeamColor } from "../../../../shared/defs/maps/factionDefs";
+import { chatLogger } from "../../utils/betterLogger";
+import { Chat } from "../../utils/chat";
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -211,6 +213,7 @@ export class PlayerBarn {
             ip,
             joinData.findGameIp,
             joinData.userId,
+            joinData.admin,
             joinData.loadout,
         );
 
@@ -294,6 +297,7 @@ export class PlayerBarn {
             ip,
             joinData.findGameIp,
             joinData.userId,
+            joinData.admin,
             joinData.loadout,
         );
 
@@ -356,7 +360,8 @@ export class PlayerBarn {
         }
         this.game.pluginManager.emit("playerJoin", player);
 
-        this.game.updateData();   
+        this.game.updateData();
+        player.chat = new Chat(player, player.game, player.isAdmin);   
 
         //acitvating role choice
         //needs to be after initializing player -> we need player ID
@@ -408,6 +413,7 @@ export class PlayerBarn {
             "",
             "",
             null,
+            false,
         );
 
         this.activatePlayer(player, group, team);
@@ -755,6 +761,7 @@ export class Player extends BaseGameObject {
 
     team: Team | undefined = undefined;
     group: Group | undefined = undefined;
+    chat: Chat | undefined = undefined;
 
     spectator: boolean = false;
     announcedEnemies: boolean = false;
@@ -1669,6 +1676,7 @@ export class Player extends BaseGameObject {
 
     userId: string | null = null;
     ip: string;
+    isAdmin: boolean;
     // see comment on server/src/api/schema.ts
     // about logging find_game IP's
     findGameIp: string;
@@ -1683,6 +1691,7 @@ export class Player extends BaseGameObject {
         ip: string,
         findGameIp: string,
         userId: string | null,
+        admin: boolean,
         loadout?: Loadout,
     ) {
         super(game, pos);
@@ -1700,6 +1709,7 @@ export class Player extends BaseGameObject {
         this.ip = ip;
         this.findGameIp = findGameIp;
         this.userId = userId;
+        this.isAdmin = admin
 
         this.isMobile = joinMsg.isMobile;
 
@@ -5171,92 +5181,7 @@ export class Player extends BaseGameObject {
 
     processKillFeedMsg(msg: net.KillFeedMsg){
         if(msg.type === net.KillFeedMsgType.ChatMsg){
-            const chatType = msg.chatType;
-            //this only allows for philipp or if run locally
-            //if(this.userId === "l0x54arv2o8qldq" || Config.debug.allowEditMsg){
-            if(this.game.map.mapDef.gameMode.enableChat){
-                const msg1 = new net.KillFeedMsg();
-
-                if(this.chatCooldown >0){
-                    msg1.string = "chat-cooldown";
-                    msg1.player = "ADMIN";
-                    msg1.type = net.KillFeedMsgType.AdminMsg;
-                    this.sendMsg(net.MsgType.KillFeed, msg1);
-                    return;
-                }
-                if(checkForBadWords(msg.string)){
-                    msg1.string = "chat-bad-word";
-                    msg1.player = "ADMIN";
-                    msg1.type = net.KillFeedMsgType.AdminMsg;
-                    this.sendMsg(net.MsgType.KillFeed, msg1);
-                    return;
-                }
-                if(this.spectator){
-                    msg1.string = msg.string;
-                    msg1.player = this.name;
-                    msg1.chatType = 2;
-                    msg1.type = net.KillFeedMsgType.ChatMsg;
-
-                    //THIS ARE ONLY PEOPLE JOINED AS SPECS
-                    //Already dead players can still type both chats
-                    const spectators = this.game.playerBarn.players.filter(p => p.spectator);
-                    for(const s of spectators){
-                        s.sendMsg(net.MsgType.KillFeed, msg1)
-                    }
-                    this.chatCooldown = 2;
-                    return;
-                }
-                msg1.string = msg.string;
-                msg1.player += this.name;
-                msg1.type = net.KillFeedMsgType.ChatMsg;
-                // 0 = ALL | 1 = TEAM
-                switch(chatType){
-                    case(0):{
-                        
-                        msg1.chatType = 0;
-                        this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
-                        this.chatCooldown = 2;
-                        break;
-                    }
-                    case(1):{
-                        if(!this.group){
-                            msg1.string = "chat-no-team";
-                            msg1.player = "ADMIN";
-                            msg1.type = net.KillFeedMsgType.AdminMsg;
-                            this.sendMsg(net.MsgType.KillFeed, msg1);
-                            break;
-                        }
-                        const teamPlayers = this.group.players.filter(p => p !== this);
-                        if(teamPlayers.length === 0){
-                            msg1.string = "chat-no-team";
-                            msg1.player = "ADMIN";
-                            msg1.type = net.KillFeedMsgType.AdminMsg;
-                            this.sendMsg(net.MsgType.KillFeed, msg1);
-                            break;
-                        }else{
-                            
-                            msg1.chatType = 1;
-                            for(const p of teamPlayers){
-                                p.sendMsg(net.MsgType.KillFeed, msg1);
-                            }
-                            
-                            this.sendMsg(net.MsgType.KillFeed, msg1);
-                            this.chatCooldown = 2;
-                            break;
-                        }
-                        break;
-                    }
-                }
-
-                
-            }else{
-                const msg = new net.KillFeedMsg();
-                msg.string = "chat-not-allowed";
-                msg.player = "ADMIN";
-                msg.type = net.KillFeedMsgType.AdminMsg;
-                this.sendMsg(net.MsgType.KillFeed, msg);
-            }
-            
+           this.chat?.handleChatMessage(msg);
         }
     }
 

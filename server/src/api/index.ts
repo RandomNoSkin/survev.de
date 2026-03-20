@@ -163,6 +163,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 userId: user?.id || null,
                 ip,
                 loadout: user?.loadout,
+                admin: user?.admin ?? false,
             },
         ],
     });

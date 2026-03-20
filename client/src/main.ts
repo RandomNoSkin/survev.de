@@ -374,6 +374,10 @@ export class Application {
                 if (errMsg == "rate_limited") {
                     this.onJoinGameError(errMsg);
                 }
+                if (errMsg == "kicked_by_admin") {
+                    this.onJoinGameError(errMsg);
+                }
+
                 if (errMsg) {
                     this.showErrorModal(errMsg);
                 }
@@ -869,6 +873,7 @@ export class Application {
             invalid_captcha: this.localization.translate("index-invalid-captcha"),
             join_game_failed: this.localization.translate("index-failed-joining-game"),
             rate_limited: this.localization.translate("index-rate-limited"),
+            kicked_by_admin: this.localization.translate("index-kicked-by-admin"),
         };
         if (err == "invalid_protocol") {
             this.showInvalidProtocolModal();

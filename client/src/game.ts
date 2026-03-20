@@ -1780,6 +1780,12 @@ export class Game {
                     const txt = this.m_ui2Manager.getAdminChatMessage(player, text);
 
                     this.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
+                }else if(msg.type === net.KillFeedMsgType.CmdMsg){
+                    const cmd = msg.cmd;
+                    const admin = msg.player;
+                    const text = msg.string;
+                    const args = msg.args;
+                    this.chatUi.handleAdminCmds(cmd, admin, text, args);
                 }
             }
         }

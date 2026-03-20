@@ -40,6 +40,7 @@ export interface JoinTokenData {
     userId: string | null;
     findGameIp: string;
     loadout?: Loadout;
+    admin: boolean;
     groupData: {
         autoFill: boolean;
         playerCount: number;
@@ -622,6 +623,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                admin: token.admin,
             });
         }
     }
@@ -641,6 +643,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                admin: token.admin,
             });
         }
     }
