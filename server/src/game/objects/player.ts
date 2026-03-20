@@ -1948,33 +1948,27 @@ export class Player extends BaseGameObject {
                         }
 
                         // check if enough time has passed to evaluate camping state
-                        if (
+                        if(!this.isUnderCover() || 
+                                this.actionType === GameConfig.Action.UseItem ||
+                                this.actionType === GameConfig.Action.Revive || this.downed){
+                            this.currentTime = now;
+                        }else if (
                             this.currentTime + camperDecayTime < now || 
                             (this.camper && this.punishmentTime + camperPunishmentTime < now)
                         ) {
                             // if player is using a heal item or reviving also skip the decay
                             if (
-                                distFromAnchor < camperPunishmentDistance &&
-                                this.actionType !== GameConfig.Action.UseItem &&
-                                this.actionType !== GameConfig.Action.Revive && !this.downed &&
-                                this.isUnderCover()
+                                distFromAnchor < camperPunishmentDistance
                             ) {
                                 this.camper = true;
                                 this.punishmentTime = this.game.startedTime;
-                            } else {
-                                if(this.camper && this.punishmentTime + camperPunishmentTime < now){
-                                    this.camper = false;
-                                    if(this.role === "camper")
-                                    this.removeRole();
-                                    if(this.game.map.mapDef.gameMode.indicator)
-                                    this.promoteToRole("arena");
-                                }
                             }
 
                             // restart the timer / anchor
                             this.camperAnchorPos = v2.copy(this.pos);
                             this.currentTime = now;
                         }
+
                     }
                 
 

@@ -72,3 +72,7 @@ export const zRemoveItemParams = z.object({
     item: z.string(),
     slug: z.string(),
 });
+
+export const zGetUserParams = z.object({
+    name: z.string(),
+});
