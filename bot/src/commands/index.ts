@@ -300,4 +300,5 @@ export const commandsToRegister: SlashCommandOptionsOnlyBuilder[] = [
     ...Object.values(commands).map(createSlashCommand),
     // add non generic commands here
     searchPlayersHandler.command,
+    getPlayerHandler.command,
 ];
