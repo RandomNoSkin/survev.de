@@ -125,7 +125,6 @@ export const getPlayerHandler = {
                 json: {
                     name,
                     game_id: selectedGameId,
-                    use_account_slug: false,
                 },
             });
 
