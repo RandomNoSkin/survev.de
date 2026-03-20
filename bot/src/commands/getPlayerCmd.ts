@@ -79,12 +79,14 @@ export const getPlayerHandler = {
             await interaction.editReply(`No recent player entries found for \`${name}\`.`);
             return;
         }
+        console.log("GameId:", )
 
         const options = data.slice(0, 10).map((player, index) => {
             const date = player.createdAt
                 ? new Date(player.createdAt).toLocaleString()
                 : "unknown time";
 
+                console.log("GameId:", player.gameId);
             return {
                 label: `${player.username ?? name}`.slice(0, 100),
                 description: `${date} | ${player.teamMode ?? "unknown"}`.slice(0, 100),
@@ -116,12 +118,13 @@ export const getPlayerHandler = {
             });
 
             const selectedGameId = componentInteraction.values[0];
+            console.log("selectedGameId", selectedGameId);
+            console.log("first search data", data);
 
             const detailsRes = await honoClient.moderation.get_player_ip.$post({
                 json: {
                     name,
                     game_id: selectedGameId,
-                    use_account_slug: false,
                 },
             });
 
