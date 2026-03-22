@@ -576,7 +576,14 @@ export class Game {
         player.spectating = undefined;
         player.dirNew = v2.create(1, 0);
         player.setPartDirty();
-
+        if (player.downed){
+            //player killed durch bleed out
+            player.kill({
+                damageType: GameConfig.DamageType.Bleeding,
+                dir: player.dir,
+                source: player.downedBy,
+            });
+        }else
         if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn || !this.started) {
             player.game.playerBarn.removePlayer(player);
             player.mapIndicator?.kill();
@@ -584,7 +591,7 @@ export class Game {
             player.kill({
                 damageType: GameConfig.DamageType.Disconnect,
                 dir: player.dir,
-                source: undefined,
+                source: player.downedBy,
             });
         }
     }

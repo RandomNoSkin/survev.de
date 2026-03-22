@@ -504,7 +504,15 @@ export class PlayerBarn {
 
         player.obstacleOutfit?.destroy();
 
+        if(this.game.startedTime <= GameConfig.player.minActiveTime){
+            if (this.game.aliveCount === 1 || this.getAliveGroups().length === 1) {
+                this.game.started = false;
+                this.game.startedTime = 0;
+                this.game.gas.reset();
+            }
+        }
         this.game.checkGameOver();
+        
         this.game.updateData();
     }
 
