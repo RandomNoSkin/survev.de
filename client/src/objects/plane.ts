@@ -66,10 +66,17 @@ class Plane {
         this.spriteUpdateTime = 0;
 
         this.type = data.action;
-        this.config =
-            this.type == GameConfig.Plane.Airdrop
-                ? GameConfig.airdrop
-                : GameConfig.airstrike;
+        switch(data.action){
+            case(GameConfig.Plane.Airdrop):
+                this.config = GameConfig.airdrop;
+                break;
+            case(GameConfig.Plane.SupplyDrop):
+                this.config = GameConfig.supplydrop;
+                break;
+            case(GameConfig.Plane.Airstrike):
+                this.config = GameConfig.airstrike;
+                break;    
+        }
 
         this.rad = this.config.planeRad;
         switch (this.type) {
@@ -82,6 +89,12 @@ class Plane {
             case GameConfig.Plane.Airstrike:
                 this.sprite.texture = PIXI.Texture.from("map-plane-02.img");
                 this.planeSound = "fighter_01";
+                break;
+            case GameConfig.Plane.SupplyDrop:
+                this.sprite.texture = PIXI.Texture.from(
+                    map.getMapDef().biome.airdrop.planeImg,
+                );
+                break;
         }
 
         this.sprite.visible = true;

@@ -63,7 +63,7 @@ export const Comp: MapDef = {
         betterMapGen: true,
 
         betterStats: true,
-        canDespawn: false,
+        canDespawn: true,
 
         camperPunishment: true,
         announceTeams: true,

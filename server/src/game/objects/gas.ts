@@ -317,6 +317,30 @@ export class Gas {
         this.game.updateData();
     }
 
+    reset() {
+        this.stage = 0;
+        this.circleIdx = -1;
+        this.mode = GasMode.Inactive;
+        this._gasTicker = 0;
+        this.gasT = 0;
+        this._damageTicker = 0;
+        this._running = false;
+        this.doDamage = false;
+
+        const stage = this._getStageData();
+        this.radOld = 0.85 * this.mapSize;
+        this.radNew = this.currentRad = stage.rad * this.mapSize;
+        this.duration = stage.duration;
+        this.damage = stage.damage;
+
+        this.posOld = v2.create(this.game.map.width / 2, this.game.map.height / 2);
+        this.posNew = v2.copy(this.posOld);
+        this.currentPos = v2.copy(this.posOld);
+
+        this.dirty = true;
+        this.timeDirty = true;
+    }
+
     private _getStageData() {
         return GasStages[this.stage];
     }
