@@ -75,7 +75,7 @@ export class Chat{
                         msg1.chatType = 0;
                         this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
                         this.logChat(originalMsg);
-                        this.player.chatCooldown = 2;
+                        this.player.chatCooldown = 3;
                         break;
                     }
                     case(1):{
@@ -104,7 +104,7 @@ export class Chat{
                             
                             this.player.sendMsg(net.MsgType.KillFeed, msg1);
                             this.logChat(originalMsg);
-                            this.player.chatCooldown = 2;
+                            this.player.chatCooldown = 3;
                             break;
                         }
                         break;
