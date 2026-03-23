@@ -65,6 +65,7 @@ const BindDefs = {
     [GameInput.Fullscreen]: def("Full Screen", inputKey(Key.L)),
     [GameInput.HideUI]: def("Hide UI", null),
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
+    [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
 };
 
 export class InputBinds {

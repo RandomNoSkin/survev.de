@@ -42,9 +42,6 @@ export class ChatUi{
                 this.leaveChat();
             });
             window.addEventListener("keydown", (e) => {
-                if(e.key === "Enter" && !this.chatShown){
-                    this.joinChat();
-                }
                 if(e.key == "Escape" || e.key == "<"){
                     this.leaveChat();
                 }

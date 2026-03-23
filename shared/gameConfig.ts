@@ -148,6 +148,7 @@ export enum Input {
     HideUI,
     TeamPingSingle,
     Count,
+    JoinChat,
 }
 
 export const GameConfig = {

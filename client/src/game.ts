@@ -565,6 +565,13 @@ export class Game {
         ) {
             this.m_uiManager.cycleHud();
         }
+
+        // Open Chat
+        if(
+            this.m_inputBinds.isBindPressed(Input.JoinChat)
+        ){
+            this.chatUi.joinChat();
+        }
         // Update facing direction
         const playerPos = this.m_activePlayer.m_pos;
         const mousePos = v2.create(
