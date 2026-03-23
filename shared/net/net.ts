@@ -355,6 +355,7 @@ export enum MsgType {
     ArenaRoles,
     JoinAsSpectator,
     JoinFeed,
+    KillFeed,
 }
 
 export enum PickupMsgType {
@@ -364,6 +365,13 @@ export enum PickupMsgType {
     BetterItemEquipped,
     Success,
     GunCannotFire,
+}
+
+export enum KillFeedMsgType {
+    Ping,
+    ChatMsg,
+    AdminMsg,
+    CmdMsg,
 }
 
 export class UpdatePassMsg {
@@ -391,4 +399,5 @@ export { PlayerStatsMsg } from "./playerStatsMsg";
 export { RoleAnnouncementMsg } from "./roleAnnouncementMsg";
 export { SpectateMsg } from "./spectateMsg";
 export { JoinAsSpectatorMsg } from "./joinAsSpectatorMsg";
+export { KillFeedMsg } from "./killFeedMsg.ts"
 export { getPlayerStatusUpdateRate, UpdateMsg } from "./updateMsg";

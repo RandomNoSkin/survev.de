@@ -11,7 +11,7 @@ import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
 import { assert, util } from "../../../../shared/utils/util";
 import { type Vec2, v2 } from "../../../../shared/utils/v2";
-import type { Game } from "../game";
+import { Game } from "../game";
 import type { Player } from "./player";
 
 interface ScheduledAirDrop {
@@ -812,7 +812,7 @@ class AirstrikeZone {
 abstract class Plane {
     game: Game;
     planeBarn: PlaneBarn;
-    config: typeof GameConfig.airdrop | typeof GameConfig.airstrike;
+    config: typeof GameConfig.airdrop | typeof GameConfig.airstrike | typeof GameConfig.supplydrop;
     pos: Vec2;
     targetPos: Vec2;
     action: PlaneType;
@@ -820,6 +820,7 @@ abstract class Plane {
     planeDir: Vec2;
     rad: number;
     actionComplete = false;
+    startDelay = 0;
 
     constructor(
         game: Game,
@@ -837,16 +838,29 @@ abstract class Plane {
         this.id = id;
         this.planeDir = dir;
 
-        const isDrop =
-        this.action === GameConfig.Plane.Airdrop ||
-        this.action === GameConfig.Plane.SupplyDrop;
-
-        this.config = isDrop ? GameConfig.airdrop : GameConfig.airstrike;
+       
+        switch(this.action){
+            case(GameConfig.Plane.Airdrop):
+                this.config = GameConfig.airdrop;
+                break;
+            case(GameConfig.Plane.SupplyDrop):
+                this.config = GameConfig.supplydrop;
+                break;
+            case(GameConfig.Plane.Airstrike):
+                this.config = GameConfig.airstrike;
+                break;    
+        }
 
         this.rad = this.config.planeRad;
+        const planeDelay = (this.config as any).planeDelay ?? 0;
+        this.startDelay = planeDelay/10;
     }
 
     update(dt: number) {
+        if(this.startDelay>0){
+            this.startDelay -= dt;
+            return;
+        }
         this.pos = v2.add(this.pos, v2.mul(this.planeDir, this.config.planeVel * dt));
     }
 }

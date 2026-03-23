@@ -36,6 +36,7 @@ import { TeamMenu } from "./ui/teamMenu";
 import { loadStaticDomImages } from "./ui/ui2";
 import { MatchData, SpectatorMenu } from "./ui/spectatorMenu";
 import { GameInfo } from "./gameInfo";
+import { ChatUi } from "./ui/chat";
 
 export class Application {
     nameInput = $("#player-name-input-solo");
@@ -288,13 +289,17 @@ export class Application {
             const a = new Date(r).getTime();
             $(".right-column-toggle").on("click", () => {
                 if (this.newsDisplayed) {
-                    $("#news-wrapper").fadeOut(250);
-                    $("#pass-wrapper").fadeIn(250);
+                    //$("#news-wrapper").fadeOut(250);
+                    //$("#pass-wrapper").fadeIn(250);
+                    $("#news-wrapper").css("display", "none");
+                    $("#pass-wrapper").css("display", "block");
                 } else {
                     this.config.set("lastNewsTimestamp", a);
                     $(".news-toggle").find(".account-alert").css("display", "none");
-                    $("#news-wrapper").fadeIn(250);
-                    $("#pass-wrapper").fadeOut(250);
+                    //$("#news-wrapper").fadeIn(250);
+                    //$("#pass-wrapper").fadeOut(250);
+                    $("#news-wrapper").css("display", "block");
+                    $("#pass-wrapper").css("display", "none");
                 }
                 this.newsDisplayed = !this.newsDisplayed;
             });
@@ -369,6 +374,10 @@ export class Application {
                 if (errMsg == "rate_limited") {
                     this.onJoinGameError(errMsg);
                 }
+                if (errMsg == "kicked_by_admin") {
+                    this.onJoinGameError(errMsg);
+                }
+
                 if (errMsg) {
                     this.showErrorModal(errMsg);
                 }
@@ -864,6 +873,7 @@ export class Application {
             invalid_captcha: this.localization.translate("index-invalid-captcha"),
             join_game_failed: this.localization.translate("index-failed-joining-game"),
             rate_limited: this.localization.translate("index-rate-limited"),
+            kicked_by_admin: this.localization.translate("index-kicked-by-admin"),
         };
         if (err == "invalid_protocol") {
             this.showInvalidProtocolModal();

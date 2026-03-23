@@ -35,7 +35,8 @@ export type FindGameError =
     | "rate_limited"
     | "banned"
     | "behind_proxy"
-    | "invalid_captcha";
+    | "invalid_captcha"
+    | "kicked_by_admin";
 
 export type FindGameResponse =
     | {

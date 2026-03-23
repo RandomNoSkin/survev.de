@@ -312,6 +312,18 @@ a:active {
   margin-right: 30px;
   height: var(--height);
   width: var(--width);
+  padding: 8px; 
+}
+
+.ad-kofi {
+    display: block; 
+    width: 100%;
+    height: 100%;
+    background-image: url("/img/survev-de-kofi.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover; 
+    border-radius: 5px;
 }
 
 @media (max-width: 850px), (max-width: 900px) and (-webkit-min-device-pixel-ratio: 3),
@@ -3995,7 +4007,6 @@ a:active {
 .pass-column {
   height: 323px;
   margin-left: 30px;
-  position: absolute;
   width: 300px;
 }
 

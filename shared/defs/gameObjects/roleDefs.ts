@@ -472,7 +472,7 @@ export const RoleDefs: Record<string, RoleDef> = {
                 { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
-            outfit: "outfitDarkShirt",
+            outfit: "",
             backpack: "backpack03",
             helmet: "helmet03",
             chest: "chest03",
