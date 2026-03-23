@@ -486,6 +486,7 @@ export class Game {
                 this.editor.m_update(this.m_input);
             }
         }
+        this.chatUi.update(dt);
 
         let debug: DebugRenderOpts;
         if (IS_DEV) {

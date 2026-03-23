@@ -12,6 +12,7 @@ export class ChatUi{
     inputHandler: InputHandler;
     chatShown = false;
     chatType = 0; // 0 = all | 1 = team | 3 = spectator
+    clientSideChatSlowdown = 0;
 
     constructor(
         game: Game,
@@ -52,7 +53,14 @@ export class ChatUi{
     sendChatMessage() {
         const text = this.input.value.trim();
         if (!text) return;
+        if(this.clientSideChatSlowdown >0) {
 
+            const txt = this.game.m_ui2Manager.getAdminChatMessage("ADMIN", "chat-cooldown");
+
+            this.game.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
+            
+            return;
+        }    
         const msg = new net.KillFeedMsg();
         msg.string = text;
         msg.player = this.game.m_activePlayer.nameText.text;
@@ -62,6 +70,7 @@ export class ChatUi{
         this.game.m_sendMessage(net.MsgType.KillFeed, msg);
 
         this.input.value = "";
+        this.clientSideChatSlowdown = 3;
 
         //this.input.focus();
         this.leaveChat();
@@ -105,6 +114,17 @@ export class ChatUi{
         },
     };
 
+    chatIsEnabled(): boolean {
+
+        const style = window.getComputedStyle(this.chatInput[0]);
+            if(style.display !== "none"){
+                return true;
+            }
+
+        return false;
+    }
+
+
     handleAdminCmds(cmd: string, admin: string, content: string, args: string[]){
         const handler = this.adminCommands[cmd];
 
@@ -118,5 +138,10 @@ export class ChatUi{
         const color = args[0];
         const time = Number(args[1]);
         this.game.m_uiManager.displayAnnouncement(msg, color, time);
+    }
+
+    update(dt: number){
+        if(this.clientSideChatSlowdown>0)
+        this.clientSideChatSlowdown -= dt;
     }
 }

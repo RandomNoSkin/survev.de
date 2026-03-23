@@ -62,7 +62,7 @@ export class Chat{
                         s.sendMsg(net.MsgType.KillFeed, msg1)
                     }
                     this.logChat(originalMsg);
-                    this.player.chatCooldown = 2;
+                    this.player.chatCooldown = 3;
                     return;
                 }
                 msg1.string = msg.string;
