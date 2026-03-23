@@ -9364,7 +9364,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: e.specialLoot || "case_08",
+                type: randomObstacleType({ mil_crate_04: 3, chest_02: 1 }),
                 pos: v2.create(-21.75, 8.5),
                 scale: 1,
                 ori: 1,
@@ -9377,7 +9377,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: randomObstacleType({ crate_01: 4, crate_02: 1 }),
+                type: "crate_01",
                 pos: v2.create(16, -8.5),
                 scale: 1,
                 ori: 0,
@@ -9385,7 +9385,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: "crate_01",
+                type: randomObstacleType({ crate_08: 3, crate_01: 1 }),
                 pos: v2.create(-3, 8.75),
                 scale: 1,
                 ori: 0,
@@ -9399,7 +9399,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: "crate_01",
+                type: randomObstacleType({ crate_08: 3, crate_01: 1 }),
                 pos: v2.create(-13, -8.75),
                 scale: 1,
                 ori: 0,
@@ -12343,7 +12343,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     stone_07: createStone({
         scale: { createMin: 1, createMax: 1, destroy: 0.8 },
         collision: collider.createCircle(v2.create(0, 0), 7.75),
-        health: 500,
+        health: 1000,
         map: { display: true, color: 0x978c84, scale: 1 },
         terrain: { grass: true, beach: false },
         img: {

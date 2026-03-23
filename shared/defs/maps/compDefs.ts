@@ -28,7 +28,7 @@ export const Comp: MapDef = {
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods"],
+        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah"],
     },
     biome: {
         colors: {
@@ -1107,7 +1107,8 @@ export const Comp: MapDef = {
                 crate_03: 12, //grenade crates
                 bush_01: 78,
                 cache_06: 12,
-                tree_01: 450,
+                tree_01: 430,
+                tree_13: 36,
                 sandbags_01: 11,
                 sandbags_02: 11,
                 hedgehog_01: 24,
@@ -1119,12 +1120,14 @@ export const Comp: MapDef = {
                 outhouse_01: 6, //toilet houses
                 loot_tier_1: 24,
                 loot_tier_beach: 12,
+                stone_07: 5, // large stones
             },
         ],
         fixedSpawns: [
             {
                 // small is spawn count for solos and duos, large is spawn count for squads
-                warehouse_01: { small: 2, large: 5,},
+                warehouse_01: { small: 2, large: 4,},
+                warehouse_03sv: 1,
                 house_red_01: { small: 3, large: 7,}, 
                 house_red_02: { small: 3, large: 7,},
                 teahouse_complex_01su: {
@@ -1140,7 +1143,7 @@ export const Comp: MapDef = {
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
                 cache_01: 1, // flare stone
-                cache_02: { odds: 0.66 }, // mosin tree
+                cache_02: { odds: 0.5 }, // mosin tree
                 cache_07: 1, //barrel
                 bunker_structure_01: { odds: 0.4 }, // ak74 bunker
                 bunker_structure_02: 1, // vector bunker
