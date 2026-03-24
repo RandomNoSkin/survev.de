@@ -58,7 +58,7 @@ export const Comp: MapDef = {
         killLeaderEnabled: true,
         freezeTime: 10,
         joinTime: 10, // time until players can move after game start
-        airdropMinDistance: 300, // minimum distance between airdrops
+        airdropMinDistance: 0.72, // minimum distance between airdrops as multiplier of gas radius (has to be between 0 and 1)
         betterSpawn: true,
         betterMapGen: true,
 
@@ -89,6 +89,11 @@ export const Comp: MapDef = {
                     circleIdx: 3,
                     wait: 2,
                     options: { type: GameConfig.Plane.Airdrop },
+                },
+                {
+                    circleIdx: 3,
+                    wait: 32,
+                    options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
                 },
             ],
             crates: [
