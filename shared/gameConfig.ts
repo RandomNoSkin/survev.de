@@ -185,7 +185,7 @@ export const GameConfig = {
         health: 100,
         reviveHealth: 24,
         minActiveTime: 30,
-        boostDecay: 0.33,
+        boostDecay: 0.375,
         boostMoveSpeed: 1.85,
         boostHealAmounts: [0.5, 1.25, 1.5, 1.75],
         boostBreakpoints: [1, 1, 1.5, 0.5],

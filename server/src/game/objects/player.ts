@@ -2026,6 +2026,7 @@ export class Player extends BaseGameObject {
         //
         const unlimitedAdren = this.game.map.mapDef.gameMode.unlimitedAdren ?? false;
         if (!this.downed) {
+            if(unlimitedAdren) this.boost = 100;
             this.boost = math.clamp(this.boost, this.minBoost, 100);
 
             if (this.boost > 0) {
@@ -2036,7 +2037,7 @@ export class Player extends BaseGameObject {
 
                 this.health += healAmount!.heal * dt;
 
-                if (this.boost > this.minBoost) {
+                if (this.boost > this.minBoost && !unlimitedAdren) {
                     this.boost -= GameConfig.player.boostDecay * dt;
                 }
             }
