@@ -79,19 +79,23 @@ export const getPlayerHandler = {
             await interaction.editReply(`No recent player entries found for \`${name}\`.`);
             return;
         }
-        console.log("GameId:", )
 
-        const options = data.slice(0, 10).map((player, index) => {
+        const gameIds: string[] = [];
+        const optionsBuilder = data.slice(0, 10).map((player, index) => {
             const date = player.createdAt
                 ? new Date(player.createdAt).toLocaleString()
                 : "unknown time";
 
+            if(gameIds.includes(player.gameId)) return;
+            gameIds.push(player.gameId);
             return {
                 label: `${player.username ?? name}`.slice(0, 100),
                 description: `${date} | ${player.teamMode ?? "unknown"}`.slice(0, 100),
-                value: player.gameId ?? `fallback_${index}`, // WICHTIG: gameId behalten!
+                value: player.gameId ?? `fallback_${index}`,
             };
         });
+
+        const options = optionsBuilder.filter(o => o !== undefined);
 
         const select = new StringSelectMenuBuilder()
             .setCustomId(`get_player_select:${interaction.user.id}:${name}`)
