@@ -421,13 +421,20 @@ export const ModerationRouter = new Hono()
 
         const uniqueResults: typeof rows = [];
         const seenUsernames = new Set<string>();
+        const seenAccountNames = new Set<string>();
 
-        //vorhandene usernames ausschließen
         for (const row of rows) {
-            if (!seenUsernames.has(row.username)) {
+            if (
+                !seenUsernames.has(row.username) &&
+                (row.slug === null || !seenAccountNames.has(row.slug)) // oder row.accountName je nach Feld
+            ) {
                 seenUsernames.add(row.username);
+                if(row.slug)
+                seenAccountNames.add(row.slug);
+
                 uniqueResults.push(row);
-                //if (uniqueResults.length >= 20) break;
+
+                if (uniqueResults.length >= 20) break;
             }
         }
 
