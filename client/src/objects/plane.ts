@@ -91,9 +91,8 @@ class Plane {
                 this.planeSound = "fighter_01";
                 break;
             case GameConfig.Plane.SupplyDrop:
-                this.sprite.texture = PIXI.Texture.from(
-                    map.getMapDef().biome.airdrop.planeImg,
-                );
+                this.sprite.texture = PIXI.Texture.from("map-plane-02.img");
+                this.planeSound = "fighter_01";
                 break;
         }
 
