@@ -66,9 +66,12 @@ export const getPlayerHandler = {
             if(gameIds.includes(player.gameId)) return;
             gameIds.push(player.gameId);
             return {
-                label: `${player.username ?? name}`.slice(0, 100),
+                label: `${player.ip ?? name}`.slice(0, 100),
                 description: `${date} | ${player.teamMode ?? "unknown"}`.slice(0, 100),
-                value: player.gameId ?? `fallback_${index}`,
+                value: JSON.stringify({
+                        gameId: player.gameId ?? `fallback_${index}`,
+                        username: player.username,
+                    }),
             };
         });
 
@@ -97,11 +100,13 @@ export const getPlayerHandler = {
                     i.customId === `get_player_select:${interaction.user.id}:${name}`,
             });
 
-            const selectedGameId = componentInteraction.values[0];
+            const selected = JSON.parse(componentInteraction.values[0]);
+            const selectedGameId = selected.gameId;
+            const selectedUsername = selected.username;
 
             const detailsRes = await honoClient.moderation.get_player_ip.$post({
                 json: {
-                    name,
+                    name: selectedUsername,
                     game_id: selectedGameId,
                 },
             });
