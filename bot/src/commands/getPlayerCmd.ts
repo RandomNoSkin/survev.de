@@ -140,13 +140,21 @@ export const getPlayerHandler = {
             }
 
             const player = detailsData[0];
+            const associatedIps = [player.ip];
+            if (player.findGameIp !== player.ip) {
+                associatedIps.push(player.findGameIp);
+            }
+            let playerIps = "";
+            for(const ip of associatedIps){
+                playerIps += `${ip} | `
+            }
 
             await componentInteraction.update({
                 content: [
                     `**Player info**`,
                     `Name: \`${player.username ?? "unknown"}\``,
                     `Game ID: \`${player.gameId ?? selectedGameId}\``,
-                    `Encoded IP: \`${player.ip ?? "unknown"}\``,
+                    `Encoded IP: \`${playerIps}\``,
                     `Account Slug: \`${player.slug ?? "none"}\``,
                 ].join("\n"),
                 components: [],

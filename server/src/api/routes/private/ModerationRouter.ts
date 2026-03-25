@@ -427,7 +427,7 @@ export const ModerationRouter = new Hono()
             if (!seenUsernames.has(row.username)) {
                 seenUsernames.add(row.username);
                 uniqueResults.push(row);
-                if (uniqueResults.length >= 20) break;
+                //if (uniqueResults.length >= 20) break;
             }
         }
 

@@ -72,3 +72,4 @@ todo.md
 *.log
 server/logs/*
 server/*-audit.json
+/server/logs
