@@ -20,6 +20,7 @@ import { Command } from "../utils";
 import { createCommand, createSlashCommand, genericExecute } from "./helpers";
 import { searchPlayersHandler } from "./search-player";
 import { getPlayerHandler } from "./getPlayerCmd"
+import { whoIsCmd } from "./whoIsCmd";
 
 /**
  * for generic commands that only makes an api call and return it's meessage
@@ -293,6 +294,7 @@ export const commandHandlers: CommandHandlers = (
         // add non generic commands here
         [Command.SearchPlayer]: searchPlayersHandler.execute,
         [Command.GetPlayer]: getPlayerHandler.execute,
+        [Command.WhoIs]: whoIsCmd.execute,
     } as CommandHandlers,
 );
 
@@ -301,4 +303,5 @@ export const commandsToRegister: SlashCommandOptionsOnlyBuilder[] = [
     // add non generic commands here
     searchPlayersHandler.command,
     getPlayerHandler.command,
+    whoIsCmd.command,
 ];

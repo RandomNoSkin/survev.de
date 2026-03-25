@@ -76,3 +76,7 @@ export const zRemoveItemParams = z.object({
 export const zGetUserParams = z.object({
     name: z.string(),
 });
+
+export const zWhoIsParams = z.object({
+    ip: z.string(),
+});

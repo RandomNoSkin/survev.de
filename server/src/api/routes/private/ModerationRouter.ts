@@ -12,6 +12,7 @@ import {
     zSetMatchDataNameParams,
     zUnbanAccountParams,
     zUnbanIpParams,
+    zWhoIsParams,
 } from "../../../../../shared/types/moderation";
 import { util } from "../../../../../shared/utils/util";
 import { Config } from "../../../config";
@@ -22,6 +23,7 @@ import { databaseEnabledMiddleware, validateParams } from "../../auth/middleware
 import { db } from "../../db";
 import { bannedIpsTable, ipLogsTable, matchDataTable, usersTable } from "../../db/schema";
 import { sanitizeSlug } from "../user/auth/authUtils";
+import { userInfo } from "node:os";
 
 export const ModerationRouter = new Hono()
     .use(databaseEnabledMiddleware)
@@ -397,7 +399,46 @@ export const ModerationRouter = new Hono()
 
             return c.json({ message: `slug: ${user.slug}` }, 200);
         },
-    );
+    )
+    .post("/who_is", validateParams(zWhoIsParams), async (c) => {
+        const { ip } = c.req.valid("json");
+
+        const rows = await db
+            .select({
+                username: ipLogsTable.username,
+                userId: ipLogsTable.userId,
+                slug: usersTable.slug,
+                discordId: usersTable.authId,
+            })
+            .from(ipLogsTable)
+            .where(
+                and(
+                    eq(ipLogsTable.ip, ip),
+                ),
+            )
+            .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
+            .orderBy(ipLogsTable.username, desc(ipLogsTable.createdAt))
+
+        const uniqueResults: typeof rows = [];
+        const seenUsernames = new Set<string>();
+
+        //vorhandene usernames ausschließen
+        for (const row of rows) {
+            if (!seenUsernames.has(row.username)) {
+                seenUsernames.add(row.username);
+                uniqueResults.push(row);
+                if (uniqueResults.length >= 20) break;
+            }
+        }
+
+        if(uniqueResults.length === 0){
+            return c.json({
+                message: `No entries for ${ip} found.`
+            }, 200);
+        }
+
+        return c.json(uniqueResults, 200);
+    });
 
 async function banAccount(userId: string, banReason: string, executorId: string) {
     await db

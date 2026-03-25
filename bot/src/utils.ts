@@ -29,6 +29,7 @@ export const enum Command {
 
     //philipps cleanup
     GetPlayer = "get_player",
+    WhoIs = "who_is",
 }
 
 export const honoClient = hc<PrivateRouteApp>(API_URL, {
