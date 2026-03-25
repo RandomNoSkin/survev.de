@@ -147,6 +147,7 @@ export const getPlayerHandler = {
                     components: [],
                 });
             }
+            return;
         }
 
         // Falls direkt eine game_id mitgegeben wurde -> direkt 1 exakten Treffer holen
