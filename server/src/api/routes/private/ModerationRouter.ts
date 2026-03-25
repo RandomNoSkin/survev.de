@@ -287,9 +287,21 @@ export const ModerationRouter = new Hono()
             )
             .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
             .orderBy(desc(ipLogsTable.createdAt))
-            .limit(10);
+            .limit(200);
 
-        if (result.length === 0) {
+        const seenIps = new Set<string>();
+        const uniqueResults: typeof result = [];
+
+        for (const row of result) {
+            if (!seenIps.has(row.ip)) {
+                seenIps.add(row.ip);
+                uniqueResults.push(row);
+
+                if (uniqueResults.length >= 10) break;
+            }
+        }
+
+        if (uniqueResults.length === 0) {
             return c.json(
                 {
                     message: `No IP found for ${name}. Make sure the name matches the one in game.`,
@@ -298,7 +310,7 @@ export const ModerationRouter = new Hono()
             );
         }
 
-        const prettyResult = result.map((data) => ({
+        const prettyResult = uniqueResults.map((data) => ({
             ...data,
             teamMode: TeamModeToString[data.teamMode],
             mapId: MapId[data.mapId],

@@ -203,7 +203,7 @@ export const getPlayerHandler = {
             if(gameIds.includes(player.gameId)) return;
             gameIds.push(player.gameId);
             return {
-                label: `${player.username ?? name}`.slice(0, 100),
+                label: `${player.ip ?? name}`.slice(0, 100),
                 description: `${date} | ${player.teamMode ?? "unknown"}`.slice(0, 100),
                 value: player.gameId ?? `fallback_${index}`,
             };
