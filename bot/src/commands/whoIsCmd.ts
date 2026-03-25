@@ -30,7 +30,10 @@ export const whoIsCmd = {
             },
         });
 
+
+        console.log("Raw result:", res);
         const data = await res.json();
+        console.log("Json result:", data);
 
         if (!Array.isArray(data)) {
             await interaction.editReply(data.message ?? "Unexpected response from server.");
