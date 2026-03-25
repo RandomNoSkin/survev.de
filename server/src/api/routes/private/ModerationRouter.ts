@@ -413,7 +413,7 @@ export const ModerationRouter = new Hono()
             .from(ipLogsTable)
             .where(
                 and(
-                    eq(ipLogsTable.ip, ip),
+                    eq(ipLogsTable.encodedIp, ip),
                 ),
             )
             .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
