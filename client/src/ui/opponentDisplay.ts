@@ -291,12 +291,7 @@ export class LoadoutDisplay {
             dir: v2.create(0, -1),
         };
 
-        this.objectCreator.m_updateObjFull(
-            ObjectType.Player,
-            98,
-            obj as unknown as ObjectData<ObjectType.Player>,
-            ctx,
-        );
+        this.objectCreator.m_updateObjFull(ObjectType.Player, 98, obj, ctx);
 
         this.playerBarn.setPlayerInfo({
             playerId: 98,
@@ -472,7 +467,7 @@ export class LoadoutDisplay {
     render(_dt: number, debug: DebugRenderOpts) {
         const grassColor = this.map.mapLoaded
             ? this.map.getMapDef().biome.colors.grass
-            : 8433481;
+            : 0x80af49;
 
         this.pixi.renderer.background.color = grassColor;
 

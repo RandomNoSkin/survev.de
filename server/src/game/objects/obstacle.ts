@@ -47,6 +47,8 @@ export class Obstacle extends BaseGameObject {
     interactionRad = 0;
     interactedBy?: Player;
 
+    obstacleAABB?: AABB = undefined;
+
     get interactable() {
         return this.button?.canUse ?? this.door?.canUse;
     }
@@ -253,13 +255,29 @@ export class Obstacle extends BaseGameObject {
         const def = MapObjectDefs[this.type] as ObstacleDef;
         this.collider = collider.transform(def.collision, this.pos, this.rot, this.scale);
 
-        this.bounds = collider.toAabb(
-            collider.transform(def.collision, v2.create(0, 0), this.rot, this.scale),
-        );
+        if (def.aabb) {
+            this.bounds = collider.transform(
+                def.aabb,
+                v2.create(0, 0),
+                this.rot,
+                this.scale,
+            ) as AABB;
+            this.obstacleAABB = collider.transform(
+                def.aabb,
+                this.pos,
+                this.rot,
+                this.scale,
+            ) as AABB;
+        } else {
+            this.bounds = collider.toAabb(
+                collider.transform(def.collision, v2.create(0, 0), this.rot, this.scale),
+            );
 
-        const margin = v2.create(this.interactionRad, this.interactionRad);
-        v2.set(this.bounds.min, v2.sub(this.bounds.min, margin));
-        v2.set(this.bounds.max, v2.add(this.bounds.max, margin));
+            const margin = v2.create(this.interactionRad, this.interactionRad);
+            v2.set(this.bounds.min, v2.sub(this.bounds.min, margin));
+            v2.set(this.bounds.max, v2.add(this.bounds.max, margin));
+        }
+
         this.game.grid.updateObject(this);
     }
 
