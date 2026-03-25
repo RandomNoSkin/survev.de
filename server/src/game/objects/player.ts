@@ -75,6 +75,20 @@ interface Emote {
     itemType: string;
 }
 
+const boostHeals: Array<{ maxBoost: number; heal: number }> = [];
+{
+    const boostBreakPoints = GameConfig.player.boostBreakpoints;
+    const max = GameConfig.player.boostBreakpoints.reduce((a, b) => a + b, 0);
+
+    for (let i = 0, boost = 0; i < boostBreakPoints.length; i++) {
+        boost += (boostBreakPoints[i] / max) * 100;
+        boostHeals.push({
+            maxBoost: boost,
+            heal: GameConfig.player.boostHealAmounts[i],
+        });
+    }
+}
+
 export class PlayerBarn {
     players: Player[] = [];
     livingPlayers: Player[] = [];
@@ -838,6 +852,9 @@ export class Player extends BaseGameObject {
     insideZoomRegion = false;
 
     private _zoom: number = 0;
+    // zoom used for the area in which the server will send objects to the client
+    private _cullingZoom: number = 0;
+    private _cullingZoomTicker = 0;
 
     get zoom(): number {
         return this._zoom;
@@ -846,6 +863,15 @@ export class Player extends BaseGameObject {
     set zoom(zoom: number) {
         if (zoom === this._zoom) return;
         assert(zoom !== 0);
+        // when changing to a lower zoom level
+        // we want to delay changing the culling zoom
+        // so objects only disappear from the client after the scope animation
+        // has finished, instead of flashing out of existence
+        if (zoom < this._cullingZoom) {
+            this._cullingZoomTicker = 0.5;
+        } else {
+            this._cullingZoom = zoom;
+        }
         this._zoom = zoom;
         this.zoomDirty = true;
     }
@@ -1804,6 +1830,8 @@ export class Player extends BaseGameObject {
 
         this.weaponManager.showNextThrowable();
         this.recalculateScale();
+
+        this._cullingZoom = this.zoom;
     }
 
     update(dt: number): void {
@@ -1998,15 +2026,20 @@ export class Player extends BaseGameObject {
         //
         const unlimitedAdren = this.game.map.mapDef.gameMode.unlimitedAdren ?? false;
         if (!this.downed) {
-            if(unlimitedAdren) this.boost = 100;
-            if (this.boost > 0 && this.boost <= 25) this.health += 0.5 * dt;
-            else if (this.boost >= 25 && this.boost <= 50) this.health += 1.25 * dt;
-            else if (this.boost >= 50 && this.boost <= 87.5) this.health += 1.5 * dt;
-            else if (this.boost >= 87.5 && this.boost <= 100) this.health += 1.75 * dt;
-
-            if (!unlimitedAdren)this.boost -= 0.375 * dt;
-
             this.boost = math.clamp(this.boost, this.minBoost, 100);
+
+            if (this.boost > 0) {
+                let healAmount = boostHeals.findLast((b, i) => {
+                    const prev = boostHeals[i - 1]?.maxBoost ?? 0;
+                    return this.boost >= prev && this.boost <= b.maxBoost;
+                });
+
+                this.health += healAmount!.heal * dt;
+
+                if (this.boost > this.minBoost) {
+                    this.boost -= GameConfig.player.boostDecay * dt;
+                }
+            }
         } else {
             if (!unlimitedAdren)
             this.boost = 0;
@@ -2110,7 +2143,7 @@ export class Player extends BaseGameObject {
 
         if (this.game.gas.doDamage && this.game.gas.isInGas(this.pos)) {
             this.damage({
-                amount: this.game.gas.damage,
+                amount: this.disconnected ? 22 : this.game.gas.damage,
                 damageType: GameConfig.DamageType.Gas,
                 dir: this.dir,
             });
@@ -2651,6 +2684,19 @@ export class Player extends BaseGameObject {
             this.zoom = finalZoom;
         }
 
+        if (this._cullingZoom !== this.zoom) {
+            this._cullingZoomTicker -= dt;
+            if (this._cullingZoomTicker <= 0) {
+                this._cullingZoom = this.zoom;
+            }
+        }
+        if (this.portrait !== this._cullingPortrait) {
+            this._cullingPortraitTicker -= dt;
+            if (this._cullingPortraitTicker <= 0) {
+                this._cullingPortrait = this.portrait;
+            }
+        }
+
         if (insideNoZoomRegion) {
             this.insideZoomRegion = false;
         }
@@ -2886,13 +2932,22 @@ export class Player extends BaseGameObject {
             player = this;
         }
 
-        const radius = player.zoom + 4;
-        const rect = coldet.circleToAabb(player.pos, radius);
+        const radius = player._cullingZoom + 4;
+        let width = player._cullingZoom + 4;
+        // client zoom tries to keep a 16/9 aspect ratio, mirror it here
+        let height = width / (16 / 9);
+        if (this._cullingPortrait) {
+            let tmp = width;
+            width = height;
+            height = tmp;
+        }
+        const rect = collider.createAabbExtents(player.pos, v2.create(width, height));
 
         const newVisibleObjects = game.grid.intersectColliderSet(rect);
         // client crashes if active player is not visible
         // so make sure its always added to visible objects
         newVisibleObjects.add(this);
+        newVisibleObjects.add(player);
 
         for (const obj of this.visibleObjects) {
             if (!newVisibleObjects.has(obj)) {
@@ -3425,6 +3480,8 @@ export class Player extends BaseGameObject {
         this.animType = GameConfig.Anim.None;
         this.animSeq++;
         this.healEffect = false;
+        this.boostDirty = true;
+        this.inventoryDirty = true;
         this.setDirty();
 
         this.shootHold = false;
@@ -3740,6 +3797,13 @@ export class Player extends BaseGameObject {
             this._perks.length = 0;
             this._perkTypes.length = 0;
 
+        // Wipe inventory
+        this.invManager.wipeInventory();
+        this.chest = "";
+        this.helmet = "";
+        this.backpack = "backpack00";
+        this.weaponManager.showNextThrowable();
+
             // death emote
             this.sendDeathEmoteTicker = 0.3;
 
@@ -4049,6 +4113,8 @@ export class Player extends BaseGameObject {
     shootStart = false;
     shootHold = false;
     portrait = false;
+    private _cullingPortrait = false;
+    private _cullingPortraitTicker = 0;
     touchMoveActive = false;
     touchMoveDir = v2.create(1, 0);
     touchMoveLen = 255;
@@ -4081,6 +4147,11 @@ export class Player extends BaseGameObject {
         this.moveRight = msg.moveRight;
         this.moveUp = msg.moveUp;
         this.moveDown = msg.moveDown;
+
+        // same logic for `_cullingZoom`, see comment on `set zoom`
+        if (this.portrait != msg.portrait) {
+            this._cullingPortraitTicker = 0.5;
+        }
         this.portrait = msg.portrait;
         this.touchMoveActive = msg.touchMoveActive;
         this.touchMoveDir = v2.normalizeSafe(msg.touchMoveDir);
@@ -4569,7 +4640,9 @@ export class Player extends BaseGameObject {
                     // role helmets and perk helmets can't be dropped in favor of another helmet, they're the "highest" tier
                     if (
                         def.type == "helmet" &&
-                        (this.hasRoleHelmet || (thisDef && (thisDef as HelmetDef).perk))
+                        (this.hasRoleHelmet ||
+                            (thisDef && (thisDef as HelmetDef).perk) ||
+                            (thisDef && (thisDef as HelmetDef).role))
                     ) {
                         amountLeft = 1;
                         lootToAdd = obj.type;
