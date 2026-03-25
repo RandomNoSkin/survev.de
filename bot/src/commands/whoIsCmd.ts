@@ -47,7 +47,7 @@ export const whoIsCmd = {
         const username = entry.username ?? "Unknown";
         const slug = entry.slug ? ` · \`${entry.slug}\`` : "";
 
-        return `**${index + 1}.** ${username} || Acc: ${slug} DiscordId: ${entry.discordId}`;
+        return `**${index + 1}.** ${username} | Acc: ${slug} | DiscordId: ${entry.discordId}`;
     });
 
     const embed = new EmbedBuilder()
