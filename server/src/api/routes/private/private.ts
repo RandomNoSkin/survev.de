@@ -147,50 +147,86 @@ export const PrivateRouter = new Hono<Context>()
         return c.json({}, 200);
     })
     .post(
-        "/give_item",
-        databaseEnabledMiddleware,
-        validateParams(zGiveItemParams),
-        async (c) => {
-            const { item, slug, source } = c.req.valid("json");
+    "/give_item",
+    databaseEnabledMiddleware,
+    validateParams(zGiveItemParams),
+    async (c) => {
+        const { item, slug, source } = c.req.valid("json");
 
-            const def = GameObjectDefs[item];
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: {
+                id: true,
+            },
+        });
 
-            if (!def) {
-                return c.json({ message: "Invalid item type" }, 200);
-            }
+        if (!user) {
+            return c.json({ message: "User not found" }, 200);
+        }
 
-            const userId = await db.query.usersTable.findFirst({
-                where: eq(usersTable.slug, slug),
-                columns: {
-                    id: true,
-                },
-            });
-
-            if (!userId) {
-                return c.json({ message: "User not found" }, 200);
-            }
-
-            const existing = await db.query.itemsTable.findFirst({
-                where: and(eq(itemsTable.userId, userId.id), eq(itemsTable.type, item)),
+        if (item === "all") {
+            const ownedItems = await db.query.itemsTable.findMany({
+                where: eq(itemsTable.userId, user.id),
                 columns: {
                     type: true,
                 },
             });
 
-            if (existing) {
-                return c.json({ message: "User already has item" }, 200);
+            const ownedTypes = new Set(ownedItems.map((i) => i.type));
+
+            const allItemTypes = Object.keys(GameObjectDefs).filter(
+                (type) => !ownedTypes.has(type),
+            );
+
+            if (allItemTypes.length === 0) {
+                return c.json({ message: "User already has all items" }, 200);
             }
 
-            await db.insert(itemsTable).values({
-                userId: userId.id,
-                type: item,
-                source,
-                timeAcquired: Date.now(),
-            });
+            await db.insert(itemsTable).values(
+                allItemTypes.map((type) => ({
+                    userId: user.id,
+                    type,
+                    source,
+                    timeAcquired: Date.now(),
+                })),
+            );
 
-            return c.json({ message: `Item "${item}" given to ${slug}` }, 200);
-        },
-    )
+            return c.json(
+                {
+                    message: `${allItemTypes.length} items given to ${slug}`,
+                    items: allItemTypes,
+                },
+                200,
+            );
+        }
+
+        const def = GameObjectDefs[item];
+
+        if (!def) {
+            return c.json({ message: "Invalid item type" }, 200);
+        }
+
+        const existing = await db.query.itemsTable.findFirst({
+            where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
+            columns: {
+                type: true,
+            },
+        });
+
+        if (existing) {
+            return c.json({ message: "User already has item" }, 200);
+        }
+
+        await db.insert(itemsTable).values({
+            userId: user.id,
+            type: item,
+            source,
+            timeAcquired: Date.now(),
+        });
+
+        return c.json({ message: `Item "${item}" given to ${slug}` }, 200);
+    },
+)
     .post(
         "/remove_item",
         databaseEnabledMiddleware,
