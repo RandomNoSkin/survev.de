@@ -9,6 +9,11 @@
             "date": 1774182554596,
             "name": "logs\\game-2026-03-22.log",
             "hash": "f0cd08a1fdf8541b727b50562c4cf46698987af2453fb8f61a16624241b0f364"
+        },
+        {
+            "date": 1774535018208,
+            "name": "logs\\game-2026-03-26.log",
+            "hash": "56725545a550f7d2b34c441ef8670b5639ab662894c79490c2ca0837ed61c8e3"
         }
     ],
     "hashType": "sha256"
