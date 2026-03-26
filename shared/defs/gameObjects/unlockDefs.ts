@@ -1,7 +1,7 @@
 import { HealEffectDefs } from "./healEffectDefs";
 
-const _allowedHealEffects = Object.keys(HealEffectDefs);
-const _allowedMeleeSkins = [
+export const _allowedHealEffects = Object.keys(HealEffectDefs);
+export const _allowedMeleeSkins = [
     "fists",
     "knuckles_rusted",
     "knuckles_heroic",
@@ -15,7 +15,7 @@ const _allowedMeleeSkins = [
     "bowie_vintage",
     "bowie_frontier",
 ];
-const _allowedOutfits = [
+export const _allowedOutfits = [
     "outfitBase",
     "outfitTurkey",
     "outfitDev",
@@ -56,7 +56,7 @@ const _allowedOutfits = [
     "outfitRed",
     "outfitWhite",
 ];
-const _allowedEmotes = [
+export const _allowedEmotes = [
     "emote_thumbsup",
     "emote_sadface",
     "emote_happyface",
