@@ -2365,7 +2365,7 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({
-                    deposit_box_01: 3,
+                    deposit_box_01: 2,
                     deposit_box_02: e.gold_box || 1,
                 }),
                 pos: v2.create(-12.3, 5),
@@ -2374,7 +2374,7 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({
-                    deposit_box_01: 3,
+                    deposit_box_01: 2,
                     deposit_box_02: e.gold_box || 1,
                 }),
                 pos: v2.create(-12.3, -5),
@@ -2383,7 +2383,7 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({
-                    deposit_box_01: 3,
+                    deposit_box_01: 2,
                     deposit_box_02: e.gold_box || 1,
                 }),
                 pos: v2.create(-8, 9.3),
@@ -2392,7 +2392,7 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({
-                    deposit_box_01: 3,
+                    deposit_box_01: 2,
                     deposit_box_02: e.gold_box || 1,
                 }),
                 pos: v2.create(-8, -9.3),
@@ -2401,7 +2401,7 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({
-                    deposit_box_01: 3,
+                    deposit_box_01: 2,
                     deposit_box_02: e.gold_box || 1,
                 }),
                 pos: v2.create(1, 9.3),
@@ -2410,7 +2410,7 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({
-                    deposit_box_01: 3,
+                    deposit_box_01: 2,
                     deposit_box_02: e.gold_box || 1,
                 }),
                 pos: v2.create(1, -9.3),
