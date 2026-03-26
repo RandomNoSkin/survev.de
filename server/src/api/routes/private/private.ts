@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, not } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { saveConfig } from "../../../../../config";
@@ -35,6 +35,7 @@ import {
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
+import { UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
@@ -146,7 +147,7 @@ export const PrivateRouter = new Hono<Context>()
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);
     })
-    .post(
+ .post(
     "/give_item",
     databaseEnabledMiddleware,
     validateParams(zGiveItemParams),
@@ -174,36 +175,46 @@ export const PrivateRouter = new Hono<Context>()
 
             const ownedTypes = new Set(ownedItems.map((i) => i.type));
 
-            const allItemTypes = Object.keys(GameObjectDefs).filter(
+            const unlockableTypes = [
+                ...new Set(
+                    Object.values(UnlockDefs).flatMap((unlockDef) => unlockDef.unlocks),
+                ),
+            ];
+
+            const missingTypes = unlockableTypes.filter(
                 (type) => !ownedTypes.has(type),
             );
 
-            if (allItemTypes.length === 0) {
-                return c.json({ message: "User already has all items" }, 200);
+            if (missingTypes.length === 0) {
+                return c.json({ message: "User already has all unlockable items" }, 200);
             }
 
+            const now = Date.now();
+
             await db.insert(itemsTable).values(
-                allItemTypes.map((type) => ({
+                missingTypes.map((type) => ({
                     userId: user.id,
                     type,
                     source,
-                    timeAcquired: Date.now(),
+                    timeAcquired: now,
                 })),
             );
 
             return c.json(
                 {
-                    message: `${allItemTypes.length} items given to ${slug}`,
-                    items: allItemTypes,
+                    message: `${missingTypes.length} unlockable items given to ${slug}`,
+                    items: missingTypes,
                 },
                 200,
             );
         }
 
-        const def = GameObjectDefs[item];
+        const isUnlockable = Object.values(UnlockDefs).some((unlockDef) =>
+            unlockDef.unlocks.includes(item),
+        );
 
-        if (!def) {
-            return c.json({ message: "Invalid item type" }, 200);
+        if (!isUnlockable) {
+            return c.json({ message: "Item is not unlockable" }, 200);
         }
 
         const existing = await db.query.itemsTable.findFirst({
@@ -227,31 +238,76 @@ export const PrivateRouter = new Hono<Context>()
         return c.json({ message: `Item "${item}" given to ${slug}` }, 200);
     },
 )
-    .post(
-        "/remove_item",
-        databaseEnabledMiddleware,
-        validateParams(zRemoveItemParams),
-        async (c) => {
-            const { item, slug } = c.req.valid("json");
+.post(
+    "/remove_item",
+    databaseEnabledMiddleware,
+    validateParams(zRemoveItemParams),
+    async (c) => {
+        const { item, slug } = c.req.valid("json");
 
-            const user = await db.query.usersTable.findFirst({
-                where: eq(usersTable.slug, slug),
-                columns: {
-                    id: true,
-                },
-            });
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: {
+                id: true,
+            },
+        });
 
-            if (!user) {
-                return c.json({ message: "User not found" }, 200);
+        if (!user) {
+            return c.json({ message: "User not found" }, 200);
+        }
+
+        if (item === "all") {
+            const protectedItems = [
+                ...(UnlockDefs.unlock_default?.unlocks ?? []),
+                ...(UnlockDefs.unlock_new_account?.unlocks ?? []),
+            ];
+
+            const result = await db
+                .delete(itemsTable)
+                .where(
+                    and(
+                        eq(itemsTable.userId, user.id),
+                        protectedItems.length > 0
+                            ? not(inArray(itemsTable.type, protectedItems))
+                            : undefined,
+                    ),
+                )
+                .returning({ type: itemsTable.type });
+
+            if (result.length === 0) {
+                return c.json(
+                    { message: "No removable items found for user" },
+                    200,
+                );
             }
 
-            await db
-                .delete(itemsTable)
-                .where(and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)));
+            return c.json(
+                {
+                    message: `Removed ${result.length} items from ${slug}`,
+                    removedCount: result.length,
+                    removedItems: result.map((r) => r.type),
+                },
+                200,
+            );
+        }
 
-            return c.json({ message: `Item "${item}" removed from ${slug}` }, 200);
-        },
-    )
+        const result = await db
+            .delete(itemsTable)
+            .where(
+                and(
+                    eq(itemsTable.userId, user.id),
+                    eq(itemsTable.type, item),
+                ),
+            )
+            .returning({ type: itemsTable.type });
+
+        if (result.length === 0) {
+            return c.json({ message: "User does not have this item" }, 200);
+        }
+
+        return c.json({ message: `Item "${item}" removed from ${slug}` }, 200);
+    },
+)
     .post("/clear_cache", async (c) => {
         const client = await getRedisClient();
         await client.flushAll();
