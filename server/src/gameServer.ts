@@ -12,6 +12,7 @@ import { SingleThreadGameManager } from "./game/gameManager";
 import { GameProcessManager } from "./game/gameProcessManager";
 import { GIT_VERSION } from "./utils/gitRevision";
 import { ServerLogger } from "./utils/logger";
+import { gameLogger } from "./utils/betterLogger";
 import {
     apiPrivateRouter,
     cors,
@@ -277,11 +278,13 @@ app.post("/api/find_game_by_id", async (res, req) => {
 
                 const token = randomUUID();
                 const ip = getIp(res, req, Config.gameServer.proxyIPHeader) ?? "";
+                const admin = body.admin;
 
                 const playerData = [
                 {
                     token,
                     ip,
+                    admin,
                 },
                 ];
 
@@ -300,7 +303,7 @@ app.post("/api/find_game_by_id", async (res, req) => {
                 res: [
                     {
                     zone: "",
-                    data: token, // 👈 DAS ist matchPriv
+                    data: token,
                     gameId,
                     useHttps: server.region.https,
                     hosts: [server.region.address],

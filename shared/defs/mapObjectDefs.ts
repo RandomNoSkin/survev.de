@@ -9364,7 +9364,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: e.specialLoot || "case_08",
+                type: randomObstacleType({ mil_crate_04: 3, chest_02: 1 }),
                 pos: v2.create(-21.75, 8.5),
                 scale: 1,
                 ori: 1,
@@ -9377,7 +9377,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: randomObstacleType({ crate_01: 4, crate_02: 1 }),
+                type: "crate_01",
                 pos: v2.create(16, -8.5),
                 scale: 1,
                 ori: 0,
@@ -9385,7 +9385,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: "crate_01",
+                type: randomObstacleType({ crate_08: 3, crate_01: 1 }),
                 pos: v2.create(-3, 8.75),
                 scale: 1,
                 ori: 0,
@@ -9399,7 +9399,7 @@ function createWarehouse3<T extends BuildingDef>(e: Partial<T>): T {
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: "crate_01",
+                type: randomObstacleType({ crate_08: 3, crate_01: 1 }),
                 pos: v2.create(-13, -8.75),
                 scale: 1,
                 ori: 0,
@@ -10147,7 +10147,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     barrel_04: createWoodBarrel({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(1.25, 0.5)),
         health: 20,
-        loot: [tierLoot("tier_soviet", 2, 4)],
+        loot: [tierLoot("tier_soviet", 2, 4), tierLoot("tier_additional_scopes", 1, 1)],
         img: {
             sprite: "map-barrel-04.img",
             residue: "map-barrel-res-03.img",
@@ -10214,7 +10214,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     bookshelf_02: createBookShelf({
         img: { sprite: "map-bookshelf-02.img" },
-        loot: [tierLoot("tier_soviet", 2, 3)],
+        loot: [tierLoot("tier_soviet", 2, 3), tierLoot("tier_additional_scopes", 1, 1)],
     }),
     bush_01: createBush({}),
     bush_01b: createBush({ img: { alpha: 1 } }),
@@ -10649,7 +10649,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     crate_01x: createCrate({ img: { sprite: "map-crate-01x.img" } }),
     crate_02: createCrate({
         health: 140,
-        loot: [tierLoot("tier_soviet", 3, 5), tierLoot("tier_imbel", 1, 1)],
+        loot: [tierLoot("tier_soviet", 3, 5), tierLoot("tier_imbel", 1, 1), tierLoot("tier_additional_scopes", 1, 1)],
         map: { display: false },
         terrain: { grass: true, beach: false },
         img: { sprite: "map-crate-02.img" },
@@ -10671,7 +10671,6 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         health: 140,
         loot: [tierLoot("tier_soviet", 5, 6), tierLoot("tier_medical", 1, 1)],
         map: { display: true, color: 0xffc000 },
-        terrain: { lakeCenter: true },
         img: { sprite: "map-crate-02sv.img" },
         sound: { explode: "crate_break_01" },
     } as unknown as Partial<ObstacleDef>),
@@ -11574,7 +11573,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     mil_crate_02: createCrate({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(2.7, 1.25)),
         health: 100,
-                loot: [tierLoot("tier_ot_military_crate", 4, 4),],
+                loot: [tierLoot("tier_ot_military_crate", 3, 3),],
         map: { display: false },
         terrain: { grass: true, beach: true },
         img: { sprite: "map-crate-mil-02.img" },
@@ -11734,7 +11733,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     drawers_02: createDrawer({
         img: { sprite: "map-drawers-02.img" },
-        loot: [tierLoot("tier_soviet", 2, 3)],
+        loot: [tierLoot("tier_soviet", 2, 3),  tierLoot("tier_additional_scopes", 1, 1)],
     }),
     fire_ext_01: {
         type: "obstacle",
@@ -12343,7 +12342,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     stone_07: createStone({
         scale: { createMin: 1, createMax: 1, destroy: 0.8 },
         collision: collider.createCircle(v2.create(0, 0), 7.75),
-        health: 500,
+        health: 1000,
         map: { display: true, color: 0x978c84, scale: 1 },
         terrain: { grass: true, beach: false },
         img: {
@@ -12495,7 +12494,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     toilet_02: createToilet({
         img: { sprite: "map-toilet-02.img" }, 
-        loot: [tierLoot("tier_soviet", 4, 5)],
+        loot: [tierLoot("tier_soviet", 3, 5),  tierLoot("tier_additional_scopes", 1, 1)],
     }),
     toilet_02b: createToilet({
         img: {
@@ -12939,6 +12938,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             tint: 0xffffff,
             zIdx: 801,
         },
+        aabb: collider.createAabbExtents(v2.create(0, 0), v2.create(11, 11)),
     } as unknown as Partial<ObstacleDef>),
     // Palm Tree
     tree_13: createTree({
@@ -18720,7 +18720,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                     wallCount: 5,
                     particleCount: 15,
                     particle: "shackGreenBreak",
-                    residue: "map-perch-res.img",
+                    residue: "map-perch-res-01.img",
                 },
             },
             mapObjects: [
@@ -21698,12 +21698,11 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             },
         ],
     }),
-    teapavilion_01: createTeaPavilion({ terrain: { lakeCenter: true } }),
+    teapavilion_01: createTeaPavilion({}),
     teapavilion_01w: createTeaPavilion({
         center_loot: "loot_tier_helmet_forest",
         left_loot: "pot_03b",
         right_loot: "pot_03c",
-        terrain: { lakeCenter: true },
     }),
     teahouse_complex_01s: createTeaHouseComplex({}),
     teahouse_complex_01su: createTeaHouseComplex({
@@ -22789,7 +22788,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     teapavilion_complex_01: {
         type: "building",
         map: { display: true, shapes: [] },
-        terrain: { lakeCenter: true },
+        terrain: { grass: true },
         mapObstacleBounds: [
             collider.createAabbExtents(v2.create(0, 0), v2.create(14, 14)),
             collider.createAabbExtents(v2.create(0, -20), v2.create(4, 12)),

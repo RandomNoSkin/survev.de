@@ -44,6 +44,7 @@ export const LoadoutAtlas: AtlasDef = {
         "emotes/face-joy.svg",
         "emotes/face-monocle.svg",
         "emotes/face-picasso.svg",
+        "emotes/ohnah.svg",
         "emotes/face-poo.svg",
         "emotes/face-sad.svg",
         "emotes/face-sob.svg",

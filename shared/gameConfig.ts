@@ -147,6 +147,7 @@ export enum Input {
     Fullscreen,
     HideUI,
     TeamPingSingle,
+    JoinChat,
     Count,
 }
 
@@ -155,7 +156,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1012,
+    protocolVersion: 1014,
     Input,
     EmoteSlot,
     WeaponSlot,
@@ -183,10 +184,10 @@ export const GameConfig = {
         maxInteractionRad: 3.5,
         health: 100,
         reviveHealth: 24,
-        minActiveTime: 10,
-        boostDecay: 0.33,
+        minActiveTime: 30,
+        boostDecay: 0.375,
         boostMoveSpeed: 1.85,
-        boostHealAmount: 0.33,
+        boostHealAmounts: [0.5, 1.25, 1.5, 1.75],
         boostBreakpoints: [1, 1, 1.5, 0.5],
         scopeDelay: 0.25,
         baseSwitchDelay: 0.25,
@@ -309,6 +310,18 @@ export const GameConfig = {
         soundRangeMax: 48,
         fallOff: 1.25,
     },
+    supplydrop: {
+        actionOffset: 0,
+        fallTime: 8,
+        crushDamage: 100,
+        planeDelay: 40,
+        planeVel: 200,
+        planeRad: 150,
+        soundRangeMult: 2.5,
+        soundRangeDelta: 0.25,
+        soundRangeMax: 92,
+        fallOff: 0,
+    },
     groupColors: [0xffff00, 0xff00ff, 0xffff, 0xff5400],
     teamColors: [0xcc0000, 0x7eff],
     bullet: {
@@ -420,7 +433,7 @@ export const GameConfig = {
         "556mm": [90, 180, 240, 300],
         "12gauge": [15, 30, 60, 90],
         "50AE": [49, 98, 147, 196],
-        "308sub": [10, 20, 40, 80],
+        "308sub": [20, 40, 60, 80],
         flare: [2, 4, 6, 8],
         "45acp": [150, 300, 420, 540],
         frag: [3, 6, 9, 12],

@@ -1142,7 +1142,6 @@ export class UiManager {
         playerId: number,
         activePlayerId: number,
         playerBarn: PlayerBarn,
-        _factionMode: unknown,
     ) {
         const pingDef = PingDefs[pingType];
         if (pingDef) {
@@ -2277,13 +2276,21 @@ export class UiManager {
         }
     }
 
-    displayAnnouncement(message: string) {
+    displayAnnouncement(message: string, color?: string, stayTime?: number) {
+        const timeout = Number.isNaN(stayTime) ? 3000 : (stayTime ?? 3000);
         if (message) {
+            if(color){
+                this.announcement.css("color", color);
+            }
             this.announcement.html(message);
             this.announcement.fadeIn(400, () => {
                 setTimeout(() => {
-                    this.announcement.fadeOut(800);
-                }, 3000);
+                    this.announcement.fadeOut(800, () => {
+                        setTimeout(() => {
+                            this.announcement.css("color", "yellow")
+                        })
+                    });
+                }, timeout);
             });
         }
     }

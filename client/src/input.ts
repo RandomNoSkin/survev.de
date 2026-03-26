@@ -1,4 +1,5 @@
 import { v2 } from "../../shared/utils/v2";
+import { ChatUi } from "./ui/chat";
 
 class Touch {
     id = 0;
@@ -35,6 +36,7 @@ export class InputHandler {
     touches: Touch[] = [];
     touchIdCounter = 0;
     lostFocus = false;
+    isTyping = false;
     captureNextInputCb:
         | ((
               event: KeyboardEvent | MouseEvent | globalThis.TouchEvent,
@@ -157,6 +159,9 @@ export class InputHandler {
 
     // Keyboard
     onKeyDown(event: KeyboardEvent) {
+        if(this.isTyping && event.keyCode !== Key.Enter && event.keyCode !== Key.Escape){
+            return;
+        }
         const keyCode = event.keyCode;
         // Prevent tab behavior
         if (keyCode == 9) {
@@ -169,6 +174,9 @@ export class InputHandler {
     }
 
     onKeyUp(event: KeyboardEvent) {
+        if(this.isTyping && event.keyCode !== Key.Enter && event.keyCode !== Key.Escape){
+            return;
+        }
         this.keys[event.keyCode] = false;
     }
 

@@ -47,6 +47,7 @@ import { Touch } from "./ui/touch";
 import { UiManager } from "./ui/ui";
 import { UiManager2 } from "./ui/ui2";
 import { name } from "ejs";
+import { ChatUi } from "./ui/chat";
 
 export interface Ctx {
     audioManager: AudioManager;
@@ -113,6 +114,7 @@ export class Game {
 
     editor!: Editor;
     debugHUD!: DebugHUD;
+    chatUi: ChatUi;
 
     seq!: number;
     seqInFlight!: boolean;
@@ -148,6 +150,7 @@ export class Game {
         if (IS_DEV) {
             this.editor = new Editor(this.m_config);
         }
+        this.chatUi = new ChatUi(this, this.m_input);
     }
 
     tryJoinGame(
@@ -483,6 +486,7 @@ export class Game {
                 this.editor.m_update(this.m_input);
             }
         }
+        this.chatUi.update(dt);
 
         let debug: DebugRenderOpts;
         if (IS_DEV) {
@@ -537,7 +541,12 @@ export class Game {
         );
         this.m_audioManager.cameraPos = v2.copy(this.m_camera.m_pos);
         if (this.m_input.keyPressed(Key.Escape)) {
-            this.m_uiManager.toggleEscMenu();
+            const style = window.getComputedStyle(this.chatUi.chatInput[0]);
+            if(style.display !== "none"){
+                this.chatUi.leaveChat();
+            }else{
+                this.m_uiManager.toggleEscMenu();
+            }
         }
         // Large Map
         if (
@@ -556,6 +565,13 @@ export class Game {
             (this.m_input.keyPressed(Key.Escape) && !this.m_uiManager.hudVisible)
         ) {
             this.m_uiManager.cycleHud();
+        }
+
+        // Open Chat
+        if(
+            this.m_inputBinds.isBindPressed(Input.JoinChat)
+        ){
+            this.chatUi.joinChat();
         }
         // Update facing direction
         const playerPos = this.m_activePlayer.m_pos;
@@ -1104,7 +1120,7 @@ export class Game {
     m_render(dt: number, debug: DebugRenderOpts) {
         const grassColor = this.m_map.mapLoaded
             ? this.m_map.getMapDef().biome.colors.grass
-            : 8433481;
+            : 0x80af49;
         this.m_pixi.renderer.background.color = grassColor;
         // Module rendering
         this.m_playerBarn.m_render(this.m_camera, debug);
@@ -1534,13 +1550,17 @@ export class Game {
                 const msg = new net.JoinFeedMsg();
                 msg.deserialize(stream);
                 const playerName = msg.name;
-                const enemieNames = msg.enemieNames;
-                if(enemieNames.length <=0){
+                const group1 = msg.group1;
+                const group2 = msg.group2
+                if(group1.length <=0){
                     const text = this.m_ui2Manager.getJoinedText(playerName);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 }else{
-                    const text = this.m_ui2Manager.getEnemieText(enemieNames);
-                    this.m_ui2Manager.addKillFeedMessage(text, "#ff00f2");
+                    const group1Text = this.m_ui2Manager.getEnemieText(group1);
+                    const group2Text = this.m_ui2Manager.getEnemieText(group2);
+                    this.m_ui2Manager.addKillFeedMessage(group1Text, "#ff00f2");
+                    this.m_ui2Manager.addKillFeedMessage("VERSUS", "#1100ff");
+                    this.m_ui2Manager.addKillFeedMessage(group2Text, "#ff00f2");
                 }
                 
                 break
@@ -1738,6 +1758,43 @@ export class Game {
                 const msg = new net.DisconnectMsg();
                 msg.deserialize(stream);
                 this.m_disconnectMsg = msg.reason;
+                break;
+            }
+            case net.MsgType.KillFeed: {
+                const msg = new net.KillFeedMsg();
+                msg.deserialize(stream);
+                if(msg.type === net.KillFeedMsgType.Ping){
+                    const item = msg.string;
+                    const player = msg.player;
+
+                    const txt = this.m_ui2Manager.getItemPingText(player, item);
+                    this.m_ui2Manager.addKillFeedMessage(txt, "#B4A3FC");
+                } else if(msg.type === net.KillFeedMsgType.ChatMsg){
+                    const text = msg.string;
+                    const player = msg.player;
+                    let color = "#ffe600";
+                    switch(msg.chatType){
+                        case(1):{
+                            color = "#00f7ff"
+                            break;
+                        }
+                    }
+
+                    const txt = this.m_ui2Manager.getChatMessage(player, text, msg.chatType);
+                    this.m_ui2Manager.addChatMessage(txt, color, "#000000");
+                } else if(msg.type === net.KillFeedMsgType.AdminMsg){
+                    const text = msg.string;
+                    const player = msg.player;
+                    const txt = this.m_ui2Manager.getAdminChatMessage(player, text);
+
+                    this.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
+                }else if(msg.type === net.KillFeedMsgType.CmdMsg){
+                    const cmd = msg.cmd;
+                    const admin = msg.player;
+                    const text = msg.string;
+                    const args = msg.args;
+                    this.chatUi.handleAdminCmds(cmd, admin, text, args);
+                }
             }
         }
     }

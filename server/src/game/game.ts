@@ -40,6 +40,7 @@ export interface JoinTokenData {
     userId: string | null;
     findGameIp: string;
     loadout?: Loadout;
+    admin: boolean;
     groupData: {
         autoFill: boolean;
         playerCount: number;
@@ -113,6 +114,10 @@ export class Game {
     start = Date.now();
 
     profiler = new Profiler();
+    teamsAnnounced: boolean = false;
+
+    arenaRoles: string[] = [];
+    choosenArenaRoles: string[] = [];
 
     constructor(
         id: string,
@@ -197,6 +202,29 @@ export class Game {
         }
 
         if (this.started) this.startedTime += dt;
+
+        let freezeTimer = this.map.mapDef.gameMode.freezeTime || 0;
+        const alivePlayers = this.playerBarn.livingPlayers;
+        if(alivePlayers.length > 0 && !this.teamsAnnounced && this.map.mapDef.gameMode.announceTeams && this.startedTime >= freezeTimer ){
+                    const enemieGroups = this.playerBarn.getAliveGroups();
+                    let group1: string[] = [];
+                    let group2: string[] = [];
+                    
+                        
+                        for(const p of enemieGroups[0].getAlivePlayers()){
+                            group1.push(p.name);
+                        }
+                        for(const p of enemieGroups[1].getAlivePlayers()){
+                            group2.push(p.name);
+                        }
+                    
+                    this.teamsAnnounced = true;
+
+                    let joinFeedMsg = new net.JoinFeedMsg;
+                    joinFeedMsg.group1 = group1;
+                    joinFeedMsg.group2 = group2;
+                    this.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
+        }
 
         //
         // Update modules
@@ -362,6 +390,7 @@ export class Game {
             | net.PerkModeRoleSelectMsg
             | net.RoleSelectMsg
             | net.EditMsg
+            | net.KillFeedMsg
             | undefined = undefined;
 
         switch (type) {
@@ -437,6 +466,10 @@ export class Game {
             case net.MsgType.Edit:
                 if (!Config.debug.allowEditMsg) break;
                 msg = new net.EditMsg();
+                msg.deserialize(stream);
+                break;
+            case net.MsgType.KillFeed:
+                msg = new net.KillFeedMsg();
                 msg.deserialize(stream);
                 break;
         }
@@ -527,6 +560,10 @@ export class Game {
                 player.processEditMsg(msg as net.EditMsg);
                 break;
             }
+            case net.MsgType.KillFeed: {
+                player.processKillFeedMsg(msg as net.KillFeedMsg);
+                break;
+            }
         }
     }
 
@@ -539,7 +576,14 @@ export class Game {
         player.spectating = undefined;
         player.dirNew = v2.create(1, 0);
         player.setPartDirty();
-
+        if (player.downed){
+            //player killed durch bleed out
+            player.kill({
+                damageType: GameConfig.DamageType.Bleeding,
+                dir: player.dir,
+                source: player.downedBy,
+            });
+        }else
         if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn || !this.started) {
             player.game.playerBarn.removePlayer(player);
             player.mapIndicator?.kill();
@@ -547,7 +591,7 @@ export class Game {
             player.kill({
                 damageType: GameConfig.DamageType.Disconnect,
                 dir: player.dir,
-                source: undefined,
+                source: player.downedBy,
             });
         }
     }
@@ -586,6 +630,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                admin: token.admin,
             });
         }
     }
@@ -605,6 +650,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                admin: token.admin,
             });
         }
     }

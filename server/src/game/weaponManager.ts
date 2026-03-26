@@ -114,7 +114,7 @@ export class WeaponManager {
             | GunDef
             | MeleeDef
             | ThrowableDef;
-
+/*  Code that prevents switching guns mid burst, commented out to allow the player more control over burst guns
         if (
             curWeaponDef?.type === "gun" &&
             curWeaponDef.fireMode === "burst" &&
@@ -122,7 +122,7 @@ export class WeaponManager {
             !forceSwitch
         )
             return;
-
+*/
         this.player.cancelAnim();
 
         if (cancelSlowdown) {
@@ -187,7 +187,7 @@ export class WeaponManager {
             this.player.wearingPan = true;
         }
 
-        if (GameConfig.WeaponType[idx] === "gun" && this.weapons[idx].ammo <= 0) {
+        if (GameConfig.WeaponType[idx] === "gun" && this.weapons[idx].ammo <= 0 && this.player.actionType !== GameConfig.Action.UseItem) {
             this.scheduledReload = true;
         }
 

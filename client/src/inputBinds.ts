@@ -1,7 +1,7 @@
 import base64 from "base64-js";
-import BitBuffer from "bit-buffer";
 import $ from "jquery";
 import { Input as GameInput, type Input } from "../../shared/gameConfig";
+import { BitStream } from "../../shared/lib/bitBuffer";
 import type { ConfigManager } from "./config";
 import {
     type InputHandler,
@@ -65,6 +65,7 @@ const BindDefs = {
     [GameInput.Fullscreen]: def("Full Screen", inputKey(Key.L)),
     [GameInput.HideUI]: def("Hide UI", null),
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
+    [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
 };
 
 export class InputBinds {
@@ -83,7 +84,7 @@ export class InputBinds {
 
     toArray() {
         const buf = new ArrayBuffer(this.binds.length * 2 + 1);
-        const stream = new BitBuffer.BitStream(buf);
+        const stream = new BitStream(buf);
         stream.writeUint8(1);
         for (let i = 0; i < this.binds.length; i++) {
             const bind = this.binds[i];
@@ -118,7 +119,7 @@ export class InputBinds {
         for (let i = 0; i < data.length; i++) {
             view[i] = data[i];
         }
-        const stream = new BitBuffer.BitStream(arrayBuf);
+        const stream = new BitStream(arrayBuf);
         const version = stream.readUint8();
         this.clearAllBinds();
         for (let idx = 0; stream.length - stream.index >= 10; ) {
@@ -299,7 +300,7 @@ export class InputBindUi {
                     event.stopPropagation();
                     const disallowKeys: number[] = [
                         Key.Control,
-                        Key.Shift,
+                        //Key.Shift,
                         Key.Alt,
                         Key.Windows,
                         Key.ContextMenu,

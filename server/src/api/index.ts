@@ -163,6 +163,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 userId: user?.id || null,
                 ip,
                 loadout: user?.loadout,
+                admin: user?.admin ?? false,
             },
         ],
     });
@@ -216,8 +217,54 @@ app.post("/api/find_spectator_game", validateParams(zFindSpectator), async (c) =
 
 // /api/find_game_by_id
 app.post("/api/find_game_by_id", validateParams(zFindGameById), async (c) => {
-  const body = c.req.valid("json");
-  const data = await server.findGameById(body.region, body.gameId);
+
+  const ip = getHonoIp(c, Config.apiServer.proxyIPHeader);
+
+    if (!ip) {
+        return c.json<FindGameResponse>({ error: "invalid_ip" }, 500);
+    }
+
+    if (findGameRateLimit.isRateLimited(ip)) {
+        return c.json<FindGameResponse>({ error: "rate_limited" }, 429);
+    }
+
+    const banData = await isBanned(ip);
+    if (banData) {
+        return c.json<FindGameResponse>({
+            banned: true,
+            reason: banData.reason,
+            permanent: banData.permanent,
+            expiresIn: banData.expiresIn,
+        });
+    }
+
+    const token = randomUUID();
+    let user: UsersTableSelect | null = null;
+
+    const sessionId = getCookie(c, "session") ?? null;
+
+    if (sessionId) {
+        try {
+            const account = await validateSessionToken(sessionId);
+            user = account.user;
+
+            if (account.user?.banned) {
+                user = null;
+            }
+        } catch (err) {
+            server.logger.error("/api/find_game: Failed to validate session", err);
+            user = null;
+        }
+    }
+
+    if (await isBehindProxy(ip, user ? 0 : 3)) {
+        return c.json<FindGameResponse>({ error: "behind_proxy" });
+    }
+
+    const body = c.req.valid("json");
+    const admin = user?.admin ?? false;
+
+  const data = await server.findGameById(body.region, body.gameId, admin);
   return c.json(data);
 });
 

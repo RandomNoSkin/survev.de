@@ -26,6 +26,10 @@ export const enum Command {
     RemoveItem = "remove_item",
     SetGameMode = "set_game_mode",
     SetClientTheme = "set_client_theme",
+
+    //philipps cleanup
+    GetPlayer = "get_player",
+    WhoIs = "who_is",
 }
 
 export const honoClient = hc<PrivateRouteApp>(API_URL, {

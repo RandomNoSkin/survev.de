@@ -12,6 +12,7 @@ import {
     zSetMatchDataNameParams,
     zUnbanAccountParams,
     zUnbanIpParams,
+    zWhoIsParams,
 } from "../../../../../shared/types/moderation";
 import { util } from "../../../../../shared/utils/util";
 import { Config } from "../../../config";
@@ -22,6 +23,7 @@ import { databaseEnabledMiddleware, validateParams } from "../../auth/middleware
 import { db } from "../../db";
 import { bannedIpsTable, ipLogsTable, matchDataTable, usersTable } from "../../db/schema";
 import { sanitizeSlug } from "../user/auth/authUtils";
+import { userInfo } from "node:os";
 
 export const ModerationRouter = new Hono()
     .use(databaseEnabledMiddleware)
@@ -272,6 +274,7 @@ export const ModerationRouter = new Hono()
                 teamMode: ipLogsTable.teamMode,
                 createdAt: ipLogsTable.createdAt,
                 mapId: ipLogsTable.mapId,
+                gameId: ipLogsTable.gameId,
             })
             .from(ipLogsTable)
             .where(
@@ -284,9 +287,21 @@ export const ModerationRouter = new Hono()
             )
             .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
             .orderBy(desc(ipLogsTable.createdAt))
-            .limit(10);
+            .limit(200);
 
-        if (result.length === 0) {
+        const seenIps = new Set<string>();
+        const uniqueResults: typeof result = [];
+
+        for (const row of result) {
+            if (!seenIps.has(row.ip)) {
+                seenIps.add(row.ip);
+                uniqueResults.push(row);
+
+                if (uniqueResults.length >= 10) break;
+            }
+        }
+
+        if (uniqueResults.length === 0) {
             return c.json(
                 {
                     message: `No IP found for ${name}. Make sure the name matches the one in game.`,
@@ -295,7 +310,7 @@ export const ModerationRouter = new Hono()
             );
         }
 
-        const prettyResult = result.map((data) => ({
+        const prettyResult = uniqueResults.map((data) => ({
             ...data,
             teamMode: TeamModeToString[data.teamMode],
             mapId: MapId[data.mapId],
@@ -396,7 +411,53 @@ export const ModerationRouter = new Hono()
 
             return c.json({ message: `slug: ${user.slug}` }, 200);
         },
-    );
+    )
+    .post("/who_is", validateParams(zWhoIsParams), async (c) => {
+        const { ip } = c.req.valid("json");
+
+        const rows = await db
+            .select({
+                username: ipLogsTable.username,
+                userId: ipLogsTable.userId,
+                slug: usersTable.slug,
+                discordId: usersTable.authId,
+            })
+            .from(ipLogsTable)
+            .where(
+                and(
+                    eq(ipLogsTable.encodedIp, ip),
+                ),
+            )
+            .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
+            .orderBy(ipLogsTable.username, desc(ipLogsTable.createdAt))
+
+        const uniqueResults: typeof rows = [];
+        const seenUsernames = new Set<string>();
+        const seenAccountNames = new Set<string>();
+
+        for (const row of rows) {
+            if (
+                !seenUsernames.has(row.username) &&
+                (row.slug === null || !seenAccountNames.has(row.slug)) // oder row.accountName je nach Feld
+            ) {
+                seenUsernames.add(row.username);
+                if(row.slug)
+                seenAccountNames.add(row.slug);
+
+                uniqueResults.push(row);
+
+                if (uniqueResults.length >= 20) break;
+            }
+        }
+
+        if(uniqueResults.length === 0){
+            return c.json({
+                message: `No entries for ${ip} found.`
+            }, 200);
+        }
+
+        return c.json(uniqueResults, 200);
+    });
 
 async function banAccount(userId: string, banReason: string, executorId: string) {
     await db

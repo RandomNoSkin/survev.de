@@ -58,8 +58,8 @@ class Region {
     return data ?? { error: "find_spectator_game_failed" };
     }
 
-    async findGameById(gameId: string): Promise<any> {
-    const data = await this.fetch<any>("api/find_game_by_id", { region: this.id, gameId });
+    async findGameById(gameId: string, admin: boolean,): Promise<any> {
+    const data = await this.fetch<any>("api/find_game_by_id", { region: this.id, gameId, admin });
     return data ?? { error: "find_game_by_id_failed" };
     }
 
@@ -141,10 +141,10 @@ export class ApiServer {
         return await r.findSpectatorGame(body);
     }
 
-    async findGameById(region: string, gameId: string) {
+    async findGameById(region: string, gameId: string, admin: boolean) {
     const r = this.regions[region];
     if (!r) return { error: "Invalid Region" };
-        return await r.findGameById(gameId);
+        return await r.findGameById(gameId, admin);
     }
 
 }

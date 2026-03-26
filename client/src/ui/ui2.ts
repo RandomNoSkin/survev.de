@@ -149,6 +149,8 @@ class UiState {
         offset: 0,
         opacity: 0,
         ticker: Number.MAX_VALUE,
+        outline: false,
+        outlineColor: "",
     }));
 
     ammo = {
@@ -1121,16 +1123,15 @@ export class UiManager2 {
             }
         }
         if (patch.boost) {
-            const v = GameConfig.player.boostBreakpoints;
-            let I = 0;
-            for (let T = 0; T < v.length; T++) {
-                I += v[T];
-            }
-            for (let P = state.boost / 100, C = 0; C < dom.boost.bars.length; C++) {
-                const A = v[C] / I;
-                const O = math.clamp(P / A, 0, 1);
-                P = math.max(P - A, 0);
-                dom.boost.bars[C].style.width = `${O * 100}%`;
+            const breakPoints = GameConfig.player.boostBreakpoints;
+            const max = breakPoints.reduce((a, b) => a + b, 0);
+
+            let boostT = state.boost / 100;
+            for (let i = 0; i < dom.boost.bars.length; i++) {
+                const breakPointT = breakPoints[i] / max;
+                const widthT = math.clamp(boostT / breakPointT, 0, 1);
+                boostT = math.max(boostT - breakPointT, 0);
+                dom.boost.bars[i].style.width = `${widthT * 100}%`;
             }
             dom.boost.div.style.opacity = String(state.boost == 0 ? 0 : 1);
         }
@@ -1386,6 +1387,7 @@ export class UiManager2 {
         const oldest = killFeed[killFeed.length - 1];
         oldest.text = text;
         oldest.color = color;
+        oldest.outline = false;
         oldest.ticker = 0;
         killFeed.sort((a, b) => {
             return a.ticker - b.ticker;
@@ -1625,13 +1627,65 @@ export class UiManager2 {
         return `${name} ${joinTxt}`;
     }
 
-    getEnemieText(enemies: string[]){
-        const txt = this.localization.translate("game-your-enemies-are");
-        let enemiesTxt = "";
-        for(const e of enemies){
-            enemiesTxt = enemiesTxt + " " + e;
+    getEnemieText(group1: string[]){
+        const txt = this.localization.translate("game-vs");
+        let group1Txt = "";
+        let group2Txt = "";
+        for(const e of group1){
+            if(group1Txt === ""){
+                group1Txt = e;
+            }else
+            group1Txt = group1Txt + " || " + e;
         }
-        return `${txt}${enemiesTxt}`;
+        return `${group1Txt}`;
+    }
+
+    getItemPingText(player: string, item: string){
+        const itemTxt = this.localization.translate(`game-${item}`);
+        const txt = this.localization.translate("pinged-item");
+        
+        return `${player} ${txt} ${itemTxt}`;
+    }
+
+    addChatMessage(text: string, color: string, outlineColor: string) {
+        const killFeed = this.newState.killFeed;
+        const oldest = killFeed[killFeed.length - 1];
+        oldest.text = text;
+        oldest.color = color;
+        oldest.outline = true;
+        oldest.outlineColor = outlineColor
+        oldest.ticker = 0;
+        killFeed.sort((a, b) => {
+            return a.ticker - b.ticker;
+        });
+    }
+
+    getChatMessage(player: string, text:string, chatType?: number){
+
+        let channel = "";
+        switch(chatType){
+            case(0):{
+                channel = "ALL";
+                break;
+            }
+            case(1):{
+                channel = "TEAM";
+                break;
+            }
+            case(2):{
+                channel = "SPEC";
+                break;
+            }
+        }
+        if(channel !== "") return `[${channel}]  [${player}]: ${text}`;
+        return `[${player}]: ${text}`;
+    }
+
+    getAdminChatMessage(player: string, text:string){
+
+        const txt = this.localization.translate(`${text}`);
+
+        return `[${player}]: ${txt}`;
     }
 
     getPickupMessageText(type: PickupMsgType) {

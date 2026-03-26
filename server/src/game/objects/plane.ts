@@ -11,7 +11,7 @@ import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
 import { assert, util } from "../../../../shared/utils/util";
 import { type Vec2, v2 } from "../../../../shared/utils/v2";
-import type { Game } from "../game";
+import { Game } from "../game";
 import type { Player } from "./player";
 
 interface ScheduledAirDrop {
@@ -104,27 +104,7 @@ export class PlaneBarn {
                     case GameConfig.Plane.Airdrop: {
                         
                         
-                        let pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                        let tryCount = 0;
-
-                        for (let i = 0; i < this.placedAirDrops.length; i++) {
-                            const existing = this.placedAirDrops[i];
-                            const d2 = v2.distance(existing.pos, pos);
-                            let airdropMinDistance = this.game.map.mapDef.gameMode.airdropMinDistance ?? 0;
-                            if(airdropMinDistance!=0 && this.game.gas.circleIdx !=0) airdropMinDistance = airdropMinDistance/this.game.gas.circleIdx;
-                            //console.log("AirdropMinDistance",airdropMinDistance, "distance", d2)
-                            if (d2 < airdropMinDistance || this.game.map.isOnWater(pos, 0)) {
-                                //console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
-                                if (tryCount >= 1000) {
-                                    pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                                    console.log(`Resetting position after too many tries`);
-                                    continue;
-                                }
-                                pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                                tryCount++;
-                                i = -1; // restart the loop
-                            }
-                        }
+                        const pos = this.genDropAlgo();
                         
                         
                         this.addAirdrop(
@@ -137,25 +117,7 @@ export class PlaneBarn {
                     case GameConfig.Plane.SupplyDrop: {
 
 
-                        let pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                        let tryCount = 0;
-
-                        for (let i = 0; i < this.placedAirDrops.length; i++) {
-                            const existing = this.placedAirDrops[i];
-                            const d2 = v2.distance(existing.pos, pos);
-                            const airdropMinDistance = this.game.map.mapDef.gameMode.airdropMinDistance ?? 0;
-                            if (d2 < airdropMinDistance) {
-                                console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
-                                if (tryCount >= 1000) {
-                                    pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                                    console.log(`Resetting position after too many tries`);
-                                    continue;
-                                }
-                                pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                                tryCount++;
-                                i = -1; // restart the loop
-                            }
-                        }
+                        const pos = this.genDropAlgo();
 
                         this.addSupplyDrop(
                             pos,
@@ -186,6 +148,35 @@ export class PlaneBarn {
                 }
             }
         }
+    }
+
+    genDropAlgo(): Vec2{
+        let pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+        let tryCount = 0;
+
+        let airdropMinDistance = this.game.map.mapDef.gameMode.airdropMinDistance ?? 0;
+        const gasRadius = this.game.gas.radNew;
+        if(airdropMinDistance !=0)airdropMinDistance = gasRadius*airdropMinDistance;
+        console.log(airdropMinDistance);
+        //if(airdropMinDistance!=0 && this.game.gas.circleIdx !=0) airdropMinDistance = airdropMinDistance/this.game.gas.circleIdx;
+
+        for (let i = 0; i < this.placedAirDrops.length; i++) {
+            const existing = this.placedAirDrops[i];
+            const d2 = v2.distance(existing.pos, pos);
+            //console.log("AirdropMinDistance",airdropMinDistance, "distance", d2)
+            if (d2 < airdropMinDistance || this.game.map.isOnWater(pos, 1)) {
+                //console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
+                tryCount++;
+                if (tryCount >= 1000) {
+                    airdropMinDistance = airdropMinDistance * 0.75;
+                    console.log(`Resetting position after too many tries`);
+                    tryCount = tryCount * 0.75;
+                }
+                    pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
+                    i = -1; // restart the loop
+            }
+        }
+        return pos;
     }
 
     getAirstrikeZonePos(rad: number) {
@@ -812,7 +803,7 @@ class AirstrikeZone {
 abstract class Plane {
     game: Game;
     planeBarn: PlaneBarn;
-    config: typeof GameConfig.airdrop | typeof GameConfig.airstrike;
+    config: typeof GameConfig.airdrop | typeof GameConfig.airstrike | typeof GameConfig.supplydrop;
     pos: Vec2;
     targetPos: Vec2;
     action: PlaneType;
@@ -820,6 +811,7 @@ abstract class Plane {
     planeDir: Vec2;
     rad: number;
     actionComplete = false;
+    startDelay = 0;
 
     constructor(
         game: Game,
@@ -837,16 +829,29 @@ abstract class Plane {
         this.id = id;
         this.planeDir = dir;
 
-        const isDrop =
-        this.action === GameConfig.Plane.Airdrop ||
-        this.action === GameConfig.Plane.SupplyDrop;
-
-        this.config = isDrop ? GameConfig.airdrop : GameConfig.airstrike;
+       
+        switch(this.action){
+            case(GameConfig.Plane.Airdrop):
+                this.config = GameConfig.airdrop;
+                break;
+            case(GameConfig.Plane.SupplyDrop):
+                this.config = GameConfig.supplydrop;
+                break;
+            case(GameConfig.Plane.Airstrike):
+                this.config = GameConfig.airstrike;
+                break;    
+        }
 
         this.rad = this.config.planeRad;
+        const planeDelay = (this.config as any).planeDelay ?? 0;
+        this.startDelay = planeDelay/10;
     }
 
     update(dt: number) {
+        if(this.startDelay>0){
+            this.startDelay -= dt;
+            return;
+        }
         this.pos = v2.add(this.pos, v2.mul(this.planeDir, this.config.planeVel * dt));
     }
 }

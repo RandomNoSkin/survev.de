@@ -1769,6 +1769,10 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             path: "audio/ui/emote_01.mp3",
             volume: 1,
         },
+        ohnah: {
+            path: "audio/ui/emote_ohnah.mp3",
+            volume: 1,
+        },
         trick_01: {
             path: "audio/ui/trick_01.mp3",
             volume: 1.5,

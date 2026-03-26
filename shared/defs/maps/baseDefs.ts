@@ -135,6 +135,10 @@ export const Main: MapDef = {
             { name: "8xscope", count: 1, weight: 1 }, // ?
             { name: "15xscope", count: 1, weight: 0.02 }, // ?
         ],
+        tier_additional_scopes: [
+            { name: "tier_scopes", count: 1, weight: 0.3 },
+            { name: "", count: 1, weight: 0.6 },
+        ],
         tier_armor: [
             { name: "helmet01", count: 1, weight: 9 }, // !
             { name: "helmet02", count: 1, weight: 6 },

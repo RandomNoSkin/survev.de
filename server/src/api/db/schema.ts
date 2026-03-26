@@ -30,6 +30,7 @@ export const usersTable = pgTable("users", {
     id: text("id").notNull().primaryKey(),
     authId: text("auth_id").notNull(),
     slug: text("slug").notNull().unique(),
+    admin: boolean("admin").notNull().default(false),
     banned: boolean("banned").notNull().default(false),
     banReason: text("ban_reason").notNull().default(""),
     bannedBy: text("banned_by").notNull().default(""),
@@ -141,6 +142,15 @@ export const ipLogsTable = pgTable(
 export type IpLogsTable = typeof ipLogsTable.$inferSelect;
 
 export const bannedIpsTable = pgTable("banned_ips", {
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresIn: timestamp("expires_in").notNull(),
+    encodedIp: text("encoded_ip").notNull().primaryKey(),
+    permanent: boolean("permanent").notNull().default(false),
+    reason: text("reason").notNull().default(""),
+    bannedBy: text("banned_by").notNull().default("admin"),
+});
+
+export const chatBannedIpsTable = pgTable("chat_banned_ips", {
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     expiresIn: timestamp("expires_in").notNull(),
     encodedIp: text("encoded_ip").notNull().primaryKey(),

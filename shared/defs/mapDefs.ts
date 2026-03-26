@@ -156,6 +156,9 @@ export interface MapDef {
         camperPunishmentTime?: number, // time in ms how long punishment lasts || default: 5000
         camperGracePeriod?: number, // time in ms after spawn before camping checks start || default: 40000
 
+        announceTeams?: boolean;
+        enableChat?: boolean;
+
         desertMode?: boolean;
         factionMode?: boolean;
         factions?: number;
@@ -164,8 +167,17 @@ export interface MapDef {
         sniperMode?: boolean;
         perkMode?: boolean;
         perkModeRoles?: string[];
+
         arenaMode?: boolean;
         arenaModeRoles?: string[];
+        arenaModePools?: Record<
+            string,
+            Array<{
+                name: string;
+            }>
+        >;
+        arenaLobbyRoles?: number;
+
         turkeyMode?: boolean;
         spookyKillSounds?: boolean;
     };
@@ -277,6 +289,7 @@ export interface MapDef {
                     odds: number;
                     innerRad: number;
                     outerRad: number;
+                    centerObj?: string;
                     spawnBound: {
                         pos: Vec2;
                         rad: number;

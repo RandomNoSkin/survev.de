@@ -81,8 +81,8 @@ const mapDef: PartialMapDef = {
             { name: "saiga", count: 1, weight: 0.15 },
             { name: "spas12", count: 1, weight: 2.5 },
             { name: "qbb97", count: 1, weight: 0.125 },
-            { name: "pkp", count: 1, weight: 0.008 },
-            { name: "m249", count: 1, weight: 0.012 },
+            { name: "pkp", count: 1, weight: 0.007 },
+            { name: "m249", count: 1, weight: 0.011 },
         ],
         tier_ammo: [
             { name: "762mm", count: 60, weight: 3 },
@@ -156,7 +156,7 @@ const mapDef: PartialMapDef = {
         ],
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 13 },
-            { name: "stonehammer", count: 1, weight: 1 },
+            { name: "stonehammer", count: 1, weight: 3 },
             { name: "pan", count: 1, weight: 1 },
         ],
     },
@@ -171,6 +171,7 @@ const mapDef: PartialMapDef = {
                         odds: 1,
                         innerRad: 32,
                         outerRad: 96,
+                        centerObj: "teapavilion_01w",
                         spawnBound: {
                             pos: v2.create(0.5, 0.5),
                             rad: 100,
@@ -225,7 +226,6 @@ const mapDef: PartialMapDef = {
             {
                 logging_complex_02: 1,
                 logging_complex_03: 3,
-                teapavilion_01w: 1,
                 warehouse_01: 3,
                 workshop_complex_01: 1,
                 house_red_01: 3,

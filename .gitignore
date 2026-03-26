@@ -67,4 +67,9 @@ Temporary Items
 # Built Visual Studio Code Extensions
 *.vsix
 
+# Log files
 todo.md
+*.log
+server/logs/*
+server/*-audit.json
+/server/logs

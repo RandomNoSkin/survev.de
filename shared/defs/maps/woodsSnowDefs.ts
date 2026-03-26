@@ -52,7 +52,7 @@ const mapDef: PartialMapDef = {
         ],
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 13 },
-            { name: "iceaxe", count: 1, weight: 1 },
+            { name: "iceaxe", count: 1, weight: 3 },
             { name: "pan", count: 1, weight: 1 },
         ],
         tier_airdrop_outfits: [
@@ -77,6 +77,18 @@ const mapDef: PartialMapDef = {
             { name: "tier_katanas", count: 1, weight: 3 },
             { name: "iceaxe", count: 1, weight: 1 },
         ],
+        tier_eye_block: [
+            { name: "m9", count: 1, weight: 1 },
+            { name: "ots38_dual", count: 1, weight: 1.5 },
+            { name: "flare_gun", count: 1, weight: 1.5 },
+            { name: "svd_winter", count: 1, weight: 1.5 },
+            { name: "762mm", count: 1, weight: 1 },
+            { name: "snowball", count: 1, weight: 1 },
+            { name: "scar", count: 1, weight: 1.5 },
+            { name: "sv98_winter", count: 1, weight: 1 },
+            { name: "awc_winter", count: 1, weight: 0.75 },
+            { name: "pkp", count: 1, weight: 0.75 },
+        ],
     },
     mapGen: {
         fixedSpawns: [
@@ -87,7 +99,6 @@ const mapDef: PartialMapDef = {
                 },
                 logging_complex_02x: 1,
                 logging_complex_03x: 2,
-                teapavilion_01w: 1,
                 warehouse_01: 3,
                 workshop_complex_01w: 1,
                 house_red_01x: 3,
@@ -130,6 +141,9 @@ const mapDef: PartialMapDef = {
                 stone_01: "stone_01x",
                 stone_03: "stone_03x",
                 tree_01: "tree_07",
+                // make eye bunkers have the proper woods recorders
+                recorder_01: "recorder_08",
+                recorder_02: "recorder_09",
             },
         ],
     },
