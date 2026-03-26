@@ -35,7 +35,7 @@ import {
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
-import { UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
@@ -147,12 +147,21 @@ export const PrivateRouter = new Hono<Context>()
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);
     })
- .post(
+.post(
     "/give_item",
     databaseEnabledMiddleware,
     validateParams(zGiveItemParams),
     async (c) => {
         const { item, slug, source } = c.req.valid("json");
+
+        const allowedItems = [
+            ...new Set([
+                ..._allowedHealEffects,
+                ..._allowedMeleeSkins,
+                ..._allowedOutfits,
+                ..._allowedEmotes,
+            ]),
+        ];
 
         const user = await db.query.usersTable.findFirst({
             where: eq(usersTable.slug, slug),
@@ -175,18 +184,10 @@ export const PrivateRouter = new Hono<Context>()
 
             const ownedTypes = new Set(ownedItems.map((i) => i.type));
 
-            const unlockableTypes = [
-                ...new Set(
-                    Object.values(UnlockDefs).flatMap((unlockDef) => unlockDef.unlocks),
-                ),
-            ];
-
-            const missingTypes = unlockableTypes.filter(
-                (type) => !ownedTypes.has(type),
-            );
+            const missingTypes = allowedItems.filter((type) => !ownedTypes.has(type));
 
             if (missingTypes.length === 0) {
-                return c.json({ message: "User already has all unlockable items" }, 200);
+                return c.json({ message: "User already has all allowed items" }, 200);
             }
 
             const now = Date.now();
@@ -202,19 +203,15 @@ export const PrivateRouter = new Hono<Context>()
 
             return c.json(
                 {
-                    message: `${missingTypes.length} unlockable items given to ${slug}`,
+                    message: `${missingTypes.length} items given to ${slug}`,
                     items: missingTypes,
                 },
                 200,
             );
         }
 
-        const isUnlockable = Object.values(UnlockDefs).some((unlockDef) =>
-            unlockDef.unlocks.includes(item),
-        );
-
-        if (!isUnlockable) {
-            return c.json({ message: "Item is not unlockable" }, 200);
+        if (!allowedItems.includes(item)) {
+            return c.json({ message: "Item is not allowed" }, 200);
         }
 
         const existing = await db.query.itemsTable.findFirst({
