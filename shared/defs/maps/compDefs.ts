@@ -219,18 +219,18 @@ export const Comp: MapDef = {
             { name: "mirv", count: 2, weight: 1 },
         ],
         tier_ammo: [
-            { name: "9mm", count: 60, weight: 0.25 },
-            { name: "762mm", count: 60, weight: 0.25 },
-            { name: "556mm", count: 60, weight: 0.25 },
-            { name: "12gauge", count: 10, weight: 0.25 },
+            { name: "9mm", count: 90, weight: 0.25 },
+            { name: "762mm", count: 90, weight: 0.25 },
+            { name: "556mm", count: 90, weight: 0.25 },
+            { name: "12gauge", count: 15, weight: 0.25 },
         ],
         tier_ammo_crate: [
-            { name: "9mm", count: 60, weight: 3 },
-            { name: "762mm", count: 60, weight: 3 },
-            { name: "556mm", count: 60, weight: 3 },
-            { name: "12gauge", count: 10, weight: 3 },
+            { name: "9mm", count: 90, weight: 3 },
+            { name: "762mm", count: 90, weight: 3 },
+            { name: "556mm", count: 90, weight: 3 },
+            { name: "12gauge", count: 20, weight: 3 },
             { name: "50AE", count: 21, weight: 1 },
-            { name: "flare", count: 1, weight: 1.5 },
+            { name: "flare", count: 1, weight: 2 },
             { name: "45acp", count: 60, weight: 3 },
         ],
         tier_vending_soda: [
@@ -1017,8 +1017,8 @@ export const Comp: MapDef = {
         tier_supply_ammo: [
             { name: "12gauge", count: 20, weight: 0.25 },
             { name: "50AE", count: 29, weight: 0.25 },
-            { name: "flare", count: 1, weight: 0.25 },
-            { name: "45acp", count: 60, weight: 0.25 },
+            { name: "flare", count: 1, weight: 0.1 },
+            { name: "45acp", count: 90, weight: 0.25 },
         ],
     },
     mapGen: {
@@ -1128,6 +1128,7 @@ export const Comp: MapDef = {
                 loot_tier_1: 24,
                 loot_tier_beach: 12,
                 stone_07: 5, // large stones
+                tree_14: 1, //coconut tree
             },
         ],
         fixedSpawns: [
