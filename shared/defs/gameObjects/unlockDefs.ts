@@ -1,6 +1,8 @@
+import { CrosshairDefs } from "./crosshairDefs";
 import { HealEffectDefs } from "./healEffectDefs";
 
 export const _allowedHealEffects = Object.keys(HealEffectDefs);
+export const _allowedCrosshairs = Object.keys(CrosshairDefs);
 export const _allowedMeleeSkins = [
     "fists",
     "knuckles_rusted",

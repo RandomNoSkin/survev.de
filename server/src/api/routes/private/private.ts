@@ -35,7 +35,7 @@ import {
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
-import { _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
@@ -160,6 +160,7 @@ export const PrivateRouter = new Hono<Context>()
                 ..._allowedMeleeSkins,
                 ..._allowedOutfits,
                 ..._allowedEmotes,
+                ..._allowedCrosshairs,
             ]),
         ];
 
