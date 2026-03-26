@@ -195,6 +195,14 @@ export const _allowedEmotes = [
     "emote_flagbosnia",
     "emote_logocloud",
     "emote_logotwins",
+    "emote_picassoface",
+    "emote_bandagedface",
+    "emote_logocloud",
+    "emote_ghost_base",
+    "emote_ohnah",
+    "emote_pooface",
+    "emote_ok",
+    "emote_rainbow",
 ];
 
 export interface UnlockDef {
