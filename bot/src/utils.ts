@@ -30,6 +30,7 @@ export const enum Command {
     //philipps cleanup
     GetPlayer = "get_player",
     WhoIs = "who_is",
+    ChatBanIp = "chat_ban_ip",
 }
 
 export const honoClient = hc<PrivateRouteApp>(API_URL, {

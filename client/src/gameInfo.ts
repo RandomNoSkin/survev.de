@@ -28,7 +28,7 @@ export class GameInfo {
             contentType: "application/json; charset=utf-8",
             success: (response) => {
                 this.gameInfoMap.clear();
-                const games = (response?.data ?? []).filter((game: any) => game.playerCount > 0); // <- hier filtern // Array oder Fallback []
+                const games = (response?.data ?? []).filter((game: any) => game.playerCount > 0 && game.stopped === false); // <- hier filtern // Array oder Fallback []
                 games.forEach((game: any) => {
                     this.gameInfoMap.set(game.id, {
                         teamMode: game.teamMode,

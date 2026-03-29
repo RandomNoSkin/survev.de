@@ -6,6 +6,7 @@ import {
 import { zSetClientThemeBody, zSetGameModeBody } from "../../../server/src/utils/types";
 import {
     zBanAccountParams,
+    zBanChatIpParams,
     zBanIpParams,
     zFindDiscordUserSlugParams,
     zGetUserParams,
@@ -51,6 +52,43 @@ const commands = {
             },
             {
                 name: "ip_ban_duration",
+                description: "The duration for the IP ban (defaults to 7 days)",
+                required: false,
+                type: ApplicationCommandOptionType.Integer,
+            },
+            {
+                name: "permanent",
+                description: "If the IP ban is permanent, will ignore the duration",
+                required: false,
+                type: ApplicationCommandOptionType.Boolean,
+            },
+        ],
+    }),
+    [Command.ChatBanIp]: createCommand({
+        name: Command.ChatBanIp,
+        description: "ban an IP in chat",
+        optionValidator: zBanChatIpParams,
+        options: [
+            {
+                name: "ips",
+                description: "The IP to ban",
+                required: true,
+                type: ApplicationCommandOptionType.String,
+            },
+            {
+                name: "ban_reason",
+                description: "The reason for the ban",
+                required: false,
+                type: ApplicationCommandOptionType.String,
+            },
+            {
+                name: "is_encoded",
+                description: "If the IP is encoded or raw (defaults to true)",
+                required: false,
+                type: ApplicationCommandOptionType.Boolean,
+            },
+            {
+                name: "chat_ban_duration",
                 description: "The duration for the IP ban (defaults to 7 days)",
                 required: false,
                 type: ApplicationCommandOptionType.Integer,

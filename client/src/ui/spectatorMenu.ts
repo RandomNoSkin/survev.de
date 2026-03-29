@@ -330,9 +330,10 @@ export class SpectatorMenu{
 
     update(){
         //loop every  reloading the menu
+        /*
         setInterval(() => {
             this.gameInfo.fetchGameInfo(this.config.get("region")!);
-        }, 10000);
+        }, 10000);*/
     }
 
     findGameWithId(selectedGameId: string, region: string, cb: (err?: string | null, matchData?: MatchData) => void,){

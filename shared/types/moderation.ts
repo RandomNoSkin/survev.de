@@ -22,6 +22,22 @@ export const zBanIpParams = z.object({
     executor_id: z.string().default("admin"),
 });
 
+export const zBanChatIpParams = z.object({
+    ips: z.union([
+        z
+            .string()
+            .min(1)
+            .transform((v) => [v]),
+        z.array(z.string()).min(1),
+    ]),
+    is_encoded: z.boolean().default(true),
+    permanent: z.boolean().default(false),
+    ban_associated_account: z.boolean().default(true),
+    chat_ban_duration: z.number().default(7),
+    ban_reason: z.string().default("Cheating"),
+    executor_id: z.string().default("admin"),
+});
+
 export const zBanAccountParams = z.object({
     slug: z.string(),
     ban_reason: z.string().default("Cheating"),

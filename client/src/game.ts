@@ -1794,6 +1794,12 @@ export class Game {
                     const text = msg.string;
                     const args = msg.args;
                     this.chatUi.handleAdminCmds(cmd, admin, text, args);
+                }else if(msg.type === net.KillFeedMsgType.BannedMsg){
+                    const text = msg.string;
+                    const admin = msg.player;
+                    const expires = msg.cmd;
+                    const txt = this.m_ui2Manager.getBannedMessage(admin, text, expires);
+                    this.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
                 }
             }
         }
