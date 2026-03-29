@@ -221,7 +221,7 @@ export const ModerationRouter = new Hono()
             .execute();
         return c.json({ message: `IP ${encodedIp} has been unbanned.` }, 200);
     })
-    .post("/ban_chat_ip", validateParams(zBanChatIpParams), async (c) => {
+    .post("/chat_ban_ip", validateParams(zBanChatIpParams), async (c) => {
         const {
             ips,
             is_encoded,
