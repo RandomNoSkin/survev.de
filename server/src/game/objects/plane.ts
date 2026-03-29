@@ -167,7 +167,7 @@ export class PlaneBarn {
             if (d2 < airdropMinDistance || this.game.map.isOnWater(pos, 1)) {
                 //console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
                 tryCount++;
-                if (tryCount >= 1000) {
+                if (tryCount >= 10000) {
                     airdropMinDistance = airdropMinDistance * 0.75;
                     console.log(`Resetting position after too many tries`);
                     tryCount = tryCount * 0.75;
