@@ -372,6 +372,7 @@ export enum KillFeedMsgType {
     ChatMsg,
     AdminMsg,
     CmdMsg,
+    BannedMsg,
 }
 
 export class UpdatePassMsg {

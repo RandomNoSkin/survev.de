@@ -5,6 +5,7 @@ import * as net from "../../../shared/net/net";
 import { chatLogger } from "./betterLogger";
 import { checkForBadWords } from "./serverHelpers";
 import { Config } from "../config";
+import { hashIp, getActiveChatBan } from "../api/routes/private/ModerationRouter";
 
 
 
@@ -13,14 +14,37 @@ export class Chat{
     player: Player;
     game: Game;
     isAdmin: boolean;
+    chatBanned: boolean = false;
+    banExpiresAt: number = 0;
 
     constructor(player: Player, game: Game, isAdmin: boolean){
         this.player = player;
         this.game = game;
         this.isAdmin = isAdmin;
+        this.checkChatBan();
+        
+    }
+    async checkChatBan(){
+        const encodedIp = hashIp(this.player.ip);
+        const activeChatBan = await getActiveChatBan(encodedIp);
+        if (activeChatBan) {
+            this.chatBanned = true;
+            this.banExpiresAt = 0; // default to 0 for permanent bans
+            if (!activeChatBan.permanent)
+            this.banExpiresAt = activeChatBan.expiresIn.getTime();
+        }
     }
 
     handleChatMessage(msg: net.KillFeedMsg){
+        if(this.chatBanned){
+            const msg1 = new net.KillFeedMsg();
+            msg1.string = "chat-banned";
+            msg1.player = "ADMIN";
+            msg1.type = net.KillFeedMsgType.BannedMsg;
+            msg1.cmd = this.banExpiresAt > 0 ? new Date(this.banExpiresAt).toISOString() : "0";
+            this.player.sendMsg(net.MsgType.KillFeed, msg1);
+            return;
+        }
          const chatType = msg.chatType;
             const originalMsg = msg.string;
             //this only allows for philipp or if run locally
