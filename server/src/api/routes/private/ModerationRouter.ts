@@ -576,12 +576,29 @@ export async function isBanned(ip: string, isEncoded = false) {
 export async function getActiveChatBan(encodedIp: string) {
     const ban = await db.query.chatBannedIpsTable.findFirst({
         where: eq(chatBannedIpsTable.encodedIp, encodedIp),
+        columns: {
+            permanent: true,
+            expiresIn: true,
+            reason: true,
+        }
     });
-
-    if (!ban) return null;
-    if (ban.permanent) return ban;
-    if (ban.expiresIn > new Date()) return ban;
-
+    if (ban) {
+            const { expiresIn, permanent, reason } = ban;
+            if (permanent || expiresIn.getTime() > Date.now()) {
+                server.logger.info(`${encodedIp} is banned.`);
+                return {
+                    permanent,
+                    expiresIn,
+                    reason,
+                };
+            }
+            // unban the ip
+            await db
+                .delete(chatBannedIpsTable)
+                .where(eq(chatBannedIpsTable.encodedIp, encodedIp))
+                .execute();
+            return undefined;
+        }
     return null;
 }
 
