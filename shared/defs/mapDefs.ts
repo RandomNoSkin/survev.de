@@ -180,6 +180,14 @@ export interface MapDef {
 
         turkeyMode?: boolean;
         spookyKillSounds?: boolean;
+
+        xpMultiplier?: {
+            kill: number;
+            damage: number;
+            win: number;
+            timeSurvived: number;
+        };
+
     };
     gameConfig: {
         planes: {
@@ -339,4 +347,8 @@ export interface MapDef {
         importantSpawns: string[];
         spawnOnRiver?: string[];
     };
+}
+
+export function getMapDefById(mapId: number) {
+    return Object.values(MapDefs).find((def) => def.mapId === mapId);
 }

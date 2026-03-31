@@ -139,21 +139,6 @@ export class GameModeManager {
                 for(const p of this.game.playerBarn.players.filter(p => p !== winner)){
                     p.addGameOverMsg();
                 }
-                //check for item unlocks of every player
-                const userIds: string[] = [];
-                for(const player of this.game.playerBarn.players){
-                    const userId = player.userId;
-                    if(userId){
-                        if(userIds.includes(userId)) continue;
-                        userIds.push(userId);
-                        
-                        apiPrivateRouter.check_for_unlocks.$post({
-                            json: {
-                                userId,
-                            },
-                        });
-                    }
-                }
                 return true;
             }
             case GameMode.Team: {
