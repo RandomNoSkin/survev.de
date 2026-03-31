@@ -66,12 +66,35 @@ export const zSetPassUnlockRequest = z.object({
 export type SetPassUnlockRequest = z.infer<typeof zSetPassUnlockRequest>;
 export type SetPassUnlockResponse = { success: boolean };
 
+export type Quest = {
+    idx: number;
+    type: string;
+    timeAcquired: number;
+    progress: number;
+    target: number;
+    complete: boolean;
+    rerolled: boolean;
+    timeToRefresh: number;
+};
+
+export type PassType = {
+    type: string;
+    level: number;
+    xp: number;
+    totalXp?: number;
+    newItems?: boolean;
+};
+
 export const zGetPassRequest = z.object({
     tryRefreshQuests: z.boolean(),
 });
 export type GetPassRequest = z.infer<typeof zGetPassRequest>;
-export type GetPassResponse = { success: boolean };
-
+export type GetPassResponse = {
+    success: boolean;
+    pass?: PassType;
+    quests?: Quest[];
+    questPriv?: string;
+};
 export const zRefreshQuestRequest = z.object({
     idx: z.number(),
 });

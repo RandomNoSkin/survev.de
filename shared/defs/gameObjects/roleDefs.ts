@@ -469,7 +469,6 @@ export const RoleDefs: Record<string, RoleDef> = {
         defaultItems: createDefaultItems({weapons: [
                 { type: "spas12", ammo: 9 },
                 { type: "mosin", ammo: 5 },
-                { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
             outfit: "",
@@ -522,7 +521,6 @@ export const RoleDefs: Record<string, RoleDef> = {
         defaultItems: createDefaultItems({weapons: [
                 { type: "m870", ammo: 5 },
                 { type: "mosin", ammo: 5 },
-                { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
             outfit: "",
@@ -575,7 +573,6 @@ export const RoleDefs: Record<string, RoleDef> = {
         defaultItems: createDefaultItems({weapons: [
                 { type: "spas12", ammo: 9 },
                 { type: "saiga", ammo: 5 },
-                { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
             outfit: "",

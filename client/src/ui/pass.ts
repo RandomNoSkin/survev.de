@@ -9,6 +9,7 @@ import { helpers } from "../helpers";
 import type { LoadoutMenu } from "./loadoutMenu";
 import type { Localization } from "./localization";
 import { passUtil } from "./passUtil";
+import { GameConfig } from "../../../shared/gameConfig";
 
 function i(e: string, t: number) {
     for (let r = PassDefs[e], a = 0; a < r.items.length; a++) {
@@ -36,7 +37,7 @@ function humanizeTime(time: number, minutesFloor = false) {
 export class Pass {
     pass = {
         data: {
-            type: "pass_survivr1",
+            type: GameConfig.serverSettings.currentPass,
         },
         currentXp: 0,
         currentLevel: 1,
@@ -228,6 +229,7 @@ export class Pass {
         this.quests = newQuests;
         this.pass.data = pass;
         this.pass.animSteps = [];
+        console.log("pass", pass);
         this.pass.currentXp = Math.round(this.pass.currentXp);
         this.pass.levelXp = passUtil.getPassLevelXp(pass.type, this.pass.currentLevel);
         if (!this.loaded) {
@@ -237,6 +239,7 @@ export class Pass {
             this.pass.levelXp = u;
             this.pass.ticker = 0;
         }
+
         let level = this.pass.currentLevel;
         let xp = this.pass.currentXp;
         // Animate level-ups

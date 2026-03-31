@@ -457,6 +457,7 @@ export class LoadoutMenu {
     onPass(pass: UnlockDef) {
         // Show/hide the social media buttons based on whether we have
         // unlocked them
+        return;
         const unlocks = ["facebook", "instagram", "youtube", "twitter"];
         for (let i = 0; i < unlocks.length; i++) {
             const unlockType = unlocks[i];

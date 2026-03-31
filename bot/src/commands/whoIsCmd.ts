@@ -46,8 +46,11 @@ export const whoIsCmd = {
     const lines = data.map((entry, index) => {
         const username = entry.username ?? "Unknown";
         const slug = entry.slug ? ` · \`${entry.slug}\`` : "";
+        if (entry.discordId) {
+            return `**${index + 1}.** ${username} (${entry.count}) | Acc: ${slug} | DiscordId: <@${entry.discordId}>`;
+        }
 
-        return `**${index + 1}.** ${username} | Acc: ${slug} | DiscordId: ${entry.discordId}`;
+        return `**${index + 1}.** ${username} (${entry.count})`;
     });
 
     const embed = new EmbedBuilder()

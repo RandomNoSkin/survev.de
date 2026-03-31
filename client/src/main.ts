@@ -578,6 +578,7 @@ export class Application {
         if (this.active) {
             $("body").removeClass("user-select-none");
             document.removeEventListener("contextmenu", this.contextListener);
+            this.account.getPass(false);
         } else {
             $("body").addClass("user-select-none");
             $("#start-main").stop(true);

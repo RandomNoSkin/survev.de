@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, notInArray } from "drizzle-orm";
+import { and, eq, gte, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import {
@@ -16,7 +16,7 @@ import {
     zUsernameRequest,
 } from "../../../../../shared/types/user";
 import loadout from "../../../../../shared/utils/loadout";
-import { validateUserName } from "../../../utils/serverHelpers";
+import { apiPrivateRouter, validateUserName } from "../../../utils/serverHelpers";
 import { server } from "../../apiServer";
 import {
     authMiddleware,
@@ -32,6 +32,9 @@ import {
     logoutUser,
     sanitizeSlug,
 } from "./auth/authUtils";
+import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
+import { ExperienceConverter, GameConfig } from "../../../../../shared/gameConfig";
+import { QuestDefs } from "../../../../../shared/defs/gameObjects/questDefs";
 
 export const UserRouter = new Hono<Context>();
 
@@ -239,10 +242,118 @@ UserRouter.post("/set_pass_unlock", validateParams(zSetPassUnlockRequest), (c) =
     return c.json<SetPassUnlockResponse>({ success: true }, 200);
 });
 
-UserRouter.post("/get_pass", validateParams(zGetPassRequest), (c) => {
-    return c.json<GetPassResponse>({ success: true }, 200);
+UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
+    const user = c.get("user")!;
+    const passType = GameConfig.serverSettings.currentPass;
+    const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
+
+    await apiPrivateRouter.check_for_unlocks.$post({
+        json: {
+            userId: user.id,
+        },
+    });
+    console.log("checked for unlocks");
+
+    const stats = await db
+        .select({
+            gameId: matchDataTable.gameId,
+            kills: sql<number>`max(${matchDataTable.kills})`,
+            timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+            rank: sql<number>`min(${matchDataTable.rank})`,
+            entryCount: sql<number>`count(*)`,
+        })
+        .from(matchDataTable)
+        .where(
+            and(
+                eq(matchDataTable.userId, user.id),
+                gte(matchDataTable.createdAt, seasonStart),
+            ),
+        )
+        .groupBy(matchDataTable.gameId)
+        .having(sql`count(*) = 1`);
+
+    const totalKills = stats.reduce((acc, curr) => acc + curr.kills, 0);
+    const totalTimeAlive = stats.reduce((acc, curr) => acc + curr.timeAlive, 0);
+    const totalWins = stats.reduce((acc, curr) => acc + (curr.rank === 1 ? 1 : 0), 0);
+
+    const totalXp =
+        totalKills * ExperienceConverter.kill +
+        totalWins * ExperienceConverter.win +
+        totalTimeAlive * ExperienceConverter.timeSurvived;
+
+    const { level, xp } = getPassLevelAndXp(passType, totalXp);
+
+    const pass = {
+        type: passType,
+        level,
+        xp,
+        totalXp,
+        newItems: false,
+    };
+
+    const quests = Object.keys(QuestDefs).map((questType, idx) => {
+    const questDef = QuestDefs[questType];
+
+            return {
+            idx,
+            type: questType,
+            timeAcquired: Date.now(),
+            progress: 0,
+            target: questDef.target,
+            complete: false,
+            rerolled: false,
+            timeToRefresh: 0,
+        };
+    });
+
+    return c.json<GetPassResponse>(
+        {
+            success: true,
+            pass,
+            quests,
+            questPriv: "",
+        },
+        200,
+    );
 });
 
 UserRouter.post("/refresh_quest", validateParams(zRefreshQuestRequest), (c) => {
     return c.json<RefreshQuestResponse>({ success: true }, 200);
 });
+
+
+const PASS_MAX_LEVEL = GameConfig.serverSettings.passMaxLevel;
+
+function getPassLevelXp(passType: string, level: number) {
+    const passDef = PassDefs[passType];
+    const levelIdx = level - 1;
+
+    if (levelIdx < passDef.xp.length) {
+        return passDef.xp[levelIdx];
+    }
+
+    // aktuell gleiches Verhalten wie dein bestehendes passUtil
+    return passDef.xp[passDef.xp.length - 1];
+}
+
+function getPassLevelAndXp(passType: string, passXp: number) {
+    let xp = passXp;
+    let level = 1;
+
+    while (level < PASS_MAX_LEVEL) {
+        const levelXp = getPassLevelXp(passType, level);
+
+        if (xp < levelXp) {
+            break;
+        }
+
+        xp -= levelXp;
+        level++;
+    }
+
+    return {
+        level,
+        xp,
+        nextLevelXp: getPassLevelXp(passType, level),
+    };
+}

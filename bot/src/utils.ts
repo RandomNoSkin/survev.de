@@ -31,6 +31,7 @@ export const enum Command {
     GetPlayer = "get_player",
     WhoIs = "who_is",
     ChatBanIp = "chat_ban_ip",
+    ChatUnbanIp = "chat_unban_ip",
 }
 
 export const honoClient = hc<PrivateRouteApp>(API_URL, {

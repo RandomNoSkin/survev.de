@@ -8,6 +8,7 @@ import {
     zBanAccountParams,
     zBanChatIpParams,
     zBanIpParams,
+    zChatUnbanIpParams,
     zFindDiscordUserSlugParams,
     zGetUserParams,
     zGiveItemParams,
@@ -149,6 +150,25 @@ const commands = {
         name: Command.UnbanIp,
         description: "unban an ip",
         optionValidator: zUnbanIpParams,
+        options: [
+            {
+                name: "ip",
+                description: "The ip to unban",
+                required: true,
+                type: ApplicationCommandOptionType.String,
+            },
+            {
+                name: "is_encoded",
+                description: "If the IP is encoded or raw (defaults to true)",
+                required: false,
+                type: ApplicationCommandOptionType.Boolean,
+            },
+        ],
+    }),
+    [Command.ChatUnbanIp]: createCommand({
+        name: Command.ChatUnbanIp,
+        description: "unban an ip from chat",
+        optionValidator: zChatUnbanIpParams,
         options: [
             {
                 name: "ip",

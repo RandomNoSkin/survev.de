@@ -52,6 +52,11 @@ export const zUnbanIpParams = z.object({
     is_encoded: z.boolean().default(true),
 });
 
+export const zChatUnbanIpParams = z.object({
+    ip: z.string(),
+    is_encoded: z.boolean().default(true),
+});
+
 export const zUnbanAccountParams = z.object({
     slug: z.string(),
 });
@@ -82,6 +87,10 @@ export const zGiveItemParams = z.object({
     item: z.string(),
     slug: z.string(),
     source: z.string().default("unlock_default"),
+});
+
+export const zCheckForUnlocksParams = z.object({
+    userId: z.string(),
 });
 
 export const zRemoveItemParams = z.object({
