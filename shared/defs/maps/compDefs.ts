@@ -68,6 +68,13 @@ export const Comp: MapDef = {
         camperPunishment: true,
         announceTeams: true,
         enableChat: true,
+
+        xpMultiplier: {
+            kill: 0,
+            damage: 0.01, // 1 XP per 100 damage
+            win: 1,
+            timeSurvived: 0.016, // 1 XP per minute survived
+        },
     },
     /* STRIP_FROM_PROD_CLIENT:START */
     gameConfig: {

@@ -8,25 +8,6 @@ export interface QuestDef {
 }
 
 export const QuestDefs: Record<string, QuestDef> = {
-    quest_kills: {
-        type: "quest",
-        category: "pvp",
-        target: 1,
-        xp: 1,
-    },
-    quest_win:{
-        type: "quest",
-        category: "top",
-        target: 1,
-        xp: 1,
-    },
-    quest_survived: {
-        type: "quest",
-        category: "pvp",
-        target: 60,
-        xp: 1,
-        timed: true,
-    },
     /*quest_top_solo: {
         type: "quest",
         category: "top",

@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import {
     type GetPassResponse,
     type LoadoutResponse,
@@ -25,7 +25,7 @@ import {
     validateParams,
 } from "../../auth/middleware";
 import { db } from "../../db";
-import { itemsTable, matchDataTable, usersTable } from "../../db/schema";
+import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
@@ -35,6 +35,9 @@ import {
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
 import { ExperienceConverter, GameConfig } from "../../../../../shared/gameConfig";
 import { QuestDefs } from "../../../../../shared/defs/gameObjects/questDefs";
+import { mapDef } from "../../../../../shared/defs/maps/2v2Defs";
+import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
+import { MapId } from "../../../../../shared/defs/types/misc";
 
 export const UserRouter = new Hono<Context>();
 
@@ -245,51 +248,127 @@ UserRouter.post("/set_pass_unlock", validateParams(zSetPassUnlockRequest), (c) =
 UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
     const user = c.get("user")!;
     const passType = GameConfig.serverSettings.currentPass;
-    const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
-
-    await apiPrivateRouter.check_for_unlocks.$post({
-        json: {
-            userId: user.id,
-        },
+    // get lastUpdated from user_xp table to check if we need to recalculate the pass progress
+    const userXpRecord = await db.query.userXpTable.findFirst({
+        where: and(eq(userXpTable.userId, user.id), eq(userXpTable.passType, passType)),
     });
-    console.log("checked for unlocks");
+    const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
+    const lastUpdated = userXpRecord && userXpRecord.lastUpdated > seasonStart
+    ? userXpRecord.lastUpdated
+    : seasonStart;
 
+    const currentXp = userXpRecord ? Number(userXpRecord.xp) : 0;
     const stats = await db
         .select({
             gameId: matchDataTable.gameId,
             kills: sql<number>`max(${matchDataTable.kills})`,
+            damage: sql<number>`max(${matchDataTable.damageDealt})`,
             timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
             rank: sql<number>`min(${matchDataTable.rank})`,
+            mapId: sql<number>`max(${matchDataTable.mapId})`,
             entryCount: sql<number>`count(*)`,
         })
         .from(matchDataTable)
         .where(
             and(
                 eq(matchDataTable.userId, user.id),
-                gte(matchDataTable.createdAt, seasonStart),
+                gte(matchDataTable.createdAt, lastUpdated),
             ),
         )
         .groupBy(matchDataTable.gameId)
         .having(sql`count(*) = 1`);
 
-    const totalKills = stats.reduce((acc, curr) => acc + curr.kills, 0);
-    const totalTimeAlive = stats.reduce((acc, curr) => acc + curr.timeAlive, 0);
-    const totalWins = stats.reduce((acc, curr) => acc + (curr.rank === 1 ? 1 : 0), 0);
+    let totalXp = 0;
+    for (const stat of stats){
+        const mapDef = getMapDefById(stat.mapId);
+        const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
+            kill: 0,
+            damage: 0, 
+            win: 0,
+            timeSurvived: 0, 
+        };
+        totalXp += stat.kills * xpMultiplier.kill;
+        totalXp += stat.damage * xpMultiplier.damage;
+        totalXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
+        totalXp += stat.timeAlive * xpMultiplier.timeSurvived;
 
-    const totalXp =
-        totalKills * ExperienceConverter.kill +
-        totalWins * ExperienceConverter.win +
-        totalTimeAlive * ExperienceConverter.timeSurvived;
+    }
+    console.log(`User ${user.username} earned ${totalXp} XP from ${stats.length} matches since last update`);
 
-    const { level, xp } = getPassLevelAndXp(passType, totalXp);
+    const newTotalXp = currentXp + totalXp;
+
+    const { level, xp } = getPassLevelAndXp(passType, newTotalXp);
+
+
+    const allowedItems = [
+                    ...new Set([
+                        ..._allowedHealEffects,
+                        ..._allowedMeleeSkins,
+                        ..._allowedOutfits,
+                        ..._allowedEmotes,
+                        ..._allowedCrosshairs,
+                    ]),
+                ];
+
+        const passDef = PassDefs[passType as keyof typeof PassDefs];
+
+        const unlockedItems = passDef.items.filter(
+                    (item) => item.level <= level
+                );
+                const ownedItems = await db
+                    .select({ type: itemsTable.type })
+                    .from(itemsTable)
+                    .where(eq(itemsTable.userId, user.id));
+        
+                const ownedSet = new Set(ownedItems.map((i) => i.type));
+                const newUnlocks = unlockedItems.filter((item) => !ownedSet.has(item.item) && allowedItems.includes(item.item));
+        
+                if (newUnlocks.length > 0) {
+                    await db.insert(itemsTable).values(
+                        newUnlocks.map((item) => ({
+                            userId: user.id,
+                            type: item.item,
+                            source: passType,
+                            timeAcquired: Date.now(),
+                        }))
+                    );
+                }
+                console.log(`User ${user.username} has ${totalXp} XP, level ${level}, ${newUnlocks.length} new unlocks`);
 
     const pass = {
         type: passType,
         level,
         xp,
-        totalXp,
+        newTotalXp,
         newItems: false,
     };
+    if (newUnlocks.length > 0) {
+        pass.newItems = true;
+    }
+
+    // neue xp und level in der user_xp db speichern
+    if(stats.length > 0) {
+        if(userXpRecord) {
+            await db.update(userXpTable)
+            .set({
+                xp: String(newTotalXp),
+                level,
+                lastUpdated: new Date(),
+            })
+            .where(and(
+                eq(userXpTable.userId, user.id),
+                eq(userXpTable.passType, passType),
+            ));
+        } else {
+            await db.insert(userXpTable).values({
+                userId: user.id,
+                passType,
+                xp: String(newTotalXp),
+                level,
+                lastUpdated: new Date(),
+            });
+        }
+    }
 
     const quests = Object.keys(QuestDefs).map((questType, idx) => {
     const questDef = QuestDefs[questType];
