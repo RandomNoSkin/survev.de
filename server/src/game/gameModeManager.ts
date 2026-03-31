@@ -4,6 +4,8 @@ import { ObjectType } from "../../../shared/net/objectSerializeFns";
 import { collider } from "../../../shared/utils/collider";
 import { util } from "../../../shared/utils/util";
 import { v2 } from "../../../shared/utils/v2";
+import { UserRouter } from "../api/routes/user/UserRouter";
+import { apiPrivateRouter } from "../utils/serverHelpers";
 import type { Game } from "./game";
 import type { DamageParams } from "./objects/gameObject";
 import { Player } from "./objects/player";
@@ -136,6 +138,21 @@ export class GameModeManager {
                 winner.addGameOverMsg(winner.teamId);
                 for(const p of this.game.playerBarn.players.filter(p => p !== winner)){
                     p.addGameOverMsg();
+                }
+                //check for item unlocks of every player
+                const userIds: string[] = [];
+                for(const player of this.game.playerBarn.players){
+                    const userId = player.userId;
+                    if(userId){
+                        if(userIds.includes(userId)) continue;
+                        userIds.push(userId);
+                        
+                        apiPrivateRouter.check_for_unlocks.$post({
+                            json: {
+                                userId,
+                            },
+                        });
+                    }
                 }
                 return true;
             }

@@ -1,11 +1,12 @@
-import { and, eq, inArray, not } from "drizzle-orm";
+import { and, eq, gte, inArray, not, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { saveConfig } from "../../../../../config";
 import { GameObjectDefs } from "../../../../../shared/defs/gameObjectDefs";
 import { MapDefs } from "../../../../../shared/defs/mapDefs";
-import { TeamMode } from "../../../../../shared/gameConfig";
+import { ExperienceConverter, GameConfig, TeamMode } from "../../../../../shared/gameConfig";
 import {
+    zCheckForUnlocksParams,
     zGiveItemParams,
     zRemoveItemParams,
 } from "../../../../../shared/types/moderation";
@@ -36,6 +37,8 @@ import {
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
 import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
+import { level } from "winston";
 
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
@@ -147,165 +150,248 @@ export const PrivateRouter = new Hono<Context>()
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);
     })
-.post(
-    "/give_item",
-    databaseEnabledMiddleware,
-    validateParams(zGiveItemParams),
-    async (c) => {
-        const { item, slug, source } = c.req.valid("json");
+    .post(
+        "/give_item",
+        databaseEnabledMiddleware,
+        validateParams(zGiveItemParams),
+        async (c) => {
+            const { item, slug, source } = c.req.valid("json");
 
-        const allowedItems = [
-            ...new Set([
-                ..._allowedHealEffects,
-                ..._allowedMeleeSkins,
-                ..._allowedOutfits,
-                ..._allowedEmotes,
-                ..._allowedCrosshairs,
-            ]),
-        ];
+            const allowedItems = [
+                ...new Set([
+                    ..._allowedHealEffects,
+                    ..._allowedMeleeSkins,
+                    ..._allowedOutfits,
+                    ..._allowedEmotes,
+                    ..._allowedCrosshairs,
+                ]),
+            ];
 
-        const user = await db.query.usersTable.findFirst({
-            where: eq(usersTable.slug, slug),
-            columns: {
-                id: true,
-            },
-        });
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: {
+                    id: true,
+                },
+            });
 
-        if (!user) {
-            return c.json({ message: "User not found" }, 200);
-        }
+            if (!user) {
+                return c.json({ message: "User not found" }, 200);
+            }
 
-        if (item === "all") {
-            const ownedItems = await db.query.itemsTable.findMany({
-                where: eq(itemsTable.userId, user.id),
+            if (item === "all") {
+                const ownedItems = await db.query.itemsTable.findMany({
+                    where: eq(itemsTable.userId, user.id),
+                    columns: {
+                        type: true,
+                    },
+                });
+
+                const ownedTypes = new Set(ownedItems.map((i) => i.type));
+
+                const missingTypes = allowedItems.filter((type) => !ownedTypes.has(type));
+
+                if (missingTypes.length === 0) {
+                    return c.json({ message: "User already has all allowed items" }, 200);
+                }
+
+                const now = Date.now();
+
+                await db.insert(itemsTable).values(
+                    missingTypes.map((type) => ({
+                        userId: user.id,
+                        type,
+                        source,
+                        timeAcquired: now,
+                    })),
+                );
+
+                return c.json(
+                    {
+                        message: `${missingTypes.length} items given to ${slug}`,
+                        items: missingTypes,
+                    },
+                    200,
+                );
+            }
+
+            if (!allowedItems.includes(item)) {
+                return c.json({ message: "Item is not allowed" }, 200);
+            }
+
+            const existing = await db.query.itemsTable.findFirst({
+                where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
                 columns: {
                     type: true,
                 },
             });
 
-            const ownedTypes = new Set(ownedItems.map((i) => i.type));
-
-            const missingTypes = allowedItems.filter((type) => !ownedTypes.has(type));
-
-            if (missingTypes.length === 0) {
-                return c.json({ message: "User already has all allowed items" }, 200);
+            if (existing) {
+                return c.json({ message: "User already has item" }, 200);
             }
 
-            const now = Date.now();
+            await db.insert(itemsTable).values({
+                userId: user.id,
+                type: item,
+                source,
+                timeAcquired: Date.now(),
+            });
 
-            await db.insert(itemsTable).values(
-                missingTypes.map((type) => ({
-                    userId: user.id,
-                    type,
-                    source,
-                    timeAcquired: now,
-                })),
-            );
+            return c.json({ message: `Item "${item}" given to ${slug}` }, 200);
+        },
+    )
+    .post(
+        "/remove_item",
+        databaseEnabledMiddleware,
+        validateParams(zRemoveItemParams),
+        async (c) => {
+            const { item, slug } = c.req.valid("json");
 
-            return c.json(
-                {
-                    message: `${missingTypes.length} items given to ${slug}`,
-                    items: missingTypes,
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: {
+                    id: true,
                 },
-                200,
-            );
-        }
+            });
 
-        if (!allowedItems.includes(item)) {
-            return c.json({ message: "Item is not allowed" }, 200);
-        }
+            if (!user) {
+                return c.json({ message: "User not found" }, 200);
+            }
 
-        const existing = await db.query.itemsTable.findFirst({
-            where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
-            columns: {
-                type: true,
-            },
-        });
+            if (item === "all") {
+                const protectedItems = [
+                    ...(UnlockDefs.unlock_default?.unlocks ?? []),
+                    ...(UnlockDefs.unlock_new_account?.unlocks ?? []),
+                ];
 
-        if (existing) {
-            return c.json({ message: "User already has item" }, 200);
-        }
+                const result = await db
+                    .delete(itemsTable)
+                    .where(
+                        and(
+                            eq(itemsTable.userId, user.id),
+                            protectedItems.length > 0
+                                ? not(inArray(itemsTable.type, protectedItems))
+                                : undefined,
+                        ),
+                    )
+                    .returning({ type: itemsTable.type });
 
-        await db.insert(itemsTable).values({
-            userId: user.id,
-            type: item,
-            source,
-            timeAcquired: Date.now(),
-        });
+                if (result.length === 0) {
+                    return c.json(
+                        { message: "No removable items found for user" },
+                        200,
+                    );
+                }
 
-        return c.json({ message: `Item "${item}" given to ${slug}` }, 200);
-    },
-)
-.post(
-    "/remove_item",
-    databaseEnabledMiddleware,
-    validateParams(zRemoveItemParams),
-    async (c) => {
-        const { item, slug } = c.req.valid("json");
-
-        const user = await db.query.usersTable.findFirst({
-            where: eq(usersTable.slug, slug),
-            columns: {
-                id: true,
-            },
-        });
-
-        if (!user) {
-            return c.json({ message: "User not found" }, 200);
-        }
-
-        if (item === "all") {
-            const protectedItems = [
-                ...(UnlockDefs.unlock_default?.unlocks ?? []),
-                ...(UnlockDefs.unlock_new_account?.unlocks ?? []),
-            ];
+                return c.json(
+                    {
+                        message: `Removed ${result.length} items from ${slug}`,
+                        removedCount: result.length,
+                        removedItems: result.map((r) => r.type),
+                    },
+                    200,
+                );
+            }
 
             const result = await db
                 .delete(itemsTable)
                 .where(
                     and(
                         eq(itemsTable.userId, user.id),
-                        protectedItems.length > 0
-                            ? not(inArray(itemsTable.type, protectedItems))
-                            : undefined,
+                        eq(itemsTable.type, item),
                     ),
                 )
                 .returning({ type: itemsTable.type });
 
             if (result.length === 0) {
-                return c.json(
-                    { message: "No removable items found for user" },
-                    200,
-                );
+                return c.json({ message: "User does not have this item" }, 200);
             }
 
-            return c.json(
-                {
-                    message: `Removed ${result.length} items from ${slug}`,
-                    removedCount: result.length,
-                    removedItems: result.map((r) => r.type),
-                },
-                200,
+            return c.json({ message: `Item "${item}" removed from ${slug}` }, 200);
+        },
+    )
+    .post("/check_for_unlocks",databaseEnabledMiddleware, validateParams(zCheckForUnlocksParams), async (c) => {
+        const { userId } = c.req.valid("json");
+
+        const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
+
+        const allowedItems = [
+                ...new Set([
+                    ..._allowedHealEffects,
+                    ..._allowedMeleeSkins,
+                    ..._allowedOutfits,
+                    ..._allowedEmotes,
+                    ..._allowedCrosshairs,
+                ]),
+            ];
+        //get all kills timeplayed and wins for the user
+        const stats = await db.select({
+            gameId: matchDataTable.gameId,
+            kills: sql<number>`max(${matchDataTable.kills})`,
+            timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+            rank: sql<number>`min(${matchDataTable.rank})`,
+            entryCount: sql<number>`count(*)`,
+        }).from(matchDataTable)
+        .where(
+            and(
+                eq(matchDataTable.userId, userId),
+                gte(matchDataTable.createdAt, seasonStart)
+            )
+        )
+        .groupBy(matchDataTable.gameId)
+        .having(sql`count(*) = 1`);
+
+
+        const totalKills = stats.reduce((acc, curr) => acc + curr.kills, 0);
+        const totalTimeAlive = stats.reduce((acc, curr) => acc + curr.timeAlive, 0);
+        const totalWins = stats.reduce((acc, curr) => acc + (curr.rank === 1 ? 1 : 0), 0);
+
+        //convert stats into experience
+        const killsXp = totalKills * ExperienceConverter.kill;
+        const winsXp = totalWins * ExperienceConverter.win;
+        const timeSurvivedXp = totalTimeAlive * ExperienceConverter.timeSurvived;
+
+        const totalXp = killsXp + winsXp + timeSurvivedXp;
+        //check passDefs for unlocks that are below totalXp and return them
+
+        const passType = GameConfig.serverSettings.currentPass;
+        const pass = PassDefs[passType as keyof typeof PassDefs];
+        const { level, xp, nextLevelXp } = getPassLevelAndXp(
+            passType,
+            totalXp
+        );
+
+        const unlockedItems = pass.items.filter(
+            (item) => item.level <= level
+        );
+        const ownedItems = await db
+            .select({ type: itemsTable.type })
+            .from(itemsTable)
+            .where(eq(itemsTable.userId, userId));
+
+        const ownedSet = new Set(ownedItems.map((i) => i.type));
+        const newUnlocks = unlockedItems.filter((item) => !ownedSet.has(item.item) && allowedItems.includes(item.item));
+
+        if (newUnlocks.length > 0) {
+            await db.insert(itemsTable).values(
+                newUnlocks.map((item) => ({
+                    userId,
+                    type: item.item,
+                    source: passType,
+                    timeAcquired: Date.now(),
+                }))
             );
         }
+        console.log(`User ${userId} has ${totalXp} XP, level ${level}, ${newUnlocks.length} new unlocks`);
+        return c.json({
+            success: true,
+            totalXp,
+            level,
+            xpIntoLevel: xp,
+            xpForNextLevel: nextLevelXp,
+            newUnlocks: newUnlocks.map((item) => item.item),
+        });
 
-        const result = await db
-            .delete(itemsTable)
-            .where(
-                and(
-                    eq(itemsTable.userId, user.id),
-                    eq(itemsTable.type, item),
-                ),
-            )
-            .returning({ type: itemsTable.type });
-
-        if (result.length === 0) {
-            return c.json({ message: "User does not have this item" }, 200);
-        }
-
-        return c.json({ message: `Item "${item}" removed from ${slug}` }, 200);
-    },
-)
+    })
     .post("/clear_cache", async (c) => {
         const client = await getRedisClient();
         await client.flushAll();
@@ -374,5 +460,38 @@ export const PrivateRouter = new Hono<Context>()
             return c.json({ success: true }, 200);
         },
     );
+
+    function getPassLevelXp(passType: string, level: number) {
+        const passDef = PassDefs[passType];
+        const levelIdx = level - 1;
+
+        if (levelIdx < passDef.xp.length) {
+            return passDef.xp[levelIdx];
+        }
+
+        return passDef.xp[passDef.xp.length - 1];
+    }
+
+    function getPassLevelAndXp(passType: string, passXp: number) {
+        let xp = passXp;
+        let level = 1;
+
+        while (level < GameConfig.serverSettings.passMaxLevel) {
+            const levelXp = getPassLevelXp(passType, level);
+
+            if (xp < levelXp) {
+                break;
+            }
+
+            xp -= levelXp;
+            level++;
+        }
+
+        return {
+            level,
+            xp,
+            nextLevelXp: getPassLevelXp(passType, level),
+        };
+    }
 
 export type PrivateRouteApp = typeof PrivateRouter;
