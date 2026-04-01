@@ -3233,7 +3233,7 @@ export class Player extends BaseGameObject {
      */
     lastDamagedBy: Player | undefined;
 
-    damage(params: DamageParams) {
+        damage(params: DamageParams) {
         if (this.debug.godMode) return;
         if (this._health < 0) this._health = 0;
         if (this.dead) return;
@@ -3246,14 +3246,14 @@ export class Player extends BaseGameObject {
             params.source?.__type === ObjectType.Player
                 ? (params.source as Player)
                 : undefined;
-
+        /*
         // teammates can't deal damage to each other
         if (playerSource && params.source !== this) {
             if (playerSource.teamId === this.teamId && !this.disconnected) {
                 return;
             }
         }
-
+        */
         let finalDamage = params.amount!;
 
         const reduceDamage = (multi: number) => {
