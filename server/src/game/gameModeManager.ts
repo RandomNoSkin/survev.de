@@ -4,6 +4,8 @@ import { ObjectType } from "../../../shared/net/objectSerializeFns";
 import { collider } from "../../../shared/utils/collider";
 import { util } from "../../../shared/utils/util";
 import { v2 } from "../../../shared/utils/v2";
+import { UserRouter } from "../api/routes/user/UserRouter";
+import { apiPrivateRouter } from "../utils/serverHelpers";
 import type { Game } from "./game";
 import type { DamageParams } from "./objects/gameObject";
 import { Player } from "./objects/player";

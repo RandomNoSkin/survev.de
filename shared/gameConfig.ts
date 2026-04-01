@@ -110,6 +110,12 @@ export enum NoSpawnRadius {
     SniperSpawns = 100,
 }
 
+export enum ExperienceConverter {
+    kill = 1,
+    win = 1,
+    timeSurvived = 0.016, // 1 xp per minute survived
+}
+
 export enum Input {
     MoveLeft,
     MoveRight,
@@ -176,7 +182,9 @@ export const GameConfig = {
         grassVariation: 2,
     },
     serverSettings:{
-
+        currentPass: "pass_survivr1",
+        passMaxLevel: 99,
+        seasonStart: "2026-03-31T00:00:00Z",
     },
     player: {
         radius: 1,

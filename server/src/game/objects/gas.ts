@@ -281,12 +281,12 @@ export class Gas {
                 util.randomPointInCircle(this.radOld - this.radNew),
             );
 
-            const rad = this.radNew * 0.75; // ensure at least 75% of the safe zone will be inside map bounds
+            /*const rad = this.radNew * 0.1; // ensure at least 75% of the safe zone will be inside map bounds
             this.posNew = math.v2Clamp(
                 this.posNew,
                 v2.create(rad, rad),
                 v2.create(this.game.map.width - rad, this.game.map.height - rad),
-            );
+            );*/
 
             this.currentPos = this.posOld;
             this.currentRad = this.radOld;

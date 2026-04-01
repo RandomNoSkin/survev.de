@@ -5,7 +5,9 @@ import { z } from "zod";
 import { MapId, TeamModeToString } from "../../../../../shared/defs/types/misc";
 import {
     zBanAccountParams,
+    zBanChatIpParams,
     zBanIpParams,
+    zChatUnbanIpParams,
     zFindDiscordUserSlugParams,
     zGetPlayerIpParams,
     zSetAccountNameParams,
@@ -21,7 +23,7 @@ import type { SaveGameBody } from "../../../utils/types";
 import { server } from "../../apiServer";
 import { databaseEnabledMiddleware, validateParams } from "../../auth/middleware";
 import { db } from "../../db";
-import { bannedIpsTable, ipLogsTable, matchDataTable, usersTable } from "../../db/schema";
+import { bannedIpsTable, chatBannedIpsTable, ipLogsTable, matchDataTable, usersTable } from "../../db/schema";
 import { sanitizeSlug } from "../user/auth/authUtils";
 import { userInfo } from "node:os";
 
@@ -219,6 +221,65 @@ export const ModerationRouter = new Hono()
             .where(eq(bannedIpsTable.encodedIp, encodedIp))
             .execute();
         return c.json({ message: `IP ${encodedIp} has been unbanned.` }, 200);
+    })
+    .post("/chat_ban_ip", validateParams(zBanChatIpParams), async (c) => {
+        const {
+            ips,
+            is_encoded,
+            permanent,
+            chat_ban_duration,
+            ban_reason,
+            executor_id,
+        } = c.req.valid("json");
+
+        const expiresIn = new Date(Date.now() + util.daysToMs(chat_ban_duration));
+        const encodedIps = is_encoded ? ips : ips.map(hashIp);
+
+        const values = encodedIps.map((encodedIp: any) => ({
+            encodedIp,
+            expiresIn,
+            permanent,
+            reason: ban_reason,
+            bannedBy: executor_id,
+        }));
+
+        await db
+            .insert(chatBannedIpsTable)
+            .values(values)
+            .onConflictDoUpdate({
+                target: chatBannedIpsTable.encodedIp,
+                set: {
+                    expiresIn,
+                    permanent,
+                    reason: ban_reason,
+                    bannedBy: executor_id,
+                },
+            });
+
+        const baseMessage = permanent
+            ? "permanently chat banned"
+            : `chat banned for ${chat_ban_duration} days`;
+
+        if (encodedIps.length === 1) {
+            return c.json(
+                { message: `IP ${encodedIps[0]} has been ${baseMessage}.` },
+                200,
+            );
+        }
+
+        return c.json(
+            { message: `IPs: [${encodedIps.join(", ")}] have been ${baseMessage}.` },
+            200,
+        );
+    })
+    .post("/chat_unban_ip", validateParams(zChatUnbanIpParams), async (c) => {
+        const { ip, is_encoded } = c.req.valid("json");
+        const encodedIp = is_encoded ? ip : hashIp(ip);
+        await db
+            .delete(chatBannedIpsTable)
+            .where(eq(chatBannedIpsTable.encodedIp, encodedIp))
+            .execute();
+        return c.json({ message: `IP ${encodedIp} has been unbanned from chat.` }, 200);
     })
     /**
      * @deprecated
@@ -431,20 +492,28 @@ export const ModerationRouter = new Hono()
             .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
             .orderBy(ipLogsTable.username, desc(ipLogsTable.createdAt))
 
-        const uniqueResults: typeof rows = [];
+        const counts = new Map<string, number>();
+        for (const row of rows) {
+            counts.set(row.username, (counts.get(row.username) ?? 0) + 1);
+        }
+
+        const uniqueResults: (typeof rows[number] & { count: number })[] = [];
         const seenUsernames = new Set<string>();
         const seenAccountNames = new Set<string>();
 
         for (const row of rows) {
             if (
                 !seenUsernames.has(row.username) &&
-                (row.slug === null || !seenAccountNames.has(row.slug)) // oder row.accountName je nach Feld
+                (row.slug === null || !seenAccountNames.has(row.slug))
             ) {
                 seenUsernames.add(row.username);
                 if(row.slug)
                 seenAccountNames.add(row.slug);
 
-                uniqueResults.push(row);
+                uniqueResults.push({
+                    ...row,
+                    count: counts.get(row.username) ?? 1, 
+                });
 
                 if (uniqueResults.length >= 20) break;
             }
@@ -520,6 +589,35 @@ export async function isBanned(ip: string, isEncoded = false) {
         server.logger.error("Failed to check if IP is banned", err);
         return undefined;
     }
+}
+
+export async function getActiveChatBan(encodedIp: string) {
+    const ban = await db.query.chatBannedIpsTable.findFirst({
+        where: eq(chatBannedIpsTable.encodedIp, encodedIp),
+        columns: {
+            permanent: true,
+            expiresIn: true,
+            reason: true,
+        }
+    });
+    if (ban) {
+            const { expiresIn, permanent, reason } = ban;
+            if (permanent || expiresIn.getTime() > Date.now()) {
+                server.logger.info(`${encodedIp} is banned.`);
+                return {
+                    permanent,
+                    expiresIn,
+                    reason,
+                };
+            }
+            // unban the ip
+            await db
+                .delete(chatBannedIpsTable)
+                .where(eq(chatBannedIpsTable.encodedIp, encodedIp))
+                .execute();
+            return undefined;
+        }
+    return null;
 }
 
 export async function logPlayerIPs(data: SaveGameBody["matchData"]) {

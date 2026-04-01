@@ -8,7 +8,7 @@ export interface QuestDef {
 }
 
 export const QuestDefs: Record<string, QuestDef> = {
-    quest_top_solo: {
+    /*quest_top_solo: {
         type: "quest",
         category: "top",
         target: 2,
@@ -156,5 +156,5 @@ export const QuestDefs: Record<string, QuestDef> = {
         category: "location",
         target: 2,
         xp: 40,
-    },
+    },*/
 };

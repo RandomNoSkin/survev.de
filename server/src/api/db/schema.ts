@@ -4,6 +4,7 @@ import {
     index,
     integer,
     json,
+    numeric,
     pgTable,
     serial,
     text,
@@ -157,4 +158,16 @@ export const chatBannedIpsTable = pgTable("chat_banned_ips", {
     permanent: boolean("permanent").notNull().default(false),
     reason: text("reason").notNull().default(""),
     bannedBy: text("banned_by").notNull().default("admin"),
+});
+
+export const userXpTable = pgTable("user_xp", {
+    userId: text("user_id").notNull()
+    .references(() => usersTable.id, {
+            onDelete: "cascade",
+            onUpdate: "cascade",
+        }),
+    passType: text("pass_type").notNull(),
+    level: integer("level").notNull(),
+    xp: numeric("xp").notNull(),
+    lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1688,6 +1688,14 @@ export class UiManager2 {
         return `[${player}]: ${txt}`;
     }
 
+    getBannedMessage(player: string, text: string, expires: string){
+        let txt = this.localization.translate(`${text}`);
+        if(expires!=="0")
+        txt = this.localization.translate(`chat-banned-until`);
+
+        return `[${player}]: ${txt} ${expires})`;
+    }
+
     getPickupMessageText(type: PickupMsgType) {
         const typeMap: Record<number, string> = {
             [PickupMsgType.Full]: "game-not-enough-space",

@@ -1,7 +1,9 @@
+import { CrosshairDefs } from "./crosshairDefs";
 import { HealEffectDefs } from "./healEffectDefs";
 
-const _allowedHealEffects = Object.keys(HealEffectDefs);
-const _allowedMeleeSkins = [
+export const _allowedHealEffects = Object.keys(HealEffectDefs);
+export const _allowedCrosshairs = Object.keys(CrosshairDefs);
+export const _allowedMeleeSkins = [
     "fists",
     "knuckles_rusted",
     "knuckles_heroic",
@@ -15,7 +17,7 @@ const _allowedMeleeSkins = [
     "bowie_vintage",
     "bowie_frontier",
 ];
-const _allowedOutfits = [
+export const _allowedOutfits = [
     "outfitBase",
     "outfitTurkey",
     "outfitDev",
@@ -56,7 +58,7 @@ const _allowedOutfits = [
     "outfitRed",
     "outfitWhite",
 ];
-const _allowedEmotes = [
+export const _allowedEmotes = [
     "emote_thumbsup",
     "emote_sadface",
     "emote_happyface",
@@ -195,6 +197,14 @@ const _allowedEmotes = [
     "emote_flagbosnia",
     "emote_logocloud",
     "emote_logotwins",
+    "emote_picassoface",
+    "emote_bandagedface",
+    "emote_logocloud",
+    "emote_ghost_base",
+    "emote_ohnah",
+    "emote_pooface",
+    "emote_ok",
+    "emote_rainbow",
 ];
 
 export interface UnlockDef {

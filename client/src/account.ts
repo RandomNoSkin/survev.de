@@ -345,7 +345,7 @@ export class Account {
     }
 
     getPass(tryRefreshQuests: boolean) {
-        return;
+        //return;
         const args = {
             tryRefreshQuests,
         };

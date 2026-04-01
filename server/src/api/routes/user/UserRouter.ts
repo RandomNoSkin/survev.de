@@ -1,6 +1,6 @@
-import { and, eq, inArray, ne, notInArray } from "drizzle-orm";
+import { and, eq, gte, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import {
     type GetPassResponse,
     type LoadoutResponse,
@@ -16,7 +16,7 @@ import {
     zUsernameRequest,
 } from "../../../../../shared/types/user";
 import loadout from "../../../../../shared/utils/loadout";
-import { validateUserName } from "../../../utils/serverHelpers";
+import { apiPrivateRouter, validateUserName } from "../../../utils/serverHelpers";
 import { server } from "../../apiServer";
 import {
     authMiddleware,
@@ -25,13 +25,19 @@ import {
     validateParams,
 } from "../../auth/middleware";
 import { db } from "../../db";
-import { itemsTable, matchDataTable, usersTable } from "../../db/schema";
+import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
     logoutUser,
     sanitizeSlug,
 } from "./auth/authUtils";
+import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
+import { ExperienceConverter, GameConfig } from "../../../../../shared/gameConfig";
+import { QuestDefs } from "../../../../../shared/defs/gameObjects/questDefs";
+import { mapDef } from "../../../../../shared/defs/maps/2v2Defs";
+import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
+import { MapId } from "../../../../../shared/defs/types/misc";
 
 export const UserRouter = new Hono<Context>();
 
@@ -239,10 +245,194 @@ UserRouter.post("/set_pass_unlock", validateParams(zSetPassUnlockRequest), (c) =
     return c.json<SetPassUnlockResponse>({ success: true }, 200);
 });
 
-UserRouter.post("/get_pass", validateParams(zGetPassRequest), (c) => {
-    return c.json<GetPassResponse>({ success: true }, 200);
+UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
+    const user = c.get("user")!;
+    const passType = GameConfig.serverSettings.currentPass;
+    // get lastUpdated from user_xp table to check if we need to recalculate the pass progress
+    const userXpRecord = await db.query.userXpTable.findFirst({
+        where: and(eq(userXpTable.userId, user.id), eq(userXpTable.passType, passType)),
+    });
+    const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
+    const lastUpdated = userXpRecord && userXpRecord.lastUpdated > seasonStart
+    ? userXpRecord.lastUpdated
+    : seasonStart;
+
+    const currentXp = userXpRecord ? Number(userXpRecord.xp) : 0;
+    const stats = await db
+        .select({
+            gameId: matchDataTable.gameId,
+            kills: sql<number>`max(${matchDataTable.kills})`,
+            damage: sql<number>`max(${matchDataTable.damageDealt})`,
+            timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+            rank: sql<number>`min(${matchDataTable.rank})`,
+            mapId: sql<number>`max(${matchDataTable.mapId})`,
+            entryCount: sql<number>`count(*)`,
+        })
+        .from(matchDataTable)
+        .where(
+            and(
+                eq(matchDataTable.userId, user.id),
+                gte(matchDataTable.createdAt, lastUpdated),
+            ),
+        )
+        .groupBy(matchDataTable.gameId)
+        .having(sql`count(*) = 1`);
+
+    let totalXp = 0;
+    for (const stat of stats){
+        const mapDef = getMapDefById(stat.mapId);
+        const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
+            kill: 0,
+            damage: 0, 
+            win: 0,
+            timeSurvived: 0, 
+        };
+        totalXp += stat.kills * xpMultiplier.kill;
+        totalXp += stat.damage * xpMultiplier.damage;
+        totalXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
+        totalXp += stat.timeAlive * xpMultiplier.timeSurvived;
+
+    }
+    console.log(`User ${user.username} earned ${totalXp} XP from ${stats.length} matches since last update`);
+
+    const newTotalXp = currentXp + totalXp;
+
+    const { level, xp } = getPassLevelAndXp(passType, newTotalXp);
+
+
+    const allowedItems = [
+                    ...new Set([
+                        ..._allowedHealEffects,
+                        ..._allowedMeleeSkins,
+                        ..._allowedOutfits,
+                        ..._allowedEmotes,
+                        ..._allowedCrosshairs,
+                    ]),
+                ];
+
+        const passDef = PassDefs[passType as keyof typeof PassDefs];
+
+        const unlockedItems = passDef.items.filter(
+                    (item) => item.level <= level
+                );
+                const ownedItems = await db
+                    .select({ type: itemsTable.type })
+                    .from(itemsTable)
+                    .where(eq(itemsTable.userId, user.id));
+        
+                const ownedSet = new Set(ownedItems.map((i) => i.type));
+                const newUnlocks = unlockedItems.filter((item) => !ownedSet.has(item.item) && allowedItems.includes(item.item));
+        
+                if (newUnlocks.length > 0) {
+                    await db.insert(itemsTable).values(
+                        newUnlocks.map((item) => ({
+                            userId: user.id,
+                            type: item.item,
+                            source: passType,
+                            timeAcquired: Date.now(),
+                        }))
+                    );
+                }
+                console.log(`User ${user.username} has ${totalXp} XP, level ${level}, ${newUnlocks.length} new unlocks`);
+
+    const pass = {
+        type: passType,
+        level,
+        xp,
+        newTotalXp,
+        newItems: false,
+    };
+    if (newUnlocks.length > 0) {
+        pass.newItems = true;
+    }
+
+    // neue xp und level in der user_xp db speichern
+    if(stats.length > 0) {
+        if(userXpRecord) {
+            await db.update(userXpTable)
+            .set({
+                xp: String(newTotalXp),
+                level,
+                lastUpdated: new Date(),
+            })
+            .where(and(
+                eq(userXpTable.userId, user.id),
+                eq(userXpTable.passType, passType),
+            ));
+        } else {
+            await db.insert(userXpTable).values({
+                userId: user.id,
+                passType,
+                xp: String(newTotalXp),
+                level,
+                lastUpdated: new Date(),
+            });
+        }
+    }
+
+    const quests = Object.keys(QuestDefs).map((questType, idx) => {
+    const questDef = QuestDefs[questType];
+
+            return {
+            idx,
+            type: questType,
+            timeAcquired: Date.now(),
+            progress: 0,
+            target: questDef.target,
+            complete: false,
+            rerolled: false,
+            timeToRefresh: 0,
+        };
+    });
+
+    return c.json<GetPassResponse>(
+        {
+            success: true,
+            pass,
+            quests,
+            questPriv: "",
+        },
+        200,
+    );
 });
 
 UserRouter.post("/refresh_quest", validateParams(zRefreshQuestRequest), (c) => {
     return c.json<RefreshQuestResponse>({ success: true }, 200);
 });
+
+
+const PASS_MAX_LEVEL = GameConfig.serverSettings.passMaxLevel;
+
+function getPassLevelXp(passType: string, level: number) {
+    const passDef = PassDefs[passType];
+    const levelIdx = level - 1;
+
+    if (levelIdx < passDef.xp.length) {
+        return passDef.xp[levelIdx];
+    }
+
+    // aktuell gleiches Verhalten wie dein bestehendes passUtil
+    return passDef.xp[passDef.xp.length - 1];
+}
+
+function getPassLevelAndXp(passType: string, passXp: number) {
+    let xp = passXp;
+    let level = 1;
+
+    while (level < PASS_MAX_LEVEL) {
+        const levelXp = getPassLevelXp(passType, level);
+
+        if (xp < levelXp) {
+            break;
+        }
+
+        xp -= levelXp;
+        level++;
+    }
+
+    return {
+        level,
+        xp,
+        nextLevelXp: getPassLevelXp(passType, level),
+    };
+}

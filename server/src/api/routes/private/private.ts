@@ -1,11 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, not, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { saveConfig } from "../../../../../config";
 import { GameObjectDefs } from "../../../../../shared/defs/gameObjectDefs";
 import { MapDefs } from "../../../../../shared/defs/mapDefs";
-import { TeamMode } from "../../../../../shared/gameConfig";
+import { ExperienceConverter, GameConfig, TeamMode } from "../../../../../shared/gameConfig";
 import {
+    zCheckForUnlocksParams,
     zGiveItemParams,
     zRemoveItemParams,
 } from "../../../../../shared/types/moderation";
@@ -35,6 +36,9 @@ import {
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
+import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
+import { level } from "winston";
 
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
@@ -153,25 +157,69 @@ export const PrivateRouter = new Hono<Context>()
         async (c) => {
             const { item, slug, source } = c.req.valid("json");
 
-            const def = GameObjectDefs[item];
+            const allowedItems = [
+                ...new Set([
+                    ..._allowedHealEffects,
+                    ..._allowedMeleeSkins,
+                    ..._allowedOutfits,
+                    ..._allowedEmotes,
+                    ..._allowedCrosshairs,
+                ]),
+            ];
 
-            if (!def) {
-                return c.json({ message: "Invalid item type" }, 200);
-            }
-
-            const userId = await db.query.usersTable.findFirst({
+            const user = await db.query.usersTable.findFirst({
                 where: eq(usersTable.slug, slug),
                 columns: {
                     id: true,
                 },
             });
 
-            if (!userId) {
+            if (!user) {
                 return c.json({ message: "User not found" }, 200);
             }
 
+            if (item === "all") {
+                const ownedItems = await db.query.itemsTable.findMany({
+                    where: eq(itemsTable.userId, user.id),
+                    columns: {
+                        type: true,
+                    },
+                });
+
+                const ownedTypes = new Set(ownedItems.map((i) => i.type));
+
+                const missingTypes = allowedItems.filter((type) => !ownedTypes.has(type));
+
+                if (missingTypes.length === 0) {
+                    return c.json({ message: "User already has all allowed items" }, 200);
+                }
+
+                const now = Date.now();
+
+                await db.insert(itemsTable).values(
+                    missingTypes.map((type) => ({
+                        userId: user.id,
+                        type,
+                        source,
+                        timeAcquired: now,
+                    })),
+                );
+
+                return c.json(
+                    {
+                        message: `${missingTypes.length} items given to ${slug}`,
+                        items: missingTypes,
+                    },
+                    200,
+                );
+            }
+
+            if (!allowedItems.includes(item)) {
+                return c.json({ message: "Item is not allowed" }, 200);
+            }
+
             const existing = await db.query.itemsTable.findFirst({
-                where: and(eq(itemsTable.userId, userId.id), eq(itemsTable.type, item)),
+                where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
                 columns: {
                     type: true,
                 },
@@ -182,7 +230,7 @@ export const PrivateRouter = new Hono<Context>()
             }
 
             await db.insert(itemsTable).values({
-                userId: userId.id,
+                userId: user.id,
                 type: item,
                 source,
                 timeAcquired: Date.now(),
@@ -209,9 +257,54 @@ export const PrivateRouter = new Hono<Context>()
                 return c.json({ message: "User not found" }, 200);
             }
 
-            await db
+            if (item === "all") {
+                const protectedItems = [
+                    ...(UnlockDefs.unlock_default?.unlocks ?? []),
+                    ...(UnlockDefs.unlock_new_account?.unlocks ?? []),
+                ];
+
+                const result = await db
+                    .delete(itemsTable)
+                    .where(
+                        and(
+                            eq(itemsTable.userId, user.id),
+                            protectedItems.length > 0
+                                ? not(inArray(itemsTable.type, protectedItems))
+                                : undefined,
+                        ),
+                    )
+                    .returning({ type: itemsTable.type });
+
+                if (result.length === 0) {
+                    return c.json(
+                        { message: "No removable items found for user" },
+                        200,
+                    );
+                }
+
+                return c.json(
+                    {
+                        message: `Removed ${result.length} items from ${slug}`,
+                        removedCount: result.length,
+                        removedItems: result.map((r) => r.type),
+                    },
+                    200,
+                );
+            }
+
+            const result = await db
                 .delete(itemsTable)
-                .where(and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)));
+                .where(
+                    and(
+                        eq(itemsTable.userId, user.id),
+                        eq(itemsTable.type, item),
+                    ),
+                )
+                .returning({ type: itemsTable.type });
+
+            if (result.length === 0) {
+                return c.json({ message: "User does not have this item" }, 200);
+            }
 
             return c.json({ message: `Item "${item}" removed from ${slug}` }, 200);
         },
@@ -284,5 +377,38 @@ export const PrivateRouter = new Hono<Context>()
             return c.json({ success: true }, 200);
         },
     );
+
+    function getPassLevelXp(passType: string, level: number) {
+        const passDef = PassDefs[passType];
+        const levelIdx = level - 1;
+
+        if (levelIdx < passDef.xp.length) {
+            return passDef.xp[levelIdx];
+        }
+
+        return passDef.xp[passDef.xp.length - 1];
+    }
+
+    function getPassLevelAndXp(passType: string, passXp: number) {
+        let xp = passXp;
+        let level = 1;
+
+        while (level < GameConfig.serverSettings.passMaxLevel) {
+            const levelXp = getPassLevelXp(passType, level);
+
+            if (xp < levelXp) {
+                break;
+            }
+
+            xp -= levelXp;
+            level++;
+        }
+
+        return {
+            level,
+            xp,
+            nextLevelXp: getPassLevelXp(passType, level),
+        };
+    }
 
 export type PrivateRouteApp = typeof PrivateRouter;
