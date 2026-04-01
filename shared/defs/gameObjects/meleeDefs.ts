@@ -630,7 +630,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             cooldownTime: 0.4,
         },
         speed: {
-            equip: 4,
+            equip: 1,
         },
         anim: {
             idlePose: "meleeKatana",
