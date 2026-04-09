@@ -73,7 +73,7 @@ export const Comp: MapDef = {
             kill: 0,
             damage: 0.01, // 1 XP per 100 damage
             win: 1,
-            timeSurvived: 0.016, // 1 XP per minute survived
+            timeSurvived: 0.005, 
         },
     },
     /* STRIP_FROM_PROD_CLIENT:START */
@@ -96,11 +96,6 @@ export const Comp: MapDef = {
                     circleIdx: 3,
                     wait: 2,
                     options: { type: GameConfig.Plane.Airdrop },
-                },
-                {
-                    circleIdx: 3,
-                    wait: 32,
-                    options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
                 },
             ],
             crates: [

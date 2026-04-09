@@ -850,6 +850,7 @@ export class Player extends BaseGameObject {
 
     indoors = false;
     insideZoomRegion = false;
+    insideSmoke = false;
 
     private _zoom: number = 0;
     // zoom used for the area in which the server will send objects to the client
@@ -1357,6 +1358,7 @@ export class Player extends BaseGameObject {
      * is hiding under trees/tables/bushes (etc.), not when standing in the open.
      */
     isUnderCover(): boolean {
+        if(this.insideSmoke) return false;
         const pos = this.pos;
         const layer = this.layer;
 
@@ -2567,7 +2569,7 @@ export class Player extends BaseGameObject {
 
         let zoomRegionZoom = lowestZoom;
         let insideNoZoomRegion = true;
-        let insideSmoke = false;
+        this.insideSmoke = false;
         // building player is currently inside of
         let occupiedBuilding: Building | undefined;
 
@@ -2662,7 +2664,7 @@ export class Player extends BaseGameObject {
             } else if (obj.__type === ObjectType.Smoke) {
                 if (!util.sameLayer(this.layer, obj.layer)) continue;
                 if (coldet.testCircleCircle(this.pos, this.rad, obj.pos, obj.rad)) {
-                    insideSmoke = true;
+                    this.insideSmoke = true;
                 }
             }
         }
@@ -2675,7 +2677,7 @@ export class Player extends BaseGameObject {
         if (this.insideZoomRegion) {
             finalZoom = zoomRegionZoom;
         }
-        if (insideSmoke || this.downed) {
+        if (this.insideSmoke || this.downed) {
             finalZoom = lowestZoom;
         }
 
