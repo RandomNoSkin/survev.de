@@ -348,26 +348,23 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
 
     // neue xp und level in der user_xp db speichern
     if(stats.length > 0) {
-        if(userXpRecord) {
-            await db.update(userXpTable)
-            .set({
-                xp: String(newTotalXp),
-                level,
-                lastUpdated: new Date(),
-            })
-            .where(and(
-                eq(userXpTable.userId, user.id),
-                eq(userXpTable.passType, passType),
-            ));
-        } else {
-            await db.insert(userXpTable).values({
+        await db
+            .insert(userXpTable)
+            .values({
                 userId: user.id,
                 passType,
                 xp: String(newTotalXp),
                 level,
                 lastUpdated: new Date(),
+            })
+            .onConflictDoUpdate({
+                target: [userXpTable.userId, userXpTable.passType],
+                set: {
+                xp: String(newTotalXp),
+                level,
+                lastUpdated: new Date(),
+                },
             });
-        }
     }
 
     const quests = Object.keys(QuestDefs).map((questType, idx) => {
