@@ -3903,106 +3903,21 @@ export const BaseDefs: Record<string, GunDef> = {
             deploy: "ak47_switch_01",
         },
     },
-    /*Modified Guns
-    */
-   modified_mp220: {
-        name: "Modified MP220",
-        type: "gun",
-        quality: 0,
-        fireMode: "dual",
-        caseTiming: "reload",
-        ammo: "12gauge",
-        ammoSpawnCount: 10,
-        maxClip: 2,
-        maxReload: 2,
-        extendedClip: 2,
-        extendedReload: 2,
-        reloadTime: 1.5,
-        fireDelay: 0.2,
-        switchDelay: 0.3,
-        barrelLength: 2.7,
-        barrelOffset: 0,
-        recoilTime: 1e10,
-        moveSpread: 2,
-        shotSpread: 10,
-        bulletCount: 9,
-        jitter: 1,
-        bulletType: "bullet_buckshot_mp",
-        headshotMult: 1,
-        speed: { equip: 0, attack: 0 },
-        lootImg: {
-            sprite: "loot-weapon-mp220.img",
-            tint: 65280,
-            border: "loot-circle-outer-01.img",
-            borderTint: 0,
-            scale: 0.3,
-        },
-        worldImg: {
-            sprite: "gun-mp220-01.img",
-            scale: { x: 0.5, y: 0.5 },
-            tint: 0xffffff,
-            leftHandOffset: { x: 0, y: 0 },
-            recoil: 1.33,
-        },
-        particle: { shellScale: 1, shellOffset: 0.35 },
-        sound: {
-            shoot: "mp220_01",
-            reload: "mp220_reload_01",
-            pickup: "gun_pickup_01",
-            empty: "empty_fire_01",
-            deploy: "mp220_deploy_01",
-        },
-    },
-    modified_p30l: {
-        name: "Modded P30L",
-        type: "gun",
-        quality: 1,
-        fireMode: "auto",
-        caseTiming: "shoot",
-        ammo: "9mm",
-        ammoSpawnCount: 45,
-        dualWieldType: "p30l_dual",
-        pistol: true,
-        maxClip: 15,
-        maxReload: 15,
-        extendedClip: 30,
-        extendedReload: 30,
-        reloadTime: 1.2,
-        fireDelay: 0.1,
-        switchDelay: 0.25,
-        barrelLength: 2.3,
-        barrelOffset: 0,
-        recoilTime: 1e10,
-        moveSpread: 1,
-        shotSpread: 2,
-        bulletCount: 1,
-        bulletType: "bullet_p30l",
-        headshotMult: 1,
-        speed: { equip: 2.5, attack: 2 },
-        lootImg: {
-            sprite: "loot-weapon-p30l.img",
-            tint: 65280,
-            border: "loot-circle-outer-01.img",
-            borderTint: 0,
-            scale: 0.3,
-        },
-        worldImg: {
-            sprite: "gun-p30l-01.img",
-            scale: { x: 0.5, y: 0.5 },
-            tint: 0xffffff,
-            leftHandOffset: { x: 0, y: 0 },
-            recoil: 0.1,
-        },
-        particle: { shellScale: 1, shellOffset: 0.25 },
-        sound: {
-            shoot: "p30l_01",
-            reload: "p30l_reload_01",
-            pickup: "gun_pickup_01",
-            empty: "empty_fire_01",
-            deploy: "p30l_switch_01",
-        },
-    },
 };
+
+export const ModifiedGunDefs: Record<string, GunDef> = {
+    modified_mp220: defineGunSkin("mp220", {
+        name: "Modded MP220",
+        fireMode: "dual",
+        upgraded: undefined,
+    }),
+    modified_p30l: defineGunSkin("p30l", {
+        name: "Modded P30L",
+        fireMode: "auto",
+        fireDelay: 0.1,
+        upgraded: undefined,
+    }),
+}
 
 const SkinDefs: Record<string, GunDef> = {
     svd_winter: defineGunSkin("svd", {
@@ -4028,4 +3943,4 @@ const SkinDefs: Record<string, GunDef> = {
     }),
 };
 
-export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs };
+export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs, ...ModifiedGunDefs };
