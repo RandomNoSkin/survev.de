@@ -365,6 +365,9 @@ export enum PickupMsgType {
     BetterItemEquipped,
     Success,
     GunCannotFire,
+    WeaponUpgraded,
+    NoWeaponUpgrade,
+    NotEnoughResources,
 }
 
 export enum KillFeedMsgType {

@@ -551,6 +551,7 @@ export class Touch {
             $("#ui-loot-flare").insertBefore("#ui-loot-556mm");
             $("#ui-loot-762mm").insertBefore("#ui-loot-556mm");
             $("#ui-loot-45acp").insertBefore("#ui-loot-556mm");
+            //$("#ui-loot-construction_item").insertBefore("#ui-loot-556mm");
         } else {
             $("#ui-loot-9mm").insertBefore("#ui-loot-45acp");
             $("#ui-loot-12gauge").insertBefore("#ui-loot-45acp");
@@ -559,6 +560,7 @@ export class Touch {
             $("#ui-loot-50AE").insertBefore("#ui-loot-45acp");
             $("#ui-loot-308sub").insertBefore("#ui-loot-45acp");
             $("#ui-loot-flare").insertBefore("#ui-loot-45acp");
+            $("#ui-loot-construction_item").insertBefore("#ui-loot-45acp");
         }
     }
 

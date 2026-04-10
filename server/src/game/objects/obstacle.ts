@@ -1,4 +1,5 @@
 import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
 import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { DamageType, GameConfig } from "../../../../shared/gameConfig";
@@ -12,6 +13,7 @@ import type { Game } from "../game";
 import type { Building } from "./building";
 import { BaseGameObject, type DamageParams } from "./gameObject";
 import type { Player } from "./player";
+import * as net from "../../../../shared/net/net";
 
 export class Obstacle extends BaseGameObject {
     override readonly __type = ObjectType.Obstacle;
@@ -583,6 +585,68 @@ export class Obstacle extends BaseGameObject {
             this.button.canUse = false;
         }
 
+        if (this.button.useType === "weapon_upgrade_bench") {
+            const player = this.interactedBy;
+            if (!player) return;
+            const pickupMsg = new net.PickupMsg();
+
+            const activeWeaponType = player.activeWeapon;
+            if (!activeWeaponType) {
+                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                player.msgsToSend.push({
+                        type: net.MsgType.Pickup,
+                        msg: pickupMsg,
+                    });
+                return;
+            }
+
+            const weapon = GunDefs[activeWeaponType];
+            if (!weapon) {
+                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                player.msgsToSend.push({
+                        type: net.MsgType.Pickup,
+                        msg: pickupMsg,
+                    });
+                return;
+            }
+
+            if (!weapon.upgraded) {
+                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                player.msgsToSend.push({
+                        type: net.MsgType.Pickup,
+                        msg: pickupMsg,
+                    });
+                return;
+            }
+
+            const upgradedWeaponDef = GunDefs[weapon.upgraded.gun];
+            if (!upgradedWeaponDef) {
+                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                player.msgsToSend.push({
+                        type: net.MsgType.Pickup,
+                        msg: pickupMsg,
+                    });
+                return;
+            }
+            const cost = weapon.upgraded.cost;
+            if (player.invManager.get("construction_item") < cost) {
+                pickupMsg.type = net.PickupMsgType.NotEnoughResources;
+                pickupMsg.count = cost;
+                player.msgsToSend.push({
+                        type: net.MsgType.Pickup,
+                        msg: pickupMsg,
+                    });
+                return;
+            }
+            player.invManager.take("construction_item", cost);
+            player.weaponManager.setWeapon(player.weaponManager.curWeapIdx, weapon.upgraded.gun, upgradedWeaponDef.maxClip);
+            
+            pickupMsg.type = net.PickupMsgType.WeaponUpgraded;
+            player.msgsToSend.push({
+                        type: net.MsgType.Pickup,
+                        msg: pickupMsg,
+                    });
+        } else
         if (this.button.useType && this.parentBuilding) {
             for (const obj of this.parentBuilding.childObjects) {
                 if (
