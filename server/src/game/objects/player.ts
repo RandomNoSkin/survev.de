@@ -1871,7 +1871,8 @@ export class Player extends BaseGameObject {
             return;
         }
 
-        this.timeAlive += dt;
+
+        if (this.game.started){this.timeAlive += dt;}else{this.timeAlive = 0;}
         if(this.chatCooldown >0){
             this.chatCooldown -= dt;
         }
