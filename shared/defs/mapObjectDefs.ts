@@ -12443,7 +12443,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     }),
     table_04: createTable({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(4.5, 2)),
-        health: 225,
+        health: 2500,
         img: {
             sprite: "map-table-04.img",
             residue: "map-table-res-02.img",
@@ -12452,6 +12452,19 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             tint: 0xffffff,
             zIdx: 60,
         },
+        button: {
+        interactionRad: 1.5,
+        interactionText: "game-modify-weapon",
+        useOnce: false,
+        useType: "weapon_upgrade_bench",
+        useDelay: 1,
+        useDir: v2.create(0, -1),
+        useImg: "map-table-04.img",
+        sound: {
+            on: "button_press_01",
+            off: "",
+        },
+    },
     }),
     tire_01: (function <T extends ObstacleDef>(e: Partial<T>): T {
         const t = {

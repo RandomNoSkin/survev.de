@@ -1070,7 +1070,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     }),
     outfitOhNah: defineOutfitSkin("outfitBase", {
         name: "Oh Nah!",
-        rarity: Rarity.Rare,
+        rarity: Rarity.Mythic,
         lore: "What a predicament!",
         skinImg: {
             baseTint: 0xffffff,

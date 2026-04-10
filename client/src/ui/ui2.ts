@@ -1333,9 +1333,13 @@ export class UiManager2 {
         }
     }
 
-    displayPickupMessage(type: PickupMsgType) {
+    displayPickupMessage(type: PickupMsgType, count?: number) {
         const p = this.newState.pickupMessage;
-        p.message = this.getPickupMessageText(type);
+        if (count) {
+            p.message = `${this.getPickupMessageText(type)} ${count}`;
+        }else{
+            p.message = this.getPickupMessageText(type);
+        }
         p.ticker = 0;
         p.duration = 3;
     }
@@ -1703,6 +1707,9 @@ export class UiManager2 {
             [PickupMsgType.AlreadyEquipped]: "game-item-already-equipped",
             [PickupMsgType.BetterItemEquipped]: "game-better-item-equipped",
             [PickupMsgType.GunCannotFire]: "game-gun-cannot-fire",
+            [PickupMsgType.WeaponUpgraded]: "game-weapon-upgraded",
+            [PickupMsgType.NoWeaponUpgrade]: "game-no-weapon-upgrade",
+            [PickupMsgType.NotEnoughResources]: "game-not-enough-resources",
         };
         const key = typeMap[type] || typeMap[PickupMsgType.Full];
         return this.localization.translate(key);
@@ -1795,6 +1802,7 @@ export function loadStaticDomImages() {
         "ui-loot-308sub": "img/loot/loot-ammo-box.svg",
         "ui-loot-flare": "img/loot/loot-ammo-box.svg",
         "ui-loot-45acp": "img/loot/loot-ammo-box.svg",
+        "ui-loot-construction_item": "img/loot/loot-ammo-box.svg",
     };
 
     for (const [id, img] of Object.entries(lootImages)) {

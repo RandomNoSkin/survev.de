@@ -390,6 +390,17 @@ export class WeaponManager {
                     }
                 }
                 break;
+                case "dual":
+                    if (player.shootStart) {
+                    if (weapon.cooldown < 0) {
+                        this.fireWeapon(this.offHand);
+                        this.fireWeapon(this.offHand);
+                        this.offHand = !this.offHand;
+                    } else if (weapon.cooldown < 0.1) {
+                        this.bufferInput = true;
+                    }
+                }
+                    break;
         }
     }
 

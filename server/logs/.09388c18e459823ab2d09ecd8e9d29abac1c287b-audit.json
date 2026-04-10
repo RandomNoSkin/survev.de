@@ -6,14 +6,9 @@
     "auditLog": "logs\\.09388c18e459823ab2d09ecd8e9d29abac1c287b-audit.json",
     "files": [
         {
-            "date": 1774182554596,
-            "name": "logs\\game-2026-03-22.log",
-            "hash": "f0cd08a1fdf8541b727b50562c4cf46698987af2453fb8f61a16624241b0f364"
-        },
-        {
-            "date": 1774535018208,
-            "name": "logs\\game-2026-03-26.log",
-            "hash": "56725545a550f7d2b34c441ef8670b5639ab662894c79490c2ca0837ed61c8e3"
+            "date": 1775824364693,
+            "name": "logs\\game-2026-04-10.log",
+            "hash": "3322bf2276a104668f03a804817b4e9970afadc69b795ceeca34634ac722f305"
         }
     ],
     "hashType": "sha256"
