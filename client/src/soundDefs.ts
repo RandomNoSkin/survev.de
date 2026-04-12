@@ -1643,6 +1643,11 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             preload: false,
         },
+        daniel_club_music_01: {
+            path: "audio/ambient/daniel_club_music_01.mp3",
+            volume: 0.5,
+            preload: false,
+        },
         ambient_lab_01: {
             path: "audio/ambient/ambient_lab_01.mp3",
             volume: 0.2,

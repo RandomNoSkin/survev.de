@@ -21,16 +21,6 @@ export const mapDef: PartialMapDef = {
         buttonText: "4v4",
         backgroundImg: "img/main_splash.png",
     },
-    assets: {
-        audio: [
-            { name: "club_music_01", channel: "ambient" },
-            { name: "club_music_02", channel: "ambient" },
-            { name: "ambient_steam_01", channel: "ambient" },
-            { name: "log_11", channel: "sfx" },
-            { name: "log_12", channel: "sfx" },
-        ],
-        atlases: ["gradient", "loadout", "shared", "main"],
-    },
     biome: {
         colors: {
             background: 0x20536e,

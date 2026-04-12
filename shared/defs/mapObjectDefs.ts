@@ -24968,7 +24968,8 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         ],
         interiorSound: {
             sound: "club_music_01",
-            soundAlt: "club_music_02",
+            //soundAlt: "club_music_02",
+            soundAlt: "daniel_club_music_01",
             filter: "club",
             transitionTime: 1,
             soundAltPlayTime: 90,
