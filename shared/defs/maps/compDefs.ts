@@ -1107,6 +1107,12 @@ export const Comp: MapDef = {
                     rad: 180,
                     retryOnFailure: true,
                 },
+                {
+                    type: "workshop_complex_01",
+                    pos: v2.create(0.5, 0.5),
+                    rad: 100,
+                    retryOnFailure: true,
+                },
             ],
             placeSpawns: ["club_complex_01", "warehouse_complex_01"/*"warehouse_01", "house_red_01", "house_red_02", "barn_01"*/],
         },
@@ -1153,8 +1159,8 @@ export const Comp: MapDef = {
                 hut_01: 3, // huts
                 hut_02: 1, // spas hut
                 hut_03: 1, // scout hut
-                shack_03a: 2, // small river / sea cabins
-                shack_03b: { small: 2, large: 3,}, // small river / sea cabins
+                shack_03a: 3, // small river / sea cabins
+                shack_03b: { small: 2, large: 4,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
                 cache_01: 1, // flare stone
                 cache_02: { odds: 0.5 }, // mosin tree
@@ -1172,7 +1178,6 @@ export const Comp: MapDef = {
                 mansion_structure_01: { small: 0, large: 1,},
                 police_01: { small: 0, large: 1,},
                 bank_01: { small: 0, large: 1,},
-                workshop_complex_01: { small: 0, large: 1,},
             },
         ],
         randomSpawns: [
@@ -1182,7 +1187,7 @@ export const Comp: MapDef = {
             },*/
         ],
         spawnReplacements: [{}],
-        importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01"],
+        importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
         spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
