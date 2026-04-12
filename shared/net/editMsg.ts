@@ -20,8 +20,6 @@ export class EditMsg implements AbstractMsg {
     teleportToPings = false;
     godMode = false;
     moveObjs = false;
-    isAdmin = false;
-    editorModeRequest = false;
 
     serialize(s: BitStream) {
         s.writeBoolean(this.zoomEnabled);
@@ -50,8 +48,6 @@ export class EditMsg implements AbstractMsg {
         s.writeBoolean(this.teleportToPings);
         s.writeBoolean(this.godMode);
         s.writeBoolean(this.moveObjs);
-        s.writeBoolean(this.isAdmin);
-        s.writeBoolean(this.editorModeRequest);
     }
 
     deserialize(s: BitStream) {
@@ -81,7 +77,5 @@ export class EditMsg implements AbstractMsg {
         this.teleportToPings = s.readBoolean();
         this.godMode = s.readBoolean();
         this.moveObjs = s.readBoolean();
-        this.isAdmin = s.readBoolean();
-        this.isAdmin = s.readBoolean();
     }
 }
