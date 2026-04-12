@@ -81,10 +81,10 @@ export const mapDef: PartialMapDef = {
         betterMapGen: false,
 
         xpMultiplier: {
-            kill: 0,
-            damage: 0.00025, 
+            kill: 0.25,
+            damage: 0, 
             win: 0.25,
-            timeSurvived: 0.004, 
+            timeSurvived: 0, 
         },
     },
     /* STRIP_FROM_PROD_CLIENT:START */

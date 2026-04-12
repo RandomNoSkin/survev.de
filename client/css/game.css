@@ -1952,6 +1952,15 @@ img {
   opacity: 0 !important;
 }
 
+#ui-ammo-interactive {
+  font-size: 0;
+}
+
+#ui-ammo-interactive > .ui-ammo {
+  font-size: 16px;
+  vertical-align: top;
+}
+
 #ui-medical-interactive {
   margin-bottom: 32px;
 }

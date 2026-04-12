@@ -73,7 +73,7 @@ export const Comp: MapDef = {
             kill: 0,
             damage: 0.01, // 1 XP per 100 damage
             win: 1,
-            timeSurvived: 0.016, // 1 XP per minute survived
+            timeSurvived: 0.005, 
         },
     },
     /* STRIP_FROM_PROD_CLIENT:START */
@@ -96,11 +96,6 @@ export const Comp: MapDef = {
                     circleIdx: 3,
                     wait: 2,
                     options: { type: GameConfig.Plane.Airdrop },
-                },
-                {
-                    circleIdx: 3,
-                    wait: 32,
-                    options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
                 },
             ],
             crates: [
@@ -230,6 +225,7 @@ export const Comp: MapDef = {
             { name: "762mm", count: 90, weight: 0.25 },
             { name: "556mm", count: 90, weight: 0.25 },
             { name: "12gauge", count: 15, weight: 0.25 },
+            { name: "construction_item", count: 1, weight: 0.25 },
         ],
         tier_ammo_crate: [
             { name: "9mm", count: 90, weight: 3 },
@@ -239,6 +235,7 @@ export const Comp: MapDef = {
             { name: "50AE", count: 21, weight: 1 },
             { name: "flare", count: 1, weight: 2 },
             { name: "45acp", count: 60, weight: 3 },
+            { name: "construction_item", count: 1, weight: 3 },
         ],
         tier_vending_soda: [
             { name: "soda", count: 1, weight: 2 }, // ?
@@ -836,6 +833,7 @@ export const Comp: MapDef = {
             { name: "762mm", count: 30, weight: 3 },
             { name: "556mm", count: 30, weight: 3 },
             { name: "12gauge", count: 5, weight: 3 },
+            { name: "construction_item", count: 5, weight: 3 },
         ],
         tier_airdrop_outfits: [
             { name: "", count: 1, weight: 20 },
@@ -1026,6 +1024,7 @@ export const Comp: MapDef = {
             { name: "50AE", count: 29, weight: 0.25 },
             { name: "flare", count: 1, weight: 0.1 },
             { name: "45acp", count: 90, weight: 0.25 },
+            { name: "construction_item", count: 5, weight: 0.25 },
         ],
     },
     mapGen: {

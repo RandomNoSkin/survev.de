@@ -5,7 +5,7 @@ export interface GunDef {
     readonly type: "gun";
     name: string;
     quality?: number;
-    fireMode: "auto" | "single" | "burst";
+    fireMode: "auto" | "single" | "burst" | "dual";
     caseTiming: "shoot" | "reload";
     ammo: string;
     ammoSpawnCount: number;
@@ -23,6 +23,10 @@ export interface GunDef {
     shotSpread: number;
     bulletCount: number;
     bulletType: string;
+    upgraded?: {
+        gun: string;
+        cost: number;
+    };
     headshotMult: number;
     speed: {
         equip: number;
@@ -2047,6 +2051,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot_mp",
+        upgraded: { gun: "modified_mp220", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2840,6 +2845,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_p30l",
+        upgraded: { gun: "modified_p30l", cost: 5 },
         headshotMult: 1,
         speed: { equip: 2.5, attack: 2 },
         lootImg: {
@@ -3899,6 +3905,20 @@ export const BaseDefs: Record<string, GunDef> = {
     },
 };
 
+export const ModifiedGunDefs: Record<string, GunDef> = {
+    modified_mp220: defineGunSkin("mp220", {
+        name: "Modded MP220",
+        fireMode: "dual",
+        upgraded: undefined,
+    }),
+    modified_p30l: defineGunSkin("p30l", {
+        name: "Modded P30L",
+        fireMode: "auto",
+        fireDelay: 0.1,
+        upgraded: undefined,
+    }),
+}
+
 const SkinDefs: Record<string, GunDef> = {
     svd_winter: defineGunSkin("svd", {
         name: "SVD-63",
@@ -3923,4 +3943,4 @@ const SkinDefs: Record<string, GunDef> = {
     }),
 };
 
-export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs };
+export const GunDefs: Record<string, GunDef> = { ...BaseDefs, ...SkinDefs, ...ModifiedGunDefs };

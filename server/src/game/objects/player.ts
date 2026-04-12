@@ -850,6 +850,7 @@ export class Player extends BaseGameObject {
 
     indoors = false;
     insideZoomRegion = false;
+    insideSmoke = false;
 
     private _zoom: number = 0;
     // zoom used for the area in which the server will send objects to the client
@@ -1357,6 +1358,7 @@ export class Player extends BaseGameObject {
      * is hiding under trees/tables/bushes (etc.), not when standing in the open.
      */
     isUnderCover(): boolean {
+        if(this.insideSmoke) return false;
         const pos = this.pos;
         const layer = this.layer;
 
@@ -1869,7 +1871,8 @@ export class Player extends BaseGameObject {
             return;
         }
 
-        this.timeAlive += dt;
+
+        if (this.game.started){this.timeAlive += dt;}else{this.timeAlive = 0;}
         if(this.chatCooldown >0){
             this.chatCooldown -= dt;
         }
@@ -2567,7 +2570,7 @@ export class Player extends BaseGameObject {
 
         let zoomRegionZoom = lowestZoom;
         let insideNoZoomRegion = true;
-        let insideSmoke = false;
+        this.insideSmoke = false;
         // building player is currently inside of
         let occupiedBuilding: Building | undefined;
 
@@ -2662,7 +2665,7 @@ export class Player extends BaseGameObject {
             } else if (obj.__type === ObjectType.Smoke) {
                 if (!util.sameLayer(this.layer, obj.layer)) continue;
                 if (coldet.testCircleCircle(this.pos, this.rad, obj.pos, obj.rad)) {
-                    insideSmoke = true;
+                    this.insideSmoke = true;
                 }
             }
         }
@@ -2675,7 +2678,7 @@ export class Player extends BaseGameObject {
         if (this.insideZoomRegion) {
             finalZoom = zoomRegionZoom;
         }
-        if (insideSmoke || this.downed) {
+        if (this.insideSmoke || this.downed) {
             finalZoom = lowestZoom;
         }
 
@@ -3233,7 +3236,7 @@ export class Player extends BaseGameObject {
      */
     lastDamagedBy: Player | undefined;
 
-        damage(params: DamageParams) {
+    damage(params: DamageParams) {
         if (this.debug.godMode) return;
         if (this._health < 0) this._health = 0;
         if (this.dead) return;
@@ -3246,14 +3249,14 @@ export class Player extends BaseGameObject {
             params.source?.__type === ObjectType.Player
                 ? (params.source as Player)
                 : undefined;
-        /*
+
         // teammates can't deal damage to each other
         if (playerSource && params.source !== this) {
             if (playerSource.teamId === this.teamId && !this.disconnected) {
                 return;
             }
         }
-        */
+
         let finalDamage = params.amount!;
 
         const reduceDamage = (multi: number) => {

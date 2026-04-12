@@ -1733,7 +1733,7 @@ export class Game {
                         this.m_ui2Manager.addRareLootMessage(msg.item, true);
                     }
                 } else {
-                    this.m_ui2Manager.displayPickupMessage(msg.type);
+                    this.m_ui2Manager.displayPickupMessage(msg.type, msg.count);
                 }
                 break;
             }

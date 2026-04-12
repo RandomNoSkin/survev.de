@@ -570,6 +570,21 @@ const AmmoDefs: Record<string, AmmoDef> = {
             pickup: "ammo_pickup_01",
         },
     },
+    "construction_item": {
+        name: "Scrap Metal",
+        type: "ammo",
+        special: true,
+        minStackSize: 10,
+        lootImg: {
+            sprite: "loot-ammo-box.img",
+            scale: 0.2,
+            tint: 0x743f1e,
+            tintDark: 0x743f1e,
+        },
+        sound: {
+            pickup: "ammo_pickup_01",
+        },
+    },
     potato_ammo: {
         name: "Potato Ammo",
         type: "ammo",

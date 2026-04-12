@@ -6,13 +6,16 @@ import {
     json,
     numeric,
     pgTable,
+    primaryKey,
     serial,
     text,
     timestamp,
+    unique,
     uuid,
 } from "drizzle-orm/pg-core";
 import { TeamMode } from "../../../../shared/gameConfig";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout";
+import { table } from "node:console";
 
 export const sessionTable = pgTable("session", {
     id: text("id").primaryKey(),
@@ -62,7 +65,11 @@ export const itemsTable = pgTable("items", {
     timeAcquired: bigint("time_acquired", { mode: "number" }).notNull(),
     source: text("source").notNull().default("unlock_new_account"),
     status: integer("status").notNull().default(ItemStatus.New),
-});
+},
+    (table) => ({
+        pk: primaryKey({ columns: [table.userId, table.type] }),
+    }),
+);
 
 export const matchDataTable = pgTable(
     "match_data",
@@ -170,4 +177,8 @@ export const userXpTable = pgTable("user_xp", {
     level: integer("level").notNull(),
     xp: numeric("xp").notNull(),
     lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+    (table) => ({
+        pk: primaryKey({ columns: [table.userId, table.passType] }),
+    }),
+);

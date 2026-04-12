@@ -1068,6 +1068,28 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0xffffff,
         },
     }),
+    outfitOhNah: defineOutfitSkin("outfitBase", {
+        name: "Oh Nah!",
+        rarity: Rarity.Mythic,
+        lore: "What a predicament!",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitOhNah.img",
+            handTint: 0x404042,
+            handSprite: "player-hands-02.img",
+            footTint: 0x404042,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0x404042,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitOhNah.img",
+            tint: 0xffffff,
+        },
+    }),
+
+
+    // Obstacle costumes
     outfitBarrel: defineOutfitSkin("outfitBase", {
         name: "Barrel Costume",
         obstacleType: "barrel_01",
