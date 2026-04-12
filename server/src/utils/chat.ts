@@ -6,6 +6,7 @@ import { chatLogger } from "./betterLogger";
 import { checkForBadWords } from "./serverHelpers";
 import { Config } from "../config";
 import { hashIp, getActiveChatBan } from "../api/routes/private/ModerationRouter";
+import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 
 
 
@@ -184,6 +185,13 @@ export class Chat{
             const player = args[0];
             const reason = args[1];
             this.kickPlayer(player, reason);
+        },
+        give: (args) => {
+            const itemName = args[0];
+            const amount = Number(args[1]) || 1;
+            if(GameObjectDefs[itemName]){
+                this.game.lootBarn.addLoot(itemName, this.player.pos, this.player.layer, amount, false, 0);
+            }
         },
     };
 
