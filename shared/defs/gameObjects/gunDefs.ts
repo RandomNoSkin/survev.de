@@ -660,7 +660,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1,
         bulletCount: 1,
         bulletType: "bullet_mk12",
-        upgraded: { gun: "modified_mk12", cost: 6 },
+        upgraded: { gun: "modified_mk12", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1818,6 +1818,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_m39",
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
+        upgraded: { gun: "modified_m39", cost: 4 },
         lootImg: {
             sprite: "loot-weapon-m39.img",
             tint: 65280,
@@ -2062,7 +2063,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot_mp",
-        upgraded: { gun: "modified_mp220", cost: 5 },
+        upgraded: { gun: "modified_mp220", cost: 2 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2859,7 +2860,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_p30l",
-        upgraded: { gun: "modified_p30l", cost: 5 },
+        upgraded: { gun: "modified_p30l", cost: 4 },
         headshotMult: 1,
         speed: { equip: 2.5, attack: 2 },
         lootImg: {
