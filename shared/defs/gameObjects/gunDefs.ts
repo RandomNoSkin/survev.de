@@ -179,6 +179,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 11,
         bulletCount: 1,
         bulletType: "bullet_mac10",
+        upgraded: { gun: "modified_mac10", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -659,6 +660,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1,
         bulletCount: 1,
         bulletType: "bullet_mk12",
+        upgraded: { gun: "modified_mk12", cost: 6 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -906,6 +908,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_ak47",
+        upgraded: { gun: "ak74", cost: 3 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1050,6 +1053,7 @@ export const BaseDefs: Record<string, GunDef> = {
         burstCount: 2,
         burstSounds: 1,
         bulletType: "bullet_an94",
+        upgraded: { gun: "modified_an94", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1244,9 +1248,10 @@ export const BaseDefs: Record<string, GunDef> = {
         barrelOffset: 0,
         recoilTime: 1e10,
         moveSpread: 5.5,
-        shotSpread: 2,
+        shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_bar",
+        upgraded: { gun: "modified_bar", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: -1.5 },
         lootImg: {
@@ -1343,6 +1348,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.8,
         bulletCount: 1,
         bulletType: "bullet_pkp",
+        upgraded: { gun: "pkm", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: -5 },
         lootImg: {
@@ -1398,6 +1404,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_pkm",
+        upgraded: { gun: "m134", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: -3.5 },
         lootImg: {
@@ -1449,6 +1456,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1,
         bulletCount: 1,
         bulletType: "bullet_m134",
+        upgraded: { gun: "pkp", cost: 4 },
         headshotMult: 1,
         speed: { equip: -2, attack: -8 },
         lootImg: {
@@ -1501,6 +1509,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_model94",
+        upgraded: { gun: "modified_model94", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1755,6 +1764,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 0.5,
         bulletCount: 1,
         bulletType: "bullet_awc",
+        upgraded: { gun: "modified_awc", cost: 12 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1951,6 +1961,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot",
+        upgraded: { gun: "modified_m870", cost: 3 },
         headshotMult: 1,
         lootImg: {
             sprite: "loot-weapon-m870.img",
@@ -2295,6 +2306,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 0.2,
         bulletType: "bullet_flechette",
+        upgraded: { gun: "modified_spas12", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2443,6 +2455,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 1,
         jitter: 1,
         bulletType: "bullet_frag",
+        upgraded: { gun: "modified_usas", cost: 10 },
         noSplinter: true,
         headshotMult: 1,
         speed: { equip: 0, attack: -1 },
@@ -2493,6 +2506,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 8,
         bulletCount: 1,
         bulletType: "bullet_m9",
+        upgraded: { gun: "m9_cursed", cost: 15 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2580,7 +2594,7 @@ export const BaseDefs: Record<string, GunDef> = {
         noPotatoSwap: true,
         pistol: true,
         noDrop: true,
-        maxClip: 15,
+        maxClip: 75,
         maxReload: 15,
         extendedClip: 30,
         extendedReload: 30,
@@ -3907,14 +3921,97 @@ export const BaseDefs: Record<string, GunDef> = {
 
 export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_mp220: defineGunSkin("mp220", {
-        name: "Modded MP220",
+        name: "MP220 [+]",
         fireMode: "dual",
         upgraded: undefined,
     }),
     modified_p30l: defineGunSkin("p30l", {
-        name: "Modded P30L",
+        name: "P30L [+]",
+        fireMode: "auto",
+        upgraded: undefined,
+    }),
+    modified_awc: defineGunSkin("awc", {
+        name: "AWM-S [+]",
+        maxClip: 1,
+        maxReload: 1,
+        reloadTime: 6,
+        bulletType: "bullet_awc_modded",
+        sound: {
+            shoot: "awc_01",
+        },
+        upgraded: undefined,
+    }),
+    modified_m870: defineGunSkin("m870", {
+        name: "M870 [+]",
+        bulletCount: 16,
+        moveSpread: 14,
+        shotSpread: 17,
+        bulletType: "bullet_buckshot_modified",
+        upgraded: undefined,
+    }),
+    modified_model94: defineGunSkin("model94", {
+        name: "Model 94 [+]",
+        moveSpread: 3, 
+        shotSpread: 2.5,
+        burstCount: 2,
+        fireDelay: 0.13,
+        burstDelay: 0.005,
+        fireMode: "burst",
+        upgraded: undefined,
+    }),
+    modified_usas: defineGunSkin("usas", {
+        name: "USAS-12 [+]",
+        maxClip: 1,
+        maxReload: 1,
+        bulletType: "bullet_frag_modified",
+        speed: { equip: -4, attack: -7 },
+        upgraded: undefined,
+    }),
+    modified_mk12: defineGunSkin("mk12", {
+        name: "MK12 SPR [+]",
+        fireMode: "auto",
+        maxClip: 15,
+        maxReload: 15,
+        fireDelay: 0.14,
+        upgraded: undefined,
+    }),
+    modified_m39: defineGunSkin("m39", {
+        name: "M39 EMR [+]",
+        burstCount: 2,
+        fireDelay: 0.35,
+        burstDelay: 0.1,
+        fireMode: "burst",
+        upgraded: undefined,
+    }),
+    modified_an94: defineGunSkin("an94", {
+        name: "AN-94 [+]",
         fireMode: "auto",
         fireDelay: 0.1,
+        upgraded: undefined,
+    }),
+    modified_spas12: defineGunSkin("spas12", {
+        name: "SPAS-12 [+]",
+        maxClip: 4,
+        maxReload: 2,
+        bulletCount: 7,
+        reloadTime: 0.85,
+        burstCount: 2,
+        burstDelay: 0.05,
+        fireMode: "burst",
+        upgraded: undefined,
+    }),
+    modified_mac10: defineGunSkin("mac10", {
+        name: "MAC-10 [+]",
+        moveSpread: 3,
+        shotSpread: 2.5,
+        upgraded: undefined,
+    }),
+    modified_bar: defineGunSkin("bar", {
+        name: "BAR M1918 [+]",
+        moveSpread: 1.5,
+        shotSpread: 1.2,
+        fireDelay: 0.16,
+        bulletType: "bullet_bar_modified",
         upgraded: undefined,
     }),
 }
