@@ -5203,7 +5203,7 @@ export class Player extends BaseGameObject {
     }
 
     processEditMsg(msg: net.EditMsg) {
-        if (!Config.debug.allowEditMsg) return;
+        if (!Config.debug.allowEditMsg && !this.isAdmin) return;
 
         if (msg.loadNewMap) {
             this.game.map.regenerate(msg.newMapSeed);

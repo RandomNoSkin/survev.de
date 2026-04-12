@@ -486,6 +486,13 @@ export class Game {
                 this.editor.m_update(this.m_input);
             }
         }
+        
+        if (this.m_input.keyPressed(Key.F2)) {
+                this.editor.setEnabled(!this.editor.enabled);
+            }
+        if (this.editor.enabled) {
+                this.editor.m_update(this.m_input);
+        }
         this.chatUi.update(dt);
 
         let debug: DebugRenderOpts;
