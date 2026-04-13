@@ -1102,6 +1102,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 4.5,
         bulletCount: 1,
         bulletType: "bullet_groza",
+        upgraded: { gun: "grozas", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1151,6 +1152,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 3.5,
         bulletCount: 1,
         bulletType: "bullet_grozas",
+        upgraded: { gun: "modified_grozas", cost: 3 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -3409,6 +3411,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_deagle",
+        upgraded: { gun: "modified_deagle", cost: 6 },
         headshotMult: 1,
         speed: { equip: 1.4, attack: 0 },
         lootImg: {
@@ -3459,6 +3462,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 3.5,
         bulletCount: 1,
         bulletType: "bullet_deagle",
+        upgraded: { gun: "modified_deagle_dual", cost: 12 },
         headshotMult: 1,
         speed: { equip: 1.3, attack: 0 },
         lootImg: {
@@ -3928,6 +3932,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     }),
     modified_p30l: defineGunSkin("p30l", {
         name: "P30L [+]",
+        isDual: false,
         fireMode: "auto",
         upgraded: undefined,
     }),
@@ -4013,6 +4018,27 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         shotSpread: 1.2,
         fireDelay: 0.16,
         bulletType: "bullet_bar_modified",
+        upgraded: undefined,
+    }),
+    modified_grozas: defineGunSkin("grozas", {
+        name: "Groza-S [+]",
+        moveSpread: 3,
+        shotSpread: 2,
+        upgraded: undefined,
+    }),
+    modified_deagle: defineGunSkin("deagle", {
+        name: "DEagle 50 [+]",
+        fireMode: "auto",
+        dualWieldType: "modified_deagle_dual",
+        moveSpread: 8,
+        shotSpread: 5,
+        upgraded: undefined,
+    }),
+    modified_deagle_dual: defineGunSkin("deagle_dual", {
+        name: "Dual DEagle 50 [+]",
+        fireMode: "auto",
+        moveSpread: 12,
+        shotSpread: 7,
         upgraded: undefined,
     }),
 }

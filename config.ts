@@ -45,7 +45,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             errorLogs: true,
         },
         database: {
-            enabled: true,
+            enabled: false,
             host: "127.0.0.1",
             user: "survev",
             password: "survev",

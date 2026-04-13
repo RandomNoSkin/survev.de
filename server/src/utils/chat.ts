@@ -22,8 +22,9 @@ export class Chat{
         this.player = player;
         this.game = game;
         this.isAdmin = isAdmin;
-        this.checkChatBan();
-        
+        if(Config.database.enabled){
+            this.checkChatBan();
+        }
     }
     async checkChatBan(){
         const encodedIp = hashIp(this.player.ip);
