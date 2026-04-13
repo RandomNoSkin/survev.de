@@ -57,17 +57,21 @@ export const mapDef: PartialMapDef = {
     gameMode: {
         maxPlayers: 100,
         killLeaderEnabled: true,
-        freezeTime: 10,
-        joinTime: 10, // time until players can move after game start
+        freezeTime: 20,
+        joinTime: 20, // time until players can move after game start
         airdropMinDistance: 0.72, // minimum distance between airdrops as multiplier of gas radius (has to be between 0 and 1)
         betterSpawn: true,
         betterMapGen: true,
+        edgeBuffer: 120, // distance to maps border (to prevent pakistani spawns)
+        centerNoSpawnRadius: 200, // no spawn zone in the center of the map
+        minSpawnRad: 150, // spawn radius away from alive players
+        minPosSpawnRad: 80, // spawn radius from other spawn locations
 
         betterStats: true,
         canDespawn: true,
 
         camperPunishment: true,
-        announceTeams: true,
+        announceTeams: false,
         enableChat: true,
 
         xpMultiplier: {
@@ -86,15 +90,30 @@ export const mapDef: PartialMapDef = {
                     wait: 10,
                     options: { type: GameConfig.Plane.Airdrop },
                 },
+                {
+                    circleIdx: 1,
+                    wait: 11,
+                    options: { type: GameConfig.Plane.Airdrop },
+                },
                 /* EU-Comp Special Supply Drop*/
                 {
                     circleIdx: 1,
                     wait: 40,
                     options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
                 },
+                {
+                    circleIdx: 1,
+                    wait: 41,
+                    options: { type: GameConfig.Plane.SupplyDrop, airdropType: "supply_crate_01" },
+                },
                 
                 {
                     circleIdx: 3,
+                    wait: 2,
+                    options: { type: GameConfig.Plane.Airdrop },
+                },
+                {
+                    circleIdx: 5,
                     wait: 2,
                     options: { type: GameConfig.Plane.Airdrop },
                 },
