@@ -9872,6 +9872,7 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 1,
             },
         ],
+        group: { id: BuildingGroups.WorkshopSpawns, minDistance: MinDistance.WorkshopSpawns, noSpawnRadius: NoSpawnRadius.WorkshopSpawns }
     };
     return util.mergeDeep(t, e || {});
 }
