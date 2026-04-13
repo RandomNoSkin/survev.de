@@ -6,8 +6,10 @@ export interface GunDef {
     name: string;
     quality?: number;
     fireMode: "auto" | "single" | "burst" | "dual";
+    secondFireMode?: "auto" | "single" | "burst" | "dual";
     caseTiming: "shoot" | "reload";
     ammo: string;
+    secondAmmo?: string;
     ammoSpawnCount: number;
     maxClip: number;
     maxReload: number;
@@ -4028,14 +4030,33 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     }),
     modified_deagle: defineGunSkin("deagle", {
         name: "DEagle 50 [+]",
-        fireMode: "auto",
+        secondAmmo: "modified_deagle_45acp",
         dualWieldType: "modified_deagle_dual",
+        moveSpread: 3,
+        shotSpread: 1,
+        upgraded: undefined,
+    }),
+    modified_deagle_45acp: defineGunSkin("deagle", {
+        name: "DEagle 45 [+]",
+        secondAmmo: "modified_deagle",
+        fireMode: "auto",
+        ammo: "45acp",
+        dualWieldType: "modified_deagle_dual_45acp",
         moveSpread: 8,
         shotSpread: 5,
         upgraded: undefined,
     }),
     modified_deagle_dual: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 50 [+]",
+        secondAmmo: "modified_deagle_dual_45acp",
+        moveSpread: 6.5,
+        shotSpread: 2,
+        upgraded: undefined,
+    }),
+    modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
+        name: "Dual DEagle 45 [+]",
+        secondAmmo: "modified_deagle_dual",
+        ammo: "45acp",
         fireMode: "auto",
         moveSpread: 12,
         shotSpread: 7,

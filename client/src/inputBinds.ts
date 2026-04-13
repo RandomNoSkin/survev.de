@@ -66,6 +66,7 @@ const BindDefs = {
     [GameInput.HideUI]: def("Hide UI", null),
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
     [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
+    [GameInput.SwitchAmmo]: def("Switch Ammo", inputKey(Key.B)),
 };
 
 export class InputBinds {

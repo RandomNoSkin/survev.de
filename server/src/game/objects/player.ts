@@ -4328,6 +4328,9 @@ export class Player extends BaseGameObject {
                     this.weaponManager.swapWeaponSlots();
                     break;
                 }
+                case GameConfig.Input.SwitchAmmo: {
+                    this.weaponManager.switchAmmoType();
+                }
             }
         }
 
@@ -4528,6 +4531,9 @@ export class Player extends BaseGameObject {
                         } else {
                             pickupMsg.type = net.PickupMsgType.Full;
                         }
+                    }
+                    if(def.type === "ammo" && this.weaponManager.weapons[this.curWeapIdx].ammo <= 0){
+                        this.weaponManager.tryReload();
                     }
 
                     amountLeft = result.remaining;

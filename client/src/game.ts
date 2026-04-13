@@ -695,6 +695,7 @@ export class Game {
                 Input.EquipPrevScope,
                 Input.EquipNextScope,
                 Input.StowWeapons,
+                Input.SwitchAmmo,
             ];
             for (let i = 0; i < checkInputs.length; i++) {
                 const input = checkInputs[i];
