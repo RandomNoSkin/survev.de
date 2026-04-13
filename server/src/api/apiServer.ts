@@ -23,6 +23,8 @@ class Region {
         const url = `http${this.data.https ? "s" : ""}://${this.data.address}/${endPoint}`;
 
         try {
+            console.log("FETCH URL:", url);
+            console.log("FETCH REGION DATA:", this.id, this.data);
             const res = await fetch(url, {
                 method: "POST",
                 headers: {
