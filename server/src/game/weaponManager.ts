@@ -487,6 +487,13 @@ export class WeaponManager {
         if (!isInfinite) {
             if (this.player.invManager.isValid(weaponDef.ammo)) {
                 invAmmo = this.player.invManager.get(weaponDef.ammo);
+                if (invAmmo <= 0)
+                    if(weaponDef.secondAmmo &&this.player.invManager.isValid(weaponDef.secondAmmo)) {
+                    invAmmo = this.player.invManager.get(weaponDef.secondAmmo);
+                    if (invAmmo <= 0) return;
+                }
+            } else if(weaponDef.secondAmmo &&this.player.invManager.isValid(weaponDef.secondAmmo)) {
+                invAmmo = this.player.invManager.get(weaponDef.secondAmmo);
                 if (invAmmo <= 0) return;
             } else {
                 // not a valid ammo type and not an infinite ammo gun (e.g bugle)
@@ -555,8 +562,11 @@ export class WeaponManager {
         const isInfinite = this.isInfinite(weaponDef);
         // isValid check because some ammo types are not "valid" as in "they are in the player backpack"
         // eg potato and bugle ammo
-        if (!isInfinite && this.player.invManager.isValid(weaponDef.ammo)) {
+        if (!isInfinite && this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.has(weaponDef.ammo as InventoryItem)) {
             amountToReload = this.player.invManager.take(weaponDef.ammo, amountToReload);
+            if (amountToReload <= 0) return;
+        }else if (!isInfinite && weaponDef.secondAmmo && this.player.invManager.isValid(weaponDef.secondAmmo) && this.player.invManager.has(weaponDef.secondAmmo as InventoryItem)) {
+            amountToReload = this.player.invManager.take(weaponDef.secondAmmo, amountToReload);
             if (amountToReload <= 0) return;
         }
 
@@ -568,6 +578,8 @@ export class WeaponManager {
             weapon.ammo < ammoStats.maxClip &&
             (isInfinite || this.player.invManager.has(weaponDef.ammo as InventoryItem))
         ) {
+            this.player.reloadAgain = true;
+        }else if(weaponDef.secondAmmo && !isInfinite && this.player.invManager.has(weaponDef.secondAmmo as InventoryItem)){
             this.player.reloadAgain = true;
         }
 

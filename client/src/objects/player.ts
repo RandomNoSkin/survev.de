@@ -1223,7 +1223,11 @@ export class Player implements AbstractObject {
                 !preventInput &&
                 !itemDef.ammoInfinite
             ) {
-                const ammoLeft = this.m_localData.m_inventory[itemDef.ammo] || 0;
+
+                let ammoLeft = this.m_localData.m_inventory[itemDef.ammo] || 0;
+                if(ammoLeft==0 && itemDef.secondAmmo){
+                    ammoLeft = this.m_localData.m_inventory[itemDef.secondAmmo] || 0;
+                }
                 const currentClip = curWeap.ammo;
                 if (ammoLeft == 0 && currentClip == 0) {
                     audioManager.playSound(itemDef.sound.empty);
