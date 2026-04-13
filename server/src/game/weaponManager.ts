@@ -1402,6 +1402,12 @@ export class WeaponManager {
     }
 
     switchAmmoType(): void {
+        if (
+            this.player.actionType === GameConfig.Action.Reload ||
+            this.player.actionType === GameConfig.Action.ReloadAlt
+        ) {
+            return;
+        }
         const curWeap = this.weapons[this.curWeapIdx];
         if (!curWeap.type) return;
         const def = GameObjectDefs[curWeap.type];
@@ -1425,7 +1431,6 @@ export class WeaponManager {
             if (amountToDrop > 0)
             this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
         }
-        this.scheduledReload = false;
         this.setWeapon(this.curWeapIdx, newWeaponType, 0);
         this.tryReload();
     }
