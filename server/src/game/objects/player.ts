@@ -4328,6 +4328,9 @@ export class Player extends BaseGameObject {
                     this.weaponManager.swapWeaponSlots();
                     break;
                 }
+                case GameConfig.Input.SwitchAmmo: {
+                    this.weaponManager.switchAmmoType();
+                }
             }
         }
 
@@ -4528,6 +4531,9 @@ export class Player extends BaseGameObject {
                         } else {
                             pickupMsg.type = net.PickupMsgType.Full;
                         }
+                    }
+                    if(def.type === "ammo" && this.weaponManager.weapons[this.curWeapIdx].ammo <= 0){
+                        this.weaponManager.tryReload();
                     }
 
                     amountLeft = result.remaining;
@@ -5203,7 +5209,7 @@ export class Player extends BaseGameObject {
     }
 
     processEditMsg(msg: net.EditMsg) {
-        if (!Config.debug.allowEditMsg) return;
+        if (!Config.debug.allowEditMsg && !this.isAdmin) return;
 
         if (msg.loadNewMap) {
             this.game.map.regenerate(msg.newMapSeed);

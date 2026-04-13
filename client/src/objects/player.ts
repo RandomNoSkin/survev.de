@@ -1223,6 +1223,7 @@ export class Player implements AbstractObject {
                 !preventInput &&
                 !itemDef.ammoInfinite
             ) {
+
                 const ammoLeft = this.m_localData.m_inventory[itemDef.ammo] || 0;
                 const currentClip = curWeap.ammo;
                 if (ammoLeft == 0 && currentClip == 0) {

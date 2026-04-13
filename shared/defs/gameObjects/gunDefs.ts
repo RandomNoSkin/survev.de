@@ -6,8 +6,10 @@ export interface GunDef {
     name: string;
     quality?: number;
     fireMode: "auto" | "single" | "burst" | "dual";
+    secondFireMode?: "auto" | "single" | "burst" | "dual";
     caseTiming: "shoot" | "reload";
     ammo: string;
+    secondAmmo?: string;
     ammoSpawnCount: number;
     maxClip: number;
     maxReload: number;
@@ -661,7 +663,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1,
         bulletCount: 1,
         bulletType: "bullet_mk12",
-        upgraded: { gun: "modified_mk12", cost: 6 },
+        upgraded: { gun: "modified_mk12", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1103,6 +1105,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 4.5,
         bulletCount: 1,
         bulletType: "bullet_groza",
+        upgraded: { gun: "grozas", cost: 5 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1152,6 +1155,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 3.5,
         bulletCount: 1,
         bulletType: "bullet_grozas",
+        upgraded: { gun: "modified_grozas", cost: 3 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -1819,6 +1823,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_m39",
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
+        upgraded: { gun: "modified_m39", cost: 4 },
         lootImg: {
             sprite: "loot-weapon-m39.img",
             tint: 65280,
@@ -2063,7 +2068,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot_mp",
-        upgraded: { gun: "modified_mp220", cost: 5 },
+        upgraded: { gun: "modified_mp220", cost: 2 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2862,7 +2867,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_p30l",
-        upgraded: { gun: "modified_p30l", cost: 5 },
+        upgraded: { gun: "modified_p30l", cost: 4 },
         headshotMult: 1,
         speed: { equip: 2.5, attack: 2 },
         lootImg: {
@@ -3411,6 +3416,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_deagle",
+        upgraded: { gun: "modified_deagle", cost: 6 },
         headshotMult: 1,
         speed: { equip: 1.4, attack: 0 },
         lootImg: {
@@ -3461,6 +3467,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 3.5,
         bulletCount: 1,
         bulletType: "bullet_deagle",
+        upgraded: { gun: "modified_deagle_dual", cost: 12 },
         headshotMult: 1,
         speed: { equip: 1.3, attack: 0 },
         lootImg: {
@@ -3930,6 +3937,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     }),
     modified_p30l: defineGunSkin("p30l", {
         name: "P30L [+]",
+        isDual: false,
         fireMode: "auto",
         upgraded: undefined,
     }),
@@ -4015,6 +4023,45 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireDelay: 0.16,
         bulletType: "bullet_bar_modified",
         upgraded: undefined,
+    }),
+    modified_grozas: defineGunSkin("grozas", {
+        name: "Groza-S [+]",
+        moveSpread: 3,
+        shotSpread: 2,
+        upgraded: undefined,
+    }),
+    modified_deagle: defineGunSkin("deagle", {
+        name: "DEagle 50 [+]",
+        secondAmmo: "modified_deagle_45acp",
+        dualWieldType: "modified_deagle_dual",
+        moveSpread: 3,
+        shotSpread: 1,
+        upgraded: undefined,
+    }),
+    modified_deagle_45acp: defineGunSkin("deagle", {
+        name: "DEagle 45 [+]",
+        secondAmmo: "modified_deagle",
+        fireMode: "auto",
+        ammo: "45acp",
+        dualWieldType: "modified_deagle_dual_45acp",
+        moveSpread: 8,
+        shotSpread: 5,
+        upgraded: undefined,
+    }),
+    modified_deagle_dual: defineGunSkin("deagle_dual", {
+        name: "Dual DEagle 50 [+]",
+        secondAmmo: "modified_deagle_dual_45acp",
+        moveSpread: 6.5,
+        shotSpread: 2,
+        upgraded: undefined,
+    }),
+    modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
+        name: "Dual DEagle 45 [+]",
+        secondAmmo: "modified_deagle_dual",
+        ammo: "45acp",
+        fireMode: "auto",
+        moveSpread: 12,
+        shotSpread: 7,
     }),
     modified_vss: defineGunSkin("vss", {
         name: "VSS [+]",
