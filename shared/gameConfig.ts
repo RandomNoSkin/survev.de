@@ -94,6 +94,8 @@ export enum BuildingGroups {
     SniperSpawns = 3,
     // Hydra bunker, Greenhouse, Storm Bunker
     BunkerSpawns = 4,
+    // Workshop
+    WorkshopSpawns = 5,
 };
 
 export enum MinDistance {
@@ -101,6 +103,7 @@ export enum MinDistance {
     BunkerSpawns = 200,
     SVSpawns = 600,
     SniperSpawns = 225,
+    WorkshopSpawns = 250,
 }
 
 export enum NoSpawnRadius {
@@ -108,6 +111,7 @@ export enum NoSpawnRadius {
     BunkerSpawns = 0,
     SVSpawns = 200,
     SniperSpawns = 100,
+    WorkshopSpawns = 0,
 }
 
 export enum ExperienceConverter {

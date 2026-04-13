@@ -6,6 +6,7 @@ import { Beach } from "./maps/beachDefs";
 import { Birthday } from "./maps/birthdayDefs";
 import { Cobalt } from "./maps/cobaltDefs";
 import { Comp } from "./maps/compDefs";
+import { Scrims } from "./maps/scrimsDefs";
 import { CompDuo } from "./maps/compDuoDefs";
 import { CompSolo } from "./maps/compSoloDefs";
 import { Desert } from "./maps/desertDefs";
@@ -43,6 +44,7 @@ export type Atlas =
     | "beach"
     | "comp"
     | "local"
+    | "scrims"
     | "two_vs_two"
     | "four_vs_four"
     | "comp_solo"
@@ -69,6 +71,7 @@ export const MapDefs = {
     beach: Beach,
     comp: Comp,
     local: Local,
+    scrims: Scrims,
     two_vs_two: TwoVsTwo,
     four_vs_four: FourVsFour,
     comp_solo: CompSolo,

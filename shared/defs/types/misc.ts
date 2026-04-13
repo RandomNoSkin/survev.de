@@ -17,6 +17,7 @@ export enum MapId {
     FourVsFour = 13,
     CompSolo = 14,
     CompDuo = 15,
+    Scrims = 16,
 }
 
 export const TeamModeToString = {
