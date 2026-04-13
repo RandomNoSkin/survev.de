@@ -12444,6 +12444,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     table_04: createTable({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(4.5, 2)),
         health: 2500,
+        destructible: false,
         img: {
             sprite: "map-table-04.img",
             residue: "map-table-res-02.img",
