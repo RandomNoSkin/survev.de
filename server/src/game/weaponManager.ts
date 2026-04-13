@@ -1,5 +1,5 @@
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
-import type { GunDef } from "../../../shared/defs/gameObjects/gunDefs";
+import { GunDefs, type GunDef } from "../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import { PerkProperties } from "../../../shared/defs/gameObjects/perkDefs";
 import {
@@ -353,8 +353,9 @@ export class WeaponManager {
         const itemDef = GameObjectDefs[this.activeWeapon] as GunDef;
         const player = this.player;
         const weapon = this.weapons[this.curWeapIdx];
+        const fireMode = itemDef.fireMode;
 
-        switch (itemDef.fireMode) {
+        switch (fireMode) {
             case "auto":
                 if (player.shootHold && weapon.cooldown <= 0) {
                     this.fireWeapon(this.offHand);
@@ -469,7 +470,17 @@ export class WeaponManager {
         ) {
             return;
         }
-        const weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        let weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        //checking if we have ammo if not check if we have secondary ammo then switch gunDef (only backend)
+        if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) <=0 && weaponDef.secondAmmo){
+            const secondWeapon = weaponDef.secondAmmo;
+            weaponDef = GameObjectDefs[weaponDef.secondAmmo] as GunDef;
+            if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) >0 && this.weapons[this.curWeapIdx].ammo == 0){
+                this.setWeapon(this.curWeapIdx, secondWeapon, 0);
+            }else {
+                return;
+            }
+        }
 
         if (
             this.player.actionType == GameConfig.Action.Revive ||
@@ -487,15 +498,8 @@ export class WeaponManager {
         if (!isInfinite) {
             if (this.player.invManager.isValid(weaponDef.ammo)) {
                 invAmmo = this.player.invManager.get(weaponDef.ammo);
-                if (invAmmo <= 0)
-                    if(weaponDef.secondAmmo &&this.player.invManager.isValid(weaponDef.secondAmmo)) {
-                    invAmmo = this.player.invManager.get(weaponDef.secondAmmo);
-                    if (invAmmo <= 0) return;
-                }
-            } else if(weaponDef.secondAmmo &&this.player.invManager.isValid(weaponDef.secondAmmo)) {
-                invAmmo = this.player.invManager.get(weaponDef.secondAmmo);
                 if (invAmmo <= 0) return;
-            } else {
+            }  else {
                 // not a valid ammo type and not an infinite ammo gun (e.g bugle)
                 // so dont try to reload it
                 // since bugle reloads are managed in a timer elsewhere
@@ -536,7 +540,7 @@ export class WeaponManager {
     reload(curWeapIdx = this.curWeapIdx, fullReload = false): void {
         if (!this.weapons[curWeapIdx].type) return; // prevent rare bug
         const weapon = this.weapons[curWeapIdx];
-        const weaponDef = GameObjectDefs[weapon.type] as GunDef;
+        const weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
         const ammoStats = this.getAmmoStats(weaponDef);
         const activeWeaponAmmo = weapon.ammo;
 
@@ -565,9 +569,6 @@ export class WeaponManager {
         if (!isInfinite && this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.has(weaponDef.ammo as InventoryItem)) {
             amountToReload = this.player.invManager.take(weaponDef.ammo, amountToReload);
             if (amountToReload <= 0) return;
-        }else if (!isInfinite && weaponDef.secondAmmo && this.player.invManager.isValid(weaponDef.secondAmmo) && this.player.invManager.has(weaponDef.secondAmmo as InventoryItem)) {
-            amountToReload = this.player.invManager.take(weaponDef.secondAmmo, amountToReload);
-            if (amountToReload <= 0) return;
         }
 
         weapon.ammo += amountToReload;
@@ -578,8 +579,6 @@ export class WeaponManager {
             weapon.ammo < ammoStats.maxClip &&
             (isInfinite || this.player.invManager.has(weaponDef.ammo as InventoryItem))
         ) {
-            this.player.reloadAgain = true;
-        }else if(weaponDef.secondAmmo && !isInfinite && this.player.invManager.has(weaponDef.secondAmmo as InventoryItem)){
             this.player.reloadAgain = true;
         }
 
@@ -1400,5 +1399,33 @@ export class WeaponManager {
             this.setCurWeapIndex(newSlot);
         }
         this.setWeapon(slot, "", 0);
+    }
+
+    switchAmmoType(): void {
+        const curWeap = this.weapons[this.curWeapIdx];
+        if (!curWeap.type) return;
+        const def = GameObjectDefs[curWeap.type];
+        if (def.type !== "gun") return;
+        const gunDef = def as GunDef;
+        if (!gunDef.secondAmmo) return;
+
+        //switching to other gun def
+        const newWeaponType = gunDef.secondAmmo;
+        const weaponAmmoType = gunDef.ammo;
+        const weaponAmmoCount = curWeap.ammo;
+
+        //calc new ammo / drop if too much
+        let amountToDrop = 0;
+        if (!this.isInfinite(gunDef)) {
+            const res = this.player.invManager.give(
+                weaponAmmoType as InventoryItem,
+                weaponAmmoCount,
+            );
+            amountToDrop = res.remaining;
+            if (amountToDrop > 0)
+            this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
+        }
+        this.setWeapon(this.curWeapIdx, newWeaponType, 0);
+        this.tryReload();
     }
 }

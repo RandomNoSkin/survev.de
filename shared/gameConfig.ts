@@ -154,6 +154,7 @@ export enum Input {
     HideUI,
     TeamPingSingle,
     JoinChat,
+    SwitchAmmo,
     Count,
 }
 
