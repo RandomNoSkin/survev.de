@@ -1425,6 +1425,7 @@ export class WeaponManager {
             if (amountToDrop > 0)
             this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
         }
+        this.scheduledReload = false;
         this.setWeapon(this.curWeapIdx, newWeaponType, 0);
         this.tryReload();
     }
