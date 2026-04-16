@@ -59,7 +59,7 @@ export class SiteInfo {
             ? null
             : `index-play-${TeamModeToString[mode.teamMode]}`;
             const buttonText = mapDef.buttonText
-                ? mapDef.buttonText
+                ? mapDef.buttonText + TeamModeToString[mode.teamMode]
                 : TeamModeToString[mode.teamMode];
 
             availableModes.push({
