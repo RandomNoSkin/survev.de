@@ -110,7 +110,7 @@ export class SiteInfo {
                 }
                 const l = $(`#btn-team-queue-mode-${i}`);
                 if (l.length) {
-                    const c = `index-${style.buttonText}`;
+                    const c = `index-play-${style.buttonText}`;
                     l.data("l10n", c);
                     l.html(this.localization.translate(c));
                     if (style.icon) {
@@ -122,6 +122,7 @@ export class SiteInfo {
                 }
 
                 btn.toggle(style.enabled);
+                l.toggle(style.enabled);
             }
             const selectedModes = this.getModesForSelectedRegion();
             const supportsTeam = selectedModes.some((s) => s.enabled && s.teamMode > 1);
