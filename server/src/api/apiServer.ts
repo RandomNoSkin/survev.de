@@ -65,6 +65,11 @@ class Region {
     return data ?? { error: "find_game_by_id_failed" };
     }
 
+    async getModes(): Promise<any[]> {
+    const data = await this.fetch<{ data: any[] }>("api/get_modes", { region: this.id });
+    return data?.data ?? [];
+}
+
 }
 
 interface RegionData {
@@ -79,6 +84,7 @@ export class ApiServer {
     regions: Record<string, Region> = {};
 
     modes = [...Config.modes];
+    modesByRegion: Record<string, any[]> = {};
     clientTheme = Config.clientTheme;
 
     captchaEnabled = Config.captchaEnabled;
@@ -86,6 +92,7 @@ export class ApiServer {
     constructor() {
         for (const region in Config.regions) {
             this.regions[region] = new Region(region);
+            this.modesByRegion[region] = [];
         }
     }
 
@@ -93,9 +100,13 @@ export class ApiServer {
         this.teamMenu.init(app, upgradeWebSocket);
     }
 
-    getSiteInfo(): SiteInfoRes {
+    getSiteInfo(region?: string): SiteInfoRes {
+        const selectedRegion = region && this.modesByRegion[region]?.length
+        ? region
+        : Object.keys(this.modesByRegion)[0];
         const data: SiteInfoRes = {
-            modes: this.modes,
+            modes: this.modesByRegion[selectedRegion] ?? [],
+            modesByRegion: this.modesByRegion,
             pops: {},
             youtube: { name: "", link: "" },
             twitch: [],
@@ -147,6 +158,16 @@ export class ApiServer {
     const r = this.regions[region];
     if (!r) return { error: "Invalid Region" };
         return await r.findGameById(gameId, admin);
+    }
+
+    async refreshRegionModes() {
+        for (const region in this.regions) {
+            try {
+                this.modesByRegion[region] = await this.regions[region].getModes();
+            } catch (err) {
+                this.logger.warn("refreshRegionModes failed for region", region, err);
+            }
+        }
     }
 
 }

@@ -190,6 +190,68 @@ app.options("/api/find_game", (res) => {
     res.end();
 });
 
+app.options("/api/get_modes", (res) => {
+    cors(res);
+    res.end();
+});
+
+app.post("/api/get_modes", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    cors(res);
+
+    const headerKey = req.getHeader("survev-api-key");
+    if (headerKey && headerKey !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            try {
+                if (res.aborted) return;
+
+                if (!headerKey) {
+                    if (body?.apiKey !== Config.secrets.SURVEV_API_KEY) {
+                        forbidden(res);
+                        return;
+                    }
+                }
+
+                const region = body?.region;
+                if (typeof region !== "string") {
+                    returnJson(res, { err: "failed_to_parse_body", data: [] });
+                    return;
+                }
+
+                if (region !== server.regionId) {
+                    returnJson(res, { err: "Invalid Region", data: [] });
+                    return;
+                }
+
+                returnJson(res, {
+                    data: Config.modes,
+                });
+            } catch (error) {
+                server.logger.warn("API get_modes error: ", error);
+            }
+        },
+        () => {
+            if (res.aborted) return;
+            res.cork(() => {
+                if (res.aborted) return;
+                res.writeStatus("500 Internal Server Error");
+                res.write("500 Internal Server Error");
+                res.end();
+            });
+            server.logger.warn("/api/get_modes: Error retrieving body");
+        },
+    );
+});
+
 app.post("/api/find_game", (res, req) => {
     res.onAborted(() => {
         res.aborted = true;

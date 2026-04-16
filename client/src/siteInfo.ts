@@ -43,16 +43,21 @@ export class SiteInfo {
         });
     }
 
+    getModesForSelectedRegion() {
+        const region = this.config.get("region")!;
+        return this.info.modesByRegion?.[region] || this.info.modes || [];
+    }
+
     getGameModeStyles() {
         const availableModes = [];
-        const modes = this.info.modes || [];
+        const modes = this.getModesForSelectedRegion();
         for (let i = 0; i < modes.length; i++) {
             const mode = modes[i];
-            const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main)
-                .desc;
+            const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main).desc;
             const buttonText = mapDef.buttonText
                 ? mapDef.buttonText
                 : TeamModeToString[mode.teamMode];
+
             availableModes.push({
                 icon: mapDef.icon,
                 buttonCss: mapDef.buttonCss,
@@ -98,7 +103,8 @@ export class SiteInfo {
 
                 btn.toggle(style.enabled);
             }
-            const supportsTeam = this.info.modes.some((s) => s.enabled && s.teamMode > 1);
+            const selectedModes = this.getModesForSelectedRegion();
+            const supportsTeam = selectedModes.some((s) => s.enabled && s.teamMode > 1);
             $("#btn-join-team, #btn-create-team").toggle(supportsTeam);
 
             // Region pops
