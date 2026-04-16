@@ -146,7 +146,8 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
         }
     }
 
-    const mode = server.modes[body.gameModeIdx];
+    //const mode = server.modes[body.gameModeIdx];
+    const mode = server.modesByRegion[body.region]?.[body.gameModeIdx];
     if (!mode || !mode.enabled) {
         return c.json<FindGameResponse>({ error: "full" });
     }
