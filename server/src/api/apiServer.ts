@@ -21,8 +21,6 @@ class Region {
         const url = `http${this.data.https ? "s" : ""}://${this.data.address}/${endPoint}`;
 
         try {
-            console.log("FETCH URL:", url);
-            console.log("FETCH REGION DATA:", this.id, this.data);
             const res = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -168,6 +166,7 @@ export class ApiServer {
             } catch (err) {
                 this.logger.warn("refreshRegionModes failed for region", region, err);
             }
+            console.log("modes for region", region, this.modesByRegion[region]);
         }
     }
 

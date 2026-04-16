@@ -420,12 +420,12 @@ export class TeamMenu {
     const regionModes =
         this.server.modesByRegion[region] ?? [];
 
-    return regionModes
+    return regionModes;/*
         .map((_, i) => i)
         .filter((i) => {
             const mode = regionModes[i];
             return mode.enabled && mode.teamMode > 1;
-        });
+        });*/
 }
 
     init(app: Hono, upgradeWebSocket: UpgradeWebSocket) {
