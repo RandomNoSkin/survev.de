@@ -54,6 +54,10 @@ export class SiteInfo {
         for (let i = 0; i < modes.length; i++) {
             const mode = modes[i];
             const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main).desc;
+
+            const l10nKey = mapDef.buttonText
+            ? null
+            : `index-play-${TeamModeToString[mode.teamMode]}`;
             const buttonText = mapDef.buttonText
                 ? mapDef.buttonText
                 : TeamModeToString[mode.teamMode];
@@ -62,6 +66,7 @@ export class SiteInfo {
                 icon: mapDef.icon,
                 buttonCss: mapDef.buttonCss,
                 buttonText,
+                l10nKey,
                 enabled: mode.enabled,
             });
         }
@@ -70,6 +75,21 @@ export class SiteInfo {
 
     updatePageFromInfo() {
         if (this.loaded) {
+            for (let i = 0; i < 3; i++) {
+                const btn = $(`#btn-start-mode-${i}`);
+                btn.removeClass("btn-custom-mode-no-indent btn-custom-mode-main");
+                btn.css("background-image", "");
+                btn.removeData("l10n");
+                btn.html("");
+                btn.hide();
+
+                const l = $(`#btn-team-queue-mode-${i}`);
+                l.removeClass("btn-custom-mode-select");
+                l.css("background-image", "");
+                l.removeData("l10n");
+                l.html("");
+                l.hide();
+            }
             const getGameModeStyles = this.getGameModeStyles();
             for (let i = 0; i < getGameModeStyles.length; i++) {
                 const style = getGameModeStyles[i];
