@@ -559,6 +559,16 @@ export class Application {
             this.config.set("regionSelected", true);
             this.startPingTest();
             this.siteInfo.updatePageFromInfo();
+            const updateButton = (ele: JQuery<HTMLElement>, gameModeIdx: number) => {
+                ele.html(
+                    this.quickPlayPendingModeIdx === gameModeIdx
+                        ? '<div class="ui-spinner"></div>'
+                        : this.localization.translate(ele.data("l10n")),
+                );
+            };
+            updateButton(this.playMode0Btn, 0);
+            updateButton(this.playMode1Btn, 1);
+            updateButton(this.playMode2Btn, 2);
         }
 
         if (key == "highResTex") {
