@@ -127,7 +127,7 @@ class Room {
         initialData: ClientRoomData,
     ) {
         this.data.roomUrl = `#${id}`;
-        this.data.enabledGameModeIdxs = teamMenu.allowedGameModeIdxs(this.data.region);
+        this.data.enabledGameModeIdxs = teamMenu.allowedGameModeIdxs(initialData.region);
         this.data.captchaEnabled = teamMenu.server.captchaEnabled;
 
         this.setProps(initialData);
