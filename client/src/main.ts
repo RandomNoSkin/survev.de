@@ -558,6 +558,7 @@ export class Application {
         if (key == "region") {
             this.config.set("regionSelected", true);
             this.startPingTest();
+            this.siteInfo.updatePageFromInfo();
         }
 
         if (key == "highResTex") {
