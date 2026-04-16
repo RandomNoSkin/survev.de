@@ -417,16 +417,13 @@ export class TeamMenu {
     }
 
     allowedGameModeIdxs(region: string) {
-    const regionModes =
-        this.server.modesByRegion[region] ?? [];
+        const regionModes = this.server.modesByRegion[region] ?? [];
 
-    return regionModes;/*
-        .map((_, i) => i)
-        .filter((i) => {
-            const mode = regionModes[i];
-            return mode.enabled && mode.teamMode > 1;
-        });*/
-}
+        return regionModes
+            .map((mode, i) => ({ mode, i }))
+            .filter(({ mode }) => mode.enabled && mode.teamMode > 1)
+            .map(({ i }) => i);
+    }
 
     init(app: Hono, upgradeWebSocket: UpgradeWebSocket) {
         const teamMenu = this;

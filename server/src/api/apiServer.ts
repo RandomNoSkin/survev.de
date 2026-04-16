@@ -166,7 +166,6 @@ export class ApiServer {
             } catch (err) {
                 this.logger.warn("refreshRegionModes failed for region", region, err);
             }
-            console.log("modes for region", region, this.modesByRegion[region]);
         }
     }
 
