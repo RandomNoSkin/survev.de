@@ -93,6 +93,7 @@ export class ApiServer {
         for (const region in Config.regions) {
             this.regions[region] = new Region(region);
             this.modesByRegion[region] = [];
+            this.refreshRegionModes();
         }
     }
 
