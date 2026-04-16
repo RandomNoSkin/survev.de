@@ -15,8 +15,6 @@ class Region {
 
     constructor(readonly id: string) {
         this.data = Config.regions[this.id];
-        console.log("ALL REGIONS:", Config.regions);
-        console.log("SCRIMS REGION:", Config.regions["scrims"]);
     }
 
     async fetch<Data extends object>(endPoint: string, body: object) {
