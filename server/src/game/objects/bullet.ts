@@ -3,6 +3,7 @@ import {
     type BulletDef,
     BulletDefs,
 } from "../../../../shared/defs/gameObjects/bulletDefs";
+import { type ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs";
 import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
@@ -12,7 +13,7 @@ import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import { coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
-import { util } from "../../../../shared/utils/util";
+import { assert, util } from "../../../../shared/utils/util";
 import { type Vec2, v2 } from "../../../../shared/utils/v2";
 import type { Game } from "../game";
 import type { DamageParams, GameObject } from "./gameObject";
@@ -385,6 +386,38 @@ export class Bullet {
             if (this.onHitFx === "explosion_rounds" && def.useExplosiveRoundsAlt) {
                 this.onHitFx = "explosion_rounds_sg";
             }
+
+            if (def.projType) {
+                const projDef = GameObjectDefs[def.projType] as ThrowableDef;
+                assert(
+                    projDef.type === "throwable",
+                    `Invalid projectile type: ${def.projType}`,
+                );
+                const projCount = def.projCount ?? 1;
+                const projSpeed = def.projSpeed ?? projDef.throwPhysics.speed;
+                const projFuseTime = def.projFuseTime ?? projDef.fuseTime;
+                const projSpread = def.projSpread ?? 0.2;
+
+                for (let i = 0; i < projCount; i++) {
+                    const throwDir = v2.rotate(
+                        this.dir,
+                        util.random(-projSpread, projSpread),
+                    );
+                    this.bulletManager.game.projectileBarn.addProjectile(
+                        this.playerId,
+                        def.projType,
+                        v2.copy(this.pos),
+                        0.5,
+                        this.layer,
+                        v2.mul(throwDir, projSpeed),
+                        projFuseTime,
+                        this.damageType,
+                        throwDir,
+                        this.shotSourceType,
+                    );
+                }
+            }
+
             this.bulletManager.game.explosionBarn.addExplosion(
                 this.onHitFx,
                 // spawn the explosion a bit behind the bullet so it won't spawn inside obstacles

@@ -25239,6 +25239,12 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 scale: 0.9,
                 ori: 0,
             },
+            {
+                type: "table_04",
+                pos: v2.create(6.7, -4.5),
+                scale: 0.9,
+                ori: 1,
+            },
         ],
     },
     bunker_egg_sublevel_02: {
@@ -27182,11 +27188,10 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 3,
             },
             {
-                type: "crate_01",
-                pos: v2.create(-6.5, 1.5),
+                type: "table_04",
+                pos: v2.create(-6.5, -1),
                 scale: 1,
-                ori: 0,
-                ignoreMapSpawnReplacement: true,
+                ori: 3,
             },
             {
                 type: "crate_04",
@@ -27831,6 +27836,13 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 inheritOri: false,
             },
             {
+                type: "table_04",
+                pos: v2.create(7.7, -1.5),
+                scale: 1,
+                ori: 1,
+                inheritOri: true,
+            },
+            {
                 type: "crate_01",
                 pos: v2.create(7.5, 6.25),
                 scale: 1,
@@ -27866,7 +27878,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             },
             {
                 type: "crate_01",
-                pos: v2.create(3.5, -9.5),
+                pos: v2.create(-2.5, -9.5),
                 scale: 1,
                 ori: 0,
                 ignoreMapSpawnReplacement: true,
