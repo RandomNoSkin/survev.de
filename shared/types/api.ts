@@ -70,6 +70,11 @@ export interface SiteInfoRes {
         teamMode: TeamMode;
         enabled: boolean;
     }>;
+    modesByRegion: Record<string, Array<{
+        mapName: string;
+        teamMode: TeamMode;
+        enabled: boolean;
+    }>>;
     clientTheme: keyof typeof MapDefs;
     pops: Record<
         string,

@@ -127,7 +127,8 @@ class Room {
         initialData: ClientRoomData,
     ) {
         this.data.roomUrl = `#${id}`;
-        this.data.enabledGameModeIdxs = teamMenu.allowedGameModeIdxs();
+        this.data.enabledGameModeIdxs = teamMenu.allowedGameModeIdxs(initialData.region);
+        console.log("enabled modes for region", initialData.region, this.data.enabledGameModeIdxs);
         this.data.captchaEnabled = teamMenu.server.captchaEnabled;
 
         this.setProps(initialData);
@@ -190,7 +191,7 @@ class Room {
 
         let gameModeIdx = props.gameModeIdx;
 
-        const modes = this.teamMenu.server.modes;
+        const modes = this.teamMenu.server.modesByRegion[this.data.region] ?? [];
 
         if (!this.data.enabledGameModeIdxs.includes(gameModeIdx)) {
             // we don't allow creating teams if there's no valid team mode
@@ -279,7 +280,8 @@ class Room {
             } satisfies FindGamePrivateBody["playerData"][0];
         });
 
-        const mode = this.teamMenu.server.modes[this.data.gameModeIdx];
+        const regionModes = this.teamMenu.server.modesByRegion[region] ?? [];
+        const mode = regionModes[this.data.gameModeIdx];
         if (!mode || !mode.enabled) {
             return;
         }
@@ -414,13 +416,13 @@ export class TeamMenu {
         }, 1000);
     }
 
-    allowedGameModeIdxs() {
-        return this.server.modes
-            .map((_, i) => i)
-            .filter((i) => {
-                const mode = this.server.modes[i];
-                return mode.enabled && mode.teamMode > 1;
-            });
+    allowedGameModeIdxs(region: string) {
+        const regionModes = this.server.modesByRegion[region] ?? [];
+
+        return regionModes
+            .map((mode, i) => ({ mode, i }))
+            .filter(({ mode }) => mode.enabled && mode.teamMode > 1)
+            .map(({ i }) => i);
     }
 
     init(app: Hono, upgradeWebSocket: UpgradeWebSocket) {
@@ -566,7 +568,7 @@ export class TeamMenu {
             switch (msg.type) {
                 case "create": {
                     // don't allow creating a team if there's no team mode enabled
-                    if (!this.allowedGameModeIdxs().length) {
+                    if (!this.allowedGameModeIdxs(msg.data.roomData.region).length) {
                         player.send("error", { type: "create_failed" });
                         break;
                     }

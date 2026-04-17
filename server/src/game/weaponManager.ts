@@ -1402,6 +1402,12 @@ export class WeaponManager {
     }
 
     switchAmmoType(): void {
+        if (
+            this.player.actionType === GameConfig.Action.Reload ||
+            this.player.actionType === GameConfig.Action.ReloadAlt
+        ) {
+            return;
+        }
         const curWeap = this.weapons[this.curWeapIdx];
         if (!curWeap.type) return;
         const def = GameObjectDefs[curWeap.type];
