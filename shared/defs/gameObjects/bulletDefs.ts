@@ -29,7 +29,7 @@ export interface BulletDef {
 export const BaseDefs: Record<string, BulletDef> = {
     bullet_mp5: {
         type: "bullet",
-        damage: 11,
+        damage: 14,
         obstacleDamage: 1,
         falloff: 0.8,
         distance: 90,
@@ -214,7 +214,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_svd: {
         type: "bullet",
-        damage: 35,
+        damage: 39,
         obstacleDamage: 1,
         falloff: 0.9,
         distance: 425,
@@ -305,7 +305,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_origin: {
         type: "bullet",
-        damage: 7,
+        damage: 8,
         obstacleDamage: 1.5,
         falloff: 0.95,
         speed: 125,
@@ -318,7 +318,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_modified_origin: {
         type: "bullet",
-        damage: 7,
+        damage: 8,
         obstacleDamage: 3.5,
         falloff: 0.95,
         speed: 125,
@@ -708,7 +708,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_imbel: {
         type: "bullet",
-        damage: 17,
+        damage: 16,
         obstacleDamage: 1.3,
         falloff: 0.93,
         distance: 200,
