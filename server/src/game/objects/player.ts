@@ -43,7 +43,7 @@ import { type Vec2, v2 } from "../../../../shared/utils/v2";
 import { Config } from "../../config";
 import { IDAllocator } from "../../utils/IDAllocator";
 import { validateUserName, checkForBadWords } from "../../utils/serverHelpers";
-import type { Game, JoinTokenData } from "../game";
+import { Game, JoinTokenData } from "../game";
 import { Group, Team } from "../group";
 import { InventoryManager } from "../inventoryManager";
 import { WeaponManager } from "../weaponManager";
@@ -518,11 +518,17 @@ export class PlayerBarn {
 
         player.obstacleOutfit?.destroy();
 
+        const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
+
         if(this.game.startedTime <= GameConfig.player.minActiveTime){
             if (this.game.aliveCount === 1 || this.getAliveGroups().length === 1) {
+                if(this.game.startedTime < freezeTime){
                 this.game.started = false;
                 this.game.startedTime = 0;
                 this.game.gas.reset();
+                }else{
+                    this.game.stop();
+                }
             }
         }
         this.game.checkGameOver();

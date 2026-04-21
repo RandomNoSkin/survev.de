@@ -1051,7 +1051,7 @@ export const mapDef: PartialMapDef = {
         map: {
             baseWidth: 512,
             baseHeight: 512,
-            scale: { small: 1.1875, large: 1.5375 },
+            scale: { small: 1.5375, large: 1.5375 },
             extension: 112,
             shoreInset: 48,
             grassInset: 18,
