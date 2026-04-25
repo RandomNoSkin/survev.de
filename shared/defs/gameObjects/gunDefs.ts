@@ -105,6 +105,7 @@ export interface GunDef {
     toMouseHit?: boolean;
     burstSounds?: number;
     perk?: string;
+    modifiedSound?: string;
 }
 
 function defineGunSkin(baseType: string, params: DeepPartial<GunDef>): GunDef {
@@ -3937,6 +3938,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireMode: "dual",
         shotSpread: 4,
         upgraded: undefined,
+        modifiedSound: "mp220_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -3947,6 +3949,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         isDual: false,
         fireMode: "auto",
         upgraded: undefined,
+        modifiedSound: "p30l_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -3959,6 +3962,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         sound: {
             shoot: "awc_01",
         },
+        modifiedSound: "awc_01",
         upgraded: undefined,
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
@@ -3971,6 +3975,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         shotSpread: 17,
         bulletType: "bullet_buckshot_modified",
         upgraded: undefined,
+        modifiedSound: "m870_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -3985,6 +3990,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         burstDelay: 0.005,
         fireMode: "burst",
         upgraded: undefined,
+        modifiedSound: "model94_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -3994,6 +4000,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         bulletType: "bullet_frag_modified",
         speed: { equip: -1, attack: -2 },
         upgraded: undefined,
+        modifiedSound: "usas_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4005,6 +4012,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         maxReload: 15,
         fireDelay: 0.13,
         upgraded: undefined,
+        modifiedSound: "mk12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4016,6 +4024,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         burstDelay: 0.1,
         fireMode: "burst",
         upgraded: undefined,
+        modifiedSound: "m39_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4026,6 +4035,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireDelay: 0.1,
         speed: { equip: 0, attack: 5 },
         upgraded: undefined,
+        modifiedSound: "an94_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4040,6 +4050,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         burstDelay: 0.04,
         fireMode: "burst",
         upgraded: undefined,
+        modifiedSound: "spas12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4049,6 +4060,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 3,
         shotSpread: 2.5,
         upgraded: undefined,
+        modifiedSound: "mac10_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4060,6 +4072,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireDelay: 0.16,
         bulletType: "bullet_bar_modified",
         upgraded: undefined,
+        modifiedSound: "bar_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4069,6 +4082,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 3,
         shotSpread: 2,
         upgraded: undefined,
+        modifiedSound: "groza_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4080,6 +4094,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 3,
         shotSpread: 1,
         upgraded: undefined,
+        modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4095,6 +4110,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 8,
         shotSpread: 5,
         upgraded: undefined,
+        modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4105,6 +4121,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 6.5,
         shotSpread: 2,
         upgraded: undefined,
+        modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4119,6 +4136,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 12,
         shotSpread: 7,
         upgraded: undefined,
+        modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4136,6 +4154,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         switchDelay: 0.4,
         bulletType: "bullet_vss_modified",
         upgraded: undefined,
+        modifiedSound: "vss_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4148,6 +4167,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 1.5,
         shotSpread: 2,
         upgraded: undefined,
+        modifiedSound: "m1014_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4158,6 +4178,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         maxReload: 6,
         bulletType: "bullet_modified_origin",
         upgraded: undefined,
+        modifiedSound: "origin12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4169,6 +4190,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         maxReload: 4,
         bulletType: "bullet_saiga_modified",
         upgraded: undefined,
+        modifiedSound: "saiga_01",
         speed: { equip: -0.5, attack: -3 },
         lootImg: {
             border: "loot-circle-outer-modified-01.img",

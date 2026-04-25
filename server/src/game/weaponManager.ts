@@ -947,6 +947,7 @@ export class WeaponManager {
                 splinter: hasSplinter,
                 apRounds: hasApRounds,
                 highVelocity: hasHighVelocity,
+                modified: itemDef.modifiedSound != undefined,
                 lastShot: weapon.ammo <= 0,
                 reflectObjId: this.player.obstacleOutfit?.__id,
                 onHitFx: hasExplosive ? "explosion_rounds" : undefined,

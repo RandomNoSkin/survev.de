@@ -22,6 +22,7 @@ interface Shot {
     trailSaturated?: boolean;
     apRounds?: boolean;
     highVelocity?: boolean;
+    modified?: boolean;
 }
 
 export function createCasingParticle(
@@ -98,6 +99,7 @@ export class ShotBarn {
         shot.trailSaturated = bullet.trailSaturated;
         shot.apRounds = bullet.apRounds;
         shot.highVelocity = bullet.highVelocity;
+        shot.modified = bullet.modified;
     }
 
     m_update(
@@ -202,6 +204,23 @@ export class ShotBarn {
                             detune: 800,
                             delay: 10,
                             volumeScale: 2,
+                        });
+                    }
+
+                    if (shot.modified && weaponDef.modifiedSound) {
+                        audioManager.playSound(weaponDef.modifiedSound, {
+                            channel:
+                                shot.playerId == activePlayerId
+                                    ? "activePlayer"
+                                    : "otherPlayers",
+                            soundPos: shot.pos,
+                            layer: player ? player.layer : shot.layer,
+                            fallOff: weaponDef.sound.fallOff
+                                ? weaponDef.sound.fallOff
+                                : 0,
+                            detune: 600,
+                            delay: 5,
+                            volumeScale: 1.5,
                         });
                     }
 
