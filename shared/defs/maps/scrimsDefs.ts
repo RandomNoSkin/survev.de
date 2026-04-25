@@ -29,7 +29,7 @@ export const mapDef: PartialMapDef = {
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah"],
+        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach"],
     },
     biome: {
         colors: {
@@ -1150,7 +1150,7 @@ export const mapDef: PartialMapDef = {
         },
         densitySpawns: [
             {
-                stone_01: 350,
+                stone_01: 610,
                 barrel_01: 76,
                 silo_01: 8,
                 crate_01: 50,
@@ -1158,15 +1158,15 @@ export const mapDef: PartialMapDef = {
                 crate_03: 12, //grenade crates
                 bush_01: 78,
                 cache_06: 12,
-                tree_01: 450,
+                tree_01: 710,
                 tree_13: 36,
-                sandbags_01: 11,
-                sandbags_02: 11,
+                sandbags_01: 18,
+                sandbags_02: 18,
                 hedgehog_01: 24,
-                container_01: 5,
-                container_02: 5,
-                container_03: 5,
-                container_04: 5,
+                container_01: 8,
+                container_02: 8,
+                container_03: 8,
+                container_04: 8,
                 shack_01: 11,
                 outhouse_01: 12, //toilet houses
                 loot_tier_1: 24,
@@ -1178,8 +1178,6 @@ export const mapDef: PartialMapDef = {
         fixedSpawns: [
             {
                 // small is spawn count for solos and duos, large is spawn count for squads
-                stone_01: { small: 260, large: 260, }, 
-                tree_01: { small: 260, large: 260, }, 
                 warehouse_01: { small: 9, large: 9,},
                 warehouse_03sv: 1,
                 house_red_01: { small: 15, large: 15,}, 

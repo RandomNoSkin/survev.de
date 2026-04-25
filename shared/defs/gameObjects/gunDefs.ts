@@ -2118,6 +2118,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot",
+        upgraded: { gun: "modified_saiga", cost: 7 },
         headshotMult: 1,
         speed: { equip: 0, attack: 6 },
         lootImg: {
@@ -2263,7 +2264,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 14,
         jitter: 1.4,
         bulletType: "bullet_origin",
-        upgraded: { gun: "modified_origin", cost: 8 },
+        upgraded: { gun: "modified_origin", cost: 10 },
         headshotMult: 1,
         speed: { equip: 0, attack: 1 },
         lootImg: {
@@ -3934,6 +3935,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_mp220: defineGunSkin("mp220", {
         name: "MP220 [+]",
         fireMode: "dual",
+        shotSpread: 4,
         upgraded: undefined,
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
@@ -4127,11 +4129,12 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         maxReload: 12,
         burstCount: 2,
         burstDelay: 0.001,
-        fireDelay: 0.3,
+        fireDelay: 0.35,
         fireMode: "burst",
         moveSpread: 1.6,
         shotSpread: 1.2,
         switchDelay: 0.4,
+        bulletType: "bullet_vss_modified",
         upgraded: undefined,
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
@@ -4141,6 +4144,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "Super90 [+]",
         bulletType: "bullet_modified_m1014",
         bulletCount: 5,
+        switchDelay: 0.4,
         moveSpread: 1.5,
         shotSpread: 2,
         upgraded: undefined,
@@ -4150,10 +4154,22 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     }),
     modified_origin: defineGunSkin("origin", {
         name: "Origin-12 [+]",
-        maxClip: 8,
-        maxReload: 8,
+        maxClip: 6,
+        maxReload: 6,
         bulletType: "bullet_modified_origin",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    modified_saiga: defineGunSkin("saiga", {
+        name: "Saiga-12 [+]",
+        bulletCount: 2,
+        maxClip: 4,
+        maxReload: 4,
+        bulletType: "bullet_saiga_modified",
+        upgraded: undefined,
+        speed: { equip: -0.5, attack: -3 },
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },

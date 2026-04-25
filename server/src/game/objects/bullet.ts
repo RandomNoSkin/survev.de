@@ -379,14 +379,10 @@ export class Bullet {
             }
         }
 
-        if (!this.alive && !this.reflected && this.onHitFx) {
+        if (!this.alive && !this.reflected) {
             const def = GameObjectDefs[this.bulletType] as BulletDef;
-            // explosion_rounds_sg has lower volume and is used for shotguns
-            // since they spawn a bunch of explosions at once
-            if (this.onHitFx === "explosion_rounds" && def.useExplosiveRoundsAlt) {
-                this.onHitFx = "explosion_rounds_sg";
-            }
 
+            // Spawn projectiles if defined
             if (def.projType) {
                 const projDef = GameObjectDefs[def.projType] as ThrowableDef;
                 assert(
@@ -418,19 +414,28 @@ export class Bullet {
                 }
             }
 
-            this.bulletManager.game.explosionBarn.addExplosion(
-                this.onHitFx,
-                // spawn the explosion a bit behind the bullet so it won't spawn inside obstacles
-                v2.sub(this.pos, v2.mul(this.dir, 0.01)),
-                this.layer,
-                {
-                    source: this.player,
-                    gameSourceType: this.shotSourceType,
-                    weaponSourceType: this.shotSourceType,
-                    mapSourceType: this.mapSourceType,
-                    damageType: this.damageType,
-                },
-            );
+            // Spawn explosion if defined
+            if (this.onHitFx) {
+                // explosion_rounds_sg has lower volume and is used for shotguns
+                // since they spawn a bunch of explosions at once
+                if (this.onHitFx === "explosion_rounds" && def.useExplosiveRoundsAlt) {
+                    this.onHitFx = "explosion_rounds_sg";
+                }
+
+                this.bulletManager.game.explosionBarn.addExplosion(
+                    this.onHitFx,
+                    // spawn the explosion a bit behind the bullet so it won't spawn inside obstacles
+                    v2.sub(this.pos, v2.mul(this.dir, 0.01)),
+                    this.layer,
+                    {
+                        source: this.player,
+                        gameSourceType: this.shotSourceType,
+                        weaponSourceType: this.shotSourceType,
+                        mapSourceType: this.mapSourceType,
+                        damageType: this.damageType,
+                    },
+                );
+            }
         }
 
         // set active at the end of the update because:
