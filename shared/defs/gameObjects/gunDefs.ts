@@ -3983,10 +3983,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_model94: defineGunSkin("model94", {
         name: "Model 94 [+]",
         maxReload: 1, 
-        moveSpread: 4.5, 
-        shotSpread: 2.5,
         burstCount: 2,
-        fireDelay: 0.13,
         burstDelay: 0.005,
         fireMode: "burst",
         upgraded: undefined,
