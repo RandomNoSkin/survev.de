@@ -13024,7 +13024,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             zIdx: 801,
             randomRotation: true,
         },
-        terrain: { grass: true, beach: true },
+        terrain: { grass: false, beach: true },
     } as unknown as Partial<ObstacleDef>),
     // Christmas Coconut Palm
     tree_14x: createTree({

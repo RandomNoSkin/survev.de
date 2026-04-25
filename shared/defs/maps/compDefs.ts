@@ -1148,7 +1148,6 @@ export const Comp: MapDef = {
                 loot_tier_1: 24,
                 loot_tier_beach: 12,
                 stone_07: 5, // large stones
-                tree_14: 1, //coconut tree
             },
         ],
         fixedSpawns: [
@@ -1173,6 +1172,7 @@ export const Comp: MapDef = {
                 cache_01: 1, // flare stone
                 cache_02: { odds: 0.5 }, // mosin tree
                 cache_07: 1, //barrel
+                tree_14: 1, //coconut tree
                 bunker_structure_01: { odds: 0.6 }, // ak74 bunker
                 bunker_structure_02: 1, // vector bunker
                 bunker_structure_03: 1, // storm bunker
