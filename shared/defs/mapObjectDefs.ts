@@ -10900,7 +10900,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         loot: [
             tierLoot("tier_supply_meds", 4, 5),
             tierLoot("tier_supply_armor", 2, 4),
-            tierLoot("tier_supply_armor_3", 1, 3),
+            tierLoot("tier_supply_armor_3", 1, 2),
             tierLoot("tier_supply_pistols", 1, 1),
             tierLoot("tier_supply_scopes", 1, 2),
             tierLoot("tier_supply_nades", 1, 2),            

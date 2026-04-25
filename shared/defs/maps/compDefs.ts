@@ -28,7 +28,7 @@ export const Comp: MapDef = {
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah"],
+        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach"],
     },
     biome: {
         colors: {
