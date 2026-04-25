@@ -336,8 +336,8 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_modified_origin: {
         type: "bullet",
         damage: 7.5,
-        obstacleDamage: 3.5,
-        falloff: 0.8,
+        obstacleDamage: 0.2,
+        falloff: 0.7,
         speed: 125,
         distance: 55,
         variance: 0,
