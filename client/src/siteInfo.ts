@@ -43,20 +43,30 @@ export class SiteInfo {
         });
     }
 
+    getModesForSelectedRegion() {
+        const region = this.config.get("region")!;
+        return this.info.modesByRegion?.[region] || this.info.modes || [];
+    }
+
     getGameModeStyles() {
         const availableModes = [];
-        const modes = this.info.modes || [];
+        const modes = this.getModesForSelectedRegion();
         for (let i = 0; i < modes.length; i++) {
             const mode = modes[i];
-            const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main)
-                .desc;
+            const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main).desc;
+
+            const l10nKey = mapDef.buttonText
+            ? null
+            : `index-play-${TeamModeToString[mode.teamMode]}`;
             const buttonText = mapDef.buttonText
-                ? mapDef.buttonText
+                ? mapDef.buttonText +"-"+ TeamModeToString[mode.teamMode]
                 : TeamModeToString[mode.teamMode];
+
             availableModes.push({
                 icon: mapDef.icon,
                 buttonCss: mapDef.buttonCss,
                 buttonText,
+                l10nKey,
                 enabled: mode.enabled,
             });
         }
@@ -65,6 +75,21 @@ export class SiteInfo {
 
     updatePageFromInfo() {
         if (this.loaded) {
+            for (let i = 0; i < 3; i++) {
+                const btn = $(`#btn-start-mode-${i}`);
+                btn.removeClass("btn-custom-mode-no-indent btn-custom-mode-main");
+                btn.css("background-image", "");
+                btn.removeData("l10n");
+                btn.html("");
+                btn.hide();
+
+                const l = $(`#btn-team-queue-mode-${i}`);
+                l.removeClass("btn-custom-mode-select");
+                l.css("background-image", "");
+                l.removeData("l10n");
+                l.html("");
+                l.hide();
+            }
             const getGameModeStyles = this.getGameModeStyles();
             for (let i = 0; i < getGameModeStyles.length; i++) {
                 const style = getGameModeStyles[i];
@@ -85,7 +110,7 @@ export class SiteInfo {
                 }
                 const l = $(`#btn-team-queue-mode-${i}`);
                 if (l.length) {
-                    const c = `index-${style.buttonText}`;
+                    const c = `index-play-${style.buttonText}`;
                     l.data("l10n", c);
                     l.html(this.localization.translate(c));
                     if (style.icon) {
@@ -97,8 +122,10 @@ export class SiteInfo {
                 }
 
                 btn.toggle(style.enabled);
+                l.toggle(style.enabled);
             }
-            const supportsTeam = this.info.modes.some((s) => s.enabled && s.teamMode > 1);
+            const selectedModes = this.getModesForSelectedRegion();
+            const supportsTeam = selectedModes.some((s) => s.enabled && s.teamMode > 1);
             $("#btn-join-team, #btn-create-team").toggle(supportsTeam);
 
             // Region pops

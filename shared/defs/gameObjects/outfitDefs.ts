@@ -273,6 +273,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             sprite: "loot-shirt-outfitWheat.img",
             tint: 0xffffff,
         },
+        rarity: Rarity.Common,
     }),
     outfitNoir: defineOutfitSkin("outfitBase", {
         name: "Neo Noir",
@@ -377,6 +378,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             sprite: "loot-shirt-outfitSpetsnaz.img",
             tint: 0xffffff,
         },
+        rarity: Rarity.Rare,
     }),
     outfitWoodsCloak: defineOutfitSkin("outfitBase", {
         name: "Greencloak",

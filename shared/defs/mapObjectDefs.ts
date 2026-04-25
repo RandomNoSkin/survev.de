@@ -2431,7 +2431,13 @@ function createBankVault<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: e.floor_loot || randomObstacleType({ loot_tier_vault_floor: 1 }),
-                pos: v2.create(-3.5, 0),
+                pos: v2.create(-2, 0),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: e.floor_loot || randomObstacleType({ loot_tier_vault_floor_2: 1 }),
+                pos: v2.create(-5, 0),
                 scale: 1,
                 ori: 0,
             },
@@ -10734,7 +10740,10 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         destructible: true,
         armorPlated: true,
         hitParticle: "greenChip",
-        loot: [tierLoot("tier_ammo_crate", 1, 2)],
+        loot: [
+            tierLoot("tier_ammo_crate", 1, 2),
+            tierLoot("tier_scrap", 0, 1)
+        ],
         map: { display: true, color: 0x537054, scale: 0.875 },
         img: { sprite: "map-crate-04.img" },
         sound: {
@@ -10761,7 +10770,10 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         destructible: true,
         armorPlated: true,
         hitParticle: "greenChip",
-        loot: [tierLoot("tier_ammo", 1, 1)],
+        loot: [
+            tierLoot("tier_ammo", 1, 1),
+            tierLoot("tier_scrap", 0, 1)
+        ],
         map: { display: false },
         img: { sprite: "map-crate-06.img" },
         sound: {
@@ -10786,7 +10798,11 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     crate_07: createCrate({
         health: 140,
         loot: [
-            tierLoot("tier_surviv", 4, 5),
+            tierLoot("tier_surviv", 2, 3),
+            autoLoot("helmet02", 1),
+            autoLoot("chest02", 1),
+            autoLoot("backpack02", 1), 
+            autoLoot("4xscope", 1),
             tierLoot("tier_ak_bunker", 1, 1),
             tierLoot("tier_ak_bunker", 1, 1),
             tierLoot("tier_ak_bunker", 1, 1),
@@ -10867,6 +10883,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             tierLoot("tier_airdrop_outfits", 1, 1),
             tierLoot("tier_airdrop_melee", 1, 1),
             tierLoot("tier_airdrop_ammo", 3, 3),
+            tierLoot("tier_scrap", 2, 3),
             tierLoot("tier_airdrop_throwables", 1, 1),
         ],
         map: { display: false },
@@ -10882,11 +10899,13 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         scale: { destroy: 0.75 },
         loot: [
             tierLoot("tier_supply_meds", 4, 5),
-            tierLoot("tier_supply_armor", 3, 5),
+            tierLoot("tier_supply_armor", 2, 4),
+            tierLoot("tier_supply_armor_3", 1, 3),
             tierLoot("tier_supply_pistols", 1, 1),
             tierLoot("tier_supply_scopes", 1, 2),
             tierLoot("tier_supply_nades", 1, 2),            
             tierLoot("tier_supply_ammo", 1, 1),
+            tierLoot("tier_scrap", 2, 4),
         ],
         map: { display: true },
         img: {
@@ -10907,6 +10926,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             tierLoot("tier_airdrop_outfits", 1, 1),
             tierLoot("tier_airdrop_melee", 1, 1),
             tierLoot("tier_airdrop_ammo", 3, 3),
+            tierLoot("tier_scrap", 2, 3),
             tierLoot("tier_airdrop_throwables", 1, 1),
         ],
         map: { display: false },
@@ -10930,6 +10950,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             tierLoot("tier_outfits", 1, 1),
             tierLoot("tier_airdrop_melee", 1, 1),
             tierLoot("tier_airdrop_ammo", 3, 3),
+            tierLoot("tier_scrap", 2, 3),
             tierLoot("tier_airdrop_throwables", 1, 1),
             tierLoot("tier_airdrop_xp", 2, 2),
         ],
@@ -12445,6 +12466,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     table_04: createTable({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(4.5, 2)),
         health: 2500,
+        destructible: false,
         img: {
             sprite: "map-table-04.img",
             residue: "map-table-res-02.img",
@@ -25238,6 +25260,12 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 scale: 0.9,
                 ori: 0,
             },
+            {
+                type: "table_04",
+                pos: v2.create(6.7, -4.5),
+                scale: 0.9,
+                ori: 1,
+            },
         ],
     },
     bunker_egg_sublevel_02: {
@@ -27181,11 +27209,10 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 3,
             },
             {
-                type: "crate_01",
-                pos: v2.create(-6.5, 1.5),
+                type: "table_04",
+                pos: v2.create(-6.5, -1),
                 scale: 1,
-                ori: 0,
-                ignoreMapSpawnReplacement: true,
+                ori: 3,
             },
             {
                 type: "crate_04",
@@ -27830,6 +27857,13 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 inheritOri: false,
             },
             {
+                type: "table_04",
+                pos: v2.create(7.7, -1.5),
+                scale: 1,
+                ori: 1,
+                inheritOri: true,
+            },
+            {
                 type: "crate_01",
                 pos: v2.create(7.5, 6.25),
                 scale: 1,
@@ -27865,7 +27899,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             },
             {
                 type: "crate_01",
-                pos: v2.create(3.5, -9.5),
+                pos: v2.create(-2.5, -9.5),
                 scale: 1,
                 ori: 0,
                 ignoreMapSpawnReplacement: true,
@@ -31405,6 +31439,10 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
     loot_tier_vault_floor: {
         type: "loot_spawner",
         loot: [tierLoot("tier_vault_floor", 1, 1)],
+    },
+    loot_tier_vault_floor_2: {
+        type: "loot_spawner",
+        loot: [tierLoot("tier_vault_floor_2", 1, 1)],
     },
     loot_tier_police_floor: {
         type: "loot_spawner",

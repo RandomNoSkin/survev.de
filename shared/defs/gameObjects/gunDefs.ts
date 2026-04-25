@@ -1200,8 +1200,8 @@ export const BaseDefs: Record<string, GunDef> = {
         barrelLength: 3.75,
         barrelOffset: 0,
         recoilTime: 1e10,
-        moveSpread: 11,
-        shotSpread: 3.5,
+        moveSpread: 9,
+        shotSpread: 3,
         bulletCount: 1,
         bulletType: "bullet_dp28",
         headshotMult: 1,
@@ -1769,7 +1769,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 0.5,
         bulletCount: 1,
         bulletType: "bullet_awc",
-        upgraded: { gun: "modified_awc", cost: 12 },
+        upgraded: { gun: "modified_awc", cost: 8 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2108,7 +2108,8 @@ export const BaseDefs: Record<string, GunDef> = {
         extendedReload: 8,
         reloadTime: 2.5,
         fireDelay: 0.45,
-        switchDelay: 0.75,
+        switchDelay: 0.45,
+        pullDelay: 0.45,
         barrelLength: 3.75,
         barrelOffset: 0,
         recoilTime: 1e10,
@@ -3546,7 +3547,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
     },
     supply_flare_gun: {
-        name: "Supply Flare Gun",
+        name: "S. Flare Gun",
         type: "gun",
         quality: 0,
         fireMode: "single",
@@ -3575,10 +3576,10 @@ export const BaseDefs: Record<string, GunDef> = {
         headshotMult: 1,
         speed: { equip: 3, attack: 0 },
         lootImg: {
-            sprite: "loot-weapon-flare-gun.img",
+            sprite: "loot-weapon-supply-flare-gun.img",
             tint: 65280,
             border: "loot-circle-outer-01.img",
-            borderTint: 848887,
+            borderTint: 0,
             scale: 0.3,
         },
         worldImg: {
@@ -3651,7 +3652,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
     },
     supply_flare_gun_dual: {
-        name: "Dual Supply Flare Gun",
+        name: "Dual S. Flare Gun",
         type: "gun",
         quality: 0,
         fireMode: "single",
@@ -3681,10 +3682,10 @@ export const BaseDefs: Record<string, GunDef> = {
         headshotMult: 1,
         speed: { equip: 3, attack: 0 },
         lootImg: {
-            sprite: "loot-weapon-flare-gun-dual.img",
+            sprite: "loot-weapon-supply-flare-gun-dual.img",
             tint: 65280,
             border: "loot-circle-outer-01.img",
-            borderTint: 848887,
+            borderTint: 0,
             scale: 0.3,
         },
         worldImg: {
@@ -3934,12 +3935,19 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "MP220 [+]",
         fireMode: "dual",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_p30l: defineGunSkin("p30l", {
         name: "P30L [+]",
+        fireDelay: 0.12,
         isDual: false,
         fireMode: "auto",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_awc: defineGunSkin("awc", {
         name: "AWM-S [+]",
@@ -3950,6 +3958,9 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
             shoot: "awc_01",
         },
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_m870: defineGunSkin("m870", {
         name: "M870 [+]",
@@ -3958,63 +3969,87 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         shotSpread: 17,
         bulletType: "bullet_buckshot_modified",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_model94: defineGunSkin("model94", {
         name: "Model 94 [+]",
-        moveSpread: 3, 
+        maxReload: 1, 
+        moveSpread: 4.5, 
         shotSpread: 2.5,
         burstCount: 2,
         fireDelay: 0.13,
         burstDelay: 0.005,
         fireMode: "burst",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_usas: defineGunSkin("usas", {
         name: "USAS-12 [+]",
-        maxClip: 1,
-        maxReload: 1,
         bulletType: "bullet_frag_modified",
-        speed: { equip: -4, attack: -7 },
+        speed: { equip: -1, attack: -2 },
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_mk12: defineGunSkin("mk12", {
         name: "MK12 SPR [+]",
         fireMode: "auto",
         maxClip: 15,
         maxReload: 15,
-        fireDelay: 0.14,
+        fireDelay: 0.13,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_m39: defineGunSkin("m39", {
         name: "M39 EMR [+]",
         burstCount: 2,
-        fireDelay: 0.35,
+        fireDelay: 0.25,
         burstDelay: 0.1,
         fireMode: "burst",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_an94: defineGunSkin("an94", {
         name: "AN-94 [+]",
         fireMode: "auto",
         fireDelay: 0.1,
+        speed: { equip: 0, attack: 5 },
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_spas12: defineGunSkin("spas12", {
         name: "SPAS-12 [+]",
         maxClip: 4,
         maxReload: 2,
-        bulletCount: 7,
-        reloadTime: 0.85,
+        bulletCount: 8,
+        reloadTime: 0.65,
         burstCount: 2,
-        burstDelay: 0.05,
+        burstDelay: 0.04,
         fireMode: "burst",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_mac10: defineGunSkin("mac10", {
         name: "MAC-10 [+]",
         moveSpread: 3,
         shotSpread: 2.5,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_bar: defineGunSkin("bar", {
         name: "BAR M1918 [+]",
@@ -4023,12 +4058,18 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireDelay: 0.16,
         bulletType: "bullet_bar_modified",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_grozas: defineGunSkin("grozas", {
         name: "Groza-S [+]",
         moveSpread: 3,
         shotSpread: 2,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_deagle: defineGunSkin("deagle", {
         name: "DEagle 50 [+]",
@@ -4037,16 +4078,24 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 3,
         shotSpread: 1,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_deagle_45acp: defineGunSkin("deagle", {
         name: "DEagle 45 [+]",
         secondAmmo: "modified_deagle",
         fireMode: "auto",
+        reloadTime: 1.8,
+        fireDelay: 0.1,
         ammo: "45acp",
         dualWieldType: "modified_deagle_dual_45acp",
         moveSpread: 8,
         shotSpread: 5,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_deagle_dual: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 50 [+]",
@@ -4054,26 +4103,39 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 6.5,
         shotSpread: 2,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 45 [+]",
         secondAmmo: "modified_deagle_dual",
         ammo: "45acp",
+        reloadTime: 3.5,
+        fireDelay: 0.08,
         fireMode: "auto",
         moveSpread: 12,
         shotSpread: 7,
+        upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_vss: defineGunSkin("vss", {
         name: "VSS [+]",
-        maxClip: 9,
-        maxReload: 9,
-        burstCount: 3,
+        maxClip: 12,
+        maxReload: 12,
+        burstCount: 2,
         burstDelay: 0.001,
-        fireDelay: 0.5,
+        fireDelay: 0.3,
         fireMode: "burst",
-        moveSpread: 2.5,
-        shotSpread: 1.5,
+        moveSpread: 1.6,
+        shotSpread: 1.2,
+        switchDelay: 0.4,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_m1014: defineGunSkin("m1014", {
         name: "Super90 [+]",
@@ -4082,13 +4144,19 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         moveSpread: 1.5,
         shotSpread: 2,
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
     modified_origin: defineGunSkin("origin", {
         name: "Origin-12 [+]",
-        maxClip: 6,
-        maxReload: 6,
+        maxClip: 8,
+        maxReload: 8,
         bulletType: "bullet_modified_origin",
         upgraded: undefined,
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
     }),
 }
 

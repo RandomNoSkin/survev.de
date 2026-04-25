@@ -112,7 +112,8 @@ export const Comp: MapDef = {
     // ! are uncertain data based on leak
     lootTable: {
         tier_world: [
-            { name: "tier_guns", count: 1, weight: 0.26995 }, // TODO get more data on this from original 30%
+            { name: "tier_guns", count: 1, weight: 0.21995 }, // TODO get more data on this from original 30%
+            { name: "tier_scrap", count: 1, weight: 0.05 },
             { name: "tier_ammo", count: 1, weight: 0.2 }, // ? 30%
             { name: "tier_scopes", count: 1, weight: 0.25 }, // ? 20%
             { name: "tier_armor", count: 1, weight: 0.18 }, // ? 20%
@@ -129,7 +130,8 @@ export const Comp: MapDef = {
             { name: "tier_packs", count: 1, weight: 0.11 }, // ? 14%
         ],
         tier_container: [
-            { name: "tier_guns", count: 1, weight: 0.27 }, // 27
+            { name: "tier_guns", count: 1, weight: 0.22 }, // 27
+            { name: "tier_scrap", count: 1, weight: 0.05 }, // 4
             { name: "tier_ammo", count: 1, weight: 0.04 }, // 4
             { name: "tier_scopes", count: 1, weight: 0.15 }, // 15
             { name: "tier_armor", count: 1, weight: 0.2 }, // 20
@@ -225,17 +227,19 @@ export const Comp: MapDef = {
             { name: "762mm", count: 90, weight: 0.25 },
             { name: "556mm", count: 90, weight: 0.25 },
             { name: "12gauge", count: 15, weight: 0.25 },
-            { name: "construction_item", count: 1, weight: 0.25 },
+        ],
+        tier_scrap: [
+            { name: "construction_item", count: 1, weight: 0.5 },
+            { name: "construction_item", count: 2, weight: 0.5 },
         ],
         tier_ammo_crate: [
             { name: "9mm", count: 90, weight: 3 },
             { name: "762mm", count: 90, weight: 3 },
             { name: "556mm", count: 90, weight: 3 },
             { name: "12gauge", count: 20, weight: 3 },
-            { name: "50AE", count: 21, weight: 1 },
+            { name: "50AE", count: 21, weight: 2 },
             { name: "flare", count: 1, weight: 2 },
-            { name: "45acp", count: 60, weight: 3 },
-            { name: "construction_item", count: 1, weight: 3 },
+            { name: "45acp", count: 60, weight: 4.5 },
         ],
         tier_vending_soda: [
             { name: "soda", count: 1, weight: 2 }, // ?
@@ -253,6 +257,7 @@ export const Comp: MapDef = {
         ],
         tier_mansion_floor: [{ name: "outfitCasanova", count: 1, weight: 0.5 }, { name: "saw", count: 1, weight: 0.5 }],
         tier_vault_floor: [{ name: "crowbar", count: 1, weight: 1 }],
+        tier_vault_floor_2: [{ name: "backpack03", count: 1, weight: 1 }],
         tier_police_floor: [{ name: "kukri_trad", count: 1, weight: 1 }],
         tier_fragtastic: [
             { name: "", count: 1, weight: 1 },
@@ -579,11 +584,11 @@ export const Comp: MapDef = {
             { name: "pkm", count: 1, weight: 0.03 },
         ],
         tier_crossing: [
-            { name: "ots38", count: 1, weight: 0.15},
+            { name: "ots38", count: 1, weight: 0.2},
             { name: "ots38_dual", count: 1, weight: 0.2},
             { name: "p30l", count: 1, weight: 0.2},
             { name: "m134", count: 1, weight: 0.15},
-            { name: "p90", count: 1, weight: 0.2},
+            { name: "p90", count: 1, weight: 0.15},
         ],
         tier_lmgs: [
             { name: "dp28", count: 1, weight: 2 }, // ?
@@ -833,7 +838,6 @@ export const Comp: MapDef = {
             { name: "762mm", count: 30, weight: 3 },
             { name: "556mm", count: 30, weight: 3 },
             { name: "12gauge", count: 5, weight: 3 },
-            { name: "construction_item", count: 5, weight: 3 },
         ],
         tier_airdrop_outfits: [
             { name: "", count: 1, weight: 20 },
@@ -996,6 +1000,11 @@ export const Comp: MapDef = {
             { name: "backpack02", count: 1, weight: 0.17 },
             { name: "tier_armor_3", count: 1, weight: 0.25 },
         ],
+        tier_supply_armor_3: [
+            { name: "backpack03", count: 1, weight: 0.28 },
+            { name: "chest03", count: 1, weight: 0.25 },
+            { name: "helmet03", count: 1, weight: 0.27 },
+        ],
         tier_armor_3: [
             { name: "backpack03", count: 1, weight: 0.28 },
             { name: "chest03", count: 1, weight: 0.25 },
@@ -1024,7 +1033,6 @@ export const Comp: MapDef = {
             { name: "50AE", count: 29, weight: 0.25 },
             { name: "flare", count: 1, weight: 0.1 },
             { name: "45acp", count: 90, weight: 0.25 },
-            { name: "construction_item", count: 5, weight: 0.25 },
         ],
     },
     mapGen: {
@@ -1165,7 +1173,7 @@ export const Comp: MapDef = {
                 cache_01: 1, // flare stone
                 cache_02: { odds: 0.5 }, // mosin tree
                 cache_07: 1, //barrel
-                bunker_structure_01: { odds: 0.4 }, // ak74 bunker
+                bunker_structure_01: { odds: 0.6 }, // ak74 bunker
                 bunker_structure_02: 1, // vector bunker
                 bunker_structure_03: 1, // storm bunker
                 bunker_structure_04: 1, // sea bunker

@@ -90,6 +90,7 @@ export class TeamMenu {
         this.serverSelect.on("change", () => {
             const e = this.serverSelect.find(":selected").val() as string;
             this.pingTest.start([e]);
+            this.connect(false, this.roomData.roomUrl);
             this.setRoomProperty("region", e);
         });
         this.queueMode1.on("click", () => {
@@ -451,12 +452,12 @@ export class TeamMenu {
             setButtonState(
                 this.queueMode1,
                 this.roomData.gameModeIdx == 1,
-                this.isLeader && this.roomData.enabledGameModeIdxs.includes(1),
+                this.isLeader && this.roomData.enabledGameModeIdxs[0] === 1,
             );
             setButtonState(
                 this.queueMode2,
                 this.roomData.gameModeIdx == 2,
-                this.isLeader && this.roomData.enabledGameModeIdxs.includes(2),
+                this.isLeader && this.roomData.enabledGameModeIdxs[1] === 2,
             );
 
             // Fill mode
