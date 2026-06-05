@@ -190,6 +190,7 @@ export const PassDefs: Record<string, PassDef> = {
             205,205,205,205,205,
             205,205,205,205,
             ],
+            //most to least: emotes, outfits, heal/boost, melee skins
         items: [
             { level: 2,  item: "" },
             { level: 4,  item: "" },
