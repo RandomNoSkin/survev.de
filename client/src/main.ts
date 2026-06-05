@@ -60,6 +60,7 @@ export class Application {
     refreshModal = new MenuModal($("#modal-refresh"));
     notVerifiedModal = new MenuModal($("#modal-not-verified"));
     ipBanModal = new MenuModal($("#modal-ip-banned"));
+    rulesModal = new MenuModal($("#modal-rules"));
     config = new ConfigManager();
     localization = new Localization();
 
@@ -120,6 +121,13 @@ export class Application {
             this.errorModal,
         );
         this.siteInfo = new SiteInfo(this.config, this.localization);
+        this.siteInfo.onModesUpdated = () => {
+            const modes = this.siteInfo.getModesForSelectedRegion();
+            const names = modes.filter((m) => m.enabled).map((m) => m.mapName);
+            this.pass.buildXpInfo(names);
+            this.updateBoostBadges();
+        };
+        setInterval(() => { if (this.siteInfo.loaded) this.updateBoostBadges(); }, 1000);
         this.gameInfo = new GameInfo(this.config);
 
         this.teamMenu = new TeamMenu(
@@ -178,6 +186,19 @@ export class Application {
             this.startPingTest();
             this.siteInfo.load();
             this.localization.localizeIndex();
+
+            if (!this.config.get("rulesAccepted")) {
+                this.rulesModal.show(true);
+            }
+            $("#btn-rules-accept").on("click", () => {
+                this.config.set("rulesAccepted", true);
+                this.config.store();
+                this.rulesModal.hide();
+            });
+            $("#btn-rules-leave").on("click", () => {
+                window.location.href = "https://www.google.com";
+            });
+
             this.account.init();
 
             this.nameInput.attr("maxLength", net.Constants.PlayerNameMaxLen);
@@ -416,6 +437,13 @@ export class Application {
             this.config.addModifiedListener(this.onConfigModified.bind(this));
             loadStaticDomImages();
 
+            // Auto-spectate a specific game if triggered from the moderation dashboard
+            const pendingSpectate = sessionStorage.getItem("dashboardSpectate");
+            if (pendingSpectate) {
+                sessionStorage.removeItem("dashboardSpectate");
+                this.joinGameAsSpectator(JSON.parse(pendingSpectate));
+            }
+
             SDK.gameLoadComplete();
         }
     }
@@ -436,6 +464,38 @@ export class Application {
             this.loadoutDisplay.resize();
         }
         this.refreshUi();
+    }
+
+    updateBoostBadges() {
+        const loggedIn = this.account.loggedIn;
+        const passType = GameConfig.serverSettings.currentPass;
+        const events = (GameConfig.serverSettings.xpBoostEvents as any)?.[passType];
+        const now = Date.now();
+        let activeMaps: string[] = [];
+        let activeBoost = 2;
+        if (events) {
+            for (const ev of Object.values(events) as any[]) {
+                if (now >= new Date(ev.start).getTime() && now <= new Date(ev.end).getTime()) {
+                    activeMaps = ev.maps;
+                    activeBoost = ev.boost;
+                    break;
+                }
+            }
+        }
+        $(".xp-boost-badge").remove();
+        if (!loggedIn || activeMaps.length === 0) return;
+
+        const modes = this.siteInfo.getModesForSelectedRegion();
+        for (let i = 0; i < 3; i++) {
+            const mode = modes[i];
+            if (!mode?.enabled || !activeMaps.includes(mode.mapName)) continue;
+            const btnEl = document.getElementById(`btn-start-mode-${i}`);
+            if (!btnEl || !$(btnEl).is(":visible")) continue;
+            const r = btnEl.getBoundingClientRect();
+            $("body").append(
+                `<span class="xp-boost-badge" style="top:${r.top - 3}px;left:${r.right - 20}px;transform:translateX(-100%)">&#128293; ${activeBoost}&#xD7;</span>`
+            );
+        }
     }
 
     startPingTest() {
@@ -658,6 +718,10 @@ export class Application {
     }
 
     tryQuickStartGame(gameModeIdx: number) {
+        if (!this.config.get("rulesAccepted")) {
+            this.rulesModal.show(true);
+            return;
+        }
         if (this.quickPlayPendingModeIdx === -1) {
             // Update UI to display a spinner on the play button
             this.errorMessage = "";

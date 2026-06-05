@@ -87,6 +87,7 @@ const defaultConfig = {
     localRotation: false,
     screenShake: true,
     anonPlayerNames: false,
+    autoDownloadStats: false,
     touchMoveStyle: "anywhere" as "locked" | "anywhere",
     touchAimStyle: "anywhere" as "locked" | "anywhere",
     touchAimLine: true,
@@ -106,6 +107,7 @@ const defaultConfig = {
     loadout: loadout.defaultLoadout(),
     sessionCookie: "" as string | null,
     binds: "",
+    rulesAccepted: false,
     cachedBgImg: "img/main_splash.png",
     version: 1,
     /* STRIP_FROM_PROD_CLIENT:START */

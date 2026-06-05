@@ -85,6 +85,10 @@ class GameServer {
             playerData: data.playerData,
         });
 
+        if (gameId === "player_not_verified") {
+            return { error: "player_not_verified" };
+        }
+
         return {
             gameId,
             useHttps: this.region.https,
@@ -474,6 +478,7 @@ app.post("/api/game_infos", async (res, req) => {
                     playerNames: "",
                     runtime: g.startedTime,
                     stopped: g.stopped ?? false,
+                    verifiedOnly: g.verifiedOnly ?? false,
                 })).filter((g: any) => g.id);
 
                 returnJson(res, { data });
@@ -602,6 +607,71 @@ app.post("/api/find_spectator_game", (res, req) => {
     );
 });
 
+// ---- Moderation Dashboard endpoints (called by API server) ----
+
+/** Returns the live player list for a specific game. */
+app.post("/api/dashboard/game_players", (res, req) => {
+    res.onAborted(() => { res.aborted = true; });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(res, async (body: any) => {
+        if (res.aborted) return;
+        const { gameId } = body ?? {};
+        if (typeof gameId !== "string") { returnJson(res, { error: "missing gameId" }); return; }
+        const players = await server.manager.getGamePlayers(gameId);
+        returnJson(res, { players });
+    }, () => {
+        if (!res.aborted) returnJson(res, { error: "body error" });
+    });
+});
+
+/** Executes an admin command on a specific running game. */
+app.post("/api/dashboard/game_cmd", (res, req) => {
+    res.onAborted(() => { res.aborted = true; });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(res, (body: any) => {
+        if (res.aborted) return;
+        const { gameId, cmd } = body ?? {};
+        if (typeof gameId !== "string" || typeof cmd?.action !== "string") {
+            returnJson(res, { error: "invalid body" });
+            return;
+        }
+        server.manager.sendAdminCmd(gameId, cmd);
+        returnJson(res, { ok: true });
+    }, () => {
+        if (!res.aborted) returnJson(res, { error: "body error" });
+    });
+});
+
+/** Sets verified-only mode on all running games and all future games on this server. */
+app.post("/api/dashboard/set_server_verified", (res, req) => {
+    res.onAborted(() => { res.aborted = true; });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(res, (body: any) => {
+        if (res.aborted) return;
+        server.manager.setServerVerified(!!body?.state);
+        returnJson(res, { ok: true });
+    }, () => {
+        if (!res.aborted) returnJson(res, { error: "body error" });
+    });
+});
+
+// ---------------------------------------------------------------
+
 const gameHTTPRateLimit = new HTTPRateLimit(5, 1000);
 const gameWsRateLimit = new WebSocketRateLimit(500, 1000, 5);
 
@@ -665,7 +735,8 @@ app.ws<GameSocketData>("/play", {
 
         if (ipData?.banned) {
             disconnectReason = "ip_banned";
-        } else if (ipData?.behindProxy) {
+        } else if (ipData?.behindProxy && !server.manager.ipHasAccount(ip)) {
+            // Skip the proxy block if the player joined with a linked account
             disconnectReason = "behind_proxy";
         }
 
@@ -777,7 +848,7 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
         const ipData = await server.checkIp(ip);
         if (ipData?.banned) {
             disconnectReason = "ip_banned";
-        } else if (ipData?.behindProxy) {
+        } else if (ipData?.behindProxy && !server.manager.ipHasAccount(ip)) {
             disconnectReason = "behind_proxy";
         }
 

@@ -6,6 +6,8 @@ import type { MapDefs } from "../../../shared/defs/mapDefs";
 import * as net from "../../../shared/net/net";
 import { Config } from "../config";
 import type {
+    AdminCmdAction,
+    DashboardPlayer,
     FindGamePrivateBody,
     GameData,
     GameSocketData,
@@ -25,6 +27,18 @@ export abstract class GameManager {
     abstract findGameById(gameId: string, playerData: any[], autoFill: boolean): Promise<string>;
     abstract getGames(): Promise<GameData[]>;
 
+    /** Returns true if this IP recently used a join token with a linked account (skip proxy check). */
+    abstract ipHasAccount(ip: string): boolean;
+
+    /** Returns live player data for a running game (for the moderation dashboard). */
+    abstract getGamePlayers(gameId: string): Promise<DashboardPlayer[]>;
+
+    /** Sends an admin command to a running game (fire-and-forget). */
+    abstract sendAdminCmd(gameId: string, cmd: AdminCmdAction): void;
+
+    /** Sets verified-only mode on all running games and all future games. */
+    abstract setServerVerified(state: boolean): void;
+
     abstract onOpen(socketId: string, socket: WebSocket<GameSocketData>): void;
 
     abstract onMsg(socketId: string, msg: ArrayBuffer): void;
@@ -41,6 +55,8 @@ export class SingleThreadGameManager implements GameManager {
 
     readonly gamesById = new Map<string, Game>();
     readonly games: Game[] = [];
+
+    serverVerifiedOnly = false;
 
     constructor() {
         // setInterval on windows sucks
@@ -123,6 +139,7 @@ export class SingleThreadGameManager implements GameManager {
             },
         );
         await game.init();
+        game.verifiedOnly = this.serverVerifiedOnly;
         this.games.push(game);
         this.gamesById.set(id, game);
         return game;
@@ -152,6 +169,10 @@ export class SingleThreadGameManager implements GameManager {
             });
         }
 
+        if (game.verifiedOnly && body.playerData.some((p) => !p.userId)) {
+            return "player_not_verified";
+        }
+
         game.addJoinTokens(body.playerData, body.autoFill);
 
         return game.id;
@@ -171,6 +192,27 @@ export class SingleThreadGameManager implements GameManager {
 
     async getGames(): Promise<GameData[]> {
         return this.games.map((game) => game);
+    }
+
+    ipHasAccount(_ip: string): boolean {
+        // SingleThread mode is dev-only; skip the check there
+        return false;
+    }
+
+    async getGamePlayers(gameId: string): Promise<DashboardPlayer[]> {
+        return this.gamesById.get(gameId)?.getPlayerDataForDashboard() ?? [];
+    }
+
+    sendAdminCmd(gameId: string, cmd: AdminCmdAction): void {
+        this.gamesById.get(gameId)?.executeAdminCmd(cmd);
+    }
+
+    setServerVerified(state: boolean): void {
+        this.serverVerifiedOnly = state;
+        const cmd: AdminCmdAction = { action: state ? "verify" : "unverify" };
+        for (const game of this.games) {
+            game.executeAdminCmd(cmd);
+        }
     }
 
     onOpen(socketId: string, socket: WebSocket<GameSocketData>): void {

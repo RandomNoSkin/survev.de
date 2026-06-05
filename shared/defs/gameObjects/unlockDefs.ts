@@ -7,6 +7,7 @@ export const _allowedMeleeSkins = [
     "fists",
     "knuckles_rusted",
     "knuckles_heroic",
+    "knuckles_OldMan",
     "karambit_rugged",
     "karambit_prismatic",
     "karambit_drowned",
@@ -53,12 +54,20 @@ export const _allowedOutfits = [
     "outfitCobaltShell",
     "outfitCarbonFiber",
     "outfitDarkGloves",
+    "outfitOldMan",
     "outfitDesertCamo",
     "outfitCamo",
     "outfitRed",
     "outfitWhite",
     "outfitOhNah",
     "outfitParrotfish",
+    "outfitSunrise",
+    "outfitTide",
+    "outfitTropicalStorm",
+    "outfitBeachCamo",
+    "outfitWave",
+    "outfitCoconut",
+    "outfitNordCode",
 ];
 export const _allowedEmotes = [
     "emote_thumbsup",
@@ -207,6 +216,12 @@ export const _allowedEmotes = [
     "emote_pooface",
     "emote_ok",
     "emote_rainbow",
+    "emote_sun",
+    "emote_surfboard",
+    "emote_beachball",
+    "emote_flamingo",
+    "emote_watermelon",
+    "emote_palm",
 ];
 
 export interface UnlockDef {

@@ -7,6 +7,8 @@ import * as net from "../../../shared/net/net";
 import { util } from "../../../shared/utils/util";
 import { ServerLogger } from "../utils/logger";
 import {
+    type AdminCmdAction,
+    type DashboardPlayer,
     type FindGamePrivateBody,
     type GameData,
     type GameSocketData,
@@ -45,6 +47,9 @@ class GameProcess implements GameData {
     stoppedTime = Date.now();
 
     avaliableSlots = 0;
+
+    /** Pending GetPlayerData callbacks, keyed by requestId. */
+    readonly pendingPlayerDataRequests = new Map<string, (players: DashboardPlayer[]) => void>();
 
     constructor(manager: GameProcessManager, id: string, config: ServerGameConfig) {
         this.manager = manager;
@@ -112,6 +117,16 @@ class GameProcess implements GameData {
                         socket.close();
                     }
                     break;
+
+                // Dashboard: resolve the pending getGamePlayers() promise
+                case ProcessMsgType.PlayerDataResponse: {
+                    const resolve = this.pendingPlayerDataRequests.get(msg.requestId);
+                    if (resolve) {
+                        this.pendingPlayerDataRequests.delete(msg.requestId);
+                        resolve(msg.players);
+                    }
+                    break;
+                }
             }
         });
 
@@ -140,6 +155,12 @@ class GameProcess implements GameData {
     }
 
     addJoinTokens(tokens: FindGamePrivateBody["playerData"], autoFill: boolean) {
+        // Cache IPs of logged-in players so the WebSocket upgrade can skip the proxy check
+        for (const t of tokens) {
+            if (t.userId) {
+                this.manager.accountIpCache.set(t.ip, Date.now() + 2 * 60 * 1000);
+            }
+        }
         this.send({
             type: ProcessMsgType.AddJoinToken,
             autoFill,
@@ -180,8 +201,26 @@ class GameProcess implements GameData {
 export class GameProcessManager implements GameManager {
     readonly sockets = new Map<string, WebSocket<GameSocketData>>();
 
+    /**
+     * Short-lived cache: IP → has a linked account.
+     * Populated when AddJoinToken is called with a non-empty userId.
+     * Used during WebSocket upgrade to skip the proxy check for logged-in players.
+     * Entries expire after 2 minutes (more than enough to cover the join window).
+     */
+    readonly accountIpCache = new Map<string, number>();
+
+    /** Returns true if this IP recently joined with a linked account. */
+    ipHasAccount(ip: string): boolean {
+        const expires = this.accountIpCache.get(ip);
+        if (expires === undefined) return false;
+        if (expires < Date.now()) { this.accountIpCache.delete(ip); return false; }
+        return true;
+    }
+
     readonly processById = new Map<string, GameProcess>();
     readonly processes: GameProcess[] = [];
+
+    serverVerifiedOnly = false;
 
     readonly logger = new ServerLogger("Game Process Manager");
 
@@ -258,6 +297,10 @@ export class GameProcessManager implements GameManager {
 
         this.processById.set(id, gameProc);
 
+        if (this.serverVerifiedOnly) {
+            gameProc.send({ type: ProcessMsgType.AdminCmd, cmd: { action: "verify" } });
+        }
+
         return gameProc;
     }
 
@@ -318,10 +361,18 @@ export class GameProcessManager implements GameManager {
         if (!game.created) {
             return await new Promise((resolve) => {
                 game.onCreatedCbs.push((game) => {
+                    if (this.serverVerifiedOnly && body.playerData.some((p) => !p.userId)) {
+                        resolve("player_not_verified");
+                        return;
+                    }
                     game.addJoinTokens(body.playerData, body.autoFill);
                     resolve(game.id);
                 });
             });
+        }
+
+        if (this.serverVerifiedOnly && body.playerData.some((p) => !p.userId)) {
+            return "player_not_verified";
         }
 
         game.addJoinTokens(body.playerData, body.autoFill);
@@ -343,6 +394,46 @@ export class GameProcessManager implements GameManager {
 
     async getGames(): Promise<GameData[]> {
         return this.processes.map((game) => game);
+    }
+
+    /**
+     * Requests the live player list from a running game process.
+     * Resolves with an empty array if the game is not found or times out after 3 s.
+     */
+    async getGamePlayers(gameId: string): Promise<DashboardPlayer[]> {
+        const proc = this.processById.get(gameId);
+        if (!proc) return [];
+
+        const requestId = randomUUID();
+
+        return new Promise<DashboardPlayer[]>((resolve) => {
+            const timeout = setTimeout(() => {
+                proc.pendingPlayerDataRequests.delete(requestId);
+                resolve([]);
+            }, 3000);
+
+            proc.pendingPlayerDataRequests.set(requestId, (players) => {
+                clearTimeout(timeout);
+                resolve(players);
+            });
+
+            proc.send({ type: ProcessMsgType.GetPlayerData, requestId });
+        });
+    }
+
+    /** Sends an admin command to a running game process (fire-and-forget). */
+    sendAdminCmd(gameId: string, cmd: AdminCmdAction): void {
+        this.processById.get(gameId)?.send({ type: ProcessMsgType.AdminCmd, cmd });
+    }
+
+    setServerVerified(state: boolean): void {
+        this.serverVerifiedOnly = state;
+        const cmd: AdminCmdAction = { action: state ? "verify" : "unverify" };
+        for (const proc of this.processes) {
+            if (!proc.stopped) {
+                proc.send({ type: ProcessMsgType.AdminCmd, cmd });
+            }
+        }
     }
 
     onOpen(socketId: string, socket: WebSocket<GameSocketData>): void {
