@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:cc="http://creativecommons.org/ns#"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:svg="http://www.w3.org/2000/svg"
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.0.2"
+  xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+  width="140" height="140" version="1.1" id="svg4">
+  <metadata id="metadata10"><rdf:RDF><cc:Work rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/><dc:title>Marble Red Skin</dc:title></cc:Work></rdf:RDF></metadata>
+  <defs id="defs8">
+    <clipPath id="circleClip"><ellipse cx="70" cy="70" rx="66.5" ry="66.5"/></clipPath>
+    <filter id="marbleFilter" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="turbulence" baseFrequency="0.012 0.008" numOctaves="6" seed="5" result="turbulence"/>
+      <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="55" xChannelSelector="R" yChannelSelector="G" result="displaced"/>
+    </filter>
+    <filter id="swirl" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.018 0.012" numOctaves="5" seed="12" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="38" xChannelSelector="R" yChannelSelector="B" result="swirled"/>
+    </filter>
+    <radialGradient id="darkBase" cx="50%" cy="50%" r="60%" fx="35%" fy="40%">
+      <stop offset="0%" stop-color="#2a0000"/>
+      <stop offset="40%" stop-color="#150000"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+    <linearGradient id="fluid1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff0000" stop-opacity="0.95"/>
+      <stop offset="25%" stop-color="#dd0000" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#ff0011" stop-opacity="1"/>
+      <stop offset="75%" stop-color="#cc0000" stop-opacity="0.88"/>
+      <stop offset="100%" stop-color="#880000" stop-opacity="0.9"/>
+    </linearGradient>
+    <linearGradient id="vein1" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#ff2222" stop-opacity="0.8"/>
+      <stop offset="40%" stop-color="#ff0000" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#cc0000" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="highlight" x1="0%" y1="0%" x2="60%" y2="100%">
+      <stop offset="0%" stop-color="#ff6666" stop-opacity="0.7"/>
+      <stop offset="50%" stop-color="#ff1111" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#dd0000" stop-opacity="0.4"/>
+    </linearGradient>
+    <linearGradient id="darkSwirl" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#660000" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#440000" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#220000" stop-opacity="0.8"/>
+    </linearGradient>
+    <radialGradient id="gloss" cx="38%" cy="32%" r="45%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="50%" stop-color="#ff4444" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="50%">
+      <stop offset="65%" stop-color="#000000" stop-opacity="0.0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.55"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse cx="70" cy="70" rx="66.5" ry="66.5" style="fill:url(#darkBase);stroke:none;"/>
+  <g clip-path="url(#circleClip)">
+    <ellipse cx="75" cy="45" rx="80" ry="75" style="fill:url(#fluid1);opacity:0.92;" filter="url(#marbleFilter)"/>
+    <path d="M -10,80 Q 20,30 50,60 Q 80,90 60,140 Q 30,155 -10,120 Z" style="fill:url(#darkSwirl);opacity:0.88;" filter="url(#swirl)"/>
+    <ellipse cx="100" cy="25" rx="55" ry="50" style="fill:#100505;opacity:0.75;" filter="url(#swirl)"/>
+    <path d="M -5,10 Q 40,50 65,70 Q 90,90 145,130" style="fill:none;stroke:url(#vein1);stroke-width:22;stroke-linecap:round;opacity:0.82;" filter="url(#swirl)"/>
+    <path d="M 10,40 Q 45,65 55,85 Q 65,105 40,145" style="fill:none;stroke:#ff0000;stroke-width:15;stroke-linecap:round;opacity:0.75;" filter="url(#marbleFilter)"/>
+    <path d="M 20,0 Q 55,20 70,40 Q 85,60 145,55" style="fill:none;stroke:#ff4444;stroke-width:9;stroke-linecap:round;opacity:0.65;" filter="url(#swirl)"/>
+    <ellipse cx="60" cy="55" rx="50" ry="42" style="fill:url(#highlight);opacity:0.58;" filter="url(#marbleFilter)"/>
+    <ellipse cx="20" cy="115" rx="55" ry="40" style="fill:#0a0000;opacity:0.72;" filter="url(#swirl)"/>
+    <ellipse cx="125" cy="90" rx="40" ry="55" style="fill:#0d0000;opacity:0.65;" filter="url(#marbleFilter)"/>
+    <ellipse cx="95" cy="80" rx="28" ry="22" style="fill:#ff0000;opacity:0.55;" filter="url(#swirl)"/>
+    <ellipse cx="70" cy="70" rx="66.5" ry="66.5" style="fill:url(#gloss);opacity:1;"/>
+    <ellipse cx="70" cy="70" rx="66.5" ry="66.5" style="fill:url(#vignette);opacity:1;"/>
+  </g>
+  <ellipse cx="70" cy="70" rx="66.5" ry="66.5" style="fill:none;stroke:#550000;stroke-width:2.2;opacity:0.9;"/>
+</svg>
