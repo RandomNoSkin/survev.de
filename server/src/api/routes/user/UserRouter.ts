@@ -320,7 +320,8 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
         matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
         totalXp += matchXp * boost;
     }
-    totalXp = Math.floor(totalXp);
+    // round to avoid float drift while preserving fractional XP (smallest multiplier is 0.00025)
+    totalXp = Math.round(totalXp * 1e5) / 1e5;
     console.log(`User ${user.username} earned ${totalXp} XP from ${stats.length} matches since last update`);
 
     const newTotalXp = currentXp + totalXp;
