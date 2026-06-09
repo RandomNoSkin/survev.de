@@ -490,16 +490,12 @@ function connectSSE(region, gameId) {
   });
 
   evtSource.addEventListener('feed', (e) => {
-    const { chat = [], kills = [] } = JSON.parse(e.data);
+    const { entries = [] } = JSON.parse(e.data);
     const list = document.getElementById('game-feed-list');
     if (!list) return;
-    const entries = [
-      ...chat.map(m => \`<div class="feed-chat" style="color:var(--blue-t)">💬 <b>\${esc(m.username||'?')}</b>: \${esc(m.message||'')}</div>\`),
-      ...kills.map(k => \`<div class="feed-kill" style="color:var(--red-t)">💀 <b>\${esc(k.killerName||'?')}</b> killed <b>\${esc(k.victimName||'?')}</b> [\${esc(k.weapon||'')}]</div>\`),
-    ];
-    for (const html of entries) {
+    for (const entry of entries) {
       const div = document.createElement('div');
-      div.innerHTML = html;
+      div.innerHTML = feedEntryHtml(entry);
       list.prepend(div.firstChild);
     }
     // Cap feed display at 100 entries
@@ -901,6 +897,37 @@ async function spectateGame(region, gameId) {
 }
 
 /** Selects a game and reconnects SSE with the gameId so player events start flowing. */
+function feedEntryHtml(entry) {
+  if (entry.channel === -1) {
+    const parts = (entry.message || '').split('|');
+    const victim = parts[0] ?? '?';
+    const weapon = parts[1] ?? '';
+    return \`<div class="feed-kill" style="color:var(--red-t)">💀 <b>\${esc(entry.username||'?')}</b> killed <b>\${esc(victim)}</b> [\${esc(weapon)}]</div>\`;
+  }
+  if (entry.channel === -2) {
+    const parts = (entry.message || '').split('|');
+    const victim = parts[0] ?? '?';
+    const weapon = parts[1] ?? '';
+    return \`<div class="feed-down" style="color:var(--orange-t)">💥 <b>\${esc(entry.username||'?')}</b> knocked <b>\${esc(victim)}</b> [\${esc(weapon)}]</div>\`;
+  }
+  return \`<div class="feed-chat" style="color:var(--blue-t)">💬 <b>\${esc(entry.username||'?')}</b>: \${esc(entry.message||'')}</div>\`;
+}
+
+async function loadGameFeedHistory(region, gameId) {
+  const list = document.getElementById('game-feed-list');
+  if (!list) return;
+  list.innerHTML = '';
+  try {
+    const data = await get('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/chat');
+    const entries = data.messages ?? [];
+    for (const entry of entries) {
+      const div = document.createElement('div');
+      div.innerHTML = feedEntryHtml(entry);
+      list.appendChild(div.firstChild);
+    }
+  } catch { /* non-critical */ }
+}
+
 function selectGame(region, gameId) {
   activeGameRegion = region;
   activeGameId     = gameId;
@@ -912,6 +939,9 @@ function selectGame(region, gameId) {
   updateVerifyButtons(gameData?.verifiedOnly ?? false);
   currentPlayers = [];
   document.getElementById('player-tbody').innerHTML = '<tr><td colspan="6" class="loading">Lade…</td></tr>';
+
+  // Load existing feed history immediately
+  loadGameFeedHistory(region, gameId);
 
   // Re-open SSE with the selected gameId – server now streams player data too
   connectSSE(region, gameId);
