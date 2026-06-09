@@ -1843,6 +1843,65 @@ a:active {
   background-color: rgba(100, 149, 237, 0.12);
 }
 
+.private-lobby-team-joinable {
+  cursor: pointer;
+}
+
+.private-lobby-team-joinable:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  outline: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.private-lobby-general-settings {
+  width: 100%;
+}
+
+.private-lobby-setting-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.private-lobby-setting-label {
+  color: #fff;
+  font-size: 14px;
+}
+
+.private-lobby-setting-toggle {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  user-select: none;
+}
+
+.private-lobby-setting-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.private-lobby-setting-toggle-on {
+  background-color: rgba(124, 252, 0, 0.2);
+  color: #7cfc00;
+  outline: 1px solid rgba(124, 252, 0, 0.5);
+}
+
+.private-lobby-setting-toggle-on:hover {
+  background-color: rgba(124, 252, 0, 0.3);
+}
+
+.private-lobby-setting-toggle-disabled {
+  cursor: default;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 #private-lobby-menu-options {
   box-sizing: border-box;
   display: flex;
@@ -1872,7 +1931,6 @@ a:active {
   flex: 0 0 auto;
   flex-direction: column;
   margin-top: auto;
-  min-height: 0;
   padding-top: 8px;
 }
 
@@ -1905,8 +1963,8 @@ a:active {
 }
 
 #private-lobby-settings-content {
-  flex: 1;
-  min-height: 0;
+  min-height: 72px;
+  overflow-y: auto;
   padding-right: 4px;
 }
 

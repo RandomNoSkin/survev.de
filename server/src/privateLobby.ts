@@ -137,6 +137,7 @@ class Room {
         teamSize: 1,
         teamCount: 1,
         enabledArenaRoles: [],
+        allowMembersJoinTeams: true,
     };
 
     constructor(
@@ -289,7 +290,11 @@ class Room {
                 break;
             }
             case "assignTeam": {
-                if (!player.isLeader) break;
+                if (!player.isLeader) {
+                    // Non-leaders may only move themselves, and only when the setting allows it
+                    if (!this.data.allowMembersJoinTeams) break;
+                    if (msg.data.playerId !== player.playerId) break;
+                }
                 this.assignTeam(msg.data.playerId, msg.data.teamId);
                 break;
             }
@@ -332,11 +337,15 @@ class Room {
     assignTeam(playerId: number, teamId: number) {
         const player = this.players[playerId];
         if (!player) return;
-        // Lobbies allow custom layouts beyond the mode's nominal team count
-        // (e.g. splitting a squad lobby into more, smaller teams), so any slot
-        // index up to maxPlayers is valid — there just can't be more useful
-        // team slots than there are players to fill them.
         if (teamId < 0 || teamId >= this.data.maxPlayers) return;
+
+        // Spectators joining a team leave spectator status; check capacity first.
+        if (player.spectator) {
+            const nonSpectatorCount = this.players.filter(p => !p.spectator).length;
+            if (nonSpectatorCount >= this.data.maxPlayers) return;
+            player.spectator = false;
+        }
+
         if (player.teamId === teamId) return;
 
         const teamSize = this.players.filter(
@@ -412,6 +421,8 @@ class Room {
             enabledArenaRoles = [...arenaRoles];
         }
         this.data.enabledArenaRoles = enabledArenaRoles;
+
+        this.data.allowMembersJoinTeams = props.allowMembersJoinTeams ?? true;
 
         // kick players that don't fit on the new max players — but never the
         // leader (who's the only one able to trigger this): since ownership no

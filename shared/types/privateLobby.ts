@@ -37,6 +37,8 @@ export interface RoomData {
     teamCount: number;
     /** Arena-mode roles the leader has enabled for the match (subset of the map's `arenaModeRoles`). Empty for non-arena modes. */
     enabledArenaRoles: string[];
+    /** When true, any member (not just the leader) can click a team slot to join it. Default true. */
+    allowMembersJoinTeams: boolean;
 }
 
 //
@@ -120,6 +122,7 @@ export const zClientRoomData = z.object({
     region: z.string(),
     gameModeIdx: z.number(),
     enabledArenaRoles: z.array(z.string()).optional(),
+    allowMembersJoinTeams: z.boolean().optional(),
 });
 
 export type ClientRoomData = z.infer<typeof zClientRoomData>;
