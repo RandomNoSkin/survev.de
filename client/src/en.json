@@ -75,6 +75,8 @@
   "index-private-lobby-afk-warning": "marked as AFK. Start anyway?",
   "index-private-lobby-start-anyway": "Start Anyway",
   "index-private-lobby-cancel": "Cancel",
+  "index-private-lobby-spectators": "Spectators",
+  "index-private-lobby-copy-spectator-link": "Copy spectator invite link",
   "index-solo": "Solo",
   "index-duo": "Duo",
   "index-squad": "Squad",

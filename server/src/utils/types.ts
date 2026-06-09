@@ -92,6 +92,8 @@ export const zFindPrivateLobbyGameBody = z.object({
     mapName: z.string(),
     teamMode: z.number(),
     teams: z.array(z.array(zPrivateLobbyPlayerData)),
+    /** Spectators joining the lobby — each gets its own join token so the game server can authenticate them. */
+    spectators: z.array(zPrivateLobbyPlayerData).optional(),
     /** Arena-mode role pool the lobby leader narrowed down to (see `RoomData.enabledArenaRoles`). */
     arenaRoles: z.array(z.string()).optional(),
 });
@@ -238,6 +240,7 @@ export type AdminCmdAction =
     | { action: "unfreeze" }
     | { action: "verify" }
     | { action: "unverify" }
+    | { action: "stop" }
     | { action: "kick";            target: string }
     | { action: "announce";        text: string; color?: string; sender?: string }
     | { action: "announce_player"; target: string; text: string; color?: string; sender?: string }

@@ -45,10 +45,11 @@ import { ChatUi } from "./ui/chat";
 const PRIVATE_LOBBY_CODE_LENGTH = 6;
 
 // Matches lobby codes, optionally suffixed with "-<teamId>" for team-specific
-// invite links/codes (e.g. "ABC123-2"); group 2 captures the team slot index
-// when present. See Room.addPlayer in server/src/privateLobby.ts.
+// invite links/codes (e.g. "ABC123-2"), or "-s" for spectator links. Group 2
+// captures the team slot index or "s" when present.
+// See Room.addPlayer in server/src/privateLobby.ts.
 const PRIVATE_LOBBY_CODE_REGEX = new RegExp(
-    `^([0-9a-zA-Z]{${PRIVATE_LOBBY_CODE_LENGTH}})(?:-(\\d+))?$`,
+    `^([0-9a-zA-Z]{${PRIVATE_LOBBY_CODE_LENGTH}})(?:-(\\d+|s))?$`,
 );
 
 export class Application {
@@ -164,6 +165,7 @@ export class Application {
             this.onTeamMenuJoinGame.bind(this),
             this.onPrivateLobbyMenuLeave.bind(this),
             this.forceQuitGame.bind(this),
+            this.onPrivateLobbySpectateGame.bind(this),
         );
 
         const onLoadComplete = () => {
@@ -607,6 +609,12 @@ export class Application {
         });
     }
 
+    onPrivateLobbySpectateGame(data: FindGameMatchData) {
+        // gameId from the private lobby is a UUID string; MatchData expects number,
+        // but the /spectate endpoint accepts both as a URL param.
+        this.joinGameAsSpectator(data as unknown as MatchData);
+    }
+
     onTeamMenuLeave(errTxt = "") {
         if (errTxt && errTxt != "" && window.history) {
             window.history.replaceState("", "", "/");
@@ -838,11 +846,12 @@ export class Application {
             const raw = url || "";
 
             // Team-specific invite codes/links carry the team slot as a
-            // "-<teamId>" suffix (e.g. "ABC123-2"); split it off so we join
-            // the lobby itself but land directly in that team.
+            // "-<teamId>" suffix (e.g. "ABC123-2"), or "-s" for spectator links.
             const match = !create ? raw.match(PRIVATE_LOBBY_CODE_REGEX) : null;
             const roomUrl = match ? match[1] : raw;
-            const teamId = match?.[2] !== undefined ? Number(match[2]) : undefined;
+            const suffix = match?.[2];
+            const isSpectator = suffix === "s";
+            const teamId = !isSpectator && suffix !== undefined ? Number(suffix) : undefined;
 
             if (create || roomUrl != "") {
                 // Only creating a lobby requires an account; joining one (e.g. via link) doesn't
@@ -855,7 +864,7 @@ export class Application {
                 }
 
                 this.setConfigFromDOM();
-                this.privateLobbyMenu.connect(create, roomUrl, undefined, teamId);
+                this.privateLobbyMenu.connect(create, roomUrl, undefined, teamId, isSpectator);
                 this.refreshUi();
             }
         }

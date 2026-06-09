@@ -47,6 +47,7 @@ class Player {
 
     inGame = false;
     afk = false;
+    spectator = false;
 
     /** Lobby-local team slot index. Reassigned by the leader via `assignTeam`. */
     teamId = 0;
@@ -69,6 +70,7 @@ class Player {
             playerId: this.playerId,
             teamId: this.teamId,
             afk: this.afk,
+            spectator: this.spectator,
         };
     }
 
@@ -161,7 +163,10 @@ class Room {
     >();
 
     addPlayer(player: Player, importGroupId?: string, teamId?: number) {
-        if (this.players.length >= this.data.maxPlayers) return;
+        if (!player.spectator) {
+            const nonSpectatorCount = this.players.filter(p => !p.spectator).length;
+            if (nonSpectatorCount >= this.data.maxPlayers) return;
+        }
 
         this.players.push(player);
         player.room = this;
@@ -169,7 +174,9 @@ class Room {
 
         clearTimeout(player.disconnectTimeout);
 
-        if (teamId !== undefined) {
+        if (player.spectator) {
+            player.teamId = -1;
+        } else if (teamId !== undefined) {
             // joined via a team-specific invite link/code; onMsg already
             // checked the slot has room before we got here
             player.teamId = teamId;
@@ -306,6 +313,18 @@ class Room {
                 this.sendState();
                 break;
             }
+            case "setSpectator": {
+                if (player.spectator === msg.data.spectator) break;
+                if (!msg.data.spectator) {
+                    // returning to regular player — check capacity
+                    const nonSpectatorCount = this.players.filter(p => !p.spectator).length;
+                    if (nonSpectatorCount >= this.data.maxPlayers) break;
+                }
+                player.spectator = msg.data.spectator;
+                player.teamId = msg.data.spectator ? -1 : this.firstOpenTeamSlot();
+                this.sendState();
+                break;
+            }
         }
     }
 
@@ -398,20 +417,29 @@ class Room {
         // leader (who's the only one able to trigger this): since ownership no
         // longer follows player order, they could otherwise end up anywhere in
         // the list and kick themselves, closing the lobby mid-update (see
-        // removePlayer/close)
-        while (this.players.length > this.data.maxPlayers) {
-            let idx = this.players.length - 1;
-            while (idx >= 0 && this.players[idx] === this.leader) idx--;
-            if (idx < 0) break;
-            this.kick(idx);
+        // removePlayer/close). Spectators don't consume slots.
+        let nonSpectators = this.players.filter(p => !p.spectator);
+        while (nonSpectators.length > this.data.maxPlayers) {
+            let kickTarget: Player | undefined;
+            for (let i = nonSpectators.length - 1; i >= 0; i--) {
+                if (nonSpectators[i] !== this.leader) {
+                    kickTarget = nonSpectators[i];
+                    break;
+                }
+            }
+            if (!kickTarget) break;
+            this.kick(this.players.indexOf(kickTarget));
+            nonSpectators = this.players.filter(p => !p.spectator);
         }
 
         // re-bucket players that fell outside the new team layout, or that now
         // overflow their team's capacity (e.g. switching from 2v2 to 1v1 while
         // doubled up) — players keep their slot if it still fits, otherwise they
-        // move to the first team with room (or become unassigned if none fits)
+        // move to the first team with room (or become unassigned if none fits).
+        // Spectators are excluded: they always keep teamId = -1.
         const teamCounts = new Array(this.data.teamCount).fill(0);
         for (const player of this.players) {
+            if (player.spectator) continue;
             if (
                 player.teamId >= 0 &&
                 player.teamId < this.data.teamCount &&
@@ -537,10 +565,19 @@ class Room {
             return;
         }
 
-        // group players by their assigned team slot, preserving join order within each team;
+        const spectatorPlayers = this.players.filter(p => p.spectator);
+        const regularPlayers = this.players.filter(p => !p.spectator);
+
+        if (!regularPlayers.length) {
+            this.data.findingGame = false;
+            this.sendState();
+            return;
+        }
+
+        // group regular players by their assigned team slot, preserving join order;
         // each bucket lands in its own in-game Group (see Game.addGroupedJoinTokens)
         const teamBuckets = new Map<number, Player[]>();
-        for (const player of this.players) {
+        for (const player of regularPlayers) {
             let bucket = teamBuckets.get(player.teamId);
             if (!bucket) {
                 bucket = [];
@@ -563,12 +600,26 @@ class Room {
             }),
         );
 
+        // Generate tokens for spectators so the game server can authenticate them.
+        const specTokenMap = new Map<Player, string>();
+        const spectators = spectatorPlayers.map((p) => {
+            const token = randomUUID();
+            specTokenMap.set(p, token);
+            return {
+                token,
+                userId: p.userId,
+                ip: p.ip,
+                admin: p.admin,
+            } satisfies FindGamePrivateBody["playerData"][0];
+        });
+
         const res = await this.privateLobbyMenu.server.createPrivateGame({
             mapName: mode.mapName,
             teamMode: mode.teamMode,
             region,
             version: data.version,
             teams,
+            spectators,
             arenaRoles: this.data.enabledArenaRoles,
         });
 
@@ -590,18 +641,14 @@ class Room {
 
         this.data.lastError = "";
 
-        for (const player of this.players) {
+        for (const player of regularPlayers) {
             player.inGame = true;
-            player.afk = false; // clear AFK when the match begins
+            player.afk = false;
             const token = tokenMap.get(player);
-
             if (!token) {
-                this.privateLobbyMenu.logger.warn(
-                    `Missing token for player ${player.name}`,
-                );
+                this.privateLobbyMenu.logger.warn(`Missing token for player ${player.name}`);
                 continue;
             }
-
             player.send("joinGame", {
                 zone: "",
                 data: token,
@@ -609,6 +656,20 @@ class Room {
                 addrs: res.addrs,
                 hosts: res.hosts,
                 useHttps: res.useHttps,
+            });
+        }
+
+        for (const player of spectatorPlayers) {
+            player.inGame = true;
+            player.afk = false;
+            player.send("joinGame", {
+                zone: "",
+                data: specTokenMap.get(player) ?? "",
+                gameId: res.gameId,
+                addrs: res.addrs,
+                hosts: res.hosts,
+                useHttps: res.useHttps,
+                spectator: true,
             });
         }
 
@@ -860,13 +921,18 @@ export class PrivateLobbyMenu {
                         break;
                     }
 
-                    if (room.players.length >= room.data.maxPlayers) {
-                        player.send("error", { type: "join_full" });
-                        break;
+                    player.spectator = !!msg.data.spectator;
+
+                    if (!player.spectator) {
+                        const nonSpectatorCount = room.players.filter(p => !p.spectator).length;
+                        if (nonSpectatorCount >= room.data.maxPlayers) {
+                            player.send("error", { type: "join_full" });
+                            break;
+                        }
                     }
 
                     const teamId = msg.data.teamId;
-                    if (teamId !== undefined && !room.teamSlotHasRoom(teamId)) {
+                    if (!player.spectator && teamId !== undefined && !room.teamSlotHasRoom(teamId)) {
                         player.send("error", { type: "team_full" });
                         break;
                     }

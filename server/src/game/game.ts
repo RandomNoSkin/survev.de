@@ -60,6 +60,8 @@ export class Game {
     verifiedOnly = false;
     startedTime = 0;
     stopTicker = 0;
+    /** Seconds a private game has been running with 0 connected players and not yet started. */
+    privateIdleTime = 0;
     id: string;
     teamMode: TeamMode;
     mapName: string;
@@ -206,6 +208,16 @@ export class Game {
         if (this.over) {
             this.stopTicker -= dt;
             if (this.stopTicker <= 0) {
+                this.stop();
+                return;
+            }
+        }
+
+        // Stop private games that have been idle (no players ever connected) for 3 minutes.
+        // This prevents abandoned lobby sessions from leaking game processes indefinitely.
+        if (this.isPrivate && !this.started) {
+            this.privateIdleTime += dt;
+            if (this.privateIdleTime > 180) {
                 this.stop();
                 return;
             }
@@ -608,6 +620,9 @@ export class Game {
             });
         }
 
+        if (!this.stopped && this.playerBarn.players.every(p => p.disconnected)) {
+            this.stop();
+        }
     }
 
     broadcastMsg(type: net.MsgType, msg: net.Msg) {
@@ -616,6 +631,12 @@ export class Game {
 
     checkGameOver(): void {
         if (this.over) return;
+
+        if (this.playerBarn.livingPlayers.length === 0) {
+            this.stop();
+            return;
+        }
+
         const didGameEnd: boolean = this.modeManager.handleGameEnd();
 
         if (didGameEnd) {
@@ -689,6 +710,9 @@ export class Game {
     /** Executes an admin command sent from the moderation dashboard via IPC. */
     executeAdminCmd(cmd: AdminCmdAction) {
         switch (cmd.action) {
+            case "stop":
+                this.stop();
+                break;
             case "freeze":
                 this.frozen = true;
                 this.broadcastAnnounce("Game frozen by moderator", "#ff4444");

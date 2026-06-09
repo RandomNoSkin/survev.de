@@ -128,6 +128,7 @@ class GameServer {
             mapName: data.mapName,
             teamMode: data.teamMode,
             teams: data.teams,
+            spectators: data.spectators,
             arenaRoles: data.arenaRoles,
         });
 

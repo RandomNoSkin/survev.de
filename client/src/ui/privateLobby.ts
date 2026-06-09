@@ -89,6 +89,8 @@ export class PrivateLobbyMenu {
     teamId: number | undefined;
     /** Id of the currently selected settings tab (e.g. "arenaRoles"); reset to the first available tab whenever it stops applying. */
     activeSettingsTab: string | null = null;
+    /** True when the local client joined via a spectator invite link (`#CODE-s`). */
+    spectator = false;
 
     hideUrl!: boolean;
 
@@ -101,6 +103,7 @@ export class PrivateLobbyMenu {
         public joinGameCb: (data: FindGameMatchData) => void,
         public leaveCb: (err: string) => void,
         public forceQuitCb: () => void,
+        public joinGameAsSpectatorCb: (data: FindGameMatchData) => void,
     ) {
         // Listen for ui modifications
         this.serverSelect.on("change", () => {
@@ -236,7 +239,7 @@ export class PrivateLobbyMenu {
         });
     }
 
-    connect(create: boolean, roomUrl: string, importGroupId?: string, teamId?: number) {
+    connect(create: boolean, roomUrl: string, importGroupId?: string, teamId?: number, spectator = false) {
         if (!this.active || roomUrl !== this.roomData.roomUrl) {
             const roomHost = api.resolveRoomHost();
             const url = `w${
@@ -251,6 +254,7 @@ export class PrivateLobbyMenu {
             this.extraEmptyTeamId = null;
             this.importGroupId = importGroupId;
             this.teamId = teamId;
+            this.spectator = spectator;
 
             // Load properties from config
             this.playerData = {
@@ -301,6 +305,7 @@ export class PrivateLobbyMenu {
                             playerData: this.playerData,
                             importGroupId: this.importGroupId,
                             teamId: this.teamId,
+                            spectator: this.spectator || undefined,
                         });
                     }
                 };
@@ -327,6 +332,7 @@ export class PrivateLobbyMenu {
             this.selectedPlayerId = -1;
             this.importGroupId = undefined;
             this.teamId = undefined;
+            this.spectator = false;
             this.refreshUi();
 
             // Save state to config for the menu
@@ -379,10 +385,16 @@ export class PrivateLobbyMenu {
                 SDK.showInviteButton(stateData.room.roomUrl.replace("#", ""));
                 break;
             }
-            case "joinGame":
+            case "joinGame": {
                 this.joiningGame = true;
-                this.joinGameCb(data as FindGameMatchData);
+                const matchData = data as FindGameMatchData;
+                if (matchData.spectator) {
+                    this.joinGameAsSpectatorCb(matchData);
+                } else {
+                    this.joinGameCb(matchData);
+                }
                 break;
+            }
             case "keepAlive":
                 break;
             case "kicked":
@@ -604,9 +616,12 @@ export class PrivateLobbyMenu {
         // Players can be assigned to any slot in [0, maxPlayers) — private lobbies
         // allow custom layouts (e.g. splitting a squad-mode lobby into more, smaller
         // teams), not just the mode's nominal team count (maxPlayers / teamSize).
+        // Spectators are excluded here; they get their own section at the bottom.
+        const spectatorPlayers = this.players.filter(p => p.spectator);
         const playersByTeam = new Map<number, PrivateLobbyMenuPlayer[]>();
         const unassigned: PrivateLobbyMenuPlayer[] = [];
         for (const player of this.players) {
+            if (player.spectator) continue;
             if (player.teamId < 0 || player.teamId >= maxPlayers) {
                 unassigned.push(player);
                 continue;
@@ -649,14 +664,24 @@ export class PrivateLobbyMenu {
                 "data-teamid": t,
             });
             const header = $("<div/>", { class: "private-lobby-team-header" });
-            header.append(
-                $("<span/>", {
-                    html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})`,
-                }),
+            // Left: team name + invite code text
+            const headerLeft = $("<div/>", { class: "private-lobby-spectator-label" });
+            headerLeft.append(
+                $("<span/>", { html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})` }),
             );
-            // Lets anyone grab a link/code that drops a joiner straight into
-            // this team slot (e.g. "ABC123-2"); not leader-gated since sharing
-            // it doesn't change lobby state, only where the joiner lands.
+            if (teamSize > 1 && this.roomData.roomUrl) {
+                const teamCodeText = $("<span/>", {
+                    class: "private-lobby-invite-code-text",
+                    html: helpers.htmlEscape(this.buildInviteUrl(t)),
+                });
+                teamCodeText.on("click", (e) => {
+                    e.stopPropagation();
+                    this.copyTeamInviteCode(t, e);
+                });
+                headerLeft.append(teamCodeText);
+            }
+            header.append(headerLeft);
+            // Right: copy icon
             if (teamSize > 1) {
                 const copyLinkBtn = $("<a/>", {
                     class: "private-lobby-team-copy-link",
@@ -698,6 +723,56 @@ export class PrivateLobbyMenu {
             grid.append(team);
         }
 
+        // Spectator section — always visible at the very bottom so the copy-link
+        // button is reachable even when no spectators are present yet.
+        // Clicking anywhere on the section toggles the local player's spectator status.
+        const localPlayerForSpectator = this.getPlayerById(this.localPlayerId);
+        const spectatorSection = $("<div/>", { class: "private-lobby-team private-lobby-team-spectators" });
+        spectatorSection.on("click", (e) => {
+            if (localPlayerForSpectator) {
+                this.sendMessage("setSpectator", { spectator: !localPlayerForSpectator.spectator });
+            }
+        });
+
+        const spectatorHeader = $("<div/>", { class: "private-lobby-team-header" });
+        // Left: "Spectators" label + invite code text
+        const spectatorLabel = $("<div/>", { class: "private-lobby-spectator-label" });
+        spectatorLabel.append(
+            $("<span/>", { html: this.localization.translate("index-private-lobby-spectators") }),
+        );
+        if (this.roomData.roomUrl) {
+            const spectatorCodeText = $("<span/>", {
+                class: "private-lobby-invite-code-text",
+                html: helpers.htmlEscape(this.buildInviteUrl("s")),
+            });
+            spectatorCodeText.on("click", (e) => {
+                e.stopPropagation();
+                this.copySpectatorInviteCode(e);
+            });
+            spectatorLabel.append(spectatorCodeText);
+        }
+        spectatorHeader.append(spectatorLabel);
+        // Right: copy icon
+        const copySpectatorBtn = $("<a/>", {
+            class: "private-lobby-team-copy-link",
+            title: this.localization.translate("index-private-lobby-copy-spectator-link"),
+        });
+        copySpectatorBtn.on("click", (e) => {
+            e.stopPropagation();
+            this.copySpectatorInviteCode(e);
+        });
+        spectatorHeader.append(copySpectatorBtn);
+        spectatorSection.append(spectatorHeader);
+
+        if (spectatorPlayers.length) {
+            const spectatorSlot = $("<div/>", { class: "private-lobby-team-slot" });
+            for (const player of spectatorPlayers) {
+                spectatorSlot.append(this.renderPlayerEntry(player));
+            }
+            spectatorSection.append(spectatorSlot);
+        }
+        grid.append(spectatorSection);
+
         // "Create Team" is leader-only, and disabled while an empty team is
         // already revealed or there's no room left for another team slot
         // (can't usefully have more teams than total player capacity).
@@ -708,7 +783,7 @@ export class PrivateLobbyMenu {
         this.createTeamBtn.prop("disabled", !canCreateTeam);
 
         const localPlayer = this.getPlayerById(this.localPlayerId);
-        this.afkBtn.css("display", this.isLeader ? "none" : "block");
+        this.afkBtn.css("display", (this.isLeader || localPlayer?.spectator) ? "none" : "block");
         this.afkBtn.toggleClass("afk-active", !!localPlayer?.afk);
     }
 
@@ -754,6 +829,50 @@ export class PrivateLobbyMenu {
             const url = new URL(window.location.href);
             url.search = "";
             url.hash = `${this.roomData.roomUrl}-${teamId}`;
+            codeToCopy = url.toString();
+        }
+        helpers.copyTextToClipboard(codeToCopy);
+    }
+
+    /** Returns the full invite URL for `suffix` (e.g. "0", "s"), or the bare code when inside an iframe. */
+    buildInviteUrl(suffix: string | number): string {
+        const roomCode = this.roomData.roomUrl.substring(1);
+        if (window !== window.top) return `${roomCode}-${suffix}`;
+        const url = new URL(window.location.href);
+        url.search = "";
+        url.hash = `${this.roomData.roomUrl}-${suffix}`;
+        return url.toString();
+    }
+
+    /** Copies a shareable spectator link (`#CODE-s`) for this lobby. */
+    copySpectatorInviteCode(e: JQuery.TriggeredEvent) {
+        if (!this.roomData.roomUrl) return;
+
+        const toast = $("<div/>", { class: "copy-toast", html: "Copied!" });
+        $("#start-menu-wrapper").append(toast);
+        toast.css({
+            left: (e.pageX ?? 0) - parseInt(toast.css("width")) / 2,
+            top: $(e.currentTarget).offset()!.top,
+        });
+        toast.animate(
+            { top: "-=20", opacity: 1 },
+            {
+                queue: false,
+                duration: 300,
+                complete: function () {
+                    $(this).fadeOut(250, function () {
+                        $(this).remove();
+                    });
+                },
+            },
+        );
+
+        const roomCode = this.roomData.roomUrl.substring(1);
+        let codeToCopy = `${roomCode}-s`;
+        if (window === window.top) {
+            const url = new URL(window.location.href);
+            url.search = "";
+            url.hash = `${this.roomData.roomUrl}-s`;
             codeToCopy = url.toString();
         }
         helpers.copyTextToClipboard(codeToCopy);
