@@ -437,10 +437,11 @@ export class Application {
                 if (this.game!.m_updatePass) {
                     this.pass.scheduleUpdatePass(this.game!.m_updatePassDelay);
                 }
+                const wonGame = this.game!.m_wonGame;
                 this.game!.free();
                 this.errorMessage = this.localization.translate(errMsg || "");
                 this.teamMenu.onGameComplete();
-                this.privateLobbyMenu.onGameComplete();
+                this.privateLobbyMenu.onGameComplete(wonGame);
                 this.ambience.onGameComplete(this.audioManager);
                 this.setAppActive(true);
                 this.setPlayLockout(false);

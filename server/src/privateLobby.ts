@@ -163,6 +163,12 @@ class Room {
         { players: Player[]; timeout: ReturnType<typeof setTimeout> }
     >();
 
+    /** Win count per lobby team slot index. Persists across games within a session. */
+    teamScores: Map<number, number> = new Map();
+
+    /** Prevents double-counting a win when multiple winners send gameComplete. */
+    currentGameWinnerRecorded = false;
+
     addPlayer(player: Player, importGroupId?: string, teamId?: number) {
         if (!player.spectator) {
             const nonSpectatorCount = this.players.filter(p => !p.spectator).length;
@@ -271,6 +277,21 @@ class Room {
             }
             case "gameComplete": {
                 player.inGame = false;
+                if (
+                    !this.currentGameWinnerRecorded &&
+                    msg.data?.wonGame &&
+                    msg.data.lobbyTeamId !== undefined
+                ) {
+                    this.currentGameWinnerRecorded = true;
+                    const tid = msg.data.lobbyTeamId;
+                    this.teamScores.set(tid, (this.teamScores.get(tid) ?? 0) + 1);
+                }
+                this.sendState();
+                break;
+            }
+            case "resetScores": {
+                if (!player.isLeader) break;
+                this.teamScores.clear();
                 this.sendState();
                 break;
             }
@@ -651,6 +672,7 @@ class Room {
         this.findGameCooldown = Date.now() + 5000;
 
         this.data.lastError = "";
+        this.currentGameWinnerRecorded = false;
 
         for (const player of regularPlayers) {
             player.inGame = true;
@@ -689,11 +711,13 @@ class Room {
 
     sendState() {
         const players = this.players.map((p) => p.data);
+        const teamScores = Object.fromEntries(this.teamScores);
         for (const player of this.players) {
             player.send("state", {
                 localPlayerId: player.playerId,
                 room: this.data,
                 players,
+                teamScores,
             });
         }
     }

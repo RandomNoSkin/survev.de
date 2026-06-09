@@ -37,6 +37,7 @@ import { SmokeBarn } from "./objects/smoke";
 import { PluginManager } from "./pluginManager";
 import { Profiler } from "./profiler";
 import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
+import { gameLogger } from "../utils/betterLogger";
 
 export interface JoinTokenData {
     expiresAt: number;
@@ -62,6 +63,8 @@ export class Game {
     stopTicker = 0;
     /** Seconds a private game has been running with 0 connected players and not yet started. */
     privateIdleTime = 0;
+    /** True once the game has started for the first time; prevents the idle timer from re-arming after a freeze-phase reset. */
+    hasEverStarted = false;
     id: string;
     teamMode: TeamMode;
     mapName: string;
@@ -213,9 +216,9 @@ export class Game {
             }
         }
 
-        // Stop private games that have been idle (no players ever connected) for 3 minutes.
-        // This prevents abandoned lobby sessions from leaking game processes indefinitely.
-        if (this.isPrivate && !this.started) {
+        // Stop private games that never started within 3 minutes of creation.
+        // Uses hasEverStarted so a freeze-phase reset (started = false mid-game) does not re-arm this timer.
+        if (this.isPrivate && !this.hasEverStarted) {
             this.privateIdleTime += dt;
             if (this.privateIdleTime > 180) {
                 this.stop();
@@ -226,6 +229,7 @@ export class Game {
         if (!this.started) {
             this.started = this.modeManager.isGameStarted();
             if (this.started) {
+                this.hasEverStarted = true;
                 this.gas.advanceGasStage();
             }
         }
@@ -836,6 +840,10 @@ export class Game {
 
     stop(): void {
         if (this.stopped) return;
+        // TEMP DEBUG: log every stop() call with a stack trace to identify crash source
+        const stackTrace = new Error("stop() call stack").stack;
+        this.logger.info(`[STOP DEBUG] stop() called:\n${stackTrace}`);
+        gameLogger.error(`Game stopped! Stack trace:\n${stackTrace}`);
         this.stopped = true;
         this.allowJoin = false;
         for (const player of this.playerBarn.players) {

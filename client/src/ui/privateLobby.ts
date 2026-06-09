@@ -72,6 +72,7 @@ export class PrivateLobbyMenu {
     playerData = {};
     roomData = {} as RoomData;
     players: PrivateLobbyMenuPlayer[] = [];
+    teamScores: Record<number, number> = {};
 
     prevPlayerCount = 0;
     localPlayerId = 0;
@@ -365,10 +366,14 @@ export class PrivateLobbyMenu {
         }
     }
 
-    onGameComplete() {
+    onGameComplete(wonGame = false) {
         if (this.active) {
             this.joiningGame = false;
-            this.sendMessage("gameComplete");
+            const localPlayer = this.getPlayerById(this.localPlayerId);
+            this.sendMessage("gameComplete", {
+                wonGame,
+                lobbyTeamId: wonGame ? (localPlayer?.teamId ?? undefined) : undefined,
+            });
         }
     }
 
@@ -383,6 +388,7 @@ export class PrivateLobbyMenu {
                 const ourRoomData = this.roomData;
                 this.roomData = stateData.room;
                 this.players = stateData.players;
+                this.teamScores = stateData.teamScores ?? {};
                 this.localPlayerId = stateData.localPlayerId;
                 this.isLeader = this.getPlayerById(this.localPlayerId)!.isLeader;
 
@@ -685,8 +691,10 @@ export class PrivateLobbyMenu {
             const header = $("<div/>", { class: "private-lobby-team-header" });
             // Left: team name + invite code text
             const headerLeft = $("<div/>", { class: "private-lobby-spectator-label" });
+            const wins = this.teamScores[t] ?? 0;
+            const winsTag = wins > 0 ? ` <span class="private-lobby-team-wins">${wins}W</span>` : "";
             headerLeft.append(
-                $("<span/>", { html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})` }),
+                $("<span/>", { html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})${winsTag}` }),
             );
             if (teamSize > 1 && this.roomData.roomUrl) {
                 const teamCodeText = $("<span/>", {
@@ -791,6 +799,20 @@ export class PrivateLobbyMenu {
             spectatorSection.append(spectatorSlot);
         }
         grid.append(spectatorSection);
+
+        // "Reset Scores" — leader-only, only shown when any team has wins
+        const hasScores = Object.values(this.teamScores).some((s) => s > 0);
+        if (this.isLeader && hasScores) {
+            const resetBtn = $("<button/>", {
+                class: "btn btn-red private-lobby-reset-scores-btn",
+                html: "Reset Scores",
+            });
+            resetBtn.on("click", (e) => {
+                e.stopPropagation();
+                this.sendMessage("resetScores");
+            });
+            grid.append(resetBtn);
+        }
 
         // "Create Team" is leader-only, and disabled while an empty team is
         // already revealed or there's no room left for another team slot

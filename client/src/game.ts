@@ -99,6 +99,7 @@ export class Game {
     m_disconnectMsg!: string;
     m_playing!: boolean;
     m_gameOver!: boolean;
+    m_wonGame!: boolean;
     m_spectating!: boolean;
     //m_spectateCooldown!: number;
     m_inputMsgTimeout!: number;
@@ -402,6 +403,7 @@ export class Game {
         this.m_disconnectMsg = "";
         this.m_playing = false;
         this.m_gameOver = false;
+        this.m_wonGame = false;
         this.m_spectating = false;
         //this.m_spectateCooldown = 0;
         this.m_inputMsgTimeout = 0;
@@ -1759,6 +1761,7 @@ export class Game {
                     this.m_ui2Manager,
                 );
                 if (localTeamId == msg.winningTeamId) {
+                    this.m_wonGame = true;
                     this.victoryMusic = this.m_audioManager.playSound("menu_music", {
                         channel: "music",
                         delay: 1300,
