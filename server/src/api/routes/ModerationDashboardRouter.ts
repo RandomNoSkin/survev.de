@@ -712,9 +712,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Reconciles pass XP + item unlocks for ALL passes for all users. */
     .post("/api/reconcile_pass_xp", async (c) => {
         const allPasses = (GameConfig.serverSettings as any).passes as Record<string, { seasonStart: string }>;
-
-    /** Reconciles pass XP and item unlocks for all users across all passes. */
-    .post("/api/reconcile_pass_xp", async (c) => {
         const mapIdToName = Object.fromEntries(
             Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
         ) as Record<number, string>;
