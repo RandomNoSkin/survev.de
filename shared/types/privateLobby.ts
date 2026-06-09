@@ -75,6 +75,8 @@ export interface PrivateLobbyStateMsg {
         localPlayerId: number; // always -1 by default since it can only be set when the socket is actually sending state to each individual client
         room: RoomData;
         players: PrivateLobbyMenuPlayer[];
+        /** Win count per lobby team slot index. Only present when at least one game has been won. */
+        teamScores: Record<number, number>;
     };
 }
 
@@ -263,10 +265,24 @@ export type PrivateLobbyPlayGameMsg = z.infer<typeof zPrivateLobbyPlayGameMsg>;
 
 export const zGameCompleteMsg = z.object({
     type: z.literal("gameComplete"),
-    data: z.object({}).optional(),
+    data: z
+        .object({
+            /** True when the local player's in-game team won the match. */
+            wonGame: z.boolean().optional(),
+            /** The lobby team slot index of the winning team (only set when wonGame is true). */
+            lobbyTeamId: z.number().optional(),
+        })
+        .optional(),
 });
 
 export type PrivateLobbyGameCompleteMsg = z.infer<typeof zGameCompleteMsg>;
+
+export const zPrivateLobbyResetScoresMsg = z.object({
+    type: z.literal("resetScores"),
+    data: z.object({}).optional(),
+});
+
+export type PrivateLobbyResetScoresMsg = z.infer<typeof zPrivateLobbyResetScoresMsg>;
 
 export const zPrivateLobbyClientMsg = z.discriminatedUnion("type", [
     zPrivateLobbyCreateMsg,
@@ -282,6 +298,7 @@ export const zPrivateLobbyClientMsg = z.discriminatedUnion("type", [
     zPrivateLobbySwapTeamMsg,
     zPrivateLobbyChangeNameMsg,
     zGameCompleteMsg,
+    zPrivateLobbyResetScoresMsg,
     zKeepAliveMsg,
 ]);
 
@@ -299,4 +316,5 @@ export type ClientToServerPrivateLobbyMsg =
     | PrivateLobbyPlayGameMsg
     | PrivateLobbyLeaveGameMsg
     | PrivateLobbySetAfkMsg
-    | PrivateLobbySetSpectatorMsg;
+    | PrivateLobbySetSpectatorMsg
+    | PrivateLobbyResetScoresMsg;

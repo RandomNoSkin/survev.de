@@ -1852,6 +1852,31 @@ a:active {
   outline: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+.private-lobby-team-wins {
+  background-color: rgba(255, 215, 0, 0.25);
+  border-radius: 4px;
+  color: #ffd700;
+  font-weight: 700;
+  margin-left: 6px;
+  padding: 1px 5px;
+}
+
+.private-lobby-reset-scores-btn {
+  background: rgba(180, 40, 40, 0.7);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  width: 100%;
+}
+
+.private-lobby-reset-scores-btn:hover {
+  background: rgba(200, 60, 60, 0.9);
+}
+
 .private-lobby-general-settings {
   width: 100%;
 }
