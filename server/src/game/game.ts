@@ -609,10 +609,10 @@ export class Game {
                 source: player.downedBy,
             });
         }else
-        if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn || !this.started && !player.spectator) {
+        if (player.spectator || (player.canDespawn() && this.map.mapDef.gameMode.canDespawn) || (!this.started && !player.spectator)) {
             player.game.playerBarn.removePlayer(player);
             player.mapIndicator?.kill();
-        }else {
+        } else {
             player.kill({
                 damageType: GameConfig.DamageType.Disconnect,
                 dir: player.dir,

@@ -81,8 +81,10 @@ export class PrivateLobbyMenu {
 
     /** Lobby-local id of the player currently selected for team reassignment (leader only). */
     selectedPlayerId = -1;
-    /** Team slot revealed via "Create Team" while still empty; cleared once it gets a player. Only one may be revealed at a time. */
-    extraEmptyTeamId: number | null = null;
+    /** Team slots revealed via "Create Team" that are still empty; cleared once a player joins them. */
+    extraEmptyTeamIds = new Set<number>();
+    /** When true, "Create Team" is limited to one empty slot at a time. When false, unlimited. Default true. */
+    limitEmptyTeams = true;
     /** Set when joining as part of a "Create Team" handoff so the lobby groups us with our teammates. */
     importGroupId: string | undefined;
     /** Set when joining via a team-specific invite link/code (e.g. "ABC123-2") so the lobby places us directly into that team slot. */
@@ -187,39 +189,52 @@ export class PrivateLobbyMenu {
             });
         }
 
-        // Clicking anywhere inside a team's area (besides on a player entry)
-        // moves the currently selected player there (leader only)
+        // Clicking anywhere inside a team's area either:
+        //   a) moves the currently selected player there (leader only, when a player is selected)
+        //   b) joins that team yourself (leader always; members when allowMembersJoinTeams is on)
         this.teamGrid.on("click", ".private-lobby-team", (e) => {
-            if (!this.isLeader || this.selectedPlayerId < 0) return;
             const teamIdAttr = $(e.currentTarget).attr("data-teamid");
             if (teamIdAttr === undefined) return;
-            this.sendMessage("assignTeam", {
-                playerId: this.selectedPlayerId,
-                teamId: Number(teamIdAttr),
-            });
-            this.selectedPlayerId = -1;
-            this.refreshUi();
+            const teamId = Number(teamIdAttr);
+
+            if (this.isLeader && this.selectedPlayerId >= 0) {
+                // Move the selected player into this team
+                this.sendMessage("assignTeam", {
+                    playerId: this.selectedPlayerId,
+                    teamId,
+                });
+                this.selectedPlayerId = -1;
+                this.refreshUi();
+            } else if (this.selectedPlayerId < 0) {
+                // No player selected — join this team yourself (spectators can join too)
+                const canJoin = this.isLeader || this.roomData.allowMembersJoinTeams;
+                if (!canJoin) return;
+                const localPlayer = this.getPlayerById(this.localPlayerId);
+                if (!localPlayer || localPlayer.teamId === teamId) return;
+                this.sendMessage("assignTeam", {
+                    playerId: this.localPlayerId,
+                    teamId,
+                });
+            }
         });
 
-        // Reveals the next empty team slot in the grid (leader only). Capped
-        // at one revealed-but-empty team so the list stays decluttered; it's
-        // cleared again once a player gets assigned there (see renderTeamGrid).
+        // Reveals the next empty team slot in the grid (leader only).
+        // When limitEmptyTeams is true only one empty slot may be shown at a time;
+        // when false any number can be revealed.
         this.createTeamBtn.on("click", () => {
-            if (!this.isLeader || this.extraEmptyTeamId !== null) return;
-            // Private lobbies allow custom (uneven) team layouts, so the leader
-            // isn't capped at the mode's nominal team count (maxPlayers / teamSize) —
-            // any number of team slots is fine as long as there's still a free
-            // player slot left to put someone in.
+            if (!this.isLeader) return;
+            if (this.limitEmptyTeams && this.extraEmptyTeamIds.size > 0) return;
             const maxPlayers = Math.max(1, this.roomData.maxPlayers);
-            const filled = new Set(
-                this.players
+            const occupied = new Set([
+                ...this.players
                     .filter((p) => p.teamId >= 0 && p.teamId < maxPlayers)
                     .map((p) => p.teamId),
-            );
-            if (filled.size >= maxPlayers) return;
+                ...this.extraEmptyTeamIds,
+            ]);
+            if (occupied.size >= maxPlayers) return;
             for (let t = 0; t < maxPlayers; t++) {
-                if (!filled.has(t)) {
-                    this.extraEmptyTeamId = t;
+                if (!occupied.has(t)) {
+                    this.extraEmptyTeamIds.add(t);
                     break;
                 }
             }
@@ -251,7 +266,7 @@ export class PrivateLobbyMenu {
             this.joiningGame = false;
             this.editingName = false;
             this.selectedPlayerId = -1;
-            this.extraEmptyTeamId = null;
+            this.extraEmptyTeamIds.clear();
             this.importGroupId = importGroupId;
             this.teamId = teamId;
             this.spectator = spectator;
@@ -634,14 +649,12 @@ export class PrivateLobbyMenu {
             bucket.push(player);
         }
 
-        // Once the manually-revealed empty team gets a player (or stops
-        // existing, e.g. after a mode change shrinks maxPlayers), forget it so
-        // "Create Team" can reveal the next empty slot again.
-        if (
-            this.extraEmptyTeamId !== null &&
-            (this.extraEmptyTeamId >= maxPlayers || playersByTeam.has(this.extraEmptyTeamId))
-        ) {
-            this.extraEmptyTeamId = null;
+        // Remove revealed-empty-team IDs that are now filled or out of range,
+        // so "Create Team" can reveal the next free slot again.
+        for (const t of this.extraEmptyTeamIds) {
+            if (t >= maxPlayers || playersByTeam.has(t)) {
+                this.extraEmptyTeamIds.delete(t);
+            }
         }
 
         // Show every team slot up to the mode's nominal count, plus any extra
@@ -650,17 +663,23 @@ export class PrivateLobbyMenu {
         for (const t of playersByTeam.keys()) {
             if (t >= displayCount) displayCount = t + 1;
         }
-        if (this.extraEmptyTeamId !== null && this.extraEmptyTeamId >= displayCount) {
-            displayCount = this.extraEmptyTeamId + 1;
+        for (const t of this.extraEmptyTeamIds) {
+            if (t >= displayCount) displayCount = t + 1;
         }
+
+        const localPlayerForGrid = this.getPlayerById(this.localPlayerId);
+        const canJoinTeams = this.isLeader || this.roomData.allowMembersJoinTeams;
 
         const teamLabel = this.localization.translate("index-private-lobby-team");
         for (let t = 0; t < displayCount; t++) {
             const members = playersByTeam.get(t) || [];
-            // Only show filled teams, plus the one empty team revealed via "Create Team".
-            if (members.length === 0 && t !== this.extraEmptyTeamId) continue;
+            // Only show filled teams plus manually-revealed empty slots.
+            if (members.length === 0 && !this.extraEmptyTeamIds.has(t)) continue;
+            const teamFull = members.length >= teamSize;
+            const isMyTeam = localPlayerForGrid?.teamId === t;
+            const teamJoinable = canJoinTeams && !teamFull && !isMyTeam;
             const team = $("<div/>", {
-                class: "private-lobby-team",
+                class: `private-lobby-team${teamJoinable ? " private-lobby-team-joinable" : ""}`,
                 "data-teamid": t,
             });
             const header = $("<div/>", { class: "private-lobby-team-header" });
@@ -776,7 +795,9 @@ export class PrivateLobbyMenu {
         // "Create Team" is leader-only, and disabled while an empty team is
         // already revealed or there's no room left for another team slot
         // (can't usefully have more teams than total player capacity).
-        const canCreateTeam = this.extraEmptyTeamId === null && playersByTeam.size < maxPlayers;
+        const hasFreeSlot = (playersByTeam.size + this.extraEmptyTeamIds.size) < maxPlayers;
+        const limitOk = !this.limitEmptyTeams || this.extraEmptyTeamIds.size === 0;
+        const canCreateTeam = hasFreeSlot && limitOk;
         this.createTeamBtn.css("display", this.isLeader ? "block" : "none");
         this.createTeamBtn.removeClass("btn-darken btn-disabled btn-opaque");
         this.createTeamBtn.addClass(canCreateTeam ? "btn-darken" : "btn-disabled btn-opaque");
@@ -899,6 +920,10 @@ export class PrivateLobbyMenu {
     /** Settings tabs that apply to the current mode. Extend this list to add more tabs in the future. */
     getSettingsTabs(): Array<{ id: string; label: string }> {
         const tabs: Array<{ id: string; label: string }> = [];
+        tabs.push({
+            id: "general",
+            label: this.localization.translate("index-private-lobby-tab-general"),
+        });
         if (this.getArenaModeRoles().length >= 2) {
             tabs.push({
                 id: "arenaRoles",
@@ -937,10 +962,53 @@ export class PrivateLobbyMenu {
 
         this.settingsContent.empty();
         switch (this.activeSettingsTab) {
+            case "general":
+                this.settingsContent.append(this.renderGeneralSettingsTab());
+                break;
             case "arenaRoles":
                 this.settingsContent.append(this.renderArenaRolesTab());
                 break;
         }
+    }
+
+    /** "General" tab: lobby-wide settings the leader can toggle. */
+    renderGeneralSettingsTab() {
+        const wrapper = $("<div/>", { class: "private-lobby-general-settings" });
+        wrapper.append(this.renderSettingRow(
+            this.localization.translate("index-private-lobby-allow-members-join-teams"),
+            !!this.roomData.allowMembersJoinTeams,
+            this.isLeader,
+            () => {
+                this.roomData.allowMembersJoinTeams = !this.roomData.allowMembersJoinTeams;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+            },
+        ));
+        wrapper.append(this.renderSettingRow(
+            this.localization.translate("index-private-lobby-limit-empty-teams"),
+            this.limitEmptyTeams,
+            this.isLeader,
+            () => {
+                this.limitEmptyTeams = !this.limitEmptyTeams;
+                this.refreshUi();
+            },
+        ));
+        return wrapper;
+    }
+
+    /** Renders a single label + ON/OFF toggle row for the General settings tab. */
+    renderSettingRow(label: string, enabled: boolean, canToggle: boolean, onToggle: () => void) {
+        const row = $("<div/>", { class: "private-lobby-setting-row" });
+        row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
+        const toggle = $("<a/>", {
+            class: `private-lobby-setting-toggle${enabled ? " private-lobby-setting-toggle-on" : ""}${canToggle ? "" : " private-lobby-setting-toggle-disabled"}`,
+            html: enabled
+                ? this.localization.translate("index-private-lobby-setting-on")
+                : this.localization.translate("index-private-lobby-setting-off"),
+        });
+        if (canToggle) toggle.on("click", onToggle);
+        row.append(toggle);
+        return row;
     }
 
     /** "Arena Roles" tab: lets the leader narrow down which of the map's arena roles get played. */
