@@ -1151,10 +1151,6 @@ function renderAccounts() {
     th.textContent = col === accountsSortCol ? base + (accountsSortDir === 1 ? ' ▲' : ' ▼') : base;
   });
 
-  const passCols = accountsPassTypes.map(pt =>
-    \`<td style="font-weight:600;text-align:center;">\${a_passes_level(a, pt)}</td>\`
-  );
-
   const colCount = 6 + accountsPassTypes.length;
   const tbody = document.getElementById('accounts-tbody');
   tbody.innerHTML = rows.length ? rows.map((a, i) => \`
@@ -1173,8 +1169,6 @@ function renderAccounts() {
   \`).join('') : \`<tr><td colspan="\${colCount}" class="empty">No accounts found.</td></tr>\`;
 }
 
-// Helper to suppress template-literal reference error (resolved inline above)
-function a_passes_level(a, pt) { return a.passes?.[pt]?.level ?? '–'; }
 
 document.getElementById('accounts-search').addEventListener('input', renderAccounts);
 
