@@ -512,22 +512,19 @@ export const ModerationDashboardRouter = new Hono<Context>()
             let lastFeedAt = new Date();
             const feedTimer = gameId
                 ? setInterval(async () => {
-                      const [chat, kills] = await Promise.all([
-                          db.select({
+                      const entries = await db.select({
                               id: chatLogsTable.id,
                               createdAt: chatLogsTable.createdAt,
                               username: chatLogsTable.username,
                               channel: chatLogsTable.channel,
                               message: chatLogsTable.message,
                           })
-                              .from(chatLogsTable)
-                              .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, lastFeedAt)))
-                              .orderBy(asc(chatLogsTable.createdAt))
-                              .limit(50),
-                          server.getDashboardGameFeed(regionId, gameId),
-                      ]);
+                          .from(chatLogsTable)
+                          .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, lastFeedAt)))
+                          .orderBy(asc(chatLogsTable.createdAt))
+                          .limit(50);
                       lastFeedAt = new Date();
-                      if (chat.length || kills.length) await push("feed", { chat, kills });
+                      if (entries.length) await push("feed", { entries });
                   }, 3_000)
                 : null;
 

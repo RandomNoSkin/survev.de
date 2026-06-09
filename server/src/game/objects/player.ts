@@ -54,7 +54,7 @@ import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
 import { TeamColor } from "../../../../shared/defs/maps/factionDefs";
 import { chatLogger } from "../../utils/betterLogger";
-import { Chat } from "../../utils/chat";
+import { Chat, logKillToDB, logDownToDB } from "../../utils/chat";
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -3583,6 +3583,17 @@ export class Player extends BaseGameObject {
 
         this.game.broadcastMsg(net.MsgType.Kill, downedMsg);
 
+        if (this.downedBy) {
+            logDownToDB(
+                this.game.id,
+                this.downedBy.name,
+                this.downedBy.userId ?? "",
+                this.downedBy.ip,
+                this.name,
+                params.gameSourceType ?? params.mapSourceType ?? "unknown",
+            );
+        }
+
         // lone survivr can be given on knock or kill
         if (this.game.map.factionMode) {
             this.team!.checkAndApplyLastMan();
@@ -3658,14 +3669,23 @@ export class Player extends BaseGameObject {
             if (killCreditSource !== this && killCreditSource.teamId !== this.teamId) {
                 killCreditSource.killedIds.push(this.matchDataId);
                 killCreditSource.kills++;
+                const weapon = params.gameSourceType ?? params.mapSourceType ?? "unknown";
                 this.game.logKillFeedEntry({
                     ts: Date.now(),
                     killerName: killCreditSource.name,
                     killerUserId: killCreditSource.userId ?? "",
                     victimName: this.name,
                     victimUserId: this.userId ?? "",
-                    weapon: params.gameSourceType ?? params.mapSourceType ?? "unknown",
+                    weapon,
                 });
+                logKillToDB(
+                    this.game.id,
+                    killCreditSource.name,
+                    killCreditSource.userId ?? "",
+                    killCreditSource.ip,
+                    this.name,
+                    weapon,
+                );
 
                 if (killCreditSource.isKillLeader) {
                     this.game.playerBarn.killLeaderDirty = true;
