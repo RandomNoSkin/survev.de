@@ -46,7 +46,14 @@ import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
  * If not authenticated → redirect to Discord OAuth with a return-to cookie.
  * If authenticated but not admin → 403.
  */
+const isProd = process.env["NODE_ENV"] === "production";
+
 async function adminGuard(c: any, next: () => Promise<void>) {
+    if (!isProd) {
+        c.set("user", { id: "dev", username: "dev", slug: "dev", admin: true });
+        return next();
+    }
+
     const sessionToken = getCookie(c, "session") ?? null;
 
     if (!sessionToken) {
@@ -59,7 +66,6 @@ async function adminGuard(c: any, next: () => Promise<void>) {
         return c.redirect(`/api/auth/discord?redirect=/moderation`);
     }
 
-    // Allow mock auth in non-production environments
     if (!user.admin) {
         return c.text("Forbidden: admin access required", 403);
     }
@@ -502,28 +508,26 @@ export const ModerationDashboardRouter = new Hono<Context>()
                   }, 3_000)
                 : null;
 
-            // Periodic chat + kill feed for the watched game (every 3 s)
+            // Periodic kill+chat feed updates for the watched game (every 3 s)
             let lastFeedAt = new Date();
             const feedTimer = gameId
                 ? setInterval(async () => {
-                      const since = lastFeedAt;
-                      lastFeedAt = new Date();
-                      const chat = await db
-                          .select({
-                              id:        chatLogsTable.id,
+                      const [chat, kills] = await Promise.all([
+                          db.select({
+                              id: chatLogsTable.id,
                               createdAt: chatLogsTable.createdAt,
-                              username:  chatLogsTable.username,
-                              channel:   chatLogsTable.channel,
-                              message:   chatLogsTable.message,
+                              username: chatLogsTable.username,
+                              channel: chatLogsTable.channel,
+                              message: chatLogsTable.message,
                           })
-                          .from(chatLogsTable)
-                          .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, since)))
-                          .orderBy(asc(chatLogsTable.createdAt))
-                          .limit(50);
-                      const kills = await server.getDashboardGameFeed(regionId, gameId);
-                      if (chat.length || kills.length) {
-                          await push("feed", { chat, kills });
-                      }
+                              .from(chatLogsTable)
+                              .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, lastFeedAt)))
+                              .orderBy(asc(chatLogsTable.createdAt))
+                              .limit(50),
+                          server.getDashboardGameFeed(regionId, gameId),
+                      ]);
+                      lastFeedAt = new Date();
+                      if (chat.length || kills.length) await push("feed", { chat, kills });
                   }, 3_000)
                 : null;
 
@@ -617,8 +621,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const regionId = c.req.param("region");
             const gameId   = c.req.param("id");
             const cmd      = c.req.valid("json");
-
-            // For chat injection, persist to DB so it shows up in the live feed
+            // Log admin chat messages to the DB so they appear in the feed
             if (cmd.action === "chat" && cmd.text) {
                 await db.insert(chatLogsTable).values({
                     gameId,
@@ -627,26 +630,25 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     encodedIp: "admin",
                     channel: 0,
                     message: cmd.text,
-                });
+                }).onConflictDoNothing();
             }
-
             await server.sendDashboardGameCmd(regionId, gameId, cmd);
             return c.json({ ok: true });
         },
     )
 
-    /** Returns recent chat messages for a game since an optional ISO timestamp. */
+    /** Returns chat logs for a specific game since a given timestamp (for the feed). */
     .get("/api/game/:region/:id/chat", async (c) => {
-        const gameId    = c.req.param("id");
-        const sinceStr  = c.req.query("since");
-        const sinceDate = sinceStr ? new Date(sinceStr) : new Date(0);
-        const messages  = await db
+        const gameId = c.req.param("id");
+        const since  = c.req.query("since");
+        const sinceDate = since ? new Date(since) : new Date(0);
+        const messages = await db
             .select({
-                id:        chatLogsTable.id,
+                id: chatLogsTable.id,
                 createdAt: chatLogsTable.createdAt,
-                username:  chatLogsTable.username,
-                channel:   chatLogsTable.channel,
-                message:   chatLogsTable.message,
+                username: chatLogsTable.username,
+                channel: chatLogsTable.channel,
+                message: chatLogsTable.message,
             })
             .from(chatLogsTable)
             .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, sinceDate)))
@@ -665,29 +667,27 @@ export const ModerationDashboardRouter = new Hono<Context>()
         return c.json({ ok: true });
     })
 
-    /** Returns all registered accounts with pass levels for all seasons, creation date, and last known IP. */
+    /** Returns all registered accounts with per-pass levels, creation date, and last IP. */
     .get("/api/accounts", async (c) => {
         // 1. All users
-        const users = await db
-            .select({
-                id: usersTable.id,
-                username: usersTable.username,
-                slug: usersTable.slug,
-                banned: usersTable.banned,
-                admin: usersTable.admin,
-                userCreated: usersTable.userCreated,
-            })
-            .from(usersTable);
+        const users = await db.select({
+            id: usersTable.id,
+            username: usersTable.username,
+            slug: usersTable.slug,
+            banned: usersTable.banned,
+            admin: usersTable.admin,
+            userCreated: usersTable.userCreated,
+        }).from(usersTable);
 
-        // 2. All XP rows across every pass type
+        // 2. All userXp rows → Map<userId, Map<passType, {level, xp}>>
         const allXp = await db.select().from(userXpTable);
-        const xpByUser = new Map<string, Map<string, { level: number; xp: string }>>();
+        const xpByUser = new Map<string, Map<string, { level: number; xp: number }>>();
         for (const row of allXp) {
             if (!xpByUser.has(row.userId)) xpByUser.set(row.userId, new Map());
-            xpByUser.get(row.userId)!.set(row.passType, { level: row.level, xp: row.xp });
+            xpByUser.get(row.userId)!.set(row.passType, { level: row.level, xp: Number(row.xp) });
         }
 
-        // 3. Most recent encoded IP per user (DISTINCT ON, PostgreSQL)
+        // 3. Most recent encoded IP per user (DISTINCT ON — PostgreSQL only)
         const latestIpRows = await db.execute<{ user_id: string; encoded_ip: string }>(
             sql`SELECT DISTINCT ON (user_id) user_id, encoded_ip FROM ip_logs WHERE user_id != '' ORDER BY user_id, created_at DESC`,
         );
@@ -696,9 +696,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ipByUser.set(row.user_id as string, row.encoded_ip as string);
         }
 
-        const passTypes = Object.keys(
-            (GameConfig.serverSettings as any).passes ?? {},
-        );
+        const passTypes = Object.keys((GameConfig.serverSettings as any).passes ?? {});
 
         const accounts = users.map((u) => ({
             ...u,
@@ -708,16 +706,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ),
         }));
 
-        // Sort by current pass XP descending
-        const currentPass = GameConfig.serverSettings.currentPass;
-        accounts.sort((a, b) => {
-            const ax = Number(a.passes[currentPass]?.xp ?? 0);
-            const bx = Number(b.passes[currentPass]?.xp ?? 0);
-            return bx - ax;
-        });
-
         return c.json({ accounts, passTypes });
     })
+
+    /** Reconciles pass XP + item unlocks for ALL passes for all users. */
+    .post("/api/reconcile_pass_xp", async (c) => {
+        const allPasses = (GameConfig.serverSettings as any).passes as Record<string, { seasonStart: string }>;
 
     /** Reconciles pass XP and item unlocks for all users across all passes. */
     .post("/api/reconcile_pass_xp", async (c) => {
@@ -728,9 +722,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         let usersReconciled = 0;
         let totalXpAdded = 0;
         let totalUnlocksGranted = 0;
-
-        const allPasses = (GameConfig.serverSettings as any).passes as
-            Record<string, { seasonStart: string }>;
 
         for (const [passType, passCfg] of Object.entries(allPasses)) {
             const seasonStart = new Date(passCfg.seasonStart);
@@ -770,7 +761,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                         kill: 0, damage: 0, win: 0, timeSurvived: 0,
                     };
                     const mapTypeName = mapIdToName[stat.mapId] ?? "";
-                    const boostEvents = (GameConfig.serverSettings.xpBoostEvents as any)?.[passType];
+                    const boostEvents = (GameConfig.serverSettings as any).xpBoostEvents?.[passType];
                     let boost = 1;
                     if (boostEvents) {
                         const t = stat.createdAt instanceof Date
@@ -791,12 +782,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
                     correctXp += matchXp * boost;
                 }
-                correctXp = Math.floor(correctXp);
-
-                const effectiveXp = Math.max(correctXp, currentXp);
-                const { level } = getPassLevelAndXp(passType, effectiveXp);
+                correctXp = Math.round(correctXp * 1e5) / 1e5;
 
                 if (correctXp > currentXp) {
+                    const { level } = getPassLevelAndXp(passType, correctXp);
                     await db
                         .update(userXpTable)
                         .set({ xp: String(correctXp), level, lastUpdated: new Date() })
@@ -811,39 +800,38 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 }
 
                 // Reconcile item unlocks for this pass
+                const { level: currentLevel } = getPassLevelAndXp(passType, Math.max(correctXp, currentXp));
                 const passDef = PassDefs[passType as keyof typeof PassDefs];
                 if (passDef) {
-                    const expectedItems = passDef.items
-                        .filter((i: any) => i.level <= level)
+                    const expectedItems = (passDef as any).items
+                        .filter((i: any) => i.level <= currentLevel)
                         .map((i: any) => i.item as string);
 
-                    if (expectedItems.length > 0) {
-                        const ownedItems = await db
-                            .select({ type: itemsTable.type })
-                            .from(itemsTable)
-                            .where(
-                                and(
-                                    eq(itemsTable.userId, record.userId),
-                                    eq(itemsTable.source, passType),
-                                ),
-                            );
-                        const ownedSet = new Set(ownedItems.map((i) => i.type));
-                        const missing = expectedItems.filter((item) => !ownedSet.has(item));
-                        if (missing.length > 0) {
-                            await db
-                                .insert(itemsTable)
-                                .values(
-                                    missing.map((item) => ({
-                                        userId: record.userId,
-                                        type: item,
-                                        source: passType,
-                                        timeAcquired: Date.now(),
-                                        status: 0,
-                                    })),
-                                )
-                                .onConflictDoNothing();
-                            totalUnlocksGranted += missing.length;
-                        }
+                    const ownedItems = await db
+                        .select({ type: itemsTable.type })
+                        .from(itemsTable)
+                        .where(
+                            and(
+                                eq(itemsTable.userId, record.userId),
+                                eq(itemsTable.source, passType),
+                            ),
+                        );
+                    const ownedSet = new Set(ownedItems.map((i) => i.type));
+                    const missing = expectedItems.filter((item: string) => !ownedSet.has(item));
+                    if (missing.length > 0) {
+                        await db
+                            .insert(itemsTable)
+                            .values(
+                                missing.map((item: string) => ({
+                                    userId: record.userId,
+                                    type: item,
+                                    source: passType,
+                                    timeAcquired: Date.now(),
+                                    status: 0,
+                                })),
+                            )
+                            .onConflictDoNothing();
+                        totalUnlocksGranted += missing.length;
                     }
                 }
             }

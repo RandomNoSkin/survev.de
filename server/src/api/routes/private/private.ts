@@ -483,7 +483,8 @@ export const PrivateRouter = new Hono<Context>()
                 matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
                 correctXp += matchXp * boost;
             }
-            correctXp = Math.floor(correctXp);
+            // round to avoid float drift while preserving fractional XP (smallest multiplier is 0.00025)
+            correctXp = Math.round(correctXp * 1e5) / 1e5;
 
             if (correctXp > currentXp) {
                 const { level } = getPassLevelAndXp(passType, correctXp);
