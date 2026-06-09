@@ -9,6 +9,7 @@ import type {
     AdminCmdAction,
     DashboardPlayer,
     FindGamePrivateBody,
+    FindPrivateLobbyGameBody,
     GameData,
     GameSocketData,
     ServerGameConfig,
@@ -24,6 +25,9 @@ export abstract class GameManager {
 
     abstract findGame(body: FindGamePrivateBody): Promise<string>;
 
+    /** Spins up a fresh isolated game from a private lobby and registers each team's players as its own join group. */
+    abstract createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string>;
+
     abstract findGameById(gameId: string, playerData: any[], autoFill: boolean): Promise<string>;
     abstract getGames(): Promise<GameData[]>;
 
@@ -32,6 +36,9 @@ export abstract class GameManager {
 
     /** Returns live player data for a running game (for the moderation dashboard). */
     abstract getGamePlayers(gameId: string): Promise<DashboardPlayer[]>;
+
+    /** Returns the recent kill-feed buffer for a running game (for the moderation dashboard). */
+    abstract getGameFeed(gameId: string): Promise<import("../utils/types").KillFeedEntry[]>;
 
     /** Sends an admin command to a running game (fire-and-forget). */
     abstract sendAdminCmd(gameId: string, cmd: AdminCmdAction): void;
@@ -178,6 +185,19 @@ export class SingleThreadGameManager implements GameManager {
         return game.id;
     }
 
+    async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
+        const game = await this.newGame({
+            teamMode: body.teamMode,
+            mapName: body.mapName as keyof typeof MapDefs,
+            isPrivate: true,
+            arenaRoles: body.arenaRoles,
+        });
+
+        game.addGroupedJoinTokens(body.teams);
+
+        return game.id;
+    }
+
     async findGameById(gameId: string, playerData: any[], autoFill: false): Promise<string> {
         let game = this.gamesById.get(gameId);
 
@@ -201,6 +221,10 @@ export class SingleThreadGameManager implements GameManager {
 
     async getGamePlayers(gameId: string): Promise<DashboardPlayer[]> {
         return this.gamesById.get(gameId)?.getPlayerDataForDashboard() ?? [];
+    }
+
+    async getGameFeed(gameId: string): Promise<import("../utils/types").KillFeedEntry[]> {
+        return this.gamesById.get(gameId)?.recentKills ?? [];
     }
 
     sendAdminCmd(gameId: string, cmd: AdminCmdAction): void {

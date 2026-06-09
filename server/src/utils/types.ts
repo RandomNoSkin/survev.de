@@ -40,6 +40,10 @@ export interface SaveGameBody {
 export interface ServerGameConfig {
     readonly mapName: keyof typeof MapDefs;
     readonly teamMode: TeamMode;
+    /** Isolated match created from a private lobby: hidden from public matchmaking (see `Game.canJoin`). */
+    readonly isPrivate?: boolean;
+    /** Arena-mode role pool the private lobby leader narrowed down to; restricts `Game.arenaRoles` when set. */
+    readonly arenaRoles?: string[];
 }
 
 export interface GameData {
@@ -47,6 +51,8 @@ export interface GameData {
     teamMode: TeamMode;
     mapName: string;
     canJoin: boolean;
+    /** Isolated match created from a private lobby; joined via tokens, not public matchmaking (see `canJoin`). */
+    isPrivate: boolean;
     aliveCount: number;
     startedTime: number;
     stopped: boolean;
@@ -71,6 +77,27 @@ export const zFindGamePrivateBody = z.object({
 
 export type FindGamePrivateBody = z.infer<typeof zFindGamePrivateBody>;
 
+const zPrivateLobbyPlayerData = z.object({
+    token: z.string(),
+    userId: z.string().nullable(),
+    ip: z.string(),
+    admin: z.boolean(),
+    loadout: loadoutSchema.optional(),
+});
+
+/** Body for spinning up a fully isolated match from a private lobby; `teams` groups players that should land in the same in-game Group. */
+export const zFindPrivateLobbyGameBody = z.object({
+    region: z.string(),
+    version: z.number(),
+    mapName: z.string(),
+    teamMode: z.number(),
+    teams: z.array(z.array(zPrivateLobbyPlayerData)),
+    /** Arena-mode role pool the lobby leader narrowed down to (see `RoomData.enabledArenaRoles`). */
+    arenaRoles: z.array(z.string()).optional(),
+});
+
+export type FindPrivateLobbyGameBody = z.infer<typeof zFindPrivateLobbyGameBody>;
+
 export type FindGamePrivateRes =
     | {
           gameId: string;
@@ -87,12 +114,15 @@ export enum ProcessMsgType {
     UpdateData,
     AddJoinToken,
     AddJoinTokenAsSpectator,
+    AddGroupedJoinTokens,
     SocketMsg,
     SocketClose,
     // Dashboard IPC messages
     GetPlayerData,      // API server → game process: request live player list
     PlayerDataResponse, // game process → API server: live player list response
     AdminCmd,           // API server → game process: execute an admin action
+    GetGameFeed,        // API server → game process: request recent kill feed
+    GameFeedResponse,   // game process → API server: recent kill feed response
 }
 
 export interface CreateGameMsg {
@@ -123,6 +153,12 @@ export interface AddJoinTokenAsSpectatorMsg {
     type: ProcessMsgType.AddJoinTokenAsSpectator;
     autoFill: boolean;
     tokens: FindGamePrivateBody["playerData"];
+}
+
+/** Used for private lobbies: each entry is a team's player batch, registered as its own join group. */
+export interface AddGroupedJoinTokensMsg {
+    type: ProcessMsgType.AddGroupedJoinTokens;
+    teams: FindGamePrivateBody["playerData"][];
 }
 
 /**
@@ -175,6 +211,27 @@ export interface PlayerDataResponseMsg {
     players: DashboardPlayer[];
 }
 
+/** One kill event, buffered in-memory by Game for the live dashboard. */
+export interface KillFeedEntry {
+    ts: number;
+    killerName: string;
+    killerUserId: string;
+    victimName: string;
+    victimUserId: string;
+    weapon: string;
+}
+
+export interface GetGameFeedMsg {
+    type: ProcessMsgType.GetGameFeed;
+    requestId: string;
+}
+
+export interface GameFeedResponseMsg {
+    type: ProcessMsgType.GameFeedResponse;
+    requestId: string;
+    entries: KillFeedEntry[];
+}
+
 /** Actions the dashboard can trigger on a running game. */
 export type AdminCmdAction =
     | { action: "freeze" }
@@ -183,7 +240,8 @@ export type AdminCmdAction =
     | { action: "unverify" }
     | { action: "kick";            target: string }
     | { action: "announce";        text: string; color?: string; sender?: string }
-    | { action: "announce_player"; target: string; text: string; color?: string; sender?: string };
+    | { action: "announce_player"; target: string; text: string; color?: string; sender?: string }
+    | { action: "chat";            text: string; sender?: string };
 
 export interface AdminCmdMsg {
     type: ProcessMsgType.AdminCmd;
@@ -197,11 +255,14 @@ export type ProcessMsg =
     | UpdateDataMsg
     | AddJoinTokenMsg
     | AddJoinTokenAsSpectatorMsg
+    | AddGroupedJoinTokensMsg
     | SocketMsgsMsg
     | SocketCloseMsg
     | GetPlayerDataMsg
     | PlayerDataResponseMsg
-    | AdminCmdMsg;
+    | AdminCmdMsg
+    | GetGameFeedMsg
+    | GameFeedResponseMsg;
 
     export interface GameInfo {
     id: string,

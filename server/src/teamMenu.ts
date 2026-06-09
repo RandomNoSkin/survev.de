@@ -178,6 +178,33 @@ class Room {
                 this.findGame(msg.data);
                 break;
             }
+            case "joinPrivateLobby": {
+                if (!player.isLeader) break;
+                this.joinPrivateLobby(msg.data.lobbyCode);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Leader requests that the whole team join an existing private lobby together.
+     * Each member gets redirected with a shared `importGroupId` so the lobby can
+     * place the whole group into a single team slot (see `PrivateLobbyMenu.Room.addPlayer`).
+     */
+    joinPrivateLobby(lobbyCode: string) {
+        if (this.data.findingGame) return;
+        if (this.players.some((p) => p.inGame)) return;
+
+        const lobbyRoom = this.teamMenu.server.privateLobbyMenu.rooms.get(lobbyCode);
+        if (!lobbyRoom) {
+            this.data.lastError = "join_not_found";
+            this.sendState();
+            return;
+        }
+
+        const importGroupId = randomUUID();
+        for (const player of this.players) {
+            player.send("privateLobbyRedirect", { lobbyCode, importGroupId });
         }
     }
 

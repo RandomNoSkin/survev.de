@@ -10,8 +10,10 @@ import {
     type AdminCmdAction,
     type DashboardPlayer,
     type FindGamePrivateBody,
+    type FindPrivateLobbyGameBody,
     type GameData,
     type GameSocketData,
+    type KillFeedEntry,
     type ProcessMsg,
     ProcessMsgType,
     type ServerGameConfig,
@@ -29,6 +31,7 @@ class GameProcess implements GameData {
     process: ChildProcess;
 
     canJoin = true;
+    isPrivate = false;
     creating = false;
     teamMode: TeamMode = 1;
     mapName = "";
@@ -50,6 +53,8 @@ class GameProcess implements GameData {
 
     /** Pending GetPlayerData callbacks, keyed by requestId. */
     readonly pendingPlayerDataRequests = new Map<string, (players: DashboardPlayer[]) => void>();
+    /** Pending GetGameFeed callbacks, keyed by requestId. */
+    readonly pendingGameFeedRequests = new Map<string, (entries: KillFeedEntry[]) => void>();
 
     constructor(manager: GameProcessManager, id: string, config: ServerGameConfig) {
         this.manager = manager;
@@ -74,6 +79,7 @@ class GameProcess implements GameData {
                     break;
                 case ProcessMsgType.UpdateData:
                     this.canJoin = msg.canJoin;
+                    this.isPrivate = msg.isPrivate;
                     this.teamMode = msg.teamMode;
                     this.mapName = msg.mapName;
                     if (this.id !== msg.id) {
@@ -127,6 +133,16 @@ class GameProcess implements GameData {
                     }
                     break;
                 }
+
+                // Dashboard: resolve the pending getGameFeed() promise
+                case ProcessMsgType.GameFeedResponse: {
+                    const resolve = this.pendingGameFeedRequests.get(msg.requestId);
+                    if (resolve) {
+                        this.pendingGameFeedRequests.delete(msg.requestId);
+                        resolve(msg.entries);
+                    }
+                    break;
+                }
             }
         });
 
@@ -165,6 +181,20 @@ class GameProcess implements GameData {
             type: ProcessMsgType.AddJoinToken,
             autoFill,
             tokens,
+        });
+        this.avaliableSlots--;
+    }
+    addGroupedJoinTokens(teams: FindGamePrivateBody["playerData"][]) {
+        for (const tokens of teams) {
+            for (const t of tokens) {
+                if (t.userId) {
+                    this.manager.accountIpCache.set(t.ip, Date.now() + 2 * 60 * 1000);
+                }
+            }
+        }
+        this.send({
+            type: ProcessMsgType.AddGroupedJoinTokens,
+            teams,
         });
         this.avaliableSlots--;
     }
@@ -380,6 +410,30 @@ export class GameProcessManager implements GameManager {
         return game.id;
     }
 
+    async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
+        const game = this.newGame({
+            teamMode: body.teamMode,
+            mapName: body.mapName as keyof typeof MapDefs,
+            isPrivate: true,
+            arenaRoles: body.arenaRoles,
+        });
+
+        // if the game has not finished creating
+        // wait for it to be created before registering the join groups
+        if (!game.created) {
+            return await new Promise((resolve) => {
+                game.onCreatedCbs.push((game) => {
+                    game.addGroupedJoinTokens(body.teams);
+                    resolve(game.id);
+                });
+            });
+        }
+
+        game.addGroupedJoinTokens(body.teams);
+
+        return game.id;
+    }
+
     async findGameById(gameId: string, playerData: any[], autoFill: boolean): Promise<string> {
         let game = this.processById.get(gameId);
 
@@ -418,6 +472,31 @@ export class GameProcessManager implements GameManager {
             });
 
             proc.send({ type: ProcessMsgType.GetPlayerData, requestId });
+        });
+    }
+
+    /**
+     * Requests the recent kill feed buffer from a running game process.
+     * Resolves with an empty array if the game is not found or times out after 3 s.
+     */
+    async getGameFeed(gameId: string): Promise<KillFeedEntry[]> {
+        const proc = this.processById.get(gameId);
+        if (!proc) return [];
+
+        const requestId = randomUUID();
+
+        return new Promise<KillFeedEntry[]>((resolve) => {
+            const timeout = setTimeout(() => {
+                proc.pendingGameFeedRequests.delete(requestId);
+                resolve([]);
+            }, 3000);
+
+            proc.pendingGameFeedRequests.set(requestId, (entries) => {
+                clearTimeout(timeout);
+                resolve(entries);
+            });
+
+            proc.send({ type: ProcessMsgType.GetGameFeed, requestId });
         });
     }
 

@@ -71,6 +71,9 @@ process.on("message", async (msg: ProcessMsg) => {
         case ProcessMsgType.AddJoinToken:
             game.addJoinTokens(msg.tokens, msg.autoFill);
             break;
+        case ProcessMsgType.AddGroupedJoinTokens:
+            game.addGroupedJoinTokens(msg.teams);
+            break;
         case ProcessMsgType.AddJoinTokenAsSpectator:
             game.addJoinTokensAsSpectator(msg.tokens, false);
             break;
@@ -94,6 +97,15 @@ process.on("message", async (msg: ProcessMsg) => {
         // Dashboard: execute an admin action (freeze/kick/announce/etc.)
         case ProcessMsgType.AdminCmd:
             game.executeAdminCmd(msg.cmd);
+            break;
+
+        // Dashboard: return recent kill feed buffer
+        case ProcessMsgType.GetGameFeed:
+            sendMsg({
+                type: ProcessMsgType.GameFeedResponse,
+                requestId: msg.requestId,
+                entries: game.recentKills,
+            });
             break;
     }
 });

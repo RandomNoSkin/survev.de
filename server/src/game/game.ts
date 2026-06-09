@@ -64,6 +64,8 @@ export class Game {
     teamMode: TeamMode;
     mapName: string;
     isTeamMode: boolean;
+    /** Isolated match created from a private lobby; excluded from public matchmaking, see `canJoin`. */
+    isPrivate: boolean;
     config: ServerGameConfig;
     pluginManager = new PluginManager(this);
     modeManager: GameModeManager;
@@ -124,6 +126,14 @@ export class Game {
     arenaRoles: string[] = [];
     choosenArenaRoles: string[] = [];
 
+    /** In-memory kill event buffer for the live moderation dashboard (capped at 200). */
+    recentKills: import("../utils/types").KillFeedEntry[] = [];
+
+    logKillFeedEntry(entry: import("../utils/types").KillFeedEntry) {
+        this.recentKills.push(entry);
+        if (this.recentKills.length > 200) this.recentKills.shift();
+    }
+
     constructor(
         id: string,
         config: ServerGameConfig,
@@ -140,6 +150,10 @@ export class Game {
         this.teamMode = config.teamMode;
         this.mapName = config.mapName;
         this.isTeamMode = this.teamMode !== TeamMode.Solo;
+        this.isPrivate = config.isPrivate ?? false;
+        // Private lobby leader narrowed the arena role pool down (see `RoomData.enabledArenaRoles`);
+        // takes priority over the map's full `arenaModeRoles` list (see `Player.playerJoin`/`playerRoleSelect`).
+        this.arenaRoles = config.arenaRoles?.length ? [...config.arenaRoles] : [];
 
         this.map = new GameMap(this);
         this.grid = new Grid(this.map.width, this.map.height);
@@ -361,6 +375,7 @@ export class Game {
 
     get canJoin(): boolean {
         return (
+            !this.isPrivate &&
             this.aliveCount < this.map.mapDef.gameMode.maxPlayers &&
             !this.over &&
             this.startedTime < (this.map.mapDef.gameMode.joinTime || 60)
@@ -700,6 +715,15 @@ export class Game {
             case "announce_player":
                 this.announceToPlayer(cmd.target, cmd.text, cmd.color, cmd.sender);
                 break;
+            case "chat": {
+                const chatMsg = new net.KillFeedMsg();
+                chatMsg.type = net.KillFeedMsgType.ChatMsg;
+                chatMsg.player = cmd.sender ?? "ADMIN";
+                chatMsg.string = cmd.text;
+                chatMsg.chatType = 0;
+                this.broadcastMsg(net.MsgType.KillFeed, chatMsg);
+                break;
+            }
         }
     }
 
@@ -743,6 +767,35 @@ export class Game {
         }
     }
 
+    /**
+     * Like addJoinTokens, but registers one separate `groupData` per team batch
+     * so each batch ends up in its own in-game Group instead of all sharing one.
+     * Used for private lobbies, where the leader assigns players to teams beforehand.
+     * Never auto-fills empty slots with bots/randoms.
+     */
+    addGroupedJoinTokens(teams: FindGamePrivateBody["playerData"][]) {
+        for (const tokens of teams) {
+            if (!tokens.length) continue;
+
+            const groupData = {
+                playerCount: tokens.length,
+                groupHashToJoin: "",
+                autoFill: false,
+            };
+
+            for (const token of tokens) {
+                this.joinTokens.set(token.token, {
+                    expiresAt: Date.now() + 10000,
+                    userId: token.userId,
+                    groupData,
+                    findGameIp: token.ip,
+                    loadout: token.loadout,
+                    admin: token.admin,
+                });
+            }
+        }
+    }
+
     updateData() {
         this.sendData?.({
             type: ProcessMsgType.UpdateData,
@@ -750,6 +803,7 @@ export class Game {
             teamMode: this.teamMode,
             mapName: this.mapName,
             canJoin: this.canJoin,
+            isPrivate: this.isPrivate,
             aliveCount: this.aliveCount,
             startedTime: this.startedTime,
             stopped: this.stopped,
