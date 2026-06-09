@@ -411,7 +411,11 @@ async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch('/moderation' + path, opts);
-  if (!res.ok) throw new Error(res.statusText);
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const j = await res.json(); msg = j.error ?? j.message ?? JSON.stringify(j); } catch {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 const get  = (path)       => api('GET',  path);
@@ -1111,7 +1115,7 @@ async function loadAccounts() {
     renderAccountsHeader();
     renderAccounts();
   } catch (e) {
-    document.getElementById('accounts-tbody').innerHTML = '<tr><td colspan="6" class="empty">Failed to load accounts.</td></tr>';
+    document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="6" class="empty">Failed to load accounts: \${esc(String(e?.message ?? e))}</td></tr>\`;
   }
 }
 
