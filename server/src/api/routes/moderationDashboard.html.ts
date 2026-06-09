@@ -1115,7 +1115,8 @@ async function loadAccounts() {
     renderAccountsHeader();
     renderAccounts();
   } catch (e) {
-    document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="6" class="empty">Failed to load accounts: \${esc(String(e?.message ?? e))}</td></tr>\`;
+    console.error('loadAccounts error:', e);
+    document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="6" class="empty">Failed to load accounts: \${esc(String(e?.message ?? e))} | \${esc(e?.stack?.split('\\n')[1] ?? '')}</td></tr>\`;
   }
 }
 

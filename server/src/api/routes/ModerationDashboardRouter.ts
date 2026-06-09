@@ -22,7 +22,7 @@
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
  */
 
-import { and, asc, desc, eq, gt, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
@@ -711,7 +711,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
     /** Reconciles pass XP + item unlocks for ALL passes for all users. */
     .post("/api/reconcile_pass_xp", async (c) => {
-        const allPasses = (GameConfig.serverSettings as any).passes as Record<string, { seasonStart: string }>;
+        const allPasses = (GameConfig.serverSettings as any).passes as Record<string, { passMaxLevel: number; seasonStart: string; seasonEnd: string }>;
         const mapIdToName = Object.fromEntries(
             Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
         ) as Record<number, string>;
@@ -722,6 +722,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         for (const [passType, passCfg] of Object.entries(allPasses)) {
             const seasonStart = new Date(passCfg.seasonStart);
+            const seasonEnd   = new Date(passCfg.seasonEnd);
+            const passMaxLevel = passCfg.passMaxLevel;
 
             const allUserXp = await db
                 .select()
@@ -746,6 +748,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                         and(
                             eq(matchDataTable.userId, record.userId),
                             gte(matchDataTable.createdAt, seasonStart),
+                            lte(matchDataTable.createdAt, seasonEnd),
                         ),
                     )
                     .groupBy(matchDataTable.gameId)
@@ -782,7 +785,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 correctXp = Math.round(correctXp * 1e5) / 1e5;
 
                 if (correctXp > currentXp) {
-                    const { level } = getPassLevelAndXp(passType, correctXp);
+                    const { level } = getPassLevelAndXp(passType, correctXp, passMaxLevel);
                     await db
                         .update(userXpTable)
                         .set({ xp: String(correctXp), level, lastUpdated: new Date() })
@@ -796,8 +799,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     totalXpAdded += correctXp - currentXp;
                 }
 
-                // Reconcile item unlocks for this pass
-                const { level: currentLevel } = getPassLevelAndXp(passType, Math.max(correctXp, currentXp));
+                // Reconcile item unlocks for this pass (only missing ones — PK constraint prevents duplicates)
+                const { level: currentLevel } = getPassLevelAndXp(passType, Math.max(correctXp, currentXp), passMaxLevel);
                 const passDef = PassDefs[passType as keyof typeof PassDefs];
                 if (passDef) {
                     const expectedItems = (passDef as any).items
@@ -807,12 +810,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     const ownedItems = await db
                         .select({ type: itemsTable.type })
                         .from(itemsTable)
-                        .where(
-                            and(
-                                eq(itemsTable.userId, record.userId),
-                                eq(itemsTable.source, passType),
-                            ),
-                        );
+                        .where(eq(itemsTable.userId, record.userId));
                     const ownedSet = new Set(ownedItems.map((i) => i.type));
                     const missing = expectedItems.filter((item: string) => !ownedSet.has(item));
                     if (missing.length > 0) {
@@ -843,8 +841,8 @@ function getPassLevelXp(passType: string, level: number): number {
     return levelIdx < passDef.xp.length ? passDef.xp[levelIdx] : passDef.xp[passDef.xp.length - 1];
 }
 
-function getPassLevelAndXp(passType: string, passXp: number) {
-    const maxLevel = GameConfig.serverSettings.passMaxLevel;
+function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {
+    const maxLevel = passMaxLevel ?? GameConfig.serverSettings.passMaxLevel;
     let xp = passXp;
     let level = 1;
     while (level < maxLevel) {
