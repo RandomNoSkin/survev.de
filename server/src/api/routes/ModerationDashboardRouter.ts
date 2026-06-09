@@ -603,7 +603,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
     /**
      * Executes an admin command on a running game.
-     * Supported actions: freeze | unfreeze | verify | kick | announce | announce_player | chat
+     * Supported actions: stop | freeze | unfreeze | verify | kick | announce | announce_player | chat
      */
     .post(
         "/api/game/:region/:id/cmd",

@@ -1662,11 +1662,12 @@ a:active {
 
 #private-lobby-menu {
   display: none;
-  height: 560px;
+  height: 660px;
   /* Escape .menu-block's 325px clamp. The header/donate column are hidden
      while the lobby is open (see privateLobby.ts), which frees enough
      vertical space for this box to fit without scrolling or overflowing. */
   max-height: none !important;
+  margin-top: -100px;
   padding: 12px;
   position: relative;
   width: 1000px;
@@ -1680,7 +1681,7 @@ a:active {
 }
 
 #private-lobby-menu-columns {
-  height: 460px;
+  height: 560px;
 }
 
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
@@ -1708,6 +1709,7 @@ a:active {
   flex-direction: column;
   float: left;
   height: 100%;
+  max-height: none;
   padding: 12px 0;
   width: 420px;
 }
@@ -1763,12 +1765,25 @@ a:active {
   background-image: url(/img/gui/copy.svg);
   background-position: center;
   background-repeat: no-repeat;
-  background-size: 16px;
+  background-size: 26px;
   border: none;
   cursor: pointer;
   flex: 0 0 auto;
-  height: 22px;
-  width: 22px;
+  height: 32px;
+  width: 32px;
+}
+
+.private-lobby-invite-code-text {
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 11px;
+  margin-left: 4px;
+  user-select: none;
+}
+
+.private-lobby-invite-code-text:hover {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .private-lobby-team-slot {
@@ -1801,6 +1816,31 @@ a:active {
 
 .private-lobby-team-unassigned {
   background-color: rgba(255, 255, 255, 0.02);
+}
+
+.private-lobby-team-spectators {
+  background-color: rgba(100, 149, 237, 0.05);
+  border-top: 1px solid rgba(100, 149, 237, 0.2);
+  margin-top: 8px;
+}
+
+.private-lobby-team-spectators .private-lobby-team-header {
+  color: rgba(100, 149, 237, 0.85);
+}
+
+.private-lobby-spectator-label {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+
+.private-lobby-team-spectators:not(.no-hover) {
+  cursor: pointer;
+}
+
+.private-lobby-team-spectators:hover {
+  background-color: rgba(100, 149, 237, 0.12);
 }
 
 #private-lobby-menu-options {

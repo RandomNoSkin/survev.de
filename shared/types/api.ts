@@ -21,6 +21,8 @@ export interface FindGameMatchData {
     hosts: string[];
     addrs: string[];
     data: string;
+    /** True when the client should join as a spectator (sent by the private lobby server). */
+    spectator?: boolean;
 }
 
 export type FindGameError =

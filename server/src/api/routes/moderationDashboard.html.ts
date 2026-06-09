@@ -871,6 +871,9 @@ function renderServers() {
         <div style="margin-top:6px;">
           <button class="btn btn-blue btn-sm" style="width:100%" onclick="event.stopPropagation();spectateGame('\${esc(region.regionId)}','\${esc(g.id)}')">👁 SPECTATE</button>
         </div>
+        <div style="margin-top:4px;">
+          <button class="btn btn-red btn-sm" style="width:100%" onclick="event.stopPropagation();killGame('\${esc(region.regionId)}','\${esc(g.id)}')">✕ KILL</button>
+        </div>
       </div>\`;
     }).join('') : '<div class="empty">No running games.</div>';
 
@@ -894,6 +897,16 @@ async function spectateGame(region, gameId) {
     window.open('/', '_blank');
     toast('Opening spectator view…');
   } catch (e) { toast('Spectate failed', true); }
+}
+
+/** Force-stops a running game immediately (private games that are empty/stuck). */
+async function killGame(region, gameId) {
+  if (!confirm('Force-stop this game?')) return;
+  try {
+    await post('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/cmd', { action: 'stop' });
+    toast('Game stopped');
+    refreshData();
+  } catch (e) { toast('Kill failed', true); }
 }
 
 /** Selects a game and reconnects SSE with the gameId so player events start flowing. */

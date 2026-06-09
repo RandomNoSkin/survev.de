@@ -194,7 +194,9 @@ export class SingleThreadGameManager implements GameManager {
         });
 
         game.addGroupedJoinTokens(body.teams);
-
+        if (body.spectators?.length) {
+            game.addJoinTokensAsSpectator(body.spectators, false);
+        }
         return game.id;
     }
 

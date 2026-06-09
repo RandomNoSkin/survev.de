@@ -60,6 +60,8 @@ export interface PrivateLobbyMenuPlayer {
     teamId: number;
     /** True when the player has self-marked as AFK. Cleared automatically when a match starts. */
     afk: boolean;
+    /** True when the player joined via a spectator invite link (`#CODE-s`). */
+    spectator: boolean;
 }
 
 /**
@@ -147,6 +149,8 @@ export const zPrivateLobbyJoinMsg = z.object({
          * with a "team_full" error if it has no room (see Room.addPlayer).
          */
         teamId: z.number().optional(),
+        /** Set when joining via a spectator invite link/code (e.g. "ABC123-s"). */
+        spectator: z.boolean().optional(),
     }),
 });
 export type PrivateLobbyJoinMsg = z.infer<typeof zPrivateLobbyJoinMsg>;
@@ -228,6 +232,14 @@ export const zPrivateLobbySetAfkMsg = z.object({
 
 export type PrivateLobbySetAfkMsg = z.infer<typeof zPrivateLobbySetAfkMsg>;
 
+/** Any player (including the leader): toggles their own spectator status. */
+export const zPrivateLobbySetSpectatorMsg = z.object({
+    type: z.literal("setSpectator"),
+    data: z.object({ spectator: z.boolean() }),
+});
+
+export type PrivateLobbySetSpectatorMsg = z.infer<typeof zPrivateLobbySetSpectatorMsg>;
+
 /** Leader-only: pulls the whole lobby out of an active match back to the lobby. */
 export const zPrivateLobbyLeaveGameMsg = z.object({
     type: z.literal("leaveGame"),
@@ -260,6 +272,7 @@ export const zPrivateLobbyClientMsg = z.discriminatedUnion("type", [
     zPrivateLobbyPlayGameMsg,
     zPrivateLobbyLeaveGameMsg,
     zPrivateLobbySetAfkMsg,
+    zPrivateLobbySetSpectatorMsg,
     zPrivateLobbyKickMsg,
     zPrivateLobbyPromoteMsg,
     zPrivateLobbyAssignTeamMsg,
@@ -282,4 +295,5 @@ export type ClientToServerPrivateLobbyMsg =
     | PrivateLobbyGameCompleteMsg
     | PrivateLobbyPlayGameMsg
     | PrivateLobbyLeaveGameMsg
-    | PrivateLobbySetAfkMsg;
+    | PrivateLobbySetAfkMsg
+    | PrivateLobbySetSpectatorMsg;

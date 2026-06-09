@@ -424,13 +424,18 @@ export class GameProcessManager implements GameManager {
             return await new Promise((resolve) => {
                 game.onCreatedCbs.push((game) => {
                     game.addGroupedJoinTokens(body.teams);
+                    if (body.spectators?.length) {
+                        game.addJoinTokensAsSpectator(body.spectators, false);
+                    }
                     resolve(game.id);
                 });
             });
         }
 
         game.addGroupedJoinTokens(body.teams);
-
+        if (body.spectators?.length) {
+            game.addJoinTokensAsSpectator(body.spectators, false);
+        }
         return game.id;
     }
 
