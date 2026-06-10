@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
+import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
+import { MapId } from "../../../shared/defs/types/misc";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import type { Loadout } from "../../../shared/utils/loadout";
@@ -131,6 +133,15 @@ export class Game {
     arenaRoles: string[] = [];
     choosenArenaRoles: string[] = [];
 
+    /** True if the private lobby that created this match had "Advanced Settings" enabled; matches are saved with MapId.Custom and excluded from XP. */
+    advancedSettings: boolean = false;
+
+    /** Leader-configured loadout from a private lobby's "Custom Loadout" toggle; when set, contains the lobby's loadout/Arena Mode settings. */
+    customLoadout?: CustomLoadoutConfig;
+
+    /** True if the private lobby leader enabled "Custom Loadout"; when true, every player spawns with `customLoadout`'s items instead of the map's default items. */
+    customLoadoutEnabled: boolean = false;
+
     /** In-memory kill event buffer for the live moderation dashboard (capped at 200). */
     recentKills: import("../utils/types").KillFeedEntry[] = [];
 
@@ -158,7 +169,10 @@ export class Game {
         this.isPrivate = config.isPrivate ?? false;
         // Private lobby leader narrowed the arena role pool down (see `RoomData.enabledArenaRoles`);
         // takes priority over the map's full `arenaModeRoles` list (see `Player.playerJoin`/`playerRoleSelect`).
-        this.arenaRoles = config.arenaRoles?.length ? [...config.arenaRoles] : [];
+        this.arenaRoles = config.customLoadoutEnabled ? [] : config.arenaRoles?.length ? [...config.arenaRoles] : [];
+        this.advancedSettings = config.advancedSettings ?? false;
+        this.customLoadout = config.customLoadout;
+        this.customLoadoutEnabled = config.customLoadoutEnabled ?? false;
 
         this.map = new GameMap(this);
         this.grid = new Grid(this.map.width, this.map.height);
@@ -894,7 +908,7 @@ export class Game {
                 damageTaken: Math.round(player.damageTaken),
                 killerId: player.killedBy?.matchDataId || 0,
                 gameId: this.id,
-                mapId: this.map.mapId,
+                mapId: this.advancedSettings ? MapId.Custom : this.map.mapId,
                 mapSeed: this.map.seed,
                 killedIds: player.killedIds,
                 assistedIds: player.assistedIds,

@@ -292,7 +292,10 @@ export class GameMap {
         );
         this.factionMode = !!this.mapDef.gameMode.factionMode;
         this.perkMode = !!this.mapDef.gameMode.perkMode;
-        this.arenaMode = !!this.mapDef.gameMode.arenaMode;
+        // Custom Loadout replaces every player's spawn items; arena roles (which assign
+        // their own role-specific loadouts) would otherwise overwrite that, so disable
+        // arena mode entirely for these matches.
+        this.arenaMode = !!this.mapDef.gameMode.arenaMode && !game.customLoadoutEnabled;
         this.turkeyMode = !!this.mapDef.gameMode.turkeyMode;
         this.woodsMode = !!this.mapDef.gameMode.woodsMode;
         this.desertMode = !!this.mapDef.gameMode.desertMode;

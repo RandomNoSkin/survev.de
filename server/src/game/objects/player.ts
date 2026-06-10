@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { buildDefaultItemsFromCustomLoadout, getArenaModeExtraPerks } from "../../../../shared/defs/customLoadout";
 import {
     GameObjectDefs,
     type LootDef,
@@ -1848,6 +1849,13 @@ export class Player extends BaseGameObject {
             );
         }
 
+        let extraPerks: string[] = [];
+        if (this.game.customLoadoutEnabled && this.game.customLoadout) {
+            defaultItems = buildDefaultItemsFromCustomLoadout(this.game.customLoadout);
+        } else if (this.game.customLoadout) {
+            extraPerks = getArenaModeExtraPerks(this.game.customLoadout);
+        }
+
         // createCircle clones the position
         // so set it manually to link both
         this.collider = collider.createCircle(this.pos, this.rad);
@@ -1897,6 +1905,11 @@ export class Player extends BaseGameObject {
             const droppable = typeof perk === "object" && "droppable" in perk ? perk.droppable : false;
             assertType(perkType, "perk", false);
             this.addPerk(perkType, droppable);
+        }
+
+        for (const perkType of extraPerks) {
+            assertType(perkType, "perk", false);
+            this.addPerk(perkType, false);
         }
 
         //if indicator true assign role
@@ -2113,7 +2126,9 @@ export class Player extends BaseGameObject {
         //
         // Boost logic
         //
-        const unlimitedAdren = this.game.map.mapDef.gameMode.unlimitedAdren ?? false;
+        const customLoadout = this.game.customLoadout;
+        const unlimitedAdren = (this.game.map.mapDef.gameMode.unlimitedAdren ?? false) ||
+            !!(customLoadout && (customLoadout.arenaMode || customLoadout.unlimitedAdren));
         if (!this.downed) {
             if(unlimitedAdren) this.boost = 100;
             this.boost = math.clamp(this.boost, this.minBoost, 100);
@@ -4698,7 +4713,9 @@ export class Player extends BaseGameObject {
     pickupLoot(obj: Loot) {
         if (obj.destroyed) return;
 
-        const pickup = this.game.map.mapDef.gameMode.pickup ?? true;
+        const pickup = this.game.customLoadout
+            ? this.game.customLoadout.allowPickup
+            : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
 
         const def = GameObjectDefs[obj.type];
@@ -5194,7 +5211,9 @@ export class Player extends BaseGameObject {
 
     dropItem(dropMsg: net.DropItemMsg): void {
 
-        const pickup = this.game.map.mapDef.gameMode.pickup ?? true;
+        const pickup = this.game.customLoadout
+            ? this.game.customLoadout.allowPickup
+            : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;

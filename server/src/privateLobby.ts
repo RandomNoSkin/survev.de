@@ -3,6 +3,7 @@ import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type { UpgradeWebSocket, WSContext } from "hono/ws";
+import { DEFAULT_CUSTOM_LOADOUT, validateCustomLoadout } from "../../shared/defs/customLoadout";
 import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
 import type { FindGameError } from "../../shared/types/api";
 import {
@@ -138,6 +139,9 @@ class Room {
         teamCount: 1,
         enabledArenaRoles: [],
         allowMembersJoinTeams: true,
+        advancedSettings: false,
+        customLoadoutEnabled: false,
+        customLoadout: DEFAULT_CUSTOM_LOADOUT,
     };
 
     constructor(
@@ -444,6 +448,11 @@ class Room {
         this.data.enabledArenaRoles = enabledArenaRoles;
 
         this.data.allowMembersJoinTeams = props.allowMembersJoinTeams ?? true;
+        this.data.advancedSettings = props.advancedSettings ?? false;
+        this.data.customLoadoutEnabled = props.customLoadoutEnabled ?? false;
+        this.data.customLoadout = validateCustomLoadout(
+            props.customLoadout ?? this.data.customLoadout,
+        );
 
         // kick players that don't fit on the new max players — but never the
         // leader (who's the only one able to trigger this): since ownership no
@@ -652,7 +661,10 @@ class Room {
             version: data.version,
             teams,
             spectators,
-            arenaRoles: this.data.enabledArenaRoles,
+            arenaRoles: this.data.customLoadoutEnabled ? [] : this.data.enabledArenaRoles,
+            advancedSettings: this.data.advancedSettings,
+            customLoadout: this.data.advancedSettings ? this.data.customLoadout : undefined,
+            customLoadoutEnabled: this.data.customLoadoutEnabled,
         });
 
         if ("error" in res) {

@@ -1,6 +1,7 @@
 // /api/private_lobby_v2 websocket msgs typing
 
 import { z } from "zod";
+import type { CustomLoadoutConfig } from "../defs/customLoadout";
 import type { FindGameMatchData } from "./api";
 
 export type PrivateLobbyErrorType =
@@ -39,6 +40,12 @@ export interface RoomData {
     enabledArenaRoles: string[];
     /** When true, any member (not just the leader) can click a team slot to join it. Default true. */
     allowMembersJoinTeams: boolean;
+    /** When true, this lobby's matches do not count towards XP, and an "Advanced Settings" tab is shown. Default false. */
+    advancedSettings: boolean;
+    /** When true, every player spawns with `customLoadout` instead of the map's default items, and Arena Roles are disabled. Default false. */
+    customLoadoutEnabled: boolean;
+    /** Leader-configured spawn loadout, applied when `customLoadoutEnabled` is true. */
+    customLoadout: CustomLoadoutConfig;
 }
 
 //
@@ -117,6 +124,20 @@ export type ServerToClientPrivateLobbyMsg =
 // Private lobby msgs that the client sends to the server
 //
 
+export const zCustomLoadoutConfig = z.object({
+    weapons: z.tuple([z.string(), z.string(), z.string(), z.string()]),
+    helmet: z.string(),
+    chest: z.string(),
+    backpack: z.string(),
+    scope: z.string(),
+    perks: z.array(z.string()),
+    inventory: z.record(z.string(), z.number()),
+    arenaMode: z.boolean().default(false),
+    unlimitedAdren: z.boolean().default(false),
+    unlimitedAmmo: z.boolean().default(false),
+    allowPickup: z.boolean().default(false),
+});
+
 export const zClientRoomData = z.object({
     roomUrl: z.string(),
     findingGame: z.boolean(),
@@ -125,6 +146,9 @@ export const zClientRoomData = z.object({
     gameModeIdx: z.number(),
     enabledArenaRoles: z.array(z.string()).optional(),
     allowMembersJoinTeams: z.boolean().optional(),
+    advancedSettings: z.boolean().optional(),
+    customLoadoutEnabled: z.boolean().optional(),
+    customLoadout: zCustomLoadoutConfig.optional(),
 });
 
 export type ClientRoomData = z.infer<typeof zClientRoomData>;

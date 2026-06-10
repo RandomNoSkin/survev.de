@@ -1,7 +1,9 @@
 import { z } from "zod";
+import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
 import { TeamMode } from "../../../shared/gameConfig";
 import type { FindGameError } from "../../../shared/types/api";
+import { zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
 import { loadoutSchema } from "../../../shared/utils/loadout";
 import type { MatchDataTable } from "../api/db/schema";
 
@@ -44,6 +46,12 @@ export interface ServerGameConfig {
     readonly isPrivate?: boolean;
     /** Arena-mode role pool the private lobby leader narrowed down to; restricts `Game.arenaRoles` when set. */
     readonly arenaRoles?: string[];
+    /** Private lobby "Advanced Settings" toggle was on; matches are saved with MapId.Custom so they're excluded from XP. Default false. */
+    readonly advancedSettings?: boolean;
+    /** Private lobby "Custom Loadout" toggle was on; every player spawns with this loadout instead of the map's default items. */
+    readonly customLoadout?: CustomLoadoutConfig;
+
+    readonly customLoadoutEnabled?: boolean; // Whether the private lobby had "Custom Loadout" enabled; used to determine whether to apply the custom loadout or the map's default items, and whether to populate `arenaRoles` (see `Game.arenaRoles`)
 }
 
 export interface GameData {
@@ -96,6 +104,11 @@ export const zFindPrivateLobbyGameBody = z.object({
     spectators: z.array(zPrivateLobbyPlayerData).optional(),
     /** Arena-mode role pool the lobby leader narrowed down to (see `RoomData.enabledArenaRoles`). */
     arenaRoles: z.array(z.string()).optional(),
+    /** Mirrors `RoomData.advancedSettings` — when true, the resulting match is excluded from XP. */
+    advancedSettings: z.boolean().optional(),
+    /** Mirrors `RoomData.customLoadout` — when set, every player spawns with this loadout instead of the map's default items. */
+    customLoadout: zCustomLoadoutConfig.optional(),
+    customLoadoutEnabled: z.boolean().optional(), // Whether the lobby leader enabled "Custom Loadout" in the private lobby; used to determine whether to apply the custom loadout or the map's default items, and whether to populate `arenaRoles` (see `Game.arenaRoles`)
 });
 
 export type FindPrivateLobbyGameBody = z.infer<typeof zFindPrivateLobbyGameBody>;

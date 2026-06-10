@@ -416,6 +416,9 @@ export class GameProcessManager implements GameManager {
             mapName: body.mapName as keyof typeof MapDefs,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
+            advancedSettings: body.advancedSettings,
+            customLoadout: body.customLoadout,
+            customLoadoutEnabled: body.customLoadoutEnabled,
         });
 
         // if the game has not finished creating

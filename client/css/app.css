@@ -1881,6 +1881,16 @@ a:active {
   width: 100%;
 }
 
+.private-lobby-advanced-settings {
+  width: 100%;
+}
+
+.private-lobby-advanced-settings-warning {
+  color: red;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .private-lobby-setting-row {
   align-items: center;
   display: flex;
@@ -1927,12 +1937,64 @@ a:active {
   pointer-events: none;
 }
 
+.private-lobby-custom-loadout {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 12px;
+  padding-top: 12px;
+  width: 100%;
+}
+
+.private-lobby-setting-row-controls {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.private-lobby-collapse-toggle {
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 4px 6px;
+  user-select: none;
+}
+
+.private-lobby-collapse-toggle:hover {
+  color: #fff;
+}
+
+.private-lobby-setting-select,
+.private-lobby-setting-number {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.private-lobby-setting-select {
+  max-width: 60%;
+}
+
+.private-lobby-setting-number {
+  width: 70px;
+}
+
+.private-lobby-setting-select:disabled,
+.private-lobby-setting-number:disabled {
+  opacity: 0.6;
+}
+
 #private-lobby-menu-options {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   float: right;
   height: 100%;
+  max-height: none;
   padding: 12px;
   width: 520px;
 }
@@ -1953,9 +2015,10 @@ a:active {
 
 #private-lobby-menu-settings {
   display: none;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
   margin-top: auto;
+  min-height: 0;
   padding-top: 8px;
 }
 
@@ -1988,7 +2051,8 @@ a:active {
 }
 
 #private-lobby-settings-content {
-  min-height: 72px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 }

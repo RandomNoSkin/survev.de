@@ -130,6 +130,9 @@ class GameServer {
             teams: data.teams,
             spectators: data.spectators,
             arenaRoles: data.arenaRoles,
+            advancedSettings: data.advancedSettings,
+            customLoadout: data.customLoadout,
+            customLoadoutEnabled: data.customLoadoutEnabled,
         });
 
         return {
