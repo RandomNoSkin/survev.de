@@ -18,6 +18,8 @@ export enum MapId {
     CompSolo = 14,
     CompDuo = 15,
     Scrims = 16,
+    /** Sentinel id for matches saved from "Advanced Settings" private lobbies; intentionally has no `MapDefs` entry so XP calculations treat it as 0. */
+    Custom = 17,
 }
 
 export const TeamModeToString = {

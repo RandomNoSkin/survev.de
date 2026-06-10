@@ -105,11 +105,11 @@ async function broadcastBans() {
     }
 }
 
-/** Fetches the server/game list from all regions. */
+/** Fetches the server/game list from all regions, including private lobby matches with "Public Spectating" disabled. */
 async function fetchServers() {
     const regions = await Promise.all(
         Object.entries(server.regions).map(async ([regionId, region]) => {
-            const infos = await region.collectGameInfos().catch(() => null);
+            const infos = await region.collectGameInfos(true).catch(() => null);
             const games = Array.isArray(infos?.data) ? infos.data : [];
             return { regionId, games, verifiedOnly: region.verifiedOnly };
         }),
@@ -564,7 +564,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             await Promise.all(
                 Object.entries(server.regions).map(async ([regionId, region]) => {
-                    const infos = await region.collectGameInfos().catch(() => null);
+                    const infos = await region.collectGameInfos(true).catch(() => null);
                     const games = Array.isArray(infos?.data) ? infos.data : [];
                     await Promise.all(
                         games

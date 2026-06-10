@@ -1814,6 +1814,34 @@ a:active {
   height: 40px;
 }
 
+.private-lobby-player-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.private-lobby-player-loadout-select {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  width: 100%;
+}
+
+.private-lobby-player-loadout-select option {
+  background-color: #fff;
+  color: #000;
+}
+
+.private-lobby-player-loadout-select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .private-lobby-team-unassigned {
   background-color: rgba(255, 255, 255, 0.02);
 }
@@ -1881,6 +1909,16 @@ a:active {
   width: 100%;
 }
 
+.private-lobby-advanced-settings {
+  width: 100%;
+}
+
+.private-lobby-advanced-settings-warning {
+  color: red;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .private-lobby-setting-row {
   align-items: center;
   display: flex;
@@ -1927,12 +1965,143 @@ a:active {
   pointer-events: none;
 }
 
+.private-lobby-setting-remove {
+  background-color: rgba(255, 255, 255, 0.1);
+  background-image: url(/img/gui/close.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 50%;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  height: 24px;
+  width: 24px;
+}
+
+.private-lobby-setting-remove:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.private-lobby-loadout-group {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+
+.private-lobby-loadout-group-title {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.private-lobby-loadout-group .private-lobby-setting-row:last-child {
+  margin-bottom: 0;
+}
+
+.private-lobby-custom-loadout {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 12px;
+  padding-top: 12px;
+  width: 100%;
+}
+
+.private-lobby-setting-row-controls {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.private-lobby-collapse-toggle {
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 4px 6px;
+  user-select: none;
+}
+
+.private-lobby-collapse-toggle:hover {
+  color: #fff;
+}
+
+.private-lobby-setting-select,
+.private-lobby-setting-number {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.private-lobby-setting-select {
+  max-width: 60%;
+}
+
+.private-lobby-setting-select option {
+  background-color: #fff;
+  color: #000;
+}
+
+.private-lobby-setting-number {
+  width: 70px;
+}
+
+.private-lobby-setting-select:disabled,
+.private-lobby-setting-number:disabled {
+  opacity: 0.6;
+}
+
+.private-lobby-setting-label-editable {
+  cursor: text;
+}
+
+.private-lobby-setting-label-input {
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  outline: none;
+  padding: 0;
+}
+
+.private-lobby-add-loadout-btn {
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-align: center;
+  user-select: none;
+  width: 100%;
+}
+
+.private-lobby-add-loadout-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
 #private-lobby-menu-options {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   float: right;
   height: 100%;
+  max-height: none;
   padding: 12px;
   width: 520px;
 }
@@ -1953,9 +2122,10 @@ a:active {
 
 #private-lobby-menu-settings {
   display: none;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
   margin-top: auto;
+  min-height: 0;
   padding-top: 8px;
 }
 
@@ -1988,7 +2158,8 @@ a:active {
 }
 
 #private-lobby-settings-content {
-  min-height: 72px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
 }

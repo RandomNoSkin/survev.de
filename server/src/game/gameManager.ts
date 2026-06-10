@@ -191,6 +191,10 @@ export class SingleThreadGameManager implements GameManager {
             mapName: body.mapName as keyof typeof MapDefs,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
+            advancedSettings: body.advancedSettings,
+            customLoadout: body.customLoadout,
+            customLoadoutEnabled: body.customLoadoutEnabled,
+            publicSpectating: body.publicSpectating,
         });
 
         game.addGroupedJoinTokens(body.teams);

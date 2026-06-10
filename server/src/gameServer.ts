@@ -130,6 +130,10 @@ class GameServer {
             teams: data.teams,
             spectators: data.spectators,
             arenaRoles: data.arenaRoles,
+            advancedSettings: data.advancedSettings,
+            customLoadout: data.customLoadout,
+            customLoadoutEnabled: data.customLoadoutEnabled,
+            publicSpectating: data.publicSpectating,
         });
 
         return {
@@ -554,15 +558,18 @@ app.post("/api/game_infos", async (res, req) => {
                 const games = await server.manager.getGames();
                 const now = Date.now();
 
-                const data = (Array.isArray(games) ? games : []).map((g: any) => ({
-                    id: g.id,
-                    teamMode: g.teamMode,
-                    playerCount: g.aliveCount,
-                    playerNames: "",
-                    runtime: g.startedTime,
-                    stopped: g.stopped ?? false,
-                    verifiedOnly: g.verifiedOnly ?? false,
-                })).filter((g: any) => g.id);
+                const isAdmin = body?.admin === true;
+                const data = (Array.isArray(games) ? games : [])
+                    .filter((g: any) => isAdmin || !g.isPrivate || g.publicSpectating !== false)
+                    .map((g: any) => ({
+                        id: g.id,
+                        teamMode: g.teamMode,
+                        playerCount: g.aliveCount,
+                        playerNames: "",
+                        runtime: g.startedTime,
+                        stopped: g.stopped ?? false,
+                        verifiedOnly: g.verifiedOnly ?? false,
+                    })).filter((g: any) => g.id);
 
                 returnJson(res, { data });
             } catch (error) {
