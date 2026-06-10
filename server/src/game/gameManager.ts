@@ -194,6 +194,7 @@ export class SingleThreadGameManager implements GameManager {
             advancedSettings: body.advancedSettings,
             customLoadout: body.customLoadout,
             customLoadoutEnabled: body.customLoadoutEnabled,
+            publicSpectating: body.publicSpectating,
         });
 
         game.addGroupedJoinTokens(body.teams);

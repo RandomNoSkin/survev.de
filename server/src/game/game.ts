@@ -46,6 +46,8 @@ export interface JoinTokenData {
     userId: string | null;
     findGameIp: string;
     loadout?: Loadout;
+    /** Per-player resolved Custom Loadout (see `Room.getPlayerCustomLoadout`); overrides `Game.customLoadout` for this player when `Game.customLoadoutEnabled` is true. */
+    customLoadout?: CustomLoadoutConfig;
     admin: boolean;
     groupData: {
         autoFill: boolean;
@@ -73,6 +75,8 @@ export class Game {
     isTeamMode: boolean;
     /** Isolated match created from a private lobby; excluded from public matchmaking, see `canJoin`. */
     isPrivate: boolean;
+    /** Private lobby "Public Spectating" toggle; when false, this match is hidden from `/api/game_infos`. Default true. */
+    publicSpectating: boolean = true;
     config: ServerGameConfig;
     pluginManager = new PluginManager(this);
     modeManager: GameModeManager;
@@ -167,6 +171,7 @@ export class Game {
         this.mapName = config.mapName;
         this.isTeamMode = this.teamMode !== TeamMode.Solo;
         this.isPrivate = config.isPrivate ?? false;
+        this.publicSpectating = config.publicSpectating ?? true;
         // Private lobby leader narrowed the arena role pool down (see `RoomData.enabledArenaRoles`);
         // takes priority over the map's full `arenaModeRoles` list (see `Player.playerJoin`/`playerRoleSelect`).
         this.arenaRoles = config.customLoadoutEnabled ? [] : config.arenaRoles?.length ? [...config.arenaRoles] : [];
@@ -785,6 +790,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                customLoadout: token.customLoadout,
                 admin: token.admin,
             });
         }
@@ -804,6 +810,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                customLoadout: token.customLoadout,
                 admin: token.admin,
             });
         }
@@ -832,6 +839,7 @@ export class Game {
                     groupData,
                     findGameIp: token.ip,
                     loadout: token.loadout,
+                    customLoadout: token.customLoadout,
                     admin: token.admin,
                 });
             }
@@ -846,6 +854,7 @@ export class Game {
             mapName: this.mapName,
             canJoin: this.canJoin,
             isPrivate: this.isPrivate,
+            publicSpectating: this.publicSpectating,
             aliveCount: this.aliveCount,
             startedTime: this.startedTime,
             stopped: this.stopped,

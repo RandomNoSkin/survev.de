@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { buildDefaultItemsFromCustomLoadout, getArenaModeExtraPerks } from "../../../../shared/defs/customLoadout";
+import { buildDefaultItemsFromCustomLoadout, getArenaModeExtraPerks, type CustomLoadoutConfig } from "../../../../shared/defs/customLoadout";
 import {
     GameObjectDefs,
     type LootDef,
@@ -235,6 +235,7 @@ export class PlayerBarn {
             joinData.userId,
             joinData.admin,
             joinData.loadout,
+            joinData.customLoadout,
         );
 
         this.socketIdToPlayer.set(socketId, player);
@@ -319,6 +320,7 @@ export class PlayerBarn {
             joinData.userId,
             joinData.admin,
             joinData.loadout,
+            joinData.customLoadout,
         );
 
         this.socketIdToPlayer.set(socketId, player);
@@ -1815,6 +1817,7 @@ export class Player extends BaseGameObject {
         userId: string | null,
         admin: boolean,
         loadout?: Loadout,
+        customLoadout?: CustomLoadoutConfig,
     ) {
         super(game, pos);
 
@@ -1850,8 +1853,9 @@ export class Player extends BaseGameObject {
         }
 
         let extraPerks: string[] = [];
-        if (this.game.customLoadoutEnabled && this.game.customLoadout) {
-            defaultItems = buildDefaultItemsFromCustomLoadout(this.game.customLoadout);
+        const playerCustomLoadout = customLoadout ?? this.game.customLoadout;
+        if (this.game.customLoadoutEnabled && playerCustomLoadout) {
+            defaultItems = buildDefaultItemsFromCustomLoadout(playerCustomLoadout);
         } else if (this.game.customLoadout) {
             extraPerks = getArenaModeExtraPerks(this.game.customLoadout);
         }
@@ -2127,8 +2131,9 @@ export class Player extends BaseGameObject {
         // Boost logic
         //
         const customLoadout = this.game.customLoadout;
-        const unlimitedAdren = (this.game.map.mapDef.gameMode.unlimitedAdren ?? false) ||
-            !!(customLoadout && (customLoadout.arenaMode || customLoadout.unlimitedAdren));
+        const unlimitedAdren = customLoadout
+            ? (customLoadout.arenaMode || customLoadout.unlimitedAdren)
+            : (this.game.map.mapDef.gameMode.unlimitedAdren ?? false);
         if (!this.downed) {
             if(unlimitedAdren) this.boost = 100;
             this.boost = math.clamp(this.boost, this.minBoost, 100);
@@ -2904,7 +2909,7 @@ export class Player extends BaseGameObject {
             );
         }
 
-        let defaultItems = (RoleDefs[this.role].defaultItems || GameConfig.player.defaultItems);
+        let defaultItems = (RoleDefs[this.role]?.defaultItems || GameConfig.player.defaultItems);
 
         this.chest = defaultItems.chest;
         assertType(this.chest, "chest", true);

@@ -3,7 +3,12 @@ import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type { UpgradeWebSocket, WSContext } from "hono/ws";
-import { DEFAULT_CUSTOM_LOADOUT, validateCustomLoadout } from "../../shared/defs/customLoadout";
+import {
+    DEFAULT_CUSTOM_LOADOUT,
+    MAX_EXTRA_CUSTOM_LOADOUTS,
+    validateCustomLoadout,
+} from "../../shared/defs/customLoadout";
+import type { CustomLoadoutConfig } from "../../shared/defs/customLoadout";
 import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
 import type { FindGameError } from "../../shared/types/api";
 import {
@@ -27,6 +32,7 @@ import { hashIp, isBanned } from "./api/routes/private/ModerationRouter";
 import { Config } from "./config";
 import { ServerLogger } from "./utils/logger";
 import {
+    checkForBadWords,
     getHonoIp,
     HTTPRateLimit,
     isBehindProxy,
@@ -41,6 +47,14 @@ interface SocketData {
     ip: string;
 }
 
+/** Clears `loadout.name` if it fails the bad-word filter, falling back to the default "Custom Loadout"/"Custom Loadout 0N" label. */
+function sanitizeLoadoutName(loadout: CustomLoadoutConfig): CustomLoadoutConfig {
+    if (loadout.name && checkForBadWords(loadout.name)) {
+        return { ...loadout, name: undefined };
+    }
+    return loadout;
+}
+
 class Player {
     room?: Room;
 
@@ -52,6 +66,9 @@ class Player {
 
     /** Lobby-local team slot index. Reassigned by the leader via `assignTeam`. */
     teamId = 0;
+
+    /** Index into the room's loadout list (0 = `customLoadout`, 1+ = `extraCustomLoadouts[index - 1]`) this player spawns with. Reassigned by the leader via `assignLoadout`. */
+    loadoutIndex = 0;
 
     get isLeader() {
         // ownership is explicit (see Room#leader) — the room's creator starts
@@ -72,6 +89,7 @@ class Player {
             teamId: this.teamId,
             afk: this.afk,
             spectator: this.spectator,
+            loadoutIndex: this.loadoutIndex,
         };
     }
 
@@ -139,9 +157,11 @@ class Room {
         teamCount: 1,
         enabledArenaRoles: [],
         allowMembersJoinTeams: true,
+        publicSpectating: true,
         advancedSettings: false,
         customLoadoutEnabled: false,
         customLoadout: DEFAULT_CUSTOM_LOADOUT,
+        extraCustomLoadouts: [],
     };
 
     constructor(
@@ -328,6 +348,11 @@ class Room {
                 this.swapTeam(msg.data.playerId, msg.data.targetPlayerId);
                 break;
             }
+            case "assignLoadout": {
+                if (!player.isLeader) break;
+                this.assignLoadout(msg.data.playerId, msg.data.loadoutIndex);
+                break;
+            }
             case "playGame": {
                 if (!player.isLeader) break;
                 this.findGame(msg.data);
@@ -395,6 +420,40 @@ class Room {
         this.sendState();
     }
 
+    /** Leader-only: assigns a player to spawn with a specific configured loadout (0 = `customLoadout`, 1+ = `extraCustomLoadouts[index - 1]`). */
+    assignLoadout(playerId: number, loadoutIndex: number) {
+        const player = this.players[playerId];
+        if (!player) return;
+        if (loadoutIndex < 0 || loadoutIndex > this.data.extraCustomLoadouts.length) return;
+
+        player.loadoutIndex = loadoutIndex;
+        this.sendState();
+    }
+
+    /**
+     * Resolves the loadout `player` should spawn with when `customLoadoutEnabled` is true:
+     * the assigned loadout's items/weapons/perks, but always the base `customLoadout`'s
+     * Arena Mode/Adrenaline/Ammo/Pickup settings (those are lobby-wide, not per-loadout).
+     */
+    getPlayerCustomLoadout(player: Player): CustomLoadoutConfig | undefined {
+        if (!this.data.customLoadoutEnabled) return undefined;
+
+        const base = this.data.customLoadout;
+        const extra =
+            player.loadoutIndex > 0
+                ? this.data.extraCustomLoadouts[player.loadoutIndex - 1]
+                : undefined;
+        if (!extra) return base;
+
+        return {
+            ...extra,
+            arenaMode: base.arenaMode,
+            unlimitedAdren: base.unlimitedAdren,
+            unlimitedAmmo: base.unlimitedAmmo,
+            allowPickup: base.allowPickup,
+        };
+    }
+
     /** Leader-only: hands lobby ownership over to another player. */
     promote(playerId: number) {
         const player = this.players[playerId];
@@ -405,6 +464,8 @@ class Room {
     }
 
     setProps(props: ClientRoomData) {
+        const previousGameModeIdx = this.data.gameModeIdx;
+
         let region = props.region;
         if (!(region in Config.regions)) {
             region = Object.keys(Config.regions)[0];
@@ -448,11 +509,40 @@ class Room {
         this.data.enabledArenaRoles = enabledArenaRoles;
 
         this.data.allowMembersJoinTeams = props.allowMembersJoinTeams ?? true;
+        this.data.publicSpectating = props.publicSpectating ?? true;
         this.data.advancedSettings = props.advancedSettings ?? false;
         this.data.customLoadoutEnabled = props.customLoadoutEnabled ?? false;
-        this.data.customLoadout = validateCustomLoadout(
+        this.data.customLoadout = sanitizeLoadoutName(validateCustomLoadout(
             props.customLoadout ?? this.data.customLoadout,
-        );
+        ));
+        this.data.extraCustomLoadouts = (
+            props.extraCustomLoadouts ?? this.data.extraCustomLoadouts
+        )
+            .slice(0, MAX_EXTRA_CUSTOM_LOADOUTS)
+            .map((loadout) => sanitizeLoadoutName(validateCustomLoadout(loadout)));
+
+        // players assigned to a loadout slot that no longer exists fall back to
+        // the base "Custom Loadout" (index 0)
+        const maxLoadoutIndex = this.data.extraCustomLoadouts.length;
+        for (const player of this.players) {
+            if (player.loadoutIndex > maxLoadoutIndex) {
+                player.loadoutIndex = 0;
+            }
+        }
+
+        // Arena roles (e.g. arena1/arena2) already grant the "arena" perk
+        // (unlimited ammo + adrenaline), so when they're active the leader
+        // can't disable Arena Mode in Advanced Settings — keep it locked on.
+        if (mapDef.gameMode.arenaMode && !this.data.customLoadoutEnabled) {
+            this.data.customLoadout.arenaMode = true;
+        }
+
+        // Switching modes resets "Allow Pickup" to the new mode's default
+        // (e.g. 1v1 doesn't allow pickup, 4v4 does), instead of carrying over
+        // whatever the previous mode had it set to.
+        if (gameModeIdx !== previousGameModeIdx) {
+            this.data.customLoadout.allowPickup = mapDef.gameMode.pickup ?? true;
+        }
 
         // kick players that don't fit on the new max players — but never the
         // leader (who's the only one able to trigger this): since ownership no
@@ -478,12 +568,17 @@ class Room {
         // doubled up) — players keep their slot if it still fits, otherwise they
         // move to the first team with room (or become unassigned if none fits).
         // Spectators are excluded: they always keep teamId = -1.
-        const teamCounts = new Array(this.data.teamCount).fill(0);
+        //
+        // Bounds checks use maxPlayers (not teamCount): private lobbies allow
+        // custom layouts with more, smaller teams than the mode's nominal
+        // teamCount (see renderTeamGrid), and those slots must survive
+        // unrelated setProps calls (e.g. toggling Arena Mode).
+        const teamCounts = new Array(this.data.maxPlayers).fill(0);
         for (const player of this.players) {
             if (player.spectator) continue;
             if (
                 player.teamId >= 0 &&
-                player.teamId < this.data.teamCount &&
+                player.teamId < this.data.maxPlayers &&
                 teamCounts[player.teamId] < this.data.teamSize
             ) {
                 teamCounts[player.teamId]++;
@@ -637,6 +732,7 @@ class Room {
                     ip: p.ip,
                     admin: p.admin,
                     loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
+                    customLoadout: this.getPlayerCustomLoadout(p),
                 } satisfies FindGamePrivateBody["playerData"][0];
             }),
         );
@@ -665,6 +761,7 @@ class Room {
             advancedSettings: this.data.advancedSettings,
             customLoadout: this.data.advancedSettings ? this.data.customLoadout : undefined,
             customLoadoutEnabled: this.data.customLoadoutEnabled,
+            publicSpectating: this.data.publicSpectating,
         });
 
         if ("error" in res) {
@@ -920,7 +1017,9 @@ export class PrivateLobbyMenu {
     onMsg(ws: WSContext<SocketData>, data: string) {
         let msg: ClientToServerPrivateLobbyMsg;
         try {
-            assert(data.length < 1024);
+            // setRoomProps carries the full ClientRoomData, including up to
+            // MAX_EXTRA_CUSTOM_LOADOUTS+1 CustomLoadoutConfigs (~3.5KB at max).
+            assert(data.length < 8192);
             msg = JSON.parse(data);
             zPrivateLobbyClientMsg.parse(msg);
         } catch {

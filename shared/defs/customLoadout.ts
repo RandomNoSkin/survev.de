@@ -3,12 +3,15 @@ import { GameObjectDefs } from "./gameObjectDefs";
 import { type GunDef, GunDefs } from "./gameObjects/gunDefs";
 import { MeleeDefs } from "./gameObjects/meleeDefs";
 import { PerkDefs } from "./gameObjects/perkDefs";
+import { _allowedMeleeSkins } from "./gameObjects/unlockDefs";
 
 /**
  * Leader-configured loadout applied to every player when a private lobby's
  * "Custom Loadout" advanced setting is enabled, replacing the map's default items.
  */
 export interface CustomLoadoutConfig {
+    /** Player-given display name shown in the leader's loadout list and the per-player assignment dropdown. Falls back to "Custom Loadout"/"Custom Loadout 0N" when unset. */
+    name?: string;
     /** [primary gun, secondary gun, melee, throwable]; "" = none/default for that slot */
     weapons: [string, string, string, string];
     /** "" | helmet01-04 */
@@ -33,6 +36,12 @@ export interface CustomLoadoutConfig {
     allowPickup: boolean;
 }
 
+/** Max number of additional named loadouts ("Custom Loadout 01"-"07") a lobby leader can configure besides the base "Custom Loadout". */
+export const MAX_EXTRA_CUSTOM_LOADOUTS = 7;
+
+/** Max length of a player-given `CustomLoadoutConfig.name`. */
+export const CUSTOM_LOADOUT_NAME_MAX_LEN = 16;
+
 export const DEFAULT_CUSTOM_LOADOUT: CustomLoadoutConfig = {
     weapons: ["", "", "", ""],
     helmet: "",
@@ -51,7 +60,7 @@ export const CUSTOM_LOADOUT_GUNS = Object.keys(GunDefs).filter(
     (k) => GameObjectDefs[k]?.type === "gun",
 );
 export const CUSTOM_LOADOUT_MELEES = Object.keys(MeleeDefs).filter(
-    (k) => GameObjectDefs[k]?.type === "melee",
+    (k) => GameObjectDefs[k]?.type === "melee" && !_allowedMeleeSkins.includes(k),
 );
 export const CUSTOM_LOADOUT_GRENADES = [
     "frag",
@@ -65,8 +74,18 @@ export const CUSTOM_LOADOUT_GRENADES = [
 export const CUSTOM_LOADOUT_HELMETS = ["", "helmet01", "helmet02", "helmet03", "helmet04"];
 export const CUSTOM_LOADOUT_CHESTS = ["", "chest01", "chest02", "chest03", "chest04"];
 export const CUSTOM_LOADOUT_BACKPACKS = ["backpack00", "backpack01", "backpack02", "backpack03"];
-export const CUSTOM_LOADOUT_SCOPES = ["1xscope", "2xscope", "4xscope", "8xscope", "15xscope"];
+export const CUSTOM_LOADOUT_SCOPES = ["1xscope", "2xscope", "4xscope", "8xscope", "15xscope"] as const;
 export const CUSTOM_LOADOUT_HEALS = ["bandage", "healthkit", "soda", "painkiller"] as const;
+export const CUSTOM_LOADOUT_AMMOS = [
+    "9mm",
+    "762mm",
+    "556mm",
+    "12gauge",
+    "50AE",
+    "308sub",
+    "45acp",
+    "flare",
+] as const;
 export const CUSTOM_LOADOUT_PERKS = Object.keys(PerkDefs).filter(
     (k) => GameObjectDefs[k]?.type === "perk",
 );
@@ -74,6 +93,8 @@ export const CUSTOM_LOADOUT_PERKS = Object.keys(PerkDefs).filter(
 const CUSTOM_LOADOUT_INVENTORY_ITEMS: readonly string[] = [
     ...CUSTOM_LOADOUT_GRENADES,
     ...CUSTOM_LOADOUT_HEALS,
+    ...CUSTOM_LOADOUT_SCOPES,
+    ...CUSTOM_LOADOUT_AMMOS,
 ];
 
 function backpackLevel(backpack: string): number {
@@ -87,6 +108,7 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
     const weapons = [0, 1, 2, 3].map((i) => {
         const type = input.weapons?.[i] ?? "";
         if (!type) return "";
+        if (i === 2) return CUSTOM_LOADOUT_MELEES.includes(type) ? type : "";
         return GameObjectDefs[type]?.type === weaponCategories[i] ? type : "";
     }) as [string, string, string, string];
 
@@ -95,7 +117,7 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
     const backpack = CUSTOM_LOADOUT_BACKPACKS.includes(input.backpack ?? "")
         ? (input.backpack as string)
         : "backpack00";
-    const scope = CUSTOM_LOADOUT_SCOPES.includes(input.scope ?? "")
+    const scope = (CUSTOM_LOADOUT_SCOPES as readonly string[]).includes(input.scope ?? "")
         ? (input.scope as string)
         : "1xscope";
 
@@ -116,7 +138,10 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
     const unlimitedAmmo = input.unlimitedAmmo ?? false;
     const allowPickup = input.allowPickup ?? false;
 
+    const name = (input.name ?? "").trim().slice(0, CUSTOM_LOADOUT_NAME_MAX_LEN) || undefined;
+
     return {
+        name,
         weapons,
         helmet,
         chest,
@@ -152,6 +177,15 @@ export function buildDefaultItemsFromCustomLoadout(loadout: CustomLoadoutConfig)
 
     const perks = [...loadout.perks, ...getArenaModeExtraPerks(loadout)];
 
+    // Every player always carries a 1x scope, and the equipped scope must be
+    // in the inventory to be usable; both are enforced here regardless of
+    // what the leader configured for "extra" scopes.
+    const scopes = Object.fromEntries(
+        CUSTOM_LOADOUT_SCOPES.map((scope) => [scope, loadout.inventory[scope] ?? 0]),
+    );
+    scopes["1xscope"] = 1;
+    scopes[loadout.scope || "1xscope"] = 1;
+
     return {
         weapons: [
             { type: primary, ammo: primary ? (GunDefs[primary] as GunDef).maxClip : 0 },
@@ -173,6 +207,7 @@ export function buildDefaultItemsFromCustomLoadout(loadout: CustomLoadoutConfig)
         inventory: {
             ...GameConfig.player.defaultItems.inventory,
             ...loadout.inventory,
+            ...scopes,
         },
     };
 }

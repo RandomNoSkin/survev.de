@@ -32,6 +32,7 @@ class GameProcess implements GameData {
 
     canJoin = true;
     isPrivate = false;
+    publicSpectating = true;
     creating = false;
     teamMode: TeamMode = 1;
     mapName = "";
@@ -80,6 +81,7 @@ class GameProcess implements GameData {
                 case ProcessMsgType.UpdateData:
                     this.canJoin = msg.canJoin;
                     this.isPrivate = msg.isPrivate;
+                    this.publicSpectating = msg.publicSpectating;
                     this.teamMode = msg.teamMode;
                     this.mapName = msg.mapName;
                     if (this.id !== msg.id) {
@@ -419,6 +421,7 @@ export class GameProcessManager implements GameManager {
             advancedSettings: body.advancedSettings,
             customLoadout: body.customLoadout,
             customLoadoutEnabled: body.customLoadoutEnabled,
+            publicSpectating: body.publicSpectating,
         });
 
         // if the game has not finished creating

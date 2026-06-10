@@ -40,12 +40,16 @@ export interface RoomData {
     enabledArenaRoles: string[];
     /** When true, any member (not just the leader) can click a team slot to join it. Default true. */
     allowMembersJoinTeams: boolean;
+    /** When true, this lobby's matches are listed in the public spectator menu. Default true. */
+    publicSpectating: boolean;
     /** When true, this lobby's matches do not count towards XP, and an "Advanced Settings" tab is shown. Default false. */
     advancedSettings: boolean;
     /** When true, every player spawns with `customLoadout` instead of the map's default items, and Arena Roles are disabled. Default false. */
     customLoadoutEnabled: boolean;
     /** Leader-configured spawn loadout, applied when `customLoadoutEnabled` is true. */
     customLoadout: CustomLoadoutConfig;
+    /** Additional named loadouts ("Custom Loadout 01", "02", ...) the leader can configure and assign to specific players via `PrivateLobbyMenuPlayer.loadoutIndex`. Max length: MAX_EXTRA_CUSTOM_LOADOUTS. */
+    extraCustomLoadouts: CustomLoadoutConfig[];
 }
 
 //
@@ -71,6 +75,8 @@ export interface PrivateLobbyMenuPlayer {
     afk: boolean;
     /** True when the player joined via a spectator invite link (`#CODE-s`). */
     spectator: boolean;
+    /** Index into the lobby's loadout list (0 = `customLoadout`, 1+ = `extraCustomLoadouts[index - 1]`) this player spawns with when `customLoadoutEnabled` is true. Default 0. */
+    loadoutIndex: number;
 }
 
 /**
@@ -125,6 +131,7 @@ export type ServerToClientPrivateLobbyMsg =
 //
 
 export const zCustomLoadoutConfig = z.object({
+    name: z.string().optional(),
     weapons: z.tuple([z.string(), z.string(), z.string(), z.string()]),
     helmet: z.string(),
     chest: z.string(),
@@ -146,12 +153,26 @@ export const zClientRoomData = z.object({
     gameModeIdx: z.number(),
     enabledArenaRoles: z.array(z.string()).optional(),
     allowMembersJoinTeams: z.boolean().optional(),
+    publicSpectating: z.boolean().optional(),
     advancedSettings: z.boolean().optional(),
     customLoadoutEnabled: z.boolean().optional(),
     customLoadout: zCustomLoadoutConfig.optional(),
+    extraCustomLoadouts: z.array(zCustomLoadoutConfig).optional(),
 });
 
 export type ClientRoomData = z.infer<typeof zClientRoomData>;
+
+/** Subset of `ClientRoomData` persisted client-side (`config.privateLobbySettings`) and re-applied when the player creates a new lobby. */
+export type SavedPrivateLobbySettings = Pick<
+    ClientRoomData,
+    | "allowMembersJoinTeams"
+    | "publicSpectating"
+    | "advancedSettings"
+    | "customLoadoutEnabled"
+    | "customLoadout"
+    | "extraCustomLoadouts"
+    | "enabledArenaRoles"
+>;
 
 export const zKeepAliveMsg = z.object({
     type: z.literal("keepAlive"),
@@ -242,6 +263,17 @@ export const zPrivateLobbyAssignTeamMsg = z.object({
 
 export type PrivateLobbyAssignTeamMsg = z.infer<typeof zPrivateLobbyAssignTeamMsg>;
 
+/** Leader-only: assigns a player to spawn with a specific configured loadout (0 = `customLoadout`, 1+ = `extraCustomLoadouts[index - 1]`). */
+export const zPrivateLobbyAssignLoadoutMsg = z.object({
+    type: z.literal("assignLoadout"),
+    data: z.object({
+        playerId: z.number(),
+        loadoutIndex: z.number(),
+    }),
+});
+
+export type PrivateLobbyAssignLoadoutMsg = z.infer<typeof zPrivateLobbyAssignLoadoutMsg>;
+
 /** Leader-only: swaps two players' team slots. */
 export const zPrivateLobbySwapTeamMsg = z.object({
     type: z.literal("swapTeam"),
@@ -319,6 +351,7 @@ export const zPrivateLobbyClientMsg = z.discriminatedUnion("type", [
     zPrivateLobbyKickMsg,
     zPrivateLobbyPromoteMsg,
     zPrivateLobbyAssignTeamMsg,
+    zPrivateLobbyAssignLoadoutMsg,
     zPrivateLobbySwapTeamMsg,
     zPrivateLobbyChangeNameMsg,
     zGameCompleteMsg,
@@ -335,6 +368,7 @@ export type ClientToServerPrivateLobbyMsg =
     | PrivateLobbyKickMsg
     | PrivateLobbyPromoteMsg
     | PrivateLobbyAssignTeamMsg
+    | PrivateLobbyAssignLoadoutMsg
     | PrivateLobbySwapTeamMsg
     | PrivateLobbyGameCompleteMsg
     | PrivateLobbyPlayGameMsg

@@ -1,3 +1,5 @@
+import { Config } from "../../config";
+
 /** HTML template for the moderation dashboard SPA. Served inline by Hono so auth is enforced server-side. */
 export const dashboardHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -390,6 +392,9 @@ export const dashboardHtml = `<!DOCTYPE html>
 // ═══════════════════════════════════════════════════════════════════════════
 
 'use strict';
+
+// Base URL of the game client (Vite dev server in dev, same origin in prod) — used to open spectate tabs.
+const CLIENT_URL = ${JSON.stringify(Config.oauthRedirectURI)};
 
 // ── State ──────────────────────────────────────────────────────────────────
 let currentAdminId   = '';    // own userId (for "YOU" badge + hide self-buttons)
@@ -893,8 +898,10 @@ async function spectateGame(region, gameId) {
     const data = await get('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/spectate-token');
     const matchData = data?.res?.[0];
     if (!matchData) { toast('Could not get spectate token', true); return; }
-    sessionStorage.setItem('dashboardSpectate', JSON.stringify(matchData));
-    window.open('/', '_blank');
+    // CLIENT_URL may be a different origin (e.g. dev: dashboard on :8000, client on :3000),
+    // so pass the match data via URL param instead of sessionStorage.
+    const url = CLIENT_URL + '/?spectate=' + encodeURIComponent(JSON.stringify(matchData));
+    window.open(url, '_blank');
     toast('Opening spectator view…');
   } catch (e) { toast('Spectate failed', true); }
 }

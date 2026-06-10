@@ -52,6 +52,9 @@ export interface ServerGameConfig {
     readonly customLoadout?: CustomLoadoutConfig;
 
     readonly customLoadoutEnabled?: boolean; // Whether the private lobby had "Custom Loadout" enabled; used to determine whether to apply the custom loadout or the map's default items, and whether to populate `arenaRoles` (see `Game.arenaRoles`)
+
+    /** Private lobby "Public Spectating" toggle; when false, this match is hidden from the public spectator menu (`/api/game_infos`). Default true. */
+    readonly publicSpectating?: boolean;
 }
 
 export interface GameData {
@@ -61,6 +64,8 @@ export interface GameData {
     canJoin: boolean;
     /** Isolated match created from a private lobby; joined via tokens, not public matchmaking (see `canJoin`). */
     isPrivate: boolean;
+    /** Private lobby "Public Spectating" toggle; when false, hidden from `/api/game_infos`. Default true. */
+    publicSpectating: boolean;
     aliveCount: number;
     startedTime: number;
     stopped: boolean;
@@ -79,6 +84,7 @@ export const zFindGamePrivateBody = z.object({
             ip: z.string(),
             admin:z.boolean(),
             loadout: loadoutSchema.optional(),
+            customLoadout: zCustomLoadoutConfig.optional(),
         }),
     ),
 });
@@ -91,6 +97,7 @@ const zPrivateLobbyPlayerData = z.object({
     ip: z.string(),
     admin: z.boolean(),
     loadout: loadoutSchema.optional(),
+    customLoadout: zCustomLoadoutConfig.optional(),
 });
 
 /** Body for spinning up a fully isolated match from a private lobby; `teams` groups players that should land in the same in-game Group. */
@@ -109,6 +116,8 @@ export const zFindPrivateLobbyGameBody = z.object({
     /** Mirrors `RoomData.customLoadout` — when set, every player spawns with this loadout instead of the map's default items. */
     customLoadout: zCustomLoadoutConfig.optional(),
     customLoadoutEnabled: z.boolean().optional(), // Whether the lobby leader enabled "Custom Loadout" in the private lobby; used to determine whether to apply the custom loadout or the map's default items, and whether to populate `arenaRoles` (see `Game.arenaRoles`)
+    /** Mirrors `RoomData.publicSpectating` — when false, the resulting match is hidden from the public spectator menu. */
+    publicSpectating: z.boolean().optional(),
 });
 
 export type FindPrivateLobbyGameBody = z.infer<typeof zFindPrivateLobbyGameBody>;

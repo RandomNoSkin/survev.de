@@ -12,6 +12,9 @@ import type {
     FindPrivateLobbyGameBody,
 } from "../utils/types";
 
+/** Max time to wait for a region game server before treating it as offline. */
+const REGION_FETCH_TIMEOUT_MS = 5000;
+
 class Region {
     data: (typeof Config)["regions"][string];
     playerCount = 0;
@@ -27,6 +30,10 @@ class Region {
         const url = `http${this.data.https ? "s" : ""}://${this.data.address}/${endPoint}`;
 
         try {
+            // Abort hung requests so an offline/unresponsive region game server
+            // fails fast instead of piling up pending fetches (which used to
+            // stall handlers long enough for clients to abort their HTTP
+            // response, leading to a fatal post-abort write — see #crash-fix).
             const res = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -34,13 +41,24 @@ class Region {
                     "survev-api-key": Config.secrets.SURVEV_API_KEY,
                 },
                 body: JSON.stringify(body),
+                signal: AbortSignal.timeout(REGION_FETCH_TIMEOUT_MS),
             });
 
             if (res.ok) {
                 return (await res.json()) as Data;
             }
+            defaultLogger.warn(
+                `Region ${this.id} returned ${res.status} for ${endPoint}`,
+            );
         } catch (err) {
-            defaultLogger.error(`Error fetching region ${this.id}`, err);
+            const reason =
+                err instanceof Error && err.name === "TimeoutError"
+                    ? `timed out after ${REGION_FETCH_TIMEOUT_MS}ms`
+                    : err;
+            defaultLogger.error(
+                `Error fetching region ${this.id} (${endPoint}):`,
+                reason,
+            );
             return undefined;
         }
     }
@@ -62,8 +80,9 @@ class Region {
     }
 
     // in class Region
-    async collectGameInfos(): Promise<any> {
-    const data = await this.fetch<any>("api/game_infos", { region: this.id });
+    /** @param admin When true, includes private lobby matches with "Public Spectating" disabled (for the moderation dashboard). */
+    async collectGameInfos(admin = false): Promise<any> {
+    const data = await this.fetch<any>("api/game_infos", { region: this.id, admin });
     return data ?? { error: "game_infos_failed" };
     }
 

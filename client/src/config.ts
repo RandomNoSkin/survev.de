@@ -1,5 +1,6 @@
 import type { MapDefs } from "../../shared/defs/mapDefs";
 import { GameConfig } from "../../shared/gameConfig";
+import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby";
 import loadout from "../../shared/utils/loadout";
 import { util } from "../../shared/utils/util";
 import { v2 } from "../../shared/utils/v2";
@@ -95,6 +96,8 @@ const defaultConfig = {
     playerName: "",
     region: "na",
     gameModeIdx: 2,
+    /** Private lobby settings the leader last configured, re-applied (minus `advancedSettings`) the next time they create a lobby. */
+    privateLobbySettings: {} as SavedPrivateLobbySettings,
     teamAutoFill: true,
     language: "en" as Locale,
     prerollGamesPlayed: 0,
