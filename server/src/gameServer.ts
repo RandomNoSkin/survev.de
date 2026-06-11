@@ -23,6 +23,7 @@ import {
     logErrorToWebhook,
     readPostedJSON,
     returnJson,
+    safeJson,
     safeText,
     WebSocketRateLimit,
 } from "./utils/serverHelpers";
@@ -374,40 +375,12 @@ app.post("/api/get_modes", (res, req) => {
 });
 
 app.post("/api/find_game", (res, req) => {
-    let aborted = false;
-    let responded = false;
-
     res.onAborted(() => {
-        aborted = true;
+        res.aborted = true;
     });
 
-    const safeText = (status: string, body: string) => {
-        if (aborted || responded) return;
-        responded = true;
-
-        res.cork(() => {
-            if (aborted) return;
-
-            res.writeStatus(status);
-            res.writeHeader("Content-Type", "text/plain");
-            res.end(body);
-        });
-    };
-
-    const safeJson = (data: unknown) => {
-        if (aborted || responded) return;
-        responded = true;
-
-        res.cork(() => {
-            if (aborted) return;
-
-            res.writeHeader("Content-Type", "application/json");
-            res.end(JSON.stringify(data));
-        });
-    };
-
     if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
-        safeText("403 Forbidden", "Forbidden");
+        safeText(res, "403 Forbidden", "Forbidden");
         return;
     }
 
@@ -415,24 +388,24 @@ app.post("/api/find_game", (res, req) => {
         res,
         async (body: FindGamePrivateBody) => {
             try {
-                if (aborted || responded) return;
+                if (res.aborted || (res as any).responded) return;
 
                 const parsed = zFindGamePrivateBody.safeParse(body);
                 if (!parsed.success || !parsed.data) {
-                    safeJson({ error: "failed_to_parse_body" });
+                    safeJson(res, { error: "failed_to_parse_body" });
                     return;
                 }
 
                 const result = await server.findGame(parsed.data);
 
-                safeJson(result);
+                safeJson(res, result);
             } catch (error) {
                 server.logger.warn("API find_game error: ", error);
-                safeJson({ error: "internal_server_error" });
+                safeJson(res, { error: "internal_server_error" });
             }
         },
         () => {
-            safeText("500 Internal Server Error", "500 Internal Server Error");
+            safeText(res, "500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/find_game: Error retrieving body");
         },
     );

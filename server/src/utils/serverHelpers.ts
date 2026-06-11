@@ -156,7 +156,16 @@ export function readPostedJSON<T>(
     });
 
     /* Register error cb */
-    res.onAborted(err);
+    res.onAborted(() => {
+        // Mark the response aborted so the handler's `if (res.aborted) return` guards
+        // and the safe response helpers (returnJson/safeJson/safeText/forbidden) skip
+        // cleanly instead of touching a dead uWS response — which throws
+        // "HttpResponse must not be accessed after onAborted" and crashes the process.
+        // (uWS keeps only the last onAborted, so any handler-level one is overwritten
+        // by this; setting the flag here is what makes those guards actually work.)
+        res.aborted = true;
+        err();
+    });
 }
 
 const badWordsdataSet = new DataSet<{ originalWord: string }>()
