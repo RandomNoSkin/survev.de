@@ -365,12 +365,40 @@ app.post("/api/get_modes", (res, req) => {
 });
 
 app.post("/api/find_game", (res, req) => {
+    let aborted = false;
+    let responded = false;
+
     res.onAborted(() => {
-        res.aborted = true;
+        aborted = true;
     });
 
+    const safeText = (status: string, body: string) => {
+        if (aborted || responded) return;
+        responded = true;
+
+        res.cork(() => {
+            if (aborted) return;
+
+            res.writeStatus(status);
+            res.writeHeader("Content-Type", "text/plain");
+            res.end(body);
+        });
+    };
+
+    const safeJson = (data: unknown) => {
+        if (aborted || responded) return;
+        responded = true;
+
+        res.cork(() => {
+            if (aborted) return;
+
+            res.writeHeader("Content-Type", "application/json");
+            res.end(JSON.stringify(data));
+        });
+    };
+
     if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
-        forbidden(res);
+        safeText("403 Forbidden", "Forbidden");
         return;
     }
 
@@ -378,31 +406,24 @@ app.post("/api/find_game", (res, req) => {
         res,
         async (body: FindGamePrivateBody) => {
             try {
-                if (res.aborted) return;
+                if (aborted || responded) return;
 
                 const parsed = zFindGamePrivateBody.safeParse(body);
                 if (!parsed.success || !parsed.data) {
-                    returnJson(res, { error: "failed_to_parse_body" });
+                    safeJson({ error: "failed_to_parse_body" });
                     return;
                 }
 
                 const result = await server.findGame(parsed.data);
 
-                if (res.aborted) return;
-
-                returnJson(res, result);
+                safeJson(result);
             } catch (error) {
                 server.logger.warn("API find_game error: ", error);
+                safeJson({ error: "internal_server_error" });
             }
         },
         () => {
-            if (res.aborted) return;
-            res.cork(() => {
-                if (res.aborted) return;
-                res.writeStatus("500 Internal Server Error");
-                res.write("500 Internal Server Error");
-                res.end();
-            });
+            safeText("500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/find_game: Error retrieving body");
         },
     );

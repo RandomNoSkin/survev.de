@@ -235,16 +235,6 @@ export class Game {
             }
         }
 
-        // Stop private games that never started within 3 minutes of creation.
-        // Uses hasEverStarted so a freeze-phase reset (started = false mid-game) does not re-arm this timer.
-        if (this.isPrivate && !this.hasEverStarted) {
-            this.privateIdleTime += dt;
-            if (this.privateIdleTime > 180) {
-                this.stop();
-                return;
-            }
-        }
-
         if (!this.started) {
             this.started = this.modeManager.isGameStarted();
             if (this.started) {
@@ -643,7 +633,7 @@ export class Game {
             });
         }
 
-        if (!this.stopped && this.playerBarn.players.every(p => p.disconnected)) {
+        if (!this.stopped && this.aliveCount === 0) {
             this.stop();
         }
     }
@@ -654,11 +644,6 @@ export class Game {
 
     checkGameOver(): void {
         if (this.over) return;
-
-        if (this.playerBarn.livingPlayers.length === 0) {
-            this.stop();
-            return;
-        }
 
         const didGameEnd: boolean = this.modeManager.handleGameEnd();
 
@@ -863,10 +848,6 @@ export class Game {
 
     stop(): void {
         if (this.stopped) return;
-        // TEMP DEBUG: log every stop() call with a stack trace to identify crash source
-        const stackTrace = new Error("stop() call stack").stack;
-        this.logger.info(`[STOP DEBUG] stop() called:\n${stackTrace}`);
-        gameLogger.error(`Game stopped! Stack trace:\n${stackTrace}`);
         this.stopped = true;
         this.allowJoin = false;
         for (const player of this.playerBarn.players) {
