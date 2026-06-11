@@ -5,7 +5,8 @@ import path from "node:path";
 import { Cron } from "croner";
 import { randomUUID } from "crypto";
 import { version } from "../../package.json";
-import { GameConfig } from "../../shared/gameConfig";
+import { TeamMode, GameConfig } from "../../shared/gameConfig";
+import { MapDefs } from "../../shared/defs/mapDefs";
 import * as net from "../../shared/net/net";
 import { Config } from "./config";
 import { SingleThreadGameManager } from "./game/gameManager";
@@ -38,14 +39,24 @@ process.on("uncaughtException", async (err) => {
     console.error(err);
     // Log the full stack (not just the Error object) so file logs actually
     // pinpoint the crash source instead of an opaque "[object Error]".
-    const details = err instanceof Error ? (err.stack ?? err.message) : err;
-    gameLogger.error("Uncaught Exception:", details);
-    errorLogger.error("Uncaught Exception:", details);
+    const details =
+        err instanceof Error
+            ? err.stack ?? err.message
+            : JSON.stringify(err);
+
+    gameLogger.error(`Uncaught Exception: ${details}`);
+    errorLogger.error(`Uncaught Exception: ${details}`);
 
     await logErrorToWebhook("server", "Game server error:", err);
 
     process.exit(1);
 });
+
+function isValidTeamMode(teamMode: number): teamMode is TeamMode {
+    return Object.values(TeamMode)
+        .filter((value) => typeof value === "number")
+        .includes(teamMode);
+}
 
 class GameServer {
     readonly logger = new ServerLogger("GameServer");
@@ -79,6 +90,20 @@ class GameServer {
             return {
                 error: "invalid_region",
             };
+        }
+
+        if (!(data.mapName in MapDefs)) {
+            this.logger.warn(`/api/find_game: Invalid mapName: ${data.mapName}`);
+            return {
+                error: "invalid_map",
+            } as any;
+        }
+
+        if (!isValidTeamMode(data.teamMode)) {
+            this.logger.warn(`/api/find_game: Invalid teamMode: ${data.teamMode}`);
+            return {
+                error: "invalid_team_mode",
+            } as any;
         }
 
         const gameId = await this.manager.findGame({
@@ -122,6 +147,20 @@ class GameServer {
         if (data.region !== this.regionId) {
             return {
                 error: "invalid_region",
+            };
+        }
+
+        if (!(data.mapName in MapDefs)) {
+            this.logger.warn(`/api/find_private_game: Invalid mapName: ${data.mapName}`);
+            return {
+                error: "invalid_map",
+            };
+        }
+
+        if (!isValidTeamMode(data.teamMode)) {
+            this.logger.warn(`/api/find_private_game: Invalid teamMode: ${data.teamMode}`);
+            return {
+                error: "invalid_team_mode",
             };
         }
 
@@ -347,7 +386,11 @@ app.post("/api/find_game", (res, req) => {
                     return;
                 }
 
-                returnJson(res, await server.findGame(parsed.data));
+                const result = await server.findGame(parsed.data);
+
+                if (res.aborted) return;
+
+                returnJson(res, result);
             } catch (error) {
                 server.logger.warn("API find_game error: ", error);
             }
@@ -387,7 +430,10 @@ app.post("/api/find_private_game", (res, req) => {
                     return;
                 }
 
-                returnJson(res, await server.createPrivateGame(parsed.data));
+                const result = await server.createPrivateGame(parsed.data);
+                if (res.aborted) return;
+
+                returnJson(res, result);
             } catch (error) {
                 server.logger.warn("API find_private_game error: ", error);
             }
@@ -473,6 +519,7 @@ app.post("/api/find_game_by_id", async (res, req) => {
                 returnJson(res, { err: "Invalid gameId" });
                 return;
                 }
+                if (res.aborted) return;
 
                 returnJson(res, {
                 res: [
@@ -487,22 +534,6 @@ app.post("/api/find_game_by_id", async (res, req) => {
                 ],
                 });
 
-
-                
-                
-
-                returnJson(res, {
-                    res: [
-                        {
-                            zone: "",
-                            data: (g as any).data ?? "",
-                            gameId,
-                            useHttps: server.region.https,
-                            hosts: [server.region.address],
-                            addrs: [server.region.address],
-                        },
-                    ],
-                });
             } catch (error) {
                 server.logger.warn("API find_game_by_id error: ", error);
             }
@@ -574,6 +605,7 @@ app.post("/api/game_infos", async (res, req) => {
                         verifiedOnly: g.verifiedOnly ?? false,
                     })).filter((g: any) => g.id);
 
+                    if(res.aborted) return;
                 returnJson(res, { data });
             } catch (error) {
                 server.logger.warn("API game_infos error: ", error);
@@ -644,6 +676,7 @@ app.post("/api/find_spectator_game", (res, req) => {
                         returnJson(res, { err: "Invalid gameId" });
                         return;
                     }
+                    if (res.aborted) return;
                     returnJson(res, {
                         res: [
                             {
@@ -670,6 +703,8 @@ app.post("/api/find_spectator_game", (res, req) => {
                 }
 
                 const pickedId = String(pick.id);
+
+                if (res.aborted) return;
 
                 returnJson(res, {
                     res: [
@@ -716,6 +751,7 @@ app.post("/api/dashboard/game_players", (res, req) => {
         const { gameId } = body ?? {};
         if (typeof gameId !== "string") { returnJson(res, { error: "missing gameId" }); return; }
         const players = await server.manager.getGamePlayers(gameId);
+        if (res.aborted) return;
         returnJson(res, { players });
     }, () => {
         if (!res.aborted) returnJson(res, { error: "body error" });
@@ -736,6 +772,7 @@ app.post("/api/dashboard/game_feed", (res, req) => {
         const { gameId } = body ?? {};
         if (typeof gameId !== "string") { returnJson(res, { error: "missing gameId" }); return; }
         const entries = await server.manager.getGameFeed(gameId);
+        if (res.aborted) return;
         returnJson(res, { entries });
     }, () => {
         if (!res.aborted) returnJson(res, { error: "body error" });

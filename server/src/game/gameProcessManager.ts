@@ -153,7 +153,17 @@ class GameProcess implements GameData {
 
     send(msg: ProcessMsg) {
         if (this.process.killed || !this.process.channel) return;
-        this.process.send(msg);
+
+        try {
+            this.process.send(msg);
+        } catch (e: any) {
+            if (e?.code === "ERR_IPC_CHANNEL_CLOSED" || e?.code === "EPIPE") {
+                this.manager.processById.delete(this.id);
+                return;
+            }
+
+            throw e;
+        }
     }
 
     create(id: string, config: ServerGameConfig) {

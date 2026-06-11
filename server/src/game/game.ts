@@ -876,7 +876,10 @@ export class Game {
         }
         this.logger.info("Game Ended");
         this.updateData();
-        this._saveGameToDatabase();
+        void this._saveGameToDatabase().catch((err) => {
+            this.logger.error("Failed to save game:", err);
+            gameLogger.error("Failed to save game:", err);
+        });
     }
 
     private async _saveGameToDatabase() {
@@ -951,15 +954,20 @@ export class Game {
                 `[${region}] Failed to save game data, saving locally instead`,
             );
 
-            const dir = path.resolve("lost_game_data");
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir);
+            try {
+                const dir = path.resolve("lost_game_data");
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir);
+                }
+
+                fs.writeFileSync(
+                    path.join(dir, `${this.id}.json`),
+                    JSON.stringify(values),
+                    "utf8",
+                );
+            } catch (err) {
+                this.logger.error("Failed to write lost_game_data:", err);
             }
-            fs.writeFileSync(
-                path.join(dir, `${this.id}.json`),
-                JSON.stringify(values),
-                "utf8",
-            );
         }
     }
 

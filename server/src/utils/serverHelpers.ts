@@ -49,11 +49,19 @@ export function forbidden(res: HttpResponse): void {
 }
 
 export function returnJson(res: HttpResponse, data: Record<string, unknown>): void {
-    if (res.aborted) return;
-    res.cork(() => {
-        if (res.aborted) return;
-        res.writeHeader("Content-Type", "application/json").end(JSON.stringify(data));
-    });
+    if (res.aborted || (res as any).responded) return;
+
+    (res as any).responded = true;
+
+    try {
+        res.cork(() => {
+            if (res.aborted) return;
+            res.writeHeader("Content-Type", "application/json").end(JSON.stringify(data));
+        });
+    } catch (err) {
+        res.aborted = true;
+        defaultLogger.warn("Tried to write to closed uWS response:", err);
+    }
 }
 
 /**
