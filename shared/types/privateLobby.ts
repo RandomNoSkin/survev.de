@@ -137,7 +137,15 @@ export const zCustomLoadoutConfig = z.object({
     chest: z.string(),
     backpack: z.string(),
     scope: z.string(),
-    perks: z.array(z.string()),
+    // Tolerate (and drop) non-string entries instead of rejecting the whole
+    // message: older clients could leave holes in this array (picking a perk in
+    // a non-contiguous slot), which JSON-serialize to null. A hard rejection
+    // would disconnect the leader and let the broken loadout get re-saved
+    // client-side; dropping them here lets validateCustomLoadout clean the rest
+    // and broadcast a healed loadout back.
+    perks: z
+        .array(z.any())
+        .transform((perks) => perks.filter((p): p is string => typeof p === "string")),
     inventory: z.record(z.string(), z.number()),
     arenaMode: z.boolean().default(false),
     unlimitedAdren: z.boolean().default(false),
