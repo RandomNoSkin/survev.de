@@ -12,8 +12,14 @@ import type {
     FindPrivateLobbyGameBody,
 } from "../utils/types";
 
-/** Max time to wait for a region game server before treating it as offline. */
-const REGION_FETCH_TIMEOUT_MS = 5000;
+/** Max time to wait for a region game server before treating it as offline.
+ *  Raised from 5s: creating a fresh game (fork child process + generate map) can
+ *  briefly exceed 5s under load, which aborted the find_game request needlessly. */
+const REGION_FETCH_TIMEOUT_MS = 10000;
+
+/** Round-trips slower than this are logged so creeping latency is visible before
+ *  it reaches the abort timeout above. */
+const SLOW_REGION_FETCH_MS = 2000;
 
 class Region {
     data: (typeof Config)["regions"][string];
@@ -29,6 +35,7 @@ class Region {
     async fetch<Data extends object>(endPoint: string, body: object) {
         const url = `http${this.data.https ? "s" : ""}://${this.data.address}/${endPoint}`;
 
+        const startTime = Date.now();
         try {
             // Abort hung requests so an offline/unresponsive region game server
             // fails fast instead of piling up pending fetches (which used to
@@ -44,19 +51,27 @@ class Region {
                 signal: AbortSignal.timeout(REGION_FETCH_TIMEOUT_MS),
             });
 
+            const elapsed = Date.now() - startTime;
+            if (elapsed > SLOW_REGION_FETCH_MS) {
+                defaultLogger.warn(
+                    `Region ${this.id} slow response for ${endPoint}: ${elapsed}ms`,
+                );
+            }
+
             if (res.ok) {
                 return (await res.json()) as Data;
             }
             defaultLogger.warn(
-                `Region ${this.id} returned ${res.status} for ${endPoint}`,
+                `Region ${this.id} returned ${res.status} for ${endPoint} (${elapsed}ms)`,
             );
         } catch (err) {
+            const elapsed = Date.now() - startTime;
             const reason =
                 err instanceof Error && err.name === "TimeoutError"
                     ? `timed out after ${REGION_FETCH_TIMEOUT_MS}ms`
                     : err;
             defaultLogger.error(
-                `Error fetching region ${this.id} (${endPoint}):`,
+                `Error fetching region ${this.id} (${endPoint}) after ${elapsed}ms:`,
                 reason,
             );
             return undefined;
