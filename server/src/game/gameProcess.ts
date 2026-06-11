@@ -131,7 +131,12 @@ setInterval(() => {
 if (platform() === "win32") {
     new NanoTimer().setInterval(
         () => {
-            game?.update();
+            try {
+                game?.update();
+            } catch (err) {
+                gameLogger.error("game.update crashed:", err);
+                process.exit(1);
+            }
         },
         "",
         `${1000 / Config.gameTps}m`,
@@ -139,34 +144,51 @@ if (platform() === "win32") {
 
     new NanoTimer().setInterval(
         () => {
-            game?.netSync();
-            sendMsg({
-                type: ProcessMsgType.SocketMsg,
-                msgs: socketMsgs,
-            });
-            socketMsgs.length = 0;
+            try {
+                game?.netSync();
+                sendMsg({
+                    type: ProcessMsgType.SocketMsg,
+                    msgs: socketMsgs,
+                });
+                socketMsgs.length = 0;
+            } catch (err) {
+                gameLogger.error("game.netSync crashed:", err);
+                process.exit(1);
+            }
         },
         "",
         `${1000 / Config.netSyncTps}m`,
     );
 } else {
     setInterval(() => {
-        game?.update();
+        try {
+            game?.update();
+        } catch (err) {
+            gameLogger.error("game.update crashed:", err);
+            process.exit(1);
+        }
     }, 1000 / Config.gameTps);
 
     setInterval(() => {
-        game?.netSync();
-        sendMsg({
-            type: ProcessMsgType.SocketMsg,
-            msgs: socketMsgs,
-        });
-        socketMsgs.length = 0;
+        try {
+            game?.netSync();
+            sendMsg({
+                type: ProcessMsgType.SocketMsg,
+                msgs: socketMsgs,
+            });
+            socketMsgs.length = 0;
+        } catch (err) {
+            gameLogger.error("game.netSync crashed:", err);
+            process.exit(1);
+        }
     }, 1000 / Config.netSyncTps);
 }
 
 process.on("uncaughtException", async (err) => {
     console.error(err);
     game = undefined;
+    console.error("Unhandled rejection:", err);
+    gameLogger.error("Unhandled rejection:", err);
 
     await logErrorToWebhook("server", "Game process error", err);
 

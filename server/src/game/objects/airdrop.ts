@@ -29,6 +29,11 @@ export class AirdropBarn {
     }
 
     addSupplyDrop(pos: Vec2, type: string) {
+        if (!MapObjectDefs[type]) {
+            console.error("[AirdropBarn] invalid drop type", type, pos);
+            gameLogger.error("[AirdropBarn] invalid drop type", { type, pos });
+            return;
+        }
         const airdrop = new Airdrop(this.game, pos, type);
         this.airdrops.push(airdrop);
         this.game.playerBarn.addMapPing("ping_supplydrop", pos);

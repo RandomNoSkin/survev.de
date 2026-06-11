@@ -39,7 +39,9 @@ export type FindGameError =
     | "behind_proxy"
     | "invalid_captcha"
     | "kicked_by_admin"
-    | "player_not_verified";
+    | "player_not_verified"
+    | "invalid_map"
+    | "invalid_team_mode";
 
 export type FindGameResponse =
     | {
