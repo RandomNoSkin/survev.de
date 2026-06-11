@@ -23,6 +23,7 @@ import {
     logErrorToWebhook,
     readPostedJSON,
     returnJson,
+    safeText,
     WebSocketRateLimit,
 } from "./utils/serverHelpers";
 import {
@@ -50,6 +51,20 @@ process.on("uncaughtException", async (err) => {
     await logErrorToWebhook("server", "Game server error:", err);
 
     process.exit(1);
+});
+
+// Without this, an unhandled promise rejection (e.g. a throw in an async uWS handler
+// body or any awaited call that rejects) would terminate the whole game server by
+// default (Node >= 15), taking every hosted game down at once. Log the full stack and
+// keep serving instead.
+process.on("unhandledRejection", (reason) => {
+    const details =
+        reason instanceof Error ? (reason.stack ?? reason.message) : JSON.stringify(reason);
+
+    gameLogger.error(`Unhandled Rejection: ${details}`);
+    errorLogger.error(`Unhandled Rejection: ${details}`);
+
+    void logErrorToWebhook("server", "Game server unhandledRejection:", reason);
 });
 
 function isValidTeamMode(teamMode: number): teamMode is TeamMode {
@@ -352,13 +367,7 @@ app.post("/api/get_modes", (res, req) => {
             }
         },
         () => {
-            if (res.aborted) return;
-            res.cork(() => {
-                if (res.aborted) return;
-                res.writeStatus("500 Internal Server Error");
-                res.write("500 Internal Server Error");
-                res.end();
-            });
+            safeText(res, "500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/get_modes: Error retrieving body");
         },
     );
@@ -460,13 +469,7 @@ app.post("/api/find_private_game", (res, req) => {
             }
         },
         () => {
-            if (res.aborted) return;
-            res.cork(() => {
-                if (res.aborted) return;
-                res.writeStatus("500 Internal Server Error");
-                res.write("500 Internal Server Error");
-                res.end();
-            });
+            safeText(res, "500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/find_private_game: Error retrieving body");
         },
     );
@@ -560,13 +563,7 @@ app.post("/api/find_game_by_id", async (res, req) => {
             }
         },
         () => {
-            if (res.aborted) return;
-            res.cork(() => {
-                if (res.aborted) return;
-                res.writeStatus("500 Internal Server Error");
-                res.write("500 Internal Server Error");
-                res.end();
-            });
+            safeText(res, "500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/find_game_by_id: Error retrieving body");
         },
     );
@@ -633,13 +630,7 @@ app.post("/api/game_infos", async (res, req) => {
             }
         },
         () => {
-            if (res.aborted) return;
-            res.cork(() => {
-                if (res.aborted) return;
-                res.writeStatus("500 Internal Server Error");
-                res.write("500 Internal Server Error");
-                res.end();
-            });
+            safeText(res, "500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/game_infos: Error retrieving body");
         },
     );
@@ -744,13 +735,7 @@ app.post("/api/find_spectator_game", (res, req) => {
             }
         },
         () => {
-            if (res.aborted) return;
-            res.cork(() => {
-                if (res.aborted) return;
-                res.writeStatus("500 Internal Server Error");
-                res.write("500 Internal Server Error");
-                res.end();
-            });
+            safeText(res, "500 Internal Server Error", "500 Internal Server Error");
             server.logger.warn("/api/find_spectator_game: Error retrieving body");
         },
     );
@@ -915,23 +900,29 @@ app.ws<GameSocketData>("/play", {
         }
 
         if (res.aborted) return;
-        res.cork(() => {
-            if (res.aborted) return;
-            res.upgrade(
-                {
-                    gameId,
-                    id: socketId,
-                    closed: false,
-                    rateLimit: {},
-                    ip,
-                    disconnectReason,
-                },
-                wskey,
-                wsProtocol,
-                wsExtensions,
-                context,
-            );
-        });
+        // res.cork can throw "HttpResponse must not be accessed after onAborted" if the
+        // client aborts during the await above; that would crash the whole server.
+        try {
+            res.cork(() => {
+                if (res.aborted) return;
+                res.upgrade(
+                    {
+                        gameId,
+                        id: socketId,
+                        closed: false,
+                        rateLimit: {},
+                        ip,
+                        disconnectReason,
+                    },
+                    wskey,
+                    wsProtocol,
+                    wsExtensions,
+                    context,
+                );
+            });
+        } catch (err) {
+            server.logger.warn("WS /play upgrade failed:", err);
+        }
     },
 
     open(socket: WebSocket<GameSocketData>) {
@@ -1028,25 +1019,31 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
 
         if (res.aborted) return;
 
-        res.cork(() => {
-            if (res.aborted) return;
+        // res.cork can throw "HttpResponse must not be accessed after onAborted" if the
+        // client aborts during the await above; that would crash the whole server.
+        try {
+            res.cork(() => {
+                if (res.aborted) return;
 
-            res.upgrade(
-                {
-                    gameId,
-                    id: socketId,
-                    closed: false,
-                    rateLimit: {},
-                    ip,
-                    disconnectReason,
-                    spectator: true,
-                },
-                wskey,
-                wsProtocol,
-                wsExtensions,
-                context,
-            );
-        });
+                res.upgrade(
+                    {
+                        gameId,
+                        id: socketId,
+                        closed: false,
+                        rateLimit: {},
+                        ip,
+                        disconnectReason,
+                        spectator: true,
+                    },
+                    wskey,
+                    wsProtocol,
+                    wsExtensions,
+                    context,
+                );
+            });
+        } catch (err) {
+            server.logger.warn("WS /spectate upgrade failed:", err);
+        }
     },
 
     open(socket) {

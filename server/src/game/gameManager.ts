@@ -5,6 +5,8 @@ import { platform } from "os";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
 import * as net from "../../../shared/net/net";
 import { Config } from "../config";
+import { gameLogger } from "../utils/betterLogger";
+import { logErrorToWebhook } from "../utils/serverHelpers";
 import type {
     AdminCmdAction,
     DashboardPlayer,
@@ -104,13 +106,38 @@ export class SingleThreadGameManager implements GameManager {
                 this.gamesById.delete(game.id);
                 continue;
             }
-            game.update();
+            try {
+                game.update();
+            } catch (err) {
+                // Single-thread mode runs every game in THIS (the only) process, so an
+                // unguarded throw here crashes the whole server and every other game on
+                // it. Isolate the failure: stop just this game; it is reaped next tick.
+                this.reportGameCrash(game, "update", err);
+            }
         }
     }
 
     netSync(): void {
         for (let i = 0; i < this.games.length; i++) {
-            this.games[i].netSync();
+            try {
+                this.games[i].netSync();
+            } catch (err) {
+                this.reportGameCrash(this.games[i], "netSync", err);
+            }
+        }
+    }
+
+    private reportGameCrash(game: Game, context: string, err: unknown): void {
+        const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        gameLogger.error(`[SingleThread] game.${context} crashed (game ${game.id}): ${details}`);
+        void logErrorToWebhook("server", `[SingleThread] game.${context} crashed`, err);
+        try {
+            game.stop();
+        } catch (stopErr) {
+            gameLogger.error(`[SingleThread] stop() also failed (game ${game.id}):`, stopErr);
+            // Force-mark so the broken game is removed on the next update() tick even
+            // if stop() itself threw.
+            game.stopped = true;
         }
     }
 

@@ -42,10 +42,53 @@ export function getHonoIp(c: Context, proxyHeader?: string): string | undefined 
 }
 
 export function forbidden(res: HttpResponse): void {
-    res.cork(() => {
-        if (res.aborted) return;
-        res.writeStatus("403 Forbidden").end("403 Forbidden");
-    });
+    if (res.aborted || (res as any).responded) return;
+    (res as any).responded = true;
+    try {
+        res.cork(() => {
+            if (res.aborted) return;
+            res.writeStatus("403 Forbidden").end("403 Forbidden");
+        });
+    } catch (err) {
+        res.aborted = true;
+        defaultLogger.warn("Tried to write to closed uWS response:", err);
+    }
+}
+
+/**
+ * Safely send a plain-text response. Guards against the uWS crash
+ * "HttpResponse must not be accessed after onAborted/after a successful response":
+ * skips if already aborted or answered, and wraps cork in try/catch.
+ */
+export function safeText(res: HttpResponse, status: string, body: string): void {
+    if (res.aborted || (res as any).responded) return;
+    (res as any).responded = true;
+    try {
+        res.cork(() => {
+            if (res.aborted) return;
+            res.writeStatus(status)
+                .writeHeader("Content-Type", "text/plain")
+                .end(body);
+        });
+    } catch (err) {
+        res.aborted = true;
+        defaultLogger.warn("Tried to write to closed uWS response:", err);
+    }
+}
+
+/** Like {@link returnJson} but accepts any serializable value. */
+export function safeJson(res: HttpResponse, data: unknown): void {
+    if (res.aborted || (res as any).responded) return;
+    (res as any).responded = true;
+    try {
+        res.cork(() => {
+            if (res.aborted) return;
+            res.writeHeader("Content-Type", "application/json").end(JSON.stringify(data));
+        });
+    } catch (err) {
+        res.aborted = true;
+        defaultLogger.warn("Tried to write to closed uWS response:", err);
+    }
 }
 
 export function returnJson(res: HttpResponse, data: Record<string, unknown>): void {

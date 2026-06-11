@@ -9,7 +9,7 @@ import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import { type AABB, type Collider, coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
-import { assert, util } from "../../../../shared/utils/util";
+import { util } from "../../../../shared/utils/util";
 import { type Vec2, v2 } from "../../../../shared/utils/v2";
 import { gameLogger } from "../../utils/betterLogger";
 import { Game } from "../game";
@@ -128,7 +128,12 @@ export class PlaneBarn {
                         break;
                     }
                     case GameConfig.Plane.Airstrike: {
-                        assert(options.airstrikeZoneRad); // only option that MUST be defined
+                        if (!options.airstrikeZoneRad) {
+                            gameLogger.error(
+                                "[PlaneBarn] Airstrike scheduled without airstrikeZoneRad, skipping",
+                            );
+                            break;
+                        }
                         const rad = options.airstrikeZoneRad;
                         const timeBeforeStart = options.wait ?? 1.5;
                         const airstrikeInterval = options.delay ?? 1;
@@ -255,8 +260,14 @@ export class PlaneBarn {
             planeCount * airstrikeInterval +
             finishBuffer;
 
-        assert(rad <= Constants.AirstrikeZoneMaxRad);
-        assert(duration <= Constants.AirstrikeZoneMaxDuration);
+        // Exceeding these limits would desync client serialization; skip the zone
+        // (log it) instead of throwing out of the game-update loop and crashing.
+        if (rad > Constants.AirstrikeZoneMaxRad || duration > Constants.AirstrikeZoneMaxDuration) {
+            gameLogger.error(
+                `[PlaneBarn] Airstrike zone exceeds limits (rad=${rad}, duration=${duration}), skipping`,
+            );
+            return;
+        }
 
         this.newAirstrikeZones.push({
             pos,
@@ -367,7 +378,9 @@ export class PlaneBarn {
             if (this.freeIds.length > 0) {
                 id = this.freeIds.shift()!;
             } else {
-                assert(false, `Ran out of plane ids`);
+                this.game.logger.warn("Plane Barn: ran out of plane ids, skipping plane");
+                gameLogger.error("[PlaneBarn] Ran out of plane ids, skipping plane");
+                return;
             }
         }
 
@@ -520,7 +533,9 @@ export class PlaneBarn {
             if (this.freeIds.length > 0) {
                 id = this.freeIds.shift()!;
             } else {
-                assert(false, `Ran out of plane ids`);
+                this.game.logger.warn("Plane Barn: ran out of plane ids, skipping plane");
+                gameLogger.error("[PlaneBarn] Ran out of plane ids, skipping plane");
+                return;
             }
         }
 
@@ -672,7 +687,9 @@ export class PlaneBarn {
             if (this.freeIds.length > 0) {
                 id = this.freeIds.shift()!;
             } else {
-                assert(false, `Ran out of plane ids`);
+                this.game.logger.warn("Plane Barn: ran out of plane ids, skipping plane");
+                gameLogger.error("[PlaneBarn] Ran out of plane ids, skipping plane");
+                return;
             }
         }
 

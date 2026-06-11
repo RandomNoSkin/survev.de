@@ -10,7 +10,7 @@ import { math } from "../../../shared/utils/math";
 import { v2 } from "../../../shared/utils/v2";
 import { Config } from "../config";
 import { ServerLogger } from "../utils/logger";
-import { apiPrivateRouter } from "../utils/serverHelpers";
+import { apiPrivateRouter, logErrorToWebhook } from "../utils/serverHelpers";
 import {
     type AdminCmdAction,
     type DashboardPlayer,
@@ -567,41 +567,54 @@ export class Game {
             return;
         }
 
-        switch (type) {
-            case net.MsgType.Input: {
-                player.handleInput(msg as net.InputMsg);
-                break;
+        // A throw while handling one player's input (e.g. a custom-loadout / role /
+        // spectate edge case) must not crash the whole game process — it's dispatched
+        // from the async IPC message handler, where an uncaught throw becomes an
+        // unhandled rejection. Isolate it: log the full stack (file + webhook) and
+        // drop just this player's socket instead of taking everyone down.
+        try {
+            switch (type) {
+                case net.MsgType.Input: {
+                    player.handleInput(msg as net.InputMsg);
+                    break;
+                }
+                case net.MsgType.Emote: {
+                    player.emoteFromMsg(msg as net.EmoteMsg);
+                    break;
+                }
+                case net.MsgType.DropItem: {
+                    player.dropItem(msg as net.DropItemMsg);
+                    break;
+                }
+                case net.MsgType.Spectate: {
+                    player.spectate(msg as net.SpectateMsg);
+                    break;
+                }
+                case net.MsgType.PerkModeRoleSelect: {
+                    player.roleSelect((msg as net.PerkModeRoleSelectMsg).role);
+                    break;
+                }
+                case net.MsgType.RoleSelect: {
+                    if(player.role)return;
+                    player.playerRoleSelect((msg as net.RoleSelectMsg).role);
+                    break;
+                }
+                case net.MsgType.Edit: {
+                    if(!player.isAdmin && !Config.debug.allowEditMsg) break;
+                    player.processEditMsg(msg as net.EditMsg);
+                    break;
+                }
+                case net.MsgType.KillFeed: {
+                    player.processKillFeedMsg(msg as net.KillFeedMsg);
+                    break;
+                }
             }
-            case net.MsgType.Emote: {
-                player.emoteFromMsg(msg as net.EmoteMsg);
-                break;
-            }
-            case net.MsgType.DropItem: {
-                player.dropItem(msg as net.DropItemMsg);
-                break;
-            }
-            case net.MsgType.Spectate: {
-                player.spectate(msg as net.SpectateMsg);
-                break;
-            }
-            case net.MsgType.PerkModeRoleSelect: {
-                player.roleSelect((msg as net.PerkModeRoleSelectMsg).role);
-                break;
-            }
-            case net.MsgType.RoleSelect: {
-                if(player.role)return;
-                player.playerRoleSelect((msg as net.RoleSelectMsg).role);
-                break;
-            }
-            case net.MsgType.Edit: {
-                if(!player.isAdmin && !Config.debug.allowEditMsg) break;
-                player.processEditMsg(msg as net.EditMsg);
-                break;
-            }
-            case net.MsgType.KillFeed: {
-                player.processKillFeedMsg(msg as net.KillFeedMsg);
-                break;
-            }
+        } catch (err) {
+            const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
+            this.logger.error(`handleMsg dispatch crashed (type=${type}): ${details}`);
+            gameLogger.error(`handleMsg dispatch crashed (type=${type}): ${details}`);
+            void logErrorToWebhook("server", `handleMsg dispatch crashed (type=${type})`, err);
+            this.closeSocket(socketId);
         }
     }
 
@@ -633,7 +646,17 @@ export class Game {
             });
         }
 
-        if (!this.stopped && this.aliveCount === 0) {
+        // Stop the game once nobody is left to play it. `aliveCount === 0` covers the
+        // normal case; the every-disconnected check also reaps "zombie" games whose
+        // players are technically still alive but all disconnected (no connected player
+        // remains), which the `b90628e2 "Removing game Stoppings"` change stopped doing
+        // and which would otherwise keep running — and accumulating planes/state — forever.
+        if (
+            !this.stopped &&
+            (this.aliveCount === 0 ||
+                (this.playerBarn.players.length > 0 &&
+                    this.playerBarn.players.every((p) => p.disconnected)))
+        ) {
             this.stop();
         }
     }

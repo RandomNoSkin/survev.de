@@ -8,6 +8,35 @@ import { gameLogger } from "../utils/betterLogger";
 
 let game: Game | undefined;
 
+/**
+ * Log a crash with its FULL stack to the file logger AND the error webhook.
+ * The previous code did `gameLogger.error("...", err)`, but betterLogger's printf
+ * only emits `message` (no splat), so the `err`/stack was silently dropped and
+ * nothing was ever sent to the webhook — which is why prod crashes were invisible.
+ */
+function reportCrash(context: string, err: unknown) {
+    const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error(`[gameProcess] ${context}:`, err);
+    gameLogger.error(`${context}: ${details}`);
+    void logErrorToWebhook("server", `Game process crash: ${context}`, err);
+}
+
+/**
+ * Recover from a crash inside the game loop by stopping just THIS game instead of
+ * killing the whole process. `game.stop()` disconnects its players and notifies the
+ * manager (which reuses/reaps the process); the sendData callback resets `game` to
+ * undefined on the stopped UpdateData. Falls back to clearing `game` if stop() throws.
+ */
+function stopCrashedGame(context: string, err: unknown) {
+    reportCrash(context, err);
+    try {
+        game?.stop();
+    } catch (stopErr) {
+        reportCrash(`${context} (stop() also failed)`, stopErr);
+    }
+    game = undefined;
+}
+
 function sendMsg(msg: ProcessMsg) {
     try {
         process.send!(msg);
@@ -33,6 +62,7 @@ process.on("message", async (msg: ProcessMsg) => {
         lastMsgTime = Date.now();
     }
 
+    try {
     if (msg.type === ProcessMsgType.Create && !game) {
         game = new Game(
             msg.id,
@@ -108,6 +138,13 @@ process.on("message", async (msg: ProcessMsg) => {
             });
             break;
     }
+    } catch (err) {
+        // A single bad IPC message (e.g. a malformed player input flowing through
+        // game.handleMsg) must not take down the whole game process. Because this
+        // handler is async, an uncaught throw here would otherwise become an
+        // unhandled rejection and kill the process.
+        reportCrash("message handler crashed", err);
+    }
 });
 
 setInterval(() => {
@@ -134,8 +171,7 @@ if (platform() === "win32") {
             try {
                 game?.update();
             } catch (err) {
-                gameLogger.error("game.update crashed:", err);
-                process.exit(1);
+                stopCrashedGame("game.update crashed", err);
             }
         },
         "",
@@ -152,8 +188,7 @@ if (platform() === "win32") {
                 });
                 socketMsgs.length = 0;
             } catch (err) {
-                gameLogger.error("game.netSync crashed:", err);
-                process.exit(1);
+                stopCrashedGame("game.netSync crashed", err);
             }
         },
         "",
@@ -164,8 +199,7 @@ if (platform() === "win32") {
         try {
             game?.update();
         } catch (err) {
-            gameLogger.error("game.update crashed:", err);
-            process.exit(1);
+            stopCrashedGame("game.update crashed", err);
         }
     }, 1000 / Config.gameTps);
 
@@ -178,19 +212,27 @@ if (platform() === "win32") {
             });
             socketMsgs.length = 0;
         } catch (err) {
-            gameLogger.error("game.netSync crashed:", err);
-            process.exit(1);
+            stopCrashedGame("game.netSync crashed", err);
         }
     }, 1000 / Config.netSyncTps);
 }
 
 process.on("uncaughtException", async (err) => {
+    // Truly unexpected top-level error: log the full stack everywhere, then exit
+    // (process state may be corrupt). await the webhook so it isn't cut off by exit.
+    const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
     console.error(err);
+    gameLogger.error(`uncaughtException: ${details}`);
     game = undefined;
-    console.error("Unhandled rejection:", err);
-    gameLogger.error("Unhandled rejection:", err);
 
-    await logErrorToWebhook("server", "Game process error", err);
+    await logErrorToWebhook("server", "Game process uncaughtException", err);
 
     process.exit(1);
+});
+
+// An unhandled promise rejection would otherwise crash the process by default
+// (Node >= 15). Log it with the full stack and keep running; if the rejection left
+// the active game corrupt, the next update() tick is caught by stopCrashedGame.
+process.on("unhandledRejection", (reason) => {
+    reportCrash("unhandledRejection", reason);
 });
