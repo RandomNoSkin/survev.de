@@ -14,6 +14,7 @@ import {
     type CustomLoadoutConfig,
     DEFAULT_CUSTOM_LOADOUT,
     MAX_EXTRA_CUSTOM_LOADOUTS,
+    validateCustomLoadout,
 } from "../../../shared/defs/customLoadout";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
@@ -28,6 +29,7 @@ import type {
     PrivateLobbyPlayGameMsg,
     PrivateLobbyStateMsg,
     RoomData,
+    SavedPrivateLobbySettings,
     ServerToClientPrivateLobbyMsg,
 } from "../../../shared/types/privateLobby";
 import { api } from "../api";
@@ -114,6 +116,8 @@ export class PrivateLobbyMenu {
     collapsedLoadouts = new Set<number>();
     /** Index of the loadout whose name label is currently being edited inline (leader only), or null. Local UI state only. */
     editingLoadoutName: number | null = null;
+    /** Uncommitted text of the inline rename input, kept so a refreshUi() (e.g. triggered by a member's action) doesn't reset what the leader is typing. */
+    editingLoadoutValue: string | null = null;
     /** True when the local client joined via a spectator invite link (`#CODE-s`). */
     spectator = false;
 
@@ -298,15 +302,21 @@ export class PrivateLobbyMenu {
             this.playerData = {
                 name: this.config.get("playerName"),
             };
+            // When creating a new lobby, restore the leader's last-used settings,
+            // but never carry over "Advanced Settings". The saved loadouts are
+            // re-validated first so a config corrupted by an older build (e.g. a
+            // perks array with holes that serialize to null) can't keep failing
+            // the server's schema and permanently lock the player out of creating.
+            const savedSettings = create
+                ? this.sanitizeSavedSettings(this.config.get("privateLobbySettings"))
+                : undefined;
             this.roomData = {
                 roomUrl,
                 region: this.config.get("region")!,
                 gameModeIdx: this.config.get("gameModeIdx")!,
                 findingGame: false,
                 lastError: "",
-                // When creating a new lobby, restore the leader's last-used
-                // settings, but never carry over "Advanced Settings".
-                ...(create ? this.config.get("privateLobbySettings") : undefined),
+                ...savedSettings,
                 ...(create ? { advancedSettings: false } : undefined),
             } as RoomData;
             this.displayedInvalidProtocolModal = false;
@@ -365,6 +375,11 @@ export class PrivateLobbyMenu {
 
     leave(errType = "") {
         if (this.active) {
+            // Captured before the reset below: `isLeader` defaults to true and is
+            // only corrected once a "state" arrives, so a failed create/join
+            // (which never receives state) would otherwise persist this session's
+            // roomData and overwrite the player's real saved settings.
+            const wasJoined = this.joined;
             this.ws?.close();
             this.ws = null;
             this.active = false;
@@ -379,7 +394,7 @@ export class PrivateLobbyMenu {
 
             // Save state to config for the menu
             this.config.set("gameModeIdx", this.roomData.gameModeIdx);
-            if (this.isLeader) {
+            if (wasJoined && this.isLeader) {
                 this.config.set("region", this.roomData.region);
                 this.config.set("privateLobbySettings", {
                     allowMembersJoinTeams: this.roomData.allowMembersJoinTeams,
@@ -399,6 +414,30 @@ export class PrivateLobbyMenu {
 
             SDK.hideInviteButton();
         }
+    }
+
+    /**
+     * Re-validates persisted loadout settings before they're used to create a
+     * lobby. A config corrupted by an older build — most notably a `perks` array
+     * with holes that JSON-serialize to `null` — would otherwise fail the
+     * server's schema on every `create` and permanently lock the player out of
+     * making lobbies. Running the saved loadouts back through the shared
+     * validator heals them; everything else is passed through untouched.
+     */
+    sanitizeSavedSettings(
+        settings: SavedPrivateLobbySettings | undefined,
+    ): SavedPrivateLobbySettings | undefined {
+        if (!settings) return settings;
+        const sanitized: SavedPrivateLobbySettings = { ...settings };
+        if (sanitized.customLoadout) {
+            sanitized.customLoadout = validateCustomLoadout(sanitized.customLoadout);
+        }
+        if (sanitized.extraCustomLoadouts) {
+            sanitized.extraCustomLoadouts = sanitized.extraCustomLoadouts
+                .filter(Boolean)
+                .map((loadout) => validateCustomLoadout(loadout));
+        }
+        return sanitized;
     }
 
     onGameComplete(wonGame = false) {
@@ -1332,13 +1371,18 @@ export class PrivateLobbyMenu {
                 maxLength: CUSTOM_LOADOUT_NAME_MAX_LEN,
                 placeholder: this.getDefaultLoadoutLabel(index),
             });
-            input.val(loadout.name ?? "");
+            // Use the uncommitted in-progress value if present, so a refreshUi()
+            // mid-edit (e.g. a member joining a team broadcasts new state) doesn't
+            // wipe what the leader is typing.
+            input.val(this.editingLoadoutValue ?? loadout.name ?? "");
             const submit = () => {
                 loadout.name = (input.val() as string).trim().slice(0, CUSTOM_LOADOUT_NAME_MAX_LEN) || undefined;
                 this.editingLoadoutName = null;
+                this.editingLoadoutValue = null;
                 update();
             };
             input.on("click", (e) => e.stopPropagation());
+            input.on("input", () => { this.editingLoadoutValue = input.val() as string; });
             input.on("keydown", (e) => {
                 if (e.which === 13) {
                     submit();
@@ -1347,6 +1391,10 @@ export class PrivateLobbyMenu {
             });
             input.on("blur", submit);
             input.trigger("focus");
+            // keep the caret at the end after a re-render instead of selecting all
+            const el = input[0];
+            const len = el.value.length;
+            el.setSelectionRange?.(len, len);
             return input;
         }
 
@@ -1358,6 +1406,7 @@ export class PrivateLobbyMenu {
             label.on("click", (e) => {
                 e.stopPropagation();
                 this.editingLoadoutName = index;
+                this.editingLoadoutValue = null;
                 this.refreshUi();
             });
         }
@@ -1372,8 +1421,12 @@ export class PrivateLobbyMenu {
     }
 
     /** Loadout builder shown when "Custom Loadout" is enabled: lets the leader configure the spawn loadout for every player. */
-    renderCustomLoadoutBuilder(loadout: CustomLoadoutConfig, update: () => void) {
+    renderCustomLoadoutBuilder(loadout: CustomLoadoutConfig | undefined, update: () => void) {
         const wrapper = $("<div/>", { class: "private-lobby-custom-loadout" });
+
+        // Defensive: never deref an undefined loadout (e.g. a stale index after a
+        // loadout was removed) — that would throw and break the whole lobby render.
+        if (!loadout) return wrapper;
 
         const noneOption = { value: "", label: this.localization.translate("index-private-lobby-custom-loadout-none") };
 
@@ -1600,6 +1653,12 @@ export class PrivateLobbyMenu {
                     } else {
                         loadout.perks.splice(i, 1);
                     }
+                    // Keep perks a dense string[]: assigning to a non-contiguous
+                    // slot (e.g. picking the 3rd perk while the 2nd is still
+                    // empty) leaves a hole that JSON-serializes to null, fails the
+                    // server's schema, disconnects the leader and corrupts their
+                    // saved settings (permanently breaking lobby creation).
+                    loadout.perks = loadout.perks.filter((p): p is string => !!p);
                     update();
                 },
             ),

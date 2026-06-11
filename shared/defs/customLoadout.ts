@@ -177,6 +177,16 @@ export function buildDefaultItemsFromCustomLoadout(loadout: CustomLoadoutConfig)
 
     const perks = [...loadout.perks, ...getArenaModeExtraPerks(loadout)];
 
+    // backpackFed guns (e.g. M249 / "M249 [+]" modified_m249) feed directly from
+    // backpack ammo and must spawn with an empty clip — giving them maxClip in the
+    // clip field desyncs the ammo state and crashes the game server.
+    const gunSpawnAmmo = (gun: string): number => {
+        if (!gun) return 0;
+        const def = GunDefs[gun] as GunDef | undefined;
+        if (!def) return 0;
+        return def.backpackFed ? 0 : def.maxClip;
+    };
+
     // Every player always carries a 1x scope, and the equipped scope must be
     // in the inventory to be usable; both are enforced here regardless of
     // what the leader configured for "extra" scopes.
@@ -188,8 +198,8 @@ export function buildDefaultItemsFromCustomLoadout(loadout: CustomLoadoutConfig)
 
     return {
         weapons: [
-            { type: primary, ammo: primary ? (GunDefs[primary] as GunDef).maxClip : 0 },
-            { type: secondary, ammo: secondary ? (GunDefs[secondary] as GunDef).maxClip : 0 },
+            { type: primary, ammo: gunSpawnAmmo(primary) },
+            { type: secondary, ammo: gunSpawnAmmo(secondary) },
             { type: melee || "fists", ammo: 0 },
             { type: throwable, ammo: throwable ? (loadout.inventory[throwable as InventoryItem] ?? 0) : 0 },
         ] as [

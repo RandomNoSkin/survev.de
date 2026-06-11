@@ -1049,6 +1049,9 @@ export class Player extends BaseGameObject {
     actionItem = "";
 
     hasRoleHelmet = false;
+    hasRoleChest = false;
+    /** Per-player Custom Loadout resolved at spawn (see ctor); reused by setDefaultInv so the arena restock refills the loadout instead of the empty map default. */
+    spawnCustomLoadout?: CustomLoadoutConfig;
     role = "";
     isKillLeader = false;
 
@@ -1184,10 +1187,14 @@ export class Player extends BaseGameObject {
             }
 
             if (roleDef.defaultItems.chest) {
-                if (this.chest) {
+                // Guard with hasRoleChest (mirrors hasRoleHelmet above): promoteToRole
+                // is re-invoked repeatedly by the arena/camper logic in update(), and
+                // without this every tick would drop the player's chest again.
+                if (this.chest && !this.hasRoleChest) {
                     this.dropArmor(this.chest);
                 }
                 this.chest = roleDef.defaultItems.chest;
+                this.hasRoleChest = true;
             }
 
             // weapons
@@ -1354,6 +1361,8 @@ export class Player extends BaseGameObject {
         const def = GameObjectDefs[this.role] as RoleDef;
         if (!def) return;
         this.role = "";
+        // allow the next role's chest to be applied/dropped correctly again
+        this.hasRoleChest = false;
 
         this.mapIndicator?.kill();
         for (let i = 0; i < this.perks.length; i++) {
@@ -1854,6 +1863,7 @@ export class Player extends BaseGameObject {
 
         let extraPerks: string[] = [];
         const playerCustomLoadout = customLoadout ?? this.game.customLoadout;
+        this.spawnCustomLoadout = playerCustomLoadout;
         if (this.game.customLoadoutEnabled && playerCustomLoadout) {
             defaultItems = buildDefaultItemsFromCustomLoadout(playerCustomLoadout);
         } else if (this.game.customLoadout) {
@@ -2909,7 +2919,13 @@ export class Player extends BaseGameObject {
             );
         }
 
-        let defaultItems = (RoleDefs[this.role]?.defaultItems || GameConfig.player.defaultItems);
+        // When a Custom Loadout is active, restock from it instead of the map's
+        // (empty) default items — otherwise the arena-perk restock on a team
+        // wipe would strip every player's armor/backpack/inventory.
+        let defaultItems =
+            this.game.customLoadoutEnabled && this.spawnCustomLoadout
+                ? buildDefaultItemsFromCustomLoadout(this.spawnCustomLoadout)
+                : (RoleDefs[this.role]?.defaultItems || GameConfig.player.defaultItems);
 
         this.chest = defaultItems.chest;
         assertType(this.chest, "chest", true);

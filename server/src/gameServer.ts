@@ -36,8 +36,11 @@ import {
 
 process.on("uncaughtException", async (err) => {
     console.error(err);
-    gameLogger.error("Uncaught Exception:", err);
-    errorLogger.error("Uncaught Exception:", err);
+    // Log the full stack (not just the Error object) so file logs actually
+    // pinpoint the crash source instead of an opaque "[object Error]".
+    const details = err instanceof Error ? (err.stack ?? err.message) : err;
+    gameLogger.error("Uncaught Exception:", details);
+    errorLogger.error("Uncaught Exception:", details);
 
     await logErrorToWebhook("server", "Game server error:", err);
 

@@ -1099,8 +1099,19 @@ export class PrivateLobbyMenu {
             return;
         }
 
-        // handle messages for when the player is already inside a room
-        player.room.onMsg(player, msg);
+        // handle messages for when the player is already inside a room.
+        // Isolated so a single malformed/edge-case message (e.g. a member
+        // poking custom-loadout controls) can only fail that one message
+        // instead of throwing out to the WS layer and taking down the whole
+        // API server (uncaughtException -> process.exit) with every lobby on it.
+        try {
+            player.room.onMsg(player, msg);
+        } catch (err) {
+            this.logger.error(
+                `Private lobby onMsg crashed (type=${msg.type}, leader=${player.isLeader}):`,
+                err instanceof Error ? (err.stack ?? err.message) : err,
+            );
+        }
     }
 
     onClose(ws: WSContext<SocketData>) {

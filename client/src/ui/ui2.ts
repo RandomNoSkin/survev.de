@@ -889,15 +889,27 @@ export class UiManager2 {
         }
         const ge = state.weapons[activePlayer.m_localData.m_curWeapIdx];
         const weaponDef = GameObjectDefs[ge.type] as GunDef | MeleeDef;
-        const we = weaponDef.type == "gun" ? weaponDef.backpackFed ? activePlayer.m_localData.m_inventory[weaponDef.ammo] : ge.ammo : ge.ammo;
-        let fe =
-            weaponDef.type == "gun"
-                ? weaponDef.ammoInfinite ||
-                  ((activePlayer.m_hasPerk("endless_ammo") || activePlayer.m_hasPerk("arena")) && !weaponDef.ignoreEndlessAmmo)
+        const gunDef = weaponDef.type == "gun" ? weaponDef : undefined;
+        const isInfiniteAmmo =
+            !!gunDef &&
+            (gunDef.ammoInfinite ||
+                ((activePlayer.m_hasPerk("endless_ammo") || activePlayer.m_hasPerk("arena")) &&
+                    !gunDef.ignoreEndlessAmmo));
+        // backpackFed guns (e.g. M249) show their backpack ammo as the "current"
+        // count; with infinite ammo show ∞ instead of the (now irrelevant) count.
+        const we = gunDef
+            ? gunDef.backpackFed
+                ? isInfiniteAmmo
                     ? Number.MAX_VALUE
-                    : activePlayer.m_localData.m_inventory[weaponDef.ammo]
-                : 0;
-        fe = weaponDef.type == "gun" ? weaponDef.backpackFed ? 0 : fe : 0;
+                    : activePlayer.m_localData.m_inventory[gunDef.ammo]
+                : ge.ammo
+            : ge.ammo;
+        let fe = gunDef
+            ? isInfiniteAmmo
+                ? Number.MAX_VALUE
+                : activePlayer.m_localData.m_inventory[gunDef.ammo]
+            : 0;
+        fe = gunDef && gunDef.backpackFed ? 0 : fe;
         state.ammo.current = we;
         state.ammo.remaining = fe;
         state.ammo.displayCurrent = weaponDef.type != "melee";
@@ -1248,7 +1260,7 @@ export class UiManager2 {
         }
         if (patch.ammo.current) {
             const H = state.ammo.current;
-            dom.ammo.current.innerHTML = String(H);
+            dom.ammo.current.innerHTML = String(H == Number.MAX_VALUE ? "&#8734;" : H);
             dom.ammo.current.style.color = H > 0 ? "white" : "red";
         }
         if (patch.ammo.remaining) {
