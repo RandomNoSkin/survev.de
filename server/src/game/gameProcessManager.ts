@@ -48,6 +48,9 @@ class GameProcess implements GameData {
 
     lastMsgTime = Date.now();
 
+    /** When the current Create was sent; used to measure game-creation latency. */
+    createStartTime = 0;
+
     stoppedTime = Date.now();
 
     avaliableSlots = 0;
@@ -69,15 +72,30 @@ class GameProcess implements GameData {
             }
 
             switch (msg.type) {
-                case ProcessMsgType.Created:
+                case ProcessMsgType.Created: {
                     this.created = true;
                     this.stopped = false;
                     this.creating = false;
+                    // How long fork + map generation took. This is the latency that,
+                    // under load, can exceed the find_game abort timeout — log it (and
+                    // warn when it gets close) so the bottleneck is visible.
+                    const elapsed = this.createStartTime
+                        ? Date.now() - this.createStartTime
+                        : 0;
+                    this.manager.logger.info(
+                        `Game #${this.id.substring(0, 4)} (${this.mapName}) created in ${elapsed}ms`,
+                    );
+                    if (elapsed > 3000) {
+                        this.manager.logger.warn(
+                            `Slow game creation: ${elapsed}ms for ${this.mapName} (PID ${this.process.pid})`,
+                        );
+                    }
                     for (const cb of this.onCreatedCbs) {
                         cb(this);
                     }
                     this.onCreatedCbs.length = 0;
                     break;
+                }
                 case ProcessMsgType.UpdateData:
                     this.canJoin = msg.canJoin;
                     this.isPrivate = msg.isPrivate;
@@ -167,6 +185,7 @@ class GameProcess implements GameData {
     }
 
     create(id: string, config: ServerGameConfig) {
+        this.createStartTime = Date.now();
         this.send({
             type: ProcessMsgType.Create,
             id,
