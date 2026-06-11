@@ -135,6 +135,12 @@ class GameServer {
             return { error: "player_not_verified" };
         }
 
+        // Empty id = the game process failed/timed out during creation; surface a
+        // clean error so the client retries instead of trying to join an empty id.
+        if (!gameId) {
+            return { error: "find_game_failed" } as any;
+        }
+
         return {
             gameId,
             useHttps: this.region.https,
