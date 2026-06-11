@@ -27,6 +27,12 @@ if (process.env.NODE_ENV === "production") {
     path = "src/game/gameProcess.ts";
 }
 
+/** Max time to wait for a freshly forked game process to report "Created" before
+ *  giving up on the find_game request. Kept under the API server's region fetch
+ *  timeout so the player gets a fast "find_game_failed" + retry instead of the API
+ *  aborting (which is what surfaced as the EU "timed out after 10000ms"). */
+const GAME_CREATE_TIMEOUT_MS = 8000;
+
 class GameProcess implements GameData {
     process: ChildProcess;
 
@@ -45,6 +51,9 @@ class GameProcess implements GameData {
     manager: GameProcessManager;
 
     onCreatedCbs: Array<(_proc: typeof this) => void> = [];
+    /** Called if the process dies or stalls before reporting "Created", so waiting
+     *  find_game/createPrivateGame requests fail fast instead of hanging. */
+    onFailedCbs: Array<() => void> = [];
 
     lastMsgTime = Date.now();
 
@@ -86,7 +95,9 @@ class GameProcess implements GameData {
                         `Game #${this.id.substring(0, 4)} (${this.mapName}) created in ${elapsed}ms`,
                     );
                     if (elapsed > 3000) {
-                        this.manager.logger.warn(
+                        // .error so it reaches the webhook — slow creation is the
+                        // thing that pushes find_game toward the abort timeout.
+                        this.manager.logger.error(
                             `Slow game creation: ${elapsed}ms for ${this.mapName} (PID ${this.process.pid})`,
                         );
                     }
@@ -94,6 +105,7 @@ class GameProcess implements GameData {
                         cb(this);
                     }
                     this.onCreatedCbs.length = 0;
+                    this.onFailedCbs.length = 0;
                     break;
                 }
                 case ProcessMsgType.UpdateData:
@@ -380,6 +392,13 @@ export class GameProcessManager implements GameManager {
             socket.close();
         }
 
+        // Fail any find_game/createPrivateGame requests still waiting on this
+        // process's creation so they return immediately instead of hanging until
+        // the API server's abort timeout.
+        for (const cb of gameProc.onFailedCbs) cb();
+        gameProc.onFailedCbs.length = 0;
+        gameProc.onCreatedCbs.length = 0;
+
         // send SIGTERM, if still hasn't terminated after 5 seconds, send SIGKILL >:3
         gameProc.process.kill(signal);
         setTimeout(() => {
@@ -420,15 +439,34 @@ export class GameProcessManager implements GameManager {
         // if the game has not finished creating
         // wait for it to be created to send the find game response
         if (!game.created) {
-            return await new Promise((resolve) => {
-                game.onCreatedCbs.push((game) => {
+            return await new Promise<string>((resolve) => {
+                let settled = false;
+                let timer: ReturnType<typeof setTimeout>;
+                const settle = (value: string) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(value);
+                };
+
+                game.onCreatedCbs.push(() => {
                     if (this.serverVerifiedOnly && body.playerData.some((p) => !p.userId)) {
-                        resolve("player_not_verified");
+                        settle("player_not_verified");
                         return;
                     }
                     game.addJoinTokens(body.playerData, body.autoFill);
-                    resolve(game.id);
+                    settle(game.id);
                 });
+                // Process died before "Created" (e.g. a throw in game.init()).
+                game.onFailedCbs.push(() => settle(""));
+                // Backstop for a process that neither finishes nor dies (a hang):
+                // fail before the API server's abort timeout so the player retries.
+                timer = setTimeout(() => {
+                    this.logger.error(
+                        `Game #${game.id.substring(0, 4)} (${game.mapName}) creation timed out after ${GAME_CREATE_TIMEOUT_MS}ms — failing find_game`,
+                    );
+                    settle("");
+                }, GAME_CREATE_TIMEOUT_MS);
             });
         }
 
