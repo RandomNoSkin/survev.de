@@ -155,6 +155,20 @@ export const dashboardHtml = `<!DOCTYPE html>
     }
     .ban-comment-input:focus { border-color: var(--blue); }
 
+    /* ── Global chat log ── */
+    .chat-game-group { border: 1px solid var(--border2); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+    .chat-game-header { background: var(--surface2); padding: 8px 12px; font-size: 11px; color: var(--text-dim); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .chat-game-header .gid { font-family: monospace; color: var(--blue-t); cursor: pointer; text-decoration: underline; }
+    .chat-msg { display: flex; gap: 10px; padding: 5px 12px; font-size: 12px; border-top: 1px solid var(--border); cursor: pointer; }
+    .chat-msg:hover { background: var(--surface2); }
+    .chat-msg .t { color: var(--text-muted); font-size: 10px; white-space: nowrap; min-width: 122px; }
+    .chat-msg .nm { min-width: 150px; color: var(--text); font-weight: 500; }
+    .chat-msg .ch { font-size: 10px; font-weight: 600; min-width: 34px; }
+    .chat-msg .mg { flex: 1; word-break: break-word; }
+    .chat-msg.highlight { background: rgba(88,166,255,0.20); box-shadow: inset 3px 0 0 var(--blue); }
+    .chat-msg mark { background: var(--blue); color: #fff; border-radius: 2px; padding: 0 2px; }
+    #chatlog-back { margin-bottom: 10px; }
+
     /* ── Sortable table headers ── */
     .sortable { cursor: pointer; user-select: none; }
     .sortable:hover { color: var(--text); }
@@ -183,6 +197,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="lookup">IP / Player</button>
   <button class="tab-btn"        data-tab="servers">Live Servers</button>
   <button class="tab-btn"        data-tab="accounts">Accounts</button>
+  <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
 </div>
 
 <div id="main">
@@ -245,6 +260,16 @@ export const dashboardHtml = `<!DOCTYPE html>
         <tbody id="recent-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- ════════════════ TAB: GLOBAL CHAT LOG ════════════════ -->
+  <div id="tab-chatlog" class="tab-pane">
+    <div class="toolbar">
+      <input type="text" id="chatlog-search" placeholder="Search all chat messages…" style="max-width:420px">
+      <button class="btn btn-primary" id="chatlog-search-btn">Search</button>
+      <button class="btn btn-gray" id="chatlog-clear-btn">Clear</button>
+    </div>
+    <div id="chatlog-container"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB 4: ACCOUNTS ════════════════ -->
@@ -556,6 +581,10 @@ function switchTab(name) {
   } else if (name === 'accounts') {
     closeSSE();
     loadAccounts();
+  } else if (name === 'chatlog') {
+    closeSSE();
+    // Skip when focusChatMessage drove the switch — it loads a focused view itself.
+    if (!chatlogFocusing) loadGlobalChatLog(document.getElementById('chatlog-search').value.trim());
   } else {
     closeSSE();
   }
@@ -921,7 +950,7 @@ async function loadChatLog(query, by, btn) {
     panel.innerHTML = \`
       <table class="data-table">
         <thead><tr><th>Time</th><th>Name</th><th>Channel</th><th>Message</th><th>Game</th></tr></thead>
-        <tbody>\${msgs.map(m => \`<tr>
+        <tbody>\${msgs.map(m => \`<tr onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})" style="cursor:pointer" title="Open in Chat Log with context">
           <td style="white-space:nowrap;font-size:11px;">\${fmtDate(m.createdAt)}</td>
           <td>\${esc(m.username)}\${m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : ''}</td>
           <td><span style="font-size:10px;font-weight:600;color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'};">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span></td>
@@ -932,6 +961,101 @@ async function loadChatLog(query, by, btn) {
     \`;
   } catch { panel.innerHTML = '<div class="empty">Failed to load chat history.</div>'; }
 }
+
+// ── Global Chat Log tab ─────────────────────────────────────────────────────
+// True while focusChatMessage drives the tab switch, so switchTab's auto-reload
+// doesn't clobber the focused (single-game, context) view with the global list.
+let chatlogFocusing = false;
+
+function chatlogGroupByGame(messages) {
+  const map = new Map();
+  for (const m of messages) {
+    const g = m.gameId || 'unknown';
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(m);
+  }
+  const groups = [...map.entries()].map(([gameId, msgs]) => {
+    msgs.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return { gameId, msgs, first: msgs[0].createdAt, last: msgs[msgs.length - 1].createdAt };
+  });
+  // most recently active game first
+  groups.sort((a, b) => new Date(b.last) - new Date(a.last));
+  return groups;
+}
+
+function chatlogHighlight(escapedText, search) {
+  if (!search) return escapedText;
+  const safe = search.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+  try { return escapedText.replace(new RegExp('(' + safe + ')', 'gi'), '<mark>$1</mark>'); }
+  catch { return escapedText; }
+}
+
+function chatlogMsgRow(m, search, highlightId) {
+  const hl = (highlightId != null && m.id === highlightId) ? ' highlight' : '';
+  const message = search ? chatlogHighlight(esc(m.message), search) : esc(m.message);
+  const slug = m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : '';
+  return \`<div class="chat-msg\${hl}" id="chatmsg-\${m.id}" onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})">
+      <span class="t">\${fmtDate(m.createdAt)}</span>
+      <span class="nm">\${esc(m.username)}\${slug}</span>
+      <span class="ch" style="color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'}">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span>
+      <span class="mg">\${message}</span>
+    </div>\`;
+}
+
+function chatlogRenderGroups(messages, search) {
+  if (!messages.length) return '<div class="empty">No chat messages found.</div>';
+  return chatlogGroupByGame(messages).map(g => \`
+    <div class="chat-game-group">
+      <div class="chat-game-header">
+        <span class="gid" onclick="focusChatMessage('\${esc(g.gameId)}', null)" title="Open full game chat">\${esc(g.gameId.slice(0, 8))}…</span>
+        <span>\${g.msgs.length} msg\${g.msgs.length === 1 ? '' : 's'}</span>
+        <span>\${fmtDate(g.first)} – \${fmtDate(g.last)}</span>
+      </div>
+      \${g.msgs.map(m => chatlogMsgRow(m, search)).join('')}
+    </div>\`).join('');
+}
+
+async function loadGlobalChatLog(search) {
+  const cont = document.getElementById('chatlog-container');
+  cont.innerHTML = '<div class="loading">Loading chat log…</div>';
+  try {
+    const data = await get('/api/chatlog' + (search ? ('?search=' + encodeURIComponent(search)) : ''));
+    const msgs = data.messages ?? [];
+    const header = search
+      ? \`<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">\${msgs.length} match\${msgs.length === 1 ? '' : 'es'} for "\${esc(search)}" — grouped by game</div>\`
+      : '';
+    cont.innerHTML = header + chatlogRenderGroups(msgs, search);
+  } catch { cont.innerHTML = '<div class="empty">Failed to load chat log.</div>'; }
+}
+
+// Opens the full chat of one game and (optionally) highlights + scrolls to a
+// specific message, so a message clicked anywhere is shown with its context.
+async function focusChatMessage(gameId, messageId) {
+  chatlogFocusing = true;
+  switchTab('chatlog');
+  chatlogFocusing = false;
+
+  const cont = document.getElementById('chatlog-container');
+  cont.innerHTML = '<div class="loading">Loading game chat…</div>';
+  try {
+    const data = await get('/api/chatlog/game/' + encodeURIComponent(gameId));
+    const msgs = data.messages ?? [];
+    cont.innerHTML = \`
+      <button class="btn btn-gray btn-sm" id="chatlog-back" onclick="loadGlobalChatLog(document.getElementById('chatlog-search').value.trim())">← Back to all chats</button>
+      <div class="chat-game-group">
+        <div class="chat-game-header"><span class="gid">\${esc(gameId.slice(0, 8))}…</span><span>\${msgs.length} msg\${msgs.length === 1 ? '' : 's'}</span><span>full game chat</span></div>
+        \${msgs.map(m => chatlogMsgRow(m, '', messageId)).join('') || '<div class="empty" style="padding:10px">No messages in this game.</div>'}
+      </div>\`;
+    if (messageId != null) {
+      const el = document.getElementById('chatmsg-' + messageId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  } catch { cont.innerHTML = '<div class="empty">Failed to load game chat.</div>'; }
+}
+
+document.getElementById('chatlog-search-btn').addEventListener('click', () => loadGlobalChatLog(document.getElementById('chatlog-search').value.trim()));
+document.getElementById('chatlog-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadGlobalChatLog(e.target.value.trim()); });
+document.getElementById('chatlog-clear-btn').addEventListener('click', () => { document.getElementById('chatlog-search').value = ''; loadGlobalChatLog(''); });
 
 function quickBanIp(hash) {
   // Pre-fill the ban modal and open it

@@ -19,12 +19,15 @@
  *   GET  /moderation/api/player/:name              → player details: IPs used + ISP
  *   GET  /moderation/api/ban-comments/:type/:target → comment thread for a ban
  *   POST /moderation/api/ban-comments              → add a comment to a ban
+ *   GET  /moderation/api/chat/:query               → chat history for one player (by name/ip)
+ *   GET  /moderation/api/chatlog                    → global chat log (newest first), ?search= to filter
+ *   GET  /moderation/api/chatlog/game/:gameId       → full chat of one game (for message context)
  *   GET  /moderation/api/events                    → SSE stream for live updates
  *   GET  /moderation/api/game/:region/:id/players  → live player list for a game
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
  */
 
-import { and, asc, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
@@ -423,6 +426,61 @@ export const ModerationDashboardRouter = new Hono<Context>()
             .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
             .orderBy(desc(chatLogsTable.createdAt))
             .limit(200);
+
+        return c.json({ messages: rows });
+    })
+
+    /**
+     * Global chat log for the Chat Log tab.
+     * Without ?search: the most recent messages across ALL games (newest first).
+     * With ?search=<term>: messages whose text matches (case-insensitive).
+     * The dashboard groups the returned rows by game. Capped via ?limit (default 500).
+     */
+    .get("/api/chatlog", async (c) => {
+        const search = (c.req.query("search") ?? "").trim();
+        const limit = Math.min(Math.max(Number(c.req.query("limit")) || 500, 1), 1000);
+
+        const rows = await db
+            .select({
+                id:        chatLogsTable.id,
+                createdAt: chatLogsTable.createdAt,
+                gameId:    chatLogsTable.gameId,
+                username:  chatLogsTable.username,
+                channel:   chatLogsTable.channel,
+                message:   chatLogsTable.message,
+                slug:      usersTable.slug,
+            })
+            .from(chatLogsTable)
+            .where(search ? ilike(chatLogsTable.message, `%${search}%`) : undefined)
+            .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
+            .orderBy(desc(chatLogsTable.createdAt))
+            .limit(limit);
+
+        return c.json({ messages: rows });
+    })
+
+    /**
+     * Full chat history for a single game, oldest first — used to show a clicked
+     * message together with its surrounding context (the whole game's chat).
+     */
+    .get("/api/chatlog/game/:gameId", async (c) => {
+        const gameId = c.req.param("gameId");
+
+        const rows = await db
+            .select({
+                id:        chatLogsTable.id,
+                createdAt: chatLogsTable.createdAt,
+                gameId:    chatLogsTable.gameId,
+                username:  chatLogsTable.username,
+                channel:   chatLogsTable.channel,
+                message:   chatLogsTable.message,
+                slug:      usersTable.slug,
+            })
+            .from(chatLogsTable)
+            .where(eq(chatLogsTable.gameId, gameId))
+            .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
+            .orderBy(asc(chatLogsTable.createdAt))
+            .limit(2000);
 
         return c.json({ messages: rows });
     })
