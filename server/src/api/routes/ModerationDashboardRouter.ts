@@ -17,12 +17,17 @@
  *   POST /moderation/api/unban/chat                → remove a chat ban
  *   GET  /moderation/api/ip/:hash                  → IP details: accounts + ISP
  *   GET  /moderation/api/player/:name              → player details: IPs used + ISP
+ *   GET  /moderation/api/ban-comments/:type/:target → comment thread for a ban
+ *   POST /moderation/api/ban-comments              → add a comment to a ban
+ *   GET  /moderation/api/chat/:query               → chat history for one player (by name/ip)
+ *   GET  /moderation/api/chatlog                    → global chat log (newest first), ?search= to filter
+ *   GET  /moderation/api/chatlog/game/:gameId       → full chat of one game (for message context)
  *   GET  /moderation/api/events                    → SSE stream for live updates
  *   GET  /moderation/api/game/:region/:id/players  → live player list for a game
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
  */
 
-import { and, asc, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
@@ -30,7 +35,7 @@ import { util } from "../../../../shared/utils/util";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
+import { banCommentsTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
 import { server } from "../apiServer";
 import type { Context } from "..";
 import { z } from "zod";
@@ -426,6 +431,61 @@ export const ModerationDashboardRouter = new Hono<Context>()
     })
 
     /**
+     * Global chat log for the Chat Log tab.
+     * Without ?search: the most recent messages across ALL games (newest first).
+     * With ?search=<term>: messages whose text matches (case-insensitive).
+     * The dashboard groups the returned rows by game. Capped via ?limit (default 500).
+     */
+    .get("/api/chatlog", async (c) => {
+        const search = (c.req.query("search") ?? "").trim();
+        const limit = Math.min(Math.max(Number(c.req.query("limit")) || 500, 1), 1000);
+
+        const rows = await db
+            .select({
+                id:        chatLogsTable.id,
+                createdAt: chatLogsTable.createdAt,
+                gameId:    chatLogsTable.gameId,
+                username:  chatLogsTable.username,
+                channel:   chatLogsTable.channel,
+                message:   chatLogsTable.message,
+                slug:      usersTable.slug,
+            })
+            .from(chatLogsTable)
+            .where(search ? ilike(chatLogsTable.message, `%${search}%`) : undefined)
+            .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
+            .orderBy(desc(chatLogsTable.createdAt))
+            .limit(limit);
+
+        return c.json({ messages: rows });
+    })
+
+    /**
+     * Full chat history for a single game, oldest first — used to show a clicked
+     * message together with its surrounding context (the whole game's chat).
+     */
+    .get("/api/chatlog/game/:gameId", async (c) => {
+        const gameId = c.req.param("gameId");
+
+        const rows = await db
+            .select({
+                id:        chatLogsTable.id,
+                createdAt: chatLogsTable.createdAt,
+                gameId:    chatLogsTable.gameId,
+                username:  chatLogsTable.username,
+                channel:   chatLogsTable.channel,
+                message:   chatLogsTable.message,
+                slug:      usersTable.slug,
+            })
+            .from(chatLogsTable)
+            .where(eq(chatLogsTable.gameId, gameId))
+            .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
+            .orderBy(asc(chatLogsTable.createdAt))
+            .limit(2000);
+
+        return c.json({ messages: rows });
+    })
+
+    /**
      * Returns all IP hashes + ISP a player used, looked up by display name.
      */
     .get("/api/player/:name", async (c) => {
@@ -456,6 +516,47 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ name, ips });
     })
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BAN COMMENTS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Returns the comment thread for a ban, oldest first. */
+    .get("/api/ban-comments/:type/:target", async (c) => {
+        const banType = c.req.param("type");
+        const target  = c.req.param("target");
+
+        const comments = await db
+            .select()
+            .from(banCommentsTable)
+            .where(and(eq(banCommentsTable.banType, banType), eq(banCommentsTable.banTarget, target)))
+            .orderBy(asc(banCommentsTable.createdAt));
+
+        return c.json({ comments });
+    })
+
+    /** Adds a comment to a ban's thread. */
+    .post(
+        "/api/ban-comments",
+        validateParams(z.object({
+            type: z.enum(["ip", "account", "chat"]),
+            target: z.string(),
+            comment: z.string().min(1),
+        })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { type, target, comment } = c.req.valid("json");
+
+            await db.insert(banCommentsTable).values({
+                banType: type,
+                banTarget: target,
+                comment,
+                createdBy: admin.slug,
+            });
+
+            return c.json({ ok: true });
+        },
+    )
 
     // ─────────────────────────────────────────────────────────────────────────
     // SSE – LIVE EVENT STREAM
