@@ -194,6 +194,23 @@ export const chatBannedIpsTable = pgTable("chat_banned_ips", {
     bannedBy: text("banned_by").notNull().default("admin"),
 });
 
+export const banCommentsTable = pgTable(
+    "ban_comments",
+    {
+        id: serial().primaryKey(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        banType: text("ban_type").notNull(), // "ip" | "account" | "chat"
+        banTarget: text("ban_target").notNull(), // encoded IP hash or account slug
+        comment: text("comment").notNull(),
+        createdBy: text("created_by").notNull(),
+    },
+    (table) => [
+        index("ban_comments_target_idx").on(table.banType, table.banTarget, table.createdAt),
+    ],
+);
+
+export type BanCommentsTable = typeof banCommentsTable.$inferSelect;
+
 export const userXpTable = pgTable("user_xp", {
     userId: text("user_id").notNull()
     .references(() => usersTable.id, {

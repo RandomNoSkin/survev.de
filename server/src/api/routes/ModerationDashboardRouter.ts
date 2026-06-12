@@ -17,6 +17,8 @@
  *   POST /moderation/api/unban/chat                → remove a chat ban
  *   GET  /moderation/api/ip/:hash                  → IP details: accounts + ISP
  *   GET  /moderation/api/player/:name              → player details: IPs used + ISP
+ *   GET  /moderation/api/ban-comments/:type/:target → comment thread for a ban
+ *   POST /moderation/api/ban-comments              → add a comment to a ban
  *   GET  /moderation/api/events                    → SSE stream for live updates
  *   GET  /moderation/api/game/:region/:id/players  → live player list for a game
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
@@ -30,7 +32,7 @@ import { util } from "../../../../shared/utils/util";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
+import { banCommentsTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
 import { server } from "../apiServer";
 import type { Context } from "..";
 import { z } from "zod";
@@ -456,6 +458,47 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ name, ips });
     })
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BAN COMMENTS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Returns the comment thread for a ban, oldest first. */
+    .get("/api/ban-comments/:type/:target", async (c) => {
+        const banType = c.req.param("type");
+        const target  = c.req.param("target");
+
+        const comments = await db
+            .select()
+            .from(banCommentsTable)
+            .where(and(eq(banCommentsTable.banType, banType), eq(banCommentsTable.banTarget, target)))
+            .orderBy(asc(banCommentsTable.createdAt));
+
+        return c.json({ comments });
+    })
+
+    /** Adds a comment to a ban's thread. */
+    .post(
+        "/api/ban-comments",
+        validateParams(z.object({
+            type: z.enum(["ip", "account", "chat"]),
+            target: z.string(),
+            comment: z.string().min(1),
+        })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { type, target, comment } = c.req.valid("json");
+
+            await db.insert(banCommentsTable).values({
+                banType: type,
+                banTarget: target,
+                comment,
+                createdBy: admin.slug,
+            });
+
+            return c.json({ ok: true });
+        },
+    )
 
     // ─────────────────────────────────────────────────────────────────────────
     // SSE – LIVE EVENT STREAM

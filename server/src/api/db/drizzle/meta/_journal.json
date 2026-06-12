@@ -64,6 +64,13 @@
       "when": 1780174976950,
       "tag": "0008_sweet_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781254120181,
+      "tag": "0009_closed_hammerhead",
+      "breakpoints": true
     }
   ]
 }

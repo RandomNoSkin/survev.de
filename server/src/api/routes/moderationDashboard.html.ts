@@ -142,6 +142,19 @@ export const dashboardHtml = `<!DOCTYPE html>
     #msg-input { flex: 1; min-width: 200px; background: var(--surface2); border: 1px solid var(--border2); border-radius: 5px; padding: 6px 10px; color: var(--text); font-family: inherit; font-size: 12px; outline: none; }
     #msg-input:focus { border-color: var(--blue); }
 
+    /* ── Ban comment threads ── */
+    .comments-row > td { background: var(--surface2); padding: 10px 14px; }
+    .ban-comments { display: flex; flex-direction: column; gap: 6px; }
+    .ban-comment { font-size: 11px; }
+    .ban-comment-meta { color: var(--text-dim); font-size: 10px; }
+    .ban-comment-text { color: var(--text); margin-top: 2px; white-space: pre-wrap; }
+    .ban-comment-input-row { display: flex; gap: 6px; margin-top: 4px; }
+    .ban-comment-input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border2); border-radius: 5px;
+      padding: 5px 8px; color: var(--text); font-family: inherit; font-size: 11px; outline: none;
+    }
+    .ban-comment-input:focus { border-color: var(--blue); }
+
     /* ── Sortable table headers ── */
     .sortable { cursor: pointer; user-select: none; }
     .sortable:hover { color: var(--text); }
@@ -581,15 +594,19 @@ function renderIpBans(q) {
     !q || b.encodedIp.includes(q) || (b.reason||'').toLowerCase().includes(q) || (b.bannedBy||'').toLowerCase().includes(q)
   );
   tbody.innerHTML = rows.length ? rows.map(b => \`
-    <tr>
+    <tr data-target="\${esc(b.encodedIp)}">
       <td>\${ipLink(b.encodedIp)}</td>
       <td>\${esc(b.reason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
       <td>\${b.permanent ? '<span class="badge badge-perm">PERMANENT</span>' : '<span class="badge badge-temp">TEMP</span>'}</td>
       <td>\${b.permanent ? '∞' : fmtDate(b.expiresIn)}</td>
-      <td><button class="btn btn-green btn-sm" onclick="unbanIp('\${esc(b.encodedIp)}')">Unban</button></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="unbanIp('\${esc(b.encodedIp)}')">Unban</button>
+        <button class="btn btn-gray btn-sm" onclick="toggleBanComments('ip','\${esc(b.encodedIp)}', this)">💬</button>
+      </td>
     </tr>
   \`).join('') : '<tr><td colspan="6" class="empty">No IP bans.</td></tr>';
+  reopenComments('ip', tbody);
 }
 
 function renderAccountBans(q) {
@@ -598,14 +615,18 @@ function renderAccountBans(q) {
     !q || b.slug.includes(q) || b.username.toLowerCase().includes(q) || (b.banReason||'').toLowerCase().includes(q)
   );
   tbody.innerHTML = rows.length ? rows.map(b => \`
-    <tr>
+    <tr data-target="\${esc(b.slug)}">
       <td>\${esc(b.slug)}</td>
       <td>\${esc(b.username)}</td>
       <td>\${esc(b.banReason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
-      <td><button class="btn btn-green btn-sm" onclick="unbanAccount('\${esc(b.slug)}')">Unban</button></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="unbanAccount('\${esc(b.slug)}')">Unban</button>
+        <button class="btn btn-gray btn-sm" onclick="toggleBanComments('account','\${esc(b.slug)}', this)">💬</button>
+      </td>
     </tr>
   \`).join('') : '<tr><td colspan="5" class="empty">No account bans.</td></tr>';
+  reopenComments('account', tbody);
 }
 
 function renderChatBans(q) {
@@ -614,15 +635,94 @@ function renderChatBans(q) {
     !q || b.encodedIp.includes(q) || (b.reason||'').toLowerCase().includes(q) || (b.bannedBy||'').toLowerCase().includes(q)
   );
   tbody.innerHTML = rows.length ? rows.map(b => \`
-    <tr>
+    <tr data-target="\${esc(b.encodedIp)}">
       <td>\${ipLink(b.encodedIp)}</td>
       <td>\${esc(b.reason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
       <td>\${b.permanent ? '<span class="badge badge-perm">PERMANENT</span>' : '<span class="badge badge-temp">TEMP</span>'}</td>
       <td>\${b.permanent ? '∞' : fmtDate(b.expiresIn)}</td>
-      <td><button class="btn btn-green btn-sm" onclick="unbanChat('\${esc(b.encodedIp)}')">Unban</button></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="unbanChat('\${esc(b.encodedIp)}')">Unban</button>
+        <button class="btn btn-gray btn-sm" onclick="toggleBanComments('chat','\${esc(b.encodedIp)}', this)">💬</button>
+      </td>
     </tr>
   \`).join('') : '<tr><td colspan="6" class="empty">No chat bans.</td></tr>';
+  reopenComments('chat', tbody);
+}
+
+// ── Ban comment threads (expandable per-row) ──────────────────────────────
+
+const openBanComments = new Set(); // keys: "type::target"
+
+/** Re-opens comment threads that were open before the table was re-rendered. */
+function reopenComments(type, tbody) {
+  for (const row of tbody.querySelectorAll('tr[data-target]')) {
+    const key = type + '::' + row.dataset.target;
+    if (openBanComments.has(key)) insertCommentsRow(type, row.dataset.target, row);
+  }
+}
+
+function insertCommentsRow(type, target, row) {
+  const tr = document.createElement('tr');
+  tr.className = 'comments-row';
+  const td = document.createElement('td');
+  td.colSpan = row.children.length;
+  td.innerHTML = '<div class="loading">Loading comments…</div>';
+  tr.appendChild(td);
+  row.after(tr);
+  loadBanComments(type, target, td);
+}
+
+/** Toggles the comment thread below a ban row. */
+function toggleBanComments(type, target, btn) {
+  const row = btn.closest('tr');
+  const key = type + '::' + target;
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains('comments-row')) {
+    existing.remove();
+    openBanComments.delete(key);
+    return;
+  }
+  openBanComments.add(key);
+  insertCommentsRow(type, target, row);
+}
+
+async function loadBanComments(type, target, td) {
+  try {
+    const data = await get('/api/ban-comments/' + type + '/' + encodeURIComponent(target));
+    renderBanComments(type, target, td, data.comments ?? []);
+  } catch {
+    td.innerHTML = '<div class="empty">Failed to load comments.</div>';
+  }
+}
+
+function renderBanComments(type, target, td, comments) {
+  td.innerHTML = \`
+    <div class="ban-comments">
+      \${comments.length ? comments.map(c => \`
+        <div class="ban-comment">
+          <span class="ban-comment-meta">\${fmtDate(c.createdAt)} – <strong>\${esc(c.createdBy)}</strong></span>
+          <div class="ban-comment-text">\${esc(c.comment)}</div>
+        </div>
+      \`).join('') : '<div class="empty" style="padding:4px 0;">No comments yet.</div>'}
+      <div class="ban-comment-input-row">
+        <input type="text" class="ban-comment-input" placeholder="Add a comment…" maxlength="500">
+        <button class="btn btn-blue btn-sm">Add</button>
+      </div>
+    </div>
+  \`;
+  const input  = td.querySelector('.ban-comment-input');
+  const addBtn = td.querySelector('.ban-comment-input-row button');
+  const submit = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await post('/api/ban-comments', { type, target, comment: text });
+      await loadBanComments(type, target, td);
+    } catch (e) { toast('Error adding comment', true); }
+  };
+  addBtn.addEventListener('click', submit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 }
 
 document.getElementById('ban-search').addEventListener('input', renderBans);
@@ -986,9 +1086,11 @@ function renderPlayers() {
     // Status badges: alive/dead + spectator (can be combined); disconnected overrides
     const aliveBadge = p.disconnected
       ? '<span class="badge badge-disc">DISCONNECTED</span>'
-      : p.alive
-        ? '<span class="badge badge-alive">ALIVE</span>'
-        : '<span class="badge badge-dead">DEAD</span>';
+      : p.isSpectator
+        ? ''
+        : p.alive
+          ? '<span class="badge badge-alive">ALIVE</span>'
+          : '<span class="badge badge-dead">DEAD</span>';
     const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
     const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>' : '';
     const isSelf     = p.userId === currentAdminId;
