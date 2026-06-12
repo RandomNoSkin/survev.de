@@ -436,7 +436,10 @@ class Room {
      * Arena Mode/Adrenaline/Ammo/Pickup settings (those are lobby-wide, not per-loadout).
      */
     getPlayerCustomLoadout(player: Player): CustomLoadoutConfig | undefined {
-        if (!this.data.customLoadoutEnabled) return undefined;
+        // Custom Loadout is a sub-feature of Advanced Settings: if Advanced Settings
+        // is off it must be inactive even when the customLoadoutEnabled toggle the
+        // leader set earlier is still true (otherwise players keep spawning with it).
+        if (!this.data.advancedSettings || !this.data.customLoadoutEnabled) return undefined;
 
         const base = this.data.customLoadout;
         const extra =
@@ -750,6 +753,12 @@ class Room {
             } satisfies FindGamePrivateBody["playerData"][0];
         });
 
+        // Custom Loadout only counts as active when Advanced Settings is also on —
+        // turning Advanced Settings off must fully disable it (loadout, the enabled
+        // flag, and the arena-roles override that the loadout normally replaces).
+        const customLoadoutEnabled =
+            this.data.advancedSettings && this.data.customLoadoutEnabled;
+
         const res = await this.privateLobbyMenu.server.createPrivateGame({
             mapName: mode.mapName,
             teamMode: mode.teamMode,
@@ -757,10 +766,10 @@ class Room {
             version: data.version,
             teams,
             spectators,
-            arenaRoles: this.data.customLoadoutEnabled ? [] : this.data.enabledArenaRoles,
+            arenaRoles: customLoadoutEnabled ? [] : this.data.enabledArenaRoles,
             advancedSettings: this.data.advancedSettings,
             customLoadout: this.data.advancedSettings ? this.data.customLoadout : undefined,
-            customLoadoutEnabled: this.data.customLoadoutEnabled,
+            customLoadoutEnabled,
             publicSpectating: this.data.publicSpectating,
         });
 
