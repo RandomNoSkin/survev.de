@@ -28,6 +28,17 @@ import type { Player } from "./objects/player";
 import { Structure } from "./objects/structure";
 import { RiverCreator } from "./riverCreator";
 
+// Baked surface-grid cell classification for the static terrain (shore + rivers).
+// `Mixed` = a boundary edge passes through this cell, so the exact polygon test must
+// still be run; `Water`/`Land` cells are uniform and answer isOnWater() in O(1).
+const SURFACE_MIXED = 0;
+const SURFACE_WATER = 1;
+const SURFACE_LAND = 2;
+// Cell size of the surface grid. The shore is generated with 64 subdivisions/edge
+// (~16 units apart on a 1024-wide map), so 16 keeps the "Mixed" boundary band ~1 cell
+// thick while leaving the open ocean / inland interiors as pure O(1) cells.
+const SURFACE_CELL_SIZE = 16;
+
 // most of this logic is based on the `renderMapBuildingBounds` from client debugHelpers
 // which was found on BHA leak
 function getBuildingBounds(type: string, layer = 0, pos: Vec2, rot: number) {
@@ -243,6 +254,17 @@ export class GameMap {
     bridges!: Structure[];
     grid!: MapGrid;
 
+    /**
+     * Baked classification of the STATIC terrain (shore + river water) per grid cell,
+     * so isOnWater() is an O(1) lookup instead of a ~256-vertex point-in-polygon every
+     * tick per player. Boundary cells are `SURFACE_MIXED` and fall back to the exact
+     * polygon test. Built once in init() after the terrain is generated; buildings/decals
+     * are NOT baked here (they're dynamic and checked via the object grid in isOnWater).
+     */
+    surfaceGrid!: Uint8Array;
+    surfaceCols = 0;
+    surfaceRows = 0;
+
     scheduledUnlocks: Array<{
         type: string;
         stagger: number;
@@ -402,6 +424,10 @@ export class GameMap {
             });
         }
         this.timerEnd("Calculating map areas");
+
+        this.timerStart();
+        this.buildSurfaceGrid();
+        this.timerEnd("Building surface grid");
 
         this.timerStart();
         this.generateObjects();
@@ -2511,6 +2537,97 @@ export class GameMap {
         );
     }
 
+    /**
+     * Bakes {@link surfaceGrid}: classifies each grid cell as pure Water/Land, or Mixed
+     * when a shore / river-water boundary edge runs through it. A non-boundary cell
+     * provably contains no boundary, so a single center sample classifies the whole cell
+     * — making isOnWater() an O(1) lookup for it. One-time cost at map gen.
+     */
+    private buildSurfaceGrid(): void {
+        const cellSize = SURFACE_CELL_SIZE;
+        const cols = Math.floor(this.width / cellSize) + 1;
+        const rows = Math.floor(this.height / cellSize) + 1;
+        const grid = new Uint8Array(cols * rows); // 0 = SURFACE_MIXED
+
+        // 1. Flag every cell touched (plus a 1-cell margin) by a shore or river-water
+        //    boundary edge. Edges are short (shore has 64 subdivisions/edge), so each
+        //    edge's dilated AABB covers only ~1-2 cells → minimal over-flagging.
+        const boundary = new Uint8Array(cols * rows);
+        const markEdge = (a: Vec2, b: Vec2) => {
+            const cx0 = Math.max(((Math.min(a.x, b.x) / cellSize) | 0) - 1, 0);
+            const cx1 = Math.min(((Math.max(a.x, b.x) / cellSize) | 0) + 1, cols - 1);
+            const cy0 = Math.max(((Math.min(a.y, b.y) / cellSize) | 0) - 1, 0);
+            const cy1 = Math.min(((Math.max(a.y, b.y) / cellSize) | 0) + 1, rows - 1);
+            for (let cy = cy0; cy <= cy1; cy++) {
+                for (let cx = cx0; cx <= cx1; cx++) {
+                    boundary[cy * cols + cx] = 1;
+                }
+            }
+        };
+        const markPoly = (poly: Vec2[]) => {
+            for (let i = 0; i < poly.length; i++) {
+                markEdge(poly[i], poly[(i + 1) % poly.length]);
+            }
+        };
+
+        markPoly(this.terrain.shore);
+        for (const river of this.terrain.rivers) {
+            markPoly(river.waterPoly);
+        }
+
+        // 2. Classify the pure (non-boundary) cells via a center sample.
+        for (let cy = 0; cy < rows; cy++) {
+            for (let cx = 0; cx < cols; cx++) {
+                const idx = cy * cols + cx;
+                if (boundary[idx]) continue; // stays SURFACE_MIXED
+                grid[idx] = this._classifyTerrainSurface(
+                    (cx + 0.5) * cellSize,
+                    (cy + 0.5) * cellSize,
+                );
+            }
+        }
+
+        this.surfaceGrid = grid;
+        this.surfaceCols = cols;
+        this.surfaceRows = rows;
+    }
+
+    /**
+     * Exact static-terrain water/land classification (no buildings/decals), mirroring the
+     * `layer !== 1` terrain tail of {@link isOnWater}. Used to bake the grid; the same
+     * logic is the runtime fallback for Mixed cells.
+     */
+    private _classifyTerrainSurface(x: number, y: number): number {
+        const p = v2.create(x, y);
+        const rivers = this.terrain.rivers;
+        for (let i = 0; i < rivers.length; i++) {
+            const river = rivers[i];
+            if (
+                coldet.testPointAabb(p, river.aabb.min, river.aabb.max) &&
+                math.pointInsidePolygon(p, river.waterPoly)
+            ) {
+                return SURFACE_WATER;
+            }
+        }
+        return math.pointInsidePolygon(p, this.terrain.shore)
+            ? SURFACE_LAND
+            : SURFACE_WATER;
+    }
+
+    /**
+     * O(1) baked-grid surface lookup. Returns SURFACE_WATER / SURFACE_LAND, or
+     * SURFACE_MIXED when the caller must run the exact polygon test (boundary cell).
+     */
+    private _surfaceAt(pos: Vec2): number {
+        const cx = Math.floor(pos.x / SURFACE_CELL_SIZE);
+        const cy = Math.floor(pos.y / SURFACE_CELL_SIZE);
+        if (cx < 0 || cy < 0 || cx >= this.surfaceCols || cy >= this.surfaceRows) {
+            // Outside the island bounds is open ocean.
+            return SURFACE_WATER;
+        }
+        return this.surfaceGrid[cy * this.surfaceCols + cx];
+    }
+
     getGroundSurface(pos: Vec2, layer: number) {
         const groundSurface = (type: string, river?: River) => {
             return { type, river };
@@ -2655,8 +2772,17 @@ export class GameMap {
             return surface.type === "water";
         }
 
-        // Check rivers
+        // Static terrain (shore + river water). For the common ground layer this is an
+        // O(1) baked-grid lookup instead of a ~256-vertex point-in-polygon every tick per
+        // player; only boundary ("Mixed") cells fall through to the exact test below. The
+        // grid bakes rivers as water, which matches the `layer !== 1` rule, so it is only
+        // consulted for that case (layer === 1 ignores rivers entirely).
         if (layer !== 1) {
+            const cell = this._surfaceAt(pos);
+            if (cell === SURFACE_WATER) return true;
+            if (cell === SURFACE_LAND) return false;
+            // SURFACE_MIXED → exact test below
+
             const { rivers } = this.terrain;
             for (let i = 0; i < rivers.length; i++) {
                 const river = rivers[i];
