@@ -89,7 +89,26 @@ process.on("message", async (msg: ProcessMsg) => {
             },
         );
 
+        // Break creation down so the find_game creation timeout is explainable in
+        // Discord: process startup (fork + Node bootstrap + module load) vs map
+        // generation (game.init). startupMs ≈ time from this child being spawned to
+        // it actually starting the map build.
+        const startupMs = Math.round(process.uptime() * 1000);
+        const initStart = Date.now();
         await game.init();
+        const initMs = Date.now() - initStart;
+        gameLogger.info(
+            `Game "${msg.config.mapName}" ready — startup ${startupMs}ms + init ${initMs}ms`,
+        );
+        // Surface the breakdown to the webhook when it gets close to the creation
+        // timeout, so we can see WHY find_game timed out (startup vs map-gen).
+        if (startupMs + initMs > 3000) {
+            void logErrorToWebhook(
+                "server",
+                `Slow game creation for "${msg.config.mapName}" (teamMode=${msg.config.teamMode}): ` +
+                    `process startup ${startupMs}ms + map/init ${initMs}ms = ${startupMs + initMs}ms total`,
+            );
+        }
         sendMsg({
             type: ProcessMsgType.Created,
         });

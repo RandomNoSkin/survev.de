@@ -462,8 +462,19 @@ export class GameProcessManager implements GameManager {
                 // Backstop for a process that neither finishes nor dies (a hang):
                 // fail before the API server's abort timeout so the player retries.
                 timer = setTimeout(() => {
+                    // Attach load + liveness context so the timeout is diagnosable in
+                    // Discord: is the server overloaded (many procs/creating at once),
+                    // or is THIS child stuck/dead? lastChildMsg = time since the child
+                    // last sent anything — large + alive ⇒ blocked in heavy work (map
+                    // gen); the child's own "Slow game creation" log gives the exact split.
+                    const sinceMsg = Date.now() - game.lastMsgTime;
+                    const active = this.processes.filter((p) => !p.stopped).length;
+                    const creating = this.processes.filter((p) => p.creating).length;
+                    const totalPlayers = this.processes.reduce((a, p) => a + p.aliveCount, 0);
                     this.logger.error(
-                        `Game #${game.id.substring(0, 4)} (${game.mapName}) creation timed out after ${GAME_CREATE_TIMEOUT_MS}ms — failing find_game`,
+                        `Game #${game.id.substring(0, 4)} (${game.mapName}) creation timed out after ${GAME_CREATE_TIMEOUT_MS}ms — failing find_game ` +
+                            `[childAlive=${!game.process.killed}, lastChildMsg=${sinceMsg}ms ago, pid=${game.process.pid}, ` +
+                            `procs=${this.processes.length} (active=${active}, creating=${creating}), totalPlayers=${totalPlayers}]`,
                     );
                     settle("");
                 }, GAME_CREATE_TIMEOUT_MS);
