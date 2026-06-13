@@ -91,6 +91,7 @@ export const _allowedOutfits = [
     "outfitBlackpurple",
     "outfitCrusader",
     "outfitDiamondred",
+    "outfitPanorama",
 ];
 export const _allowedEmotes = [
     "emote_thumbsup",

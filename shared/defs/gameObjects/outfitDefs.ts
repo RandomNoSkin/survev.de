@@ -1556,6 +1556,25 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0x282828,
         },
     }),
+    outfitPanorama: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Panorama",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xa4a4f2,
+            baseSprite: "player-base-01.img",
+            handTint: 0xa4a4f2,
+            handSprite: "player-hands-01.img",
+            footTint: 0x8e8ee8,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x8e8ee8,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xa4a4f2,
+        },
+    }),
     // Obstacle costumes
     outfitBarrel: defineOutfitSkin("outfitBase", {
         name: "Barrel Costume",
