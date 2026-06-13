@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:cc="http://creativecommons.org/ns#"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns="http://www.w3.org/2000/svg"
+  width="140"
+  height="140"
+  version="1.1"
+  id="svg4">
+
+  <metadata id="metadata10">
+    <rdf:RDF>
+      <cc:Work rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+        <dc:title>Auron Style V2</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+
+  <defs>
+    <clipPath id="cc">
+      <circle cx="70" cy="70" r="66.5"/>
+    </clipPath>
+
+    <!-- Scratch/glow filter for yellow slashes -->
+    <filter id="slashGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="subtleGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Deep matte black base -->
+    <radialGradient id="base" cx="50%" cy="46%" r="62%">
+      <stop offset="0%"   stop-color="#131108"/>
+      <stop offset="55%"  stop-color="#090800"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+
+    <!-- Slash gradients — bright core, fade at tips -->
+    <linearGradient id="slash1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#ffdd00" stop-opacity="0"/>
+      <stop offset="15%"  stop-color="#ffdd00" stop-opacity="1"/>
+      <stop offset="50%"  stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="85%"  stop-color="#ffcc00" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffcc00" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="slash2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#ffcc00" stop-opacity="0"/>
+      <stop offset="20%"  stop-color="#ffcc00" stop-opacity="1"/>
+      <stop offset="55%"  stop-color="#ffe566" stop-opacity="0.9"/>
+      <stop offset="80%"  stop-color="#ffdd00" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffdd00" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="slash3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#ffbb00" stop-opacity="0"/>
+      <stop offset="25%"  stop-color="#ffbb00" stop-opacity="1"/>
+      <stop offset="60%"  stop-color="#ffdd00" stop-opacity="0.85"/>
+      <stop offset="90%"  stop-color="#ffcc00" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffcc00" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Dark scratch marks (black cuts over yellow) -->
+    <linearGradient id="darkSlash" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#000000" stop-opacity="0"/>
+      <stop offset="20%"  stop-color="#000000" stop-opacity="0.85"/>
+      <stop offset="80%"  stop-color="#000000" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Center bright spot -->
+    <radialGradient id="centerSpot" cx="48%" cy="46%" r="28%">
+      <stop offset="0%"   stop-color="#ffee44" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Rim glow -->
+    <radialGradient id="rim" cx="50%" cy="50%" r="50%">
+      <stop offset="60%"  stop-color="#000000" stop-opacity="0"/>
+      <stop offset="84%"  stop-color="#ffcc00" stop-opacity="0.10"/>
+      <stop offset="95%"  stop-color="#ffaa00" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.65"/>
+    </radialGradient>
+
+    <!-- Gloss top-left -->
+    <radialGradient id="gloss" cx="34%" cy="28%" r="30%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Metal texture overlay -->
+    <filter id="metalTex" x="0%" y="0%" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" seed="2" result="noise"/>
+      <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
+      <feBlend in="SourceGraphic" in2="grayNoise" mode="multiply" result="blended"/>
+      <feComposite in="blended" in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+
+  <!-- Base -->
+  <circle cx="70" cy="70" r="66.5" style="fill:url(#base);"/>
+
+  <g clip-path="url(#cc)">
+
+    <!-- ═══ BACKGROUND METAL PLATE PANELS ═══ -->
+    <!-- Large dark panel top-left -->
+    <polygon points="-5,-5 85,-5 45,145 -5,145"
+      style="fill:#0c0b00; opacity:0.7;"/>
+    <!-- Slightly lighter panel right -->
+    <polygon points="80,-5 145,-5 145,145 55,145"
+      style="fill:#101000; opacity:0.6;"/>
+    <!-- Dark strip center -->
+    <polygon points="42,-5 75,-5 62,145 28,145"
+      style="fill:#080700; opacity:0.5;"/>
+
+    <!-- ═══ MAIN DIAGONAL SLASHES ═══ -->
+    <!-- Big slash 1 — thickest, center -->
+    <g transform="rotate(-38, 70, 70)" filter="url(#slashGlow)">
+      <rect x="-10" y="57" width="160" height="11" rx="1"
+        style="fill:url(#slash1); opacity:1;"/>
+    </g>
+
+    <!-- Big slash 2 — offset left -->
+    <g transform="rotate(-38, 70, 70)" filter="url(#slashGlow)">
+      <rect x="-10" y="40" width="160" height="7" rx="1"
+        style="fill:url(#slash2); opacity:0.92;"/>
+    </g>
+
+    <!-- Big slash 3 — offset right of center -->
+    <g transform="rotate(-38, 70, 70)" filter="url(#slashGlow)">
+      <rect x="-10" y="76" width="160" height="5.5" rx="1"
+        style="fill:url(#slash3); opacity:0.85;"/>
+    </g>
+
+    <!-- Thin slash 4 — further left -->
+    <g transform="rotate(-38, 70, 70)">
+      <rect x="-10" y="28" width="160" height="3" rx="0.5"
+        style="fill:#ffcc00; opacity:0.60;" filter="url(#subtleGlow)"/>
+    </g>
+
+    <!-- Thin slash 5 — far right -->
+    <g transform="rotate(-38, 70, 70)">
+      <rect x="-10" y="89" width="160" height="2.5" rx="0.5"
+        style="fill:#ffaa00; opacity:0.50;" filter="url(#subtleGlow)"/>
+    </g>
+
+    <!-- Hairline accent — top -->
+    <g transform="rotate(-38, 70, 70)">
+      <rect x="-10" y="19" width="160" height="1.2" rx="0.5"
+        style="fill:#ffdd00; opacity:0.35;"/>
+    </g>
+
+    <!-- ═══ DARK SCRATCH CUTS ACROSS THE SLASHES ═══ -->
+    <!-- These give the "battle-worn metal" feel -->
+    <g transform="rotate(-38, 70, 70)">
+      <rect x="20"  y="25" width="3"  height="80" rx="0.5"
+        style="fill:#000000; opacity:0.70;"/>
+      <rect x="50"  y="20" width="1.5" height="90" rx="0.5"
+        style="fill:#000000; opacity:0.55;"/>
+      <rect x="78"  y="22" width="2.5" height="85" rx="0.5"
+        style="fill:#000000; opacity:0.65;"/>
+      <rect x="105" y="28" width="1.5" height="75" rx="0.5"
+        style="fill:#000000; opacity:0.50;"/>
+      <rect x="128" y="30" width="2"   height="70" rx="0.5"
+        style="fill:#000000; opacity:0.60;"/>
+    </g>
+
+    <!-- ═══ SECONDARY SLASH SET — opposite angle (cross-cuts) ═══ -->
+    <g transform="rotate(22, 70, 70)">
+      <rect x="-10" y="62" width="160" height="2.5" rx="0.5"
+        style="fill:#ffbb00; opacity:0.25;" filter="url(#subtleGlow)"/>
+      <rect x="-10" y="72" width="160" height="1.5" rx="0.5"
+        style="fill:#ffaa00; opacity:0.18;"/>
+    </g>
+
+    <!-- ═══ OVERLAYS ═══ -->
+    <circle cx="70" cy="70" r="66.5" style="fill:url(#centerSpot);"/>
+    <circle cx="70" cy="70" r="66.5" style="fill:url(#gloss);"/>
+    <circle cx="70" cy="70" r="66.5" style="fill:url(#rim);"/>
+
+  </g>
+
+  <!-- Border -->
+  <circle cx="70" cy="70" r="66.5"
+    style="fill:none; stroke:#ddaa00; stroke-width:2.2; opacity:0.90;"/>
+  <circle cx="70" cy="70" r="65.0"
+    style="fill:none; stroke:#ffee00; stroke-width:0.6; opacity:0.35;"/>
+
+</svg>
