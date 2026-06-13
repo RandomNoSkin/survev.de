@@ -194,6 +194,51 @@ export const chatBannedIpsTable = pgTable("chat_banned_ips", {
     bannedBy: text("banned_by").notNull().default("admin"),
 });
 
+export const banCommentsTable = pgTable(
+    "ban_comments",
+    {
+        id: serial().primaryKey(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        banType: text("ban_type").notNull(), // "ip" | "account" | "chat"
+        banTarget: text("ban_target").notNull(), // encoded IP hash or account slug
+        comment: text("comment").notNull(),
+        createdBy: text("created_by").notNull(),
+    },
+    (table) => [
+        index("ban_comments_target_idx").on(table.banType, table.banTarget, table.createdAt),
+    ],
+);
+
+export type BanCommentsTable = typeof banCommentsTable.$inferSelect;
+
+/**
+ * Append-only audit log of ban actions, so the full history survives even after a
+ * ban is lifted (the live `banned_ips`/`chat_banned_ips` rows are deleted on unban).
+ * One row per ban action; the matching active row(s) get `unbannedAt`/`unbannedBy`
+ * set when the ban is removed. Mirrors the `banType`/`banTarget` convention used by
+ * `ban_comments` (target = encoded IP hash for ip/chat, account slug for account).
+ */
+export const banHistoryTable = pgTable(
+    "ban_history",
+    {
+        id: serial().primaryKey(),
+        banType: text("ban_type").notNull(), // "ip" | "account" | "chat"
+        banTarget: text("ban_target").notNull(), // encoded IP hash or account slug
+        reason: text("reason").notNull().default(""),
+        bannedBy: text("banned_by").notNull(), // admin slug
+        bannedAt: timestamp("banned_at", { withTimezone: true }).notNull().defaultNow(),
+        expiresAt: timestamp("expires_at", { withTimezone: true }), // null = no auto-expiry (account bans)
+        permanent: boolean("permanent").notNull().default(false),
+        unbannedAt: timestamp("unbanned_at", { withTimezone: true }), // null = still active
+        unbannedBy: text("unbanned_by"), // null = still active
+    },
+    (table) => [
+        index("ban_history_target_idx").on(table.banType, table.banTarget, table.bannedAt),
+    ],
+);
+
+export type BanHistoryTable = typeof banHistoryTable.$inferSelect;
+
 export const userXpTable = pgTable("user_xp", {
     userId: text("user_id").notNull()
     .references(() => usersTable.id, {

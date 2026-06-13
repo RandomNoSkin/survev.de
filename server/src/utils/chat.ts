@@ -11,6 +11,49 @@ import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { db } from "../api/db";
 import { chatLogsTable, usersTable } from "../api/db/schema";
 
+export const KillFeedChannel = -1; // sentinel channel value for kill events in chatLogsTable
+export const DownFeedChannel = -2; // sentinel channel value for knock/down events in chatLogsTable
+
+/** Persists a kill event to chatLogsTable so the moderation dashboard can load game history. */
+export function logKillToDB(
+    gameId: string,
+    killerName: string,
+    killerUserId: string,
+    killerIp: string,
+    victimName: string,
+    weapon: string,
+) {
+    if (!Config.database.enabled) return;
+    db.insert(chatLogsTable).values({
+        gameId,
+        username: killerName,
+        userId: killerUserId,
+        encodedIp: hashIp(killerIp),
+        channel: KillFeedChannel,
+        message: `${victimName}|${weapon}`,
+    }).catch(() => { /* non-critical */ });
+}
+
+/** Persists a knock/down event to chatLogsTable so the moderation dashboard can load game history. */
+export function logDownToDB(
+    gameId: string,
+    attackerName: string,
+    attackerUserId: string,
+    attackerIp: string,
+    victimName: string,
+    weapon: string,
+) {
+    if (!Config.database.enabled) return;
+    db.insert(chatLogsTable).values({
+        gameId,
+        username: attackerName,
+        userId: attackerUserId,
+        encodedIp: hashIp(attackerIp),
+        channel: DownFeedChannel,
+        message: `${victimName}|${weapon}`,
+    }).catch(() => { /* non-critical */ });
+}
+
 
 
 export class Chat{

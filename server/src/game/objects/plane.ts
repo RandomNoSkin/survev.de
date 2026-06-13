@@ -9,7 +9,7 @@ import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import { type AABB, type Collider, coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
-import { assert, util } from "../../../../shared/utils/util";
+import { util } from "../../../../shared/utils/util";
 import { type Vec2, v2 } from "../../../../shared/utils/v2";
 import { gameLogger } from "../../utils/betterLogger";
 import { Game } from "../game";
@@ -128,7 +128,12 @@ export class PlaneBarn {
                         break;
                     }
                     case GameConfig.Plane.Airstrike: {
-                        assert(options.airstrikeZoneRad); // only option that MUST be defined
+                        if (!options.airstrikeZoneRad) {
+                            gameLogger.error(
+                                "[PlaneBarn] Airstrike scheduled without airstrikeZoneRad, skipping",
+                            );
+                            break;
+                        }
                         const rad = options.airstrikeZoneRad;
                         const timeBeforeStart = options.wait ?? 1.5;
                         const airstrikeInterval = options.delay ?? 1;
@@ -151,33 +156,45 @@ export class PlaneBarn {
         }
     }
 
-    genDropAlgo(): Vec2{
-        let pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-        let tryCount = 0;
+    genDropAlgo(): Vec2 {
+        const gas = this.game.gas;
+        const randomPos = () =>
+            v2.add(gas.posNew, util.randomPointInCircle(gas.radNew));
 
         let airdropMinDistance = this.game.map.mapDef.gameMode.airdropMinDistance ?? 0;
-        const gasRadius = this.game.gas.radNew;
-        if(airdropMinDistance !=0)airdropMinDistance = gasRadius*airdropMinDistance;
-        console.log(airdropMinDistance);
-        //if(airdropMinDistance!=0 && this.game.gas.circleIdx !=0) airdropMinDistance = airdropMinDistance/this.game.gas.circleIdx;
+        if (airdropMinDistance !== 0) airdropMinDistance *= gas.radNew;
 
-        for (let i = 0; i < this.placedAirDrops.length; i++) {
-            const existing = this.placedAirDrops[i];
-            const d2 = v2.distance(existing.pos, pos);
-            //console.log("AirdropMinDistance",airdropMinDistance, "distance", d2)
-            if (d2 < airdropMinDistance || this.game.map.isOnWater(pos, 1)) {
-                //console.log(`Airdrop too close to existing one: ${d2} < ${airdropMinDistance}`);
-                tryCount++;
-                if (tryCount >= 10000) {
-                    airdropMinDistance = airdropMinDistance * 0.75;
-                    console.log(`Resetting position after too many tries`);
-                    tryCount = tryCount * 0.75;
+        // Hard cap: a closing or over-water gas circle could otherwise make every
+        // candidate position fail the water/spacing check forever, blocking the
+        // single-threaded game loop and freezing the whole process.
+        const MAX_TRIES = 1000;
+
+        let pos = randomPos();
+        // Best-effort fallback: a land position even if a bit too close to another
+        // drop; only falls back to an on-water position if nothing better is found.
+        let best = pos;
+
+        for (let tries = 0; tries < MAX_TRIES; tries++) {
+            const onWater = this.game.map.isOnWater(pos, 1);
+            let tooClose = false;
+            for (const existing of this.placedAirDrops) {
+                if (v2.distance(existing.pos, pos) < airdropMinDistance) {
+                    tooClose = true;
+                    break;
                 }
-                    pos = v2.add(this.game.gas.posNew, util.randomPointInCircle(this.game.gas.radNew));
-                    i = -1; // restart the loop
             }
+
+            if (!onWater && !tooClose) return pos;
+            if (!onWater) best = pos;
+
+            // Periodically relax the spacing requirement so we still terminate
+            // quickly when the safe zone is too small to fit every drop apart.
+            if (tries > 0 && tries % 200 === 0) airdropMinDistance *= 0.75;
+
+            pos = randomPos();
         }
-        return pos;
+
+        return best;
     }
 
     getAirstrikeZonePos(rad: number) {
@@ -243,8 +260,14 @@ export class PlaneBarn {
             planeCount * airstrikeInterval +
             finishBuffer;
 
-        assert(rad <= Constants.AirstrikeZoneMaxRad);
-        assert(duration <= Constants.AirstrikeZoneMaxDuration);
+        // Exceeding these limits would desync client serialization; skip the zone
+        // (log it) instead of throwing out of the game-update loop and crashing.
+        if (rad > Constants.AirstrikeZoneMaxRad || duration > Constants.AirstrikeZoneMaxDuration) {
+            gameLogger.error(
+                `[PlaneBarn] Airstrike zone exceeds limits (rad=${rad}, duration=${duration}), skipping`,
+            );
+            return;
+        }
 
         this.newAirstrikeZones.push({
             pos,
@@ -355,7 +378,9 @@ export class PlaneBarn {
             if (this.freeIds.length > 0) {
                 id = this.freeIds.shift()!;
             } else {
-                assert(false, `Ran out of plane ids`);
+                this.game.logger.warn("Plane Barn: ran out of plane ids, skipping plane");
+                gameLogger.error("[PlaneBarn] Ran out of plane ids, skipping plane");
+                return;
             }
         }
 
@@ -508,7 +533,9 @@ export class PlaneBarn {
             if (this.freeIds.length > 0) {
                 id = this.freeIds.shift()!;
             } else {
-                assert(false, `Ran out of plane ids`);
+                this.game.logger.warn("Plane Barn: ran out of plane ids, skipping plane");
+                gameLogger.error("[PlaneBarn] Ran out of plane ids, skipping plane");
+                return;
             }
         }
 
@@ -660,7 +687,9 @@ export class PlaneBarn {
             if (this.freeIds.length > 0) {
                 id = this.freeIds.shift()!;
             } else {
-                assert(false, `Ran out of plane ids`);
+                this.game.logger.warn("Plane Barn: ran out of plane ids, skipping plane");
+                gameLogger.error("[PlaneBarn] Ran out of plane ids, skipping plane");
+                return;
             }
         }
 

@@ -170,7 +170,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1016,
+    protocolVersion: 1017,
     Input,
     EmoteSlot,
     WeaponSlot,
@@ -191,15 +191,20 @@ export const GameConfig = {
     },
     serverSettings:{
         passes: {
+            "pass_survivr1": {
+                passMaxLevel: 99,
+                seasonStart: "2026-03-01T22:00:00Z",
+                seasonEnd:   "2026-05-31T23:59:30Z",
+            },
             "pass_survivr2": {
                 passMaxLevel: 99,
                 seasonStart: "2026-05-31T22:00:00Z",
-                seasonEnd:   "2026-07-31T23:59:59",
+                seasonEnd:   "2026-07-31T23:59:30",
             },
             "pass_survivr3": {
                 passMaxLevel: 99,
                 seasonStart: "2026-07-31T23:59:59",
-                seasonEnd:   "2026-10-31T23:59:59",
+                seasonEnd:   "2026-10-31T23:59:30",
             },
         } as Record<string, { passMaxLevel: number; seasonStart: string; seasonEnd: string }>,
         get currentPass(): string {
@@ -232,8 +237,14 @@ export const GameConfig = {
                 "Weekend 2": {
                     maps: ["comp"],
                     start: "2026-06-12T00:00:00Z",
-                    end:   "2026-06-14T23:59:59Z",
+                    end:   "2026-06-13T23:59:59Z",
                     boost: 2,
+                },
+                "Philipp Birthday": {
+                    maps: ["local", "comp", "two_vs_two"],
+                    start: "2026-06-14T00:00:00Z",
+                    end:   "2026-06-14T23:59:59Z",
+                    boost: 2.5,
                 },
                 "Weekend 3": {
                     maps: ["local", "comp"],
@@ -242,10 +253,10 @@ export const GameConfig = {
                     boost: 2,
                 },
                 "Weekend 4": {
-                    maps: ["local", "comp"],
+                    maps: ["scrims"],
                     start: "2026-06-26T00:00:00Z",
                     end:   "2026-06-28T23:59:59Z",
-                    boost: 2,
+                    boost: 3,
                 },
             },
         } as Record<string, Record<string, { maps: string[]; start: string; end: string; boost: number }>>,

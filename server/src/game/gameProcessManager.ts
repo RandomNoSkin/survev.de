@@ -10,8 +10,10 @@ import {
     type AdminCmdAction,
     type DashboardPlayer,
     type FindGamePrivateBody,
+    type FindPrivateLobbyGameBody,
     type GameData,
     type GameSocketData,
+    type KillFeedEntry,
     type ProcessMsg,
     ProcessMsgType,
     type ServerGameConfig,
@@ -25,10 +27,18 @@ if (process.env.NODE_ENV === "production") {
     path = "src/game/gameProcess.ts";
 }
 
+/** Max time to wait for a freshly forked game process to report "Created" before
+ *  giving up on the find_game request. Kept under the API server's region fetch
+ *  timeout so the player gets a fast "find_game_failed" + retry instead of the API
+ *  aborting (which is what surfaced as the EU "timed out after 10000ms"). */
+const GAME_CREATE_TIMEOUT_MS = 8000;
+
 class GameProcess implements GameData {
     process: ChildProcess;
 
     canJoin = true;
+    isPrivate = false;
+    publicSpectating = true;
     creating = false;
     teamMode: TeamMode = 1;
     mapName = "";
@@ -41,8 +51,14 @@ class GameProcess implements GameData {
     manager: GameProcessManager;
 
     onCreatedCbs: Array<(_proc: typeof this) => void> = [];
+    /** Called if the process dies or stalls before reporting "Created", so waiting
+     *  find_game/createPrivateGame requests fail fast instead of hanging. */
+    onFailedCbs: Array<() => void> = [];
 
     lastMsgTime = Date.now();
+
+    /** When the current Create was sent; used to measure game-creation latency. */
+    createStartTime = 0;
 
     stoppedTime = Date.now();
 
@@ -50,6 +66,8 @@ class GameProcess implements GameData {
 
     /** Pending GetPlayerData callbacks, keyed by requestId. */
     readonly pendingPlayerDataRequests = new Map<string, (players: DashboardPlayer[]) => void>();
+    /** Pending GetGameFeed callbacks, keyed by requestId. */
+    readonly pendingGameFeedRequests = new Map<string, (entries: KillFeedEntry[]) => void>();
 
     constructor(manager: GameProcessManager, id: string, config: ServerGameConfig) {
         this.manager = manager;
@@ -63,17 +81,37 @@ class GameProcess implements GameData {
             }
 
             switch (msg.type) {
-                case ProcessMsgType.Created:
+                case ProcessMsgType.Created: {
                     this.created = true;
                     this.stopped = false;
                     this.creating = false;
+                    // How long fork + map generation took. This is the latency that,
+                    // under load, can exceed the find_game abort timeout — log it (and
+                    // warn when it gets close) so the bottleneck is visible.
+                    const elapsed = this.createStartTime
+                        ? Date.now() - this.createStartTime
+                        : 0;
+                    this.manager.logger.info(
+                        `Game #${this.id.substring(0, 4)} (${this.mapName}) created in ${elapsed}ms`,
+                    );
+                    if (elapsed > 3000) {
+                        // .error so it reaches the webhook — slow creation is the
+                        // thing that pushes find_game toward the abort timeout.
+                        this.manager.logger.error(
+                            `Slow game creation: ${elapsed}ms for ${this.mapName} (PID ${this.process.pid})`,
+                        );
+                    }
                     for (const cb of this.onCreatedCbs) {
                         cb(this);
                     }
                     this.onCreatedCbs.length = 0;
+                    this.onFailedCbs.length = 0;
                     break;
+                }
                 case ProcessMsgType.UpdateData:
                     this.canJoin = msg.canJoin;
+                    this.isPrivate = msg.isPrivate;
+                    this.publicSpectating = msg.publicSpectating;
                     this.teamMode = msg.teamMode;
                     this.mapName = msg.mapName;
                     if (this.id !== msg.id) {
@@ -127,6 +165,16 @@ class GameProcess implements GameData {
                     }
                     break;
                 }
+
+                // Dashboard: resolve the pending getGameFeed() promise
+                case ProcessMsgType.GameFeedResponse: {
+                    const resolve = this.pendingGameFeedRequests.get(msg.requestId);
+                    if (resolve) {
+                        this.pendingGameFeedRequests.delete(msg.requestId);
+                        resolve(msg.entries);
+                    }
+                    break;
+                }
             }
         });
 
@@ -135,10 +183,21 @@ class GameProcess implements GameData {
 
     send(msg: ProcessMsg) {
         if (this.process.killed || !this.process.channel) return;
-        this.process.send(msg);
+
+        try {
+            this.process.send(msg);
+        } catch (e: any) {
+            if (e?.code === "ERR_IPC_CHANNEL_CLOSED" || e?.code === "EPIPE") {
+                this.manager.processById.delete(this.id);
+                return;
+            }
+
+            throw e;
+        }
     }
 
     create(id: string, config: ServerGameConfig) {
+        this.createStartTime = Date.now();
         this.send({
             type: ProcessMsgType.Create,
             id,
@@ -165,6 +224,20 @@ class GameProcess implements GameData {
             type: ProcessMsgType.AddJoinToken,
             autoFill,
             tokens,
+        });
+        this.avaliableSlots--;
+    }
+    addGroupedJoinTokens(teams: FindGamePrivateBody["playerData"][]) {
+        for (const tokens of teams) {
+            for (const t of tokens) {
+                if (t.userId) {
+                    this.manager.accountIpCache.set(t.ip, Date.now() + 2 * 60 * 1000);
+                }
+            }
+        }
+        this.send({
+            type: ProcessMsgType.AddGroupedJoinTokens,
+            teams,
         });
         this.avaliableSlots--;
     }
@@ -219,6 +292,8 @@ export class GameProcessManager implements GameManager {
 
     readonly processById = new Map<string, GameProcess>();
     readonly processes: GameProcess[] = [];
+
+    serverVerifiedOnly = false;
 
     readonly logger = new ServerLogger("Game Process Manager");
 
@@ -295,6 +370,10 @@ export class GameProcessManager implements GameManager {
 
         this.processById.set(id, gameProc);
 
+        if (this.serverVerifiedOnly) {
+            gameProc.send({ type: ProcessMsgType.AdminCmd, cmd: { action: "verify" } });
+        }
+
         return gameProc;
     }
 
@@ -312,6 +391,13 @@ export class GameProcessManager implements GameManager {
             this.logger.warn(`Closing socket for ${gameProc.id}`);
             socket.close();
         }
+
+        // Fail any find_game/createPrivateGame requests still waiting on this
+        // process's creation so they return immediately instead of hanging until
+        // the API server's abort timeout.
+        for (const cb of gameProc.onFailedCbs) cb();
+        gameProc.onFailedCbs.length = 0;
+        gameProc.onCreatedCbs.length = 0;
 
         // send SIGTERM, if still hasn't terminated after 5 seconds, send SIGKILL >:3
         gameProc.process.kill(signal);
@@ -353,16 +439,87 @@ export class GameProcessManager implements GameManager {
         // if the game has not finished creating
         // wait for it to be created to send the find game response
         if (!game.created) {
+            return await new Promise<string>((resolve) => {
+                let settled = false;
+                let timer: ReturnType<typeof setTimeout>;
+                const settle = (value: string) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(value);
+                };
+
+                game.onCreatedCbs.push(() => {
+                    if (this.serverVerifiedOnly && body.playerData.some((p) => !p.userId)) {
+                        settle("player_not_verified");
+                        return;
+                    }
+                    game.addJoinTokens(body.playerData, body.autoFill);
+                    settle(game.id);
+                });
+                // Process died before "Created" (e.g. a throw in game.init()).
+                game.onFailedCbs.push(() => settle(""));
+                // Backstop for a process that neither finishes nor dies (a hang):
+                // fail before the API server's abort timeout so the player retries.
+                timer = setTimeout(() => {
+                    // Attach load + liveness context so the timeout is diagnosable in
+                    // Discord: is the server overloaded (many procs/creating at once),
+                    // or is THIS child stuck/dead? lastChildMsg = time since the child
+                    // last sent anything — large + alive ⇒ blocked in heavy work (map
+                    // gen); the child's own "Slow game creation" log gives the exact split.
+                    const sinceMsg = Date.now() - game.lastMsgTime;
+                    const active = this.processes.filter((p) => !p.stopped).length;
+                    const creating = this.processes.filter((p) => p.creating).length;
+                    const totalPlayers = this.processes.reduce((a, p) => a + p.aliveCount, 0);
+                    this.logger.error(
+                        `Game #${game.id.substring(0, 4)} (${game.mapName}) creation timed out after ${GAME_CREATE_TIMEOUT_MS}ms — failing find_game ` +
+                            `[childAlive=${!game.process.killed}, lastChildMsg=${sinceMsg}ms ago, pid=${game.process.pid}, ` +
+                            `procs=${this.processes.length} (active=${active}, creating=${creating}), totalPlayers=${totalPlayers}]`,
+                    );
+                    settle("");
+                }, GAME_CREATE_TIMEOUT_MS);
+            });
+        }
+
+        if (this.serverVerifiedOnly && body.playerData.some((p) => !p.userId)) {
+            return "player_not_verified";
+        }
+
+        game.addJoinTokens(body.playerData, body.autoFill);
+
+        return game.id;
+    }
+
+    async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
+        const game = this.newGame({
+            teamMode: body.teamMode,
+            mapName: body.mapName as keyof typeof MapDefs,
+            isPrivate: true,
+            arenaRoles: body.arenaRoles,
+            advancedSettings: body.advancedSettings,
+            customLoadout: body.customLoadout,
+            customLoadoutEnabled: body.customLoadoutEnabled,
+            publicSpectating: body.publicSpectating,
+        });
+
+        // if the game has not finished creating
+        // wait for it to be created before registering the join groups
+        if (!game.created) {
             return await new Promise((resolve) => {
                 game.onCreatedCbs.push((game) => {
-                    game.addJoinTokens(body.playerData, body.autoFill);
+                    game.addGroupedJoinTokens(body.teams);
+                    if (body.spectators?.length) {
+                        game.addJoinTokensAsSpectator(body.spectators, false);
+                    }
                     resolve(game.id);
                 });
             });
         }
 
-        game.addJoinTokens(body.playerData, body.autoFill);
-
+        game.addGroupedJoinTokens(body.teams);
+        if (body.spectators?.length) {
+            game.addJoinTokensAsSpectator(body.spectators, false);
+        }
         return game.id;
     }
 
@@ -407,9 +564,44 @@ export class GameProcessManager implements GameManager {
         });
     }
 
+    /**
+     * Requests the recent kill feed buffer from a running game process.
+     * Resolves with an empty array if the game is not found or times out after 3 s.
+     */
+    async getGameFeed(gameId: string): Promise<KillFeedEntry[]> {
+        const proc = this.processById.get(gameId);
+        if (!proc) return [];
+
+        const requestId = randomUUID();
+
+        return new Promise<KillFeedEntry[]>((resolve) => {
+            const timeout = setTimeout(() => {
+                proc.pendingGameFeedRequests.delete(requestId);
+                resolve([]);
+            }, 3000);
+
+            proc.pendingGameFeedRequests.set(requestId, (entries) => {
+                clearTimeout(timeout);
+                resolve(entries);
+            });
+
+            proc.send({ type: ProcessMsgType.GetGameFeed, requestId });
+        });
+    }
+
     /** Sends an admin command to a running game process (fire-and-forget). */
     sendAdminCmd(gameId: string, cmd: AdminCmdAction): void {
         this.processById.get(gameId)?.send({ type: ProcessMsgType.AdminCmd, cmd });
+    }
+
+    setServerVerified(state: boolean): void {
+        this.serverVerifiedOnly = state;
+        const cmd: AdminCmdAction = { action: state ? "verify" : "unverify" };
+        for (const proc of this.processes) {
+            if (!proc.stopped) {
+                proc.send({ type: ProcessMsgType.AdminCmd, cmd });
+            }
+        }
     }
 
     onOpen(socketId: string, socket: WebSocket<GameSocketData>): void {

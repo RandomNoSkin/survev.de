@@ -1,5 +1,6 @@
 import type { MapDefs } from "../../shared/defs/mapDefs";
 import { GameConfig } from "../../shared/gameConfig";
+import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby";
 import loadout from "../../shared/utils/loadout";
 import { util } from "../../shared/utils/util";
 import { v2 } from "../../shared/utils/v2";
@@ -87,6 +88,7 @@ const defaultConfig = {
     localRotation: false,
     screenShake: true,
     anonPlayerNames: false,
+    autoDownloadStats: false,
     touchMoveStyle: "anywhere" as "locked" | "anywhere",
     touchAimStyle: "anywhere" as "locked" | "anywhere",
     touchAimLine: true,
@@ -94,6 +96,8 @@ const defaultConfig = {
     playerName: "",
     region: "na",
     gameModeIdx: 2,
+    /** Private lobby settings the leader last configured, re-applied (minus `advancedSettings`) the next time they create a lobby. */
+    privateLobbySettings: {} as SavedPrivateLobbySettings,
     teamAutoFill: true,
     language: "en" as Locale,
     prerollGamesPlayed: 0,
@@ -106,7 +110,7 @@ const defaultConfig = {
     loadout: loadout.defaultLoadout(),
     sessionCookie: "" as string | null,
     binds: "",
-    rulesAccepted: false,
+    rulesAcceptedVersion: 0,
     cachedBgImg: "img/main_splash.png",
     version: 1,
     /* STRIP_FROM_PROD_CLIENT:START */

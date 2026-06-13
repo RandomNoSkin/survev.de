@@ -2,14 +2,29 @@ import type { Hono } from "hono";
 import type { UpgradeWebSocket } from "hono/ws";
 import type { SiteInfoRes } from "../../../shared/types/api";
 import { Config } from "../config";
+import { PrivateLobbyMenu } from "../privateLobby";
 import { TeamMenu } from "../teamMenu";
 import { GIT_VERSION } from "../utils/gitRevision";
 import { defaultLogger, ServerLogger } from "../utils/logger";
-import type { FindGamePrivateBody, FindGamePrivateRes } from "../utils/types";
+import type {
+    FindGamePrivateBody,
+    FindGamePrivateRes,
+    FindPrivateLobbyGameBody,
+} from "../utils/types";
+
+/** Max time to wait for a region game server before treating it as offline.
+ *  Raised from 5s: creating a fresh game (fork child process + generate map) can
+ *  briefly exceed 5s under load, which aborted the find_game request needlessly. */
+const REGION_FETCH_TIMEOUT_MS = 10000;
+
+/** Round-trips slower than this are logged so creeping latency is visible before
+ *  it reaches the abort timeout above. */
+const SLOW_REGION_FETCH_MS = 2000;
 
 class Region {
     data: (typeof Config)["regions"][string];
     playerCount = 0;
+    verifiedOnly = false;
 
     lastUpdateTime = Date.now();
 
@@ -20,7 +35,12 @@ class Region {
     async fetch<Data extends object>(endPoint: string, body: object) {
         const url = `http${this.data.https ? "s" : ""}://${this.data.address}/${endPoint}`;
 
+        const startTime = Date.now();
         try {
+            // Abort hung requests so an offline/unresponsive region game server
+            // fails fast instead of piling up pending fetches (which used to
+            // stall handlers long enough for clients to abort their HTTP
+            // response, leading to a fatal post-abort write — see #crash-fix).
             const res = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -28,13 +48,32 @@ class Region {
                     "survev-api-key": Config.secrets.SURVEV_API_KEY,
                 },
                 body: JSON.stringify(body),
+                signal: AbortSignal.timeout(REGION_FETCH_TIMEOUT_MS),
             });
+
+            const elapsed = Date.now() - startTime;
+            if (elapsed > SLOW_REGION_FETCH_MS) {
+                defaultLogger.warn(
+                    `Region ${this.id} slow response for ${endPoint}: ${elapsed}ms`,
+                );
+            }
 
             if (res.ok) {
                 return (await res.json()) as Data;
             }
+            defaultLogger.warn(
+                `Region ${this.id} returned ${res.status} for ${endPoint} (${elapsed}ms)`,
+            );
         } catch (err) {
-            defaultLogger.error(`Error fetching region ${this.id}`, err);
+            const elapsed = Date.now() - startTime;
+            const reason =
+                err instanceof Error && err.name === "TimeoutError"
+                    ? `timed out after ${REGION_FETCH_TIMEOUT_MS}ms`
+                    : err;
+            defaultLogger.error(
+                `Error fetching region ${this.id} (${endPoint}) after ${elapsed}ms:`,
+                reason,
+            );
             return undefined;
         }
     }
@@ -47,9 +86,18 @@ class Region {
         return data;
     }
 
+    async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<FindGamePrivateRes> {
+        const data = await this.fetch<FindGamePrivateRes>("api/find_private_game", body);
+        if (!data) {
+            return { error: "find_game_failed" };
+        }
+        return data;
+    }
+
     // in class Region
-    async collectGameInfos(): Promise<any> {
-    const data = await this.fetch<any>("api/game_infos", { region: this.id });
+    /** @param admin When true, includes private lobby matches with "Public Spectating" disabled (for the moderation dashboard). */
+    async collectGameInfos(admin = false): Promise<any> {
+    const data = await this.fetch<any>("api/game_infos", { region: this.id, admin });
     return data ?? { error: "game_infos_failed" };
     }
 
@@ -64,10 +112,22 @@ class Region {
         return data?.players ?? [];
     }
 
+    /** Fetches the recent kill feed buffer for a game from the game server (for the moderation dashboard). */
+    async getDashboardGameFeed(gameId: string): Promise<any[]> {
+        const data = await this.fetch<{ entries: any[] }>("api/dashboard/game_feed", { gameId });
+        return data?.entries ?? [];
+    }
+
     /** Sends an admin command to a running game on this region's game server. */
     async sendDashboardGameCmd(gameId: string, cmd: object): Promise<boolean> {
         const data = await this.fetch<{ ok: boolean }>("api/dashboard/game_cmd", { gameId, cmd });
         return data?.ok ?? false;
+    }
+
+    /** Sets verified-only mode on all games (running + future) on this region's game server. */
+    async setServerVerified(state: boolean): Promise<void> {
+        this.verifiedOnly = state;
+        await this.fetch("api/dashboard/set_server_verified", { state });
     }
 
     async findGameById(gameId: string, admin: boolean,): Promise<any> {
@@ -90,6 +150,7 @@ export class ApiServer {
     readonly logger = new ServerLogger("Server");
 
     teamMenu = new TeamMenu(this);
+    privateLobbyMenu = new PrivateLobbyMenu(this);
 
     regions: Record<string, Region> = {};
 
@@ -108,6 +169,7 @@ export class ApiServer {
 
     init(app: Hono, upgradeWebSocket: UpgradeWebSocket) {
         this.teamMenu.init(app, upgradeWebSocket);
+        this.privateLobbyMenu.init(app, upgradeWebSocket);
     }
 
     getSiteInfo(region?: string): SiteInfoRes {
@@ -152,6 +214,13 @@ export class ApiServer {
         return { error: "find_game_failed" };
     }
 
+    async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<FindGamePrivateRes> {
+        if (body.region in this.regions) {
+            return await this.regions[body.region].createPrivateGame(body);
+        }
+        return { error: "find_game_failed" };
+    }
+
     async collectGameInfos(region: string) {
     const r = this.regions[region];
     if (!r) return { error: "Invalid Region" };
@@ -175,9 +244,19 @@ export class ApiServer {
         return (await this.regions[region]?.getDashboardGamePlayers(gameId)) ?? [];
     }
 
+    /** Returns recent kill feed entries for a game from the game server of the given region. */
+    async getDashboardGameFeed(region: string, gameId: string): Promise<any[]> {
+        return (await this.regions[region]?.getDashboardGameFeed(gameId)) ?? [];
+    }
+
     /** Sends an admin command to a running game in the given region. */
     async sendDashboardGameCmd(region: string, gameId: string, cmd: object): Promise<boolean> {
         return (await this.regions[region]?.sendDashboardGameCmd(gameId, cmd)) ?? false;
+    }
+
+    /** Sets verified-only mode on all games (running + future) in the given region. */
+    async setServerVerified(region: string, state: boolean): Promise<void> {
+        await this.regions[region]?.setServerVerified(state);
     }
 
     async refreshRegionModes() {

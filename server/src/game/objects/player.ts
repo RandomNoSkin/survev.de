@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { buildDefaultItemsFromCustomLoadout, getArenaModeExtraPerks, type CustomLoadoutConfig } from "../../../../shared/defs/customLoadout";
 import {
     GameObjectDefs,
     type LootDef,
@@ -54,7 +55,7 @@ import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
 import { TeamColor } from "../../../../shared/defs/maps/factionDefs";
 import { chatLogger } from "../../utils/betterLogger";
-import { Chat } from "../../utils/chat";
+import { Chat, logKillToDB, logDownToDB } from "../../utils/chat";
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -163,6 +164,11 @@ export class PlayerBarn {
         }
         this.game.joinTokens.delete(joinMsg.matchPriv);
 
+        if (this.game.verifiedOnly && !joinData.userId) {
+            this.game.closeSocket(socketId, "player_not_verified");
+            return;
+        }
+
         if (Config.rateLimitsEnabled) {
             const count = this.livingPlayers.filter(
                 (p) =>
@@ -229,6 +235,7 @@ export class PlayerBarn {
             joinData.userId,
             joinData.admin,
             joinData.loadout,
+            joinData.customLoadout,
         );
 
         this.socketIdToPlayer.set(socketId, player);
@@ -313,6 +320,7 @@ export class PlayerBarn {
             joinData.userId,
             joinData.admin,
             joinData.loadout,
+            joinData.customLoadout,
         );
 
         this.socketIdToPlayer.set(socketId, player);
@@ -1041,6 +1049,9 @@ export class Player extends BaseGameObject {
     actionItem = "";
 
     hasRoleHelmet = false;
+    hasRoleChest = false;
+    /** Per-player Custom Loadout resolved at spawn (see ctor); reused by setDefaultInv so the arena restock refills the loadout instead of the empty map default. */
+    spawnCustomLoadout?: CustomLoadoutConfig;
     role = "";
     isKillLeader = false;
 
@@ -1176,10 +1187,14 @@ export class Player extends BaseGameObject {
             }
 
             if (roleDef.defaultItems.chest) {
-                if (this.chest) {
+                // Guard with hasRoleChest (mirrors hasRoleHelmet above): promoteToRole
+                // is re-invoked repeatedly by the arena/camper logic in update(), and
+                // without this every tick would drop the player's chest again.
+                if (this.chest && !this.hasRoleChest) {
                     this.dropArmor(this.chest);
                 }
                 this.chest = roleDef.defaultItems.chest;
+                this.hasRoleChest = true;
             }
 
             // weapons
@@ -1346,6 +1361,8 @@ export class Player extends BaseGameObject {
         const def = GameObjectDefs[this.role] as RoleDef;
         if (!def) return;
         this.role = "";
+        // allow the next role's chest to be applied/dropped correctly again
+        this.hasRoleChest = false;
 
         this.mapIndicator?.kill();
         for (let i = 0; i < this.perks.length; i++) {
@@ -1809,6 +1826,7 @@ export class Player extends BaseGameObject {
         userId: string | null,
         admin: boolean,
         loadout?: Loadout,
+        customLoadout?: CustomLoadoutConfig,
     ) {
         super(game, pos);
 
@@ -1841,6 +1859,15 @@ export class Player extends BaseGameObject {
                 (this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems),
                 Config.defaultItems,
             );
+        }
+
+        let extraPerks: string[] = [];
+        const playerCustomLoadout = customLoadout ?? this.game.customLoadout;
+        this.spawnCustomLoadout = playerCustomLoadout;
+        if (this.game.customLoadoutEnabled && playerCustomLoadout) {
+            defaultItems = buildDefaultItemsFromCustomLoadout(playerCustomLoadout);
+        } else if (this.game.customLoadout) {
+            extraPerks = getArenaModeExtraPerks(this.game.customLoadout);
         }
 
         // createCircle clones the position
@@ -1892,6 +1919,11 @@ export class Player extends BaseGameObject {
             const droppable = typeof perk === "object" && "droppable" in perk ? perk.droppable : false;
             assertType(perkType, "perk", false);
             this.addPerk(perkType, droppable);
+        }
+
+        for (const perkType of extraPerks) {
+            assertType(perkType, "perk", false);
+            this.addPerk(perkType, false);
         }
 
         //if indicator true assign role
@@ -2108,7 +2140,10 @@ export class Player extends BaseGameObject {
         //
         // Boost logic
         //
-        const unlimitedAdren = this.game.map.mapDef.gameMode.unlimitedAdren ?? false;
+        const customLoadout = this.game.customLoadout;
+        const unlimitedAdren = customLoadout
+            ? (customLoadout.arenaMode || customLoadout.unlimitedAdren)
+            : (this.game.map.mapDef.gameMode.unlimitedAdren ?? false);
         if (!this.downed) {
             if(unlimitedAdren) this.boost = 100;
             this.boost = math.clamp(this.boost, this.minBoost, 100);
@@ -2884,7 +2919,13 @@ export class Player extends BaseGameObject {
             );
         }
 
-        let defaultItems = (RoleDefs[this.role].defaultItems || GameConfig.player.defaultItems);
+        // When a Custom Loadout is active, restock from it instead of the map's
+        // (empty) default items — otherwise the arena-perk restock on a team
+        // wipe would strip every player's armor/backpack/inventory.
+        let defaultItems =
+            this.game.customLoadoutEnabled && this.spawnCustomLoadout
+                ? buildDefaultItemsFromCustomLoadout(this.spawnCustomLoadout)
+                : (RoleDefs[this.role]?.defaultItems || GameConfig.player.defaultItems);
 
         this.chest = defaultItems.chest;
         assertType(this.chest, "chest", true);
@@ -3578,6 +3619,17 @@ export class Player extends BaseGameObject {
 
         this.game.broadcastMsg(net.MsgType.Kill, downedMsg);
 
+        if (this.downedBy) {
+            logDownToDB(
+                this.game.id,
+                this.downedBy.name,
+                this.downedBy.userId ?? "",
+                this.downedBy.ip,
+                this.name,
+                params.gameSourceType ?? params.mapSourceType ?? "unknown",
+            );
+        }
+
         // lone survivr can be given on knock or kill
         if (this.game.map.factionMode) {
             this.team!.checkAndApplyLastMan();
@@ -3653,6 +3705,23 @@ export class Player extends BaseGameObject {
             if (killCreditSource !== this && killCreditSource.teamId !== this.teamId) {
                 killCreditSource.killedIds.push(this.matchDataId);
                 killCreditSource.kills++;
+                const weapon = params.gameSourceType ?? params.mapSourceType ?? "unknown";
+                this.game.logKillFeedEntry({
+                    ts: Date.now(),
+                    killerName: killCreditSource.name,
+                    killerUserId: killCreditSource.userId ?? "",
+                    victimName: this.name,
+                    victimUserId: this.userId ?? "",
+                    weapon,
+                });
+                logKillToDB(
+                    this.game.id,
+                    killCreditSource.name,
+                    killCreditSource.userId ?? "",
+                    killCreditSource.ip,
+                    this.name,
+                    weapon,
+                );
 
                 if (killCreditSource.isKillLeader) {
                     this.game.playerBarn.killLeaderDirty = true;
@@ -4665,7 +4734,9 @@ export class Player extends BaseGameObject {
     pickupLoot(obj: Loot) {
         if (obj.destroyed) return;
 
-        const pickup = this.game.map.mapDef.gameMode.pickup ?? true;
+        const pickup = this.game.customLoadout
+            ? this.game.customLoadout.allowPickup
+            : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
 
         const def = GameObjectDefs[obj.type];
@@ -5161,7 +5232,9 @@ export class Player extends BaseGameObject {
 
     dropItem(dropMsg: net.DropItemMsg): void {
 
-        const pickup = this.game.map.mapDef.gameMode.pickup ?? true;
+        const pickup = this.game.customLoadout
+            ? this.game.customLoadout.allowPickup
+            : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;

@@ -755,7 +755,18 @@ export class WeaponManager {
         const weapon = this.weapons[this.curWeapIdx];
         this.scheduledReload = weapon.ammo <= 1;
 
-        if (weapon.ammo <= 0 && (!itemDef.backpackFed || !this.player.invManager.has(itemDef.ammo as InventoryItem) )) return;
+        const isInfinite = this.isInfinite(itemDef);
+
+        // backpackFed guns (e.g. M249 / "M249 [+]") feed from backpack ammo, so
+        // without the endless_ammo/arena perk they still need inventory ammo to
+        // fire; with infinite ammo they fire freely even on an empty clip/backpack.
+        if (
+            weapon.ammo <= 0 &&
+            (!itemDef.backpackFed ||
+                (!isInfinite && !this.player.invManager.has(itemDef.ammo as InventoryItem)))
+        ) {
+            return;
+        }
 
         const firstShotAccuracy = weapon.recoilTime <= 0;
 
@@ -778,7 +789,9 @@ export class WeaponManager {
         this.player.cancelAction();
 
         if (itemDef.backpackFed){
-            if (this.player.invManager.isValid(itemDef.ammo) && this.player.invManager.has(itemDef.ammo as InventoryItem)) {
+            // with infinite ammo, don't drain backpack ammo (and allow firing
+            // even when there is none)
+            if (!isInfinite && this.player.invManager.isValid(itemDef.ammo) && this.player.invManager.has(itemDef.ammo as InventoryItem)) {
                 this.player.invManager.take(itemDef.ammo, 1);
             }
         }else {

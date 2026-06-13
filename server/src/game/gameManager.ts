@@ -5,10 +5,13 @@ import { platform } from "os";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
 import * as net from "../../../shared/net/net";
 import { Config } from "../config";
+import { gameLogger } from "../utils/betterLogger";
+import { logErrorToWebhook } from "../utils/serverHelpers";
 import type {
     AdminCmdAction,
     DashboardPlayer,
     FindGamePrivateBody,
+    FindPrivateLobbyGameBody,
     GameData,
     GameSocketData,
     ServerGameConfig,
@@ -24,6 +27,9 @@ export abstract class GameManager {
 
     abstract findGame(body: FindGamePrivateBody): Promise<string>;
 
+    /** Spins up a fresh isolated game from a private lobby and registers each team's players as its own join group. */
+    abstract createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string>;
+
     abstract findGameById(gameId: string, playerData: any[], autoFill: boolean): Promise<string>;
     abstract getGames(): Promise<GameData[]>;
 
@@ -33,8 +39,14 @@ export abstract class GameManager {
     /** Returns live player data for a running game (for the moderation dashboard). */
     abstract getGamePlayers(gameId: string): Promise<DashboardPlayer[]>;
 
+    /** Returns the recent kill-feed buffer for a running game (for the moderation dashboard). */
+    abstract getGameFeed(gameId: string): Promise<import("../utils/types").KillFeedEntry[]>;
+
     /** Sends an admin command to a running game (fire-and-forget). */
     abstract sendAdminCmd(gameId: string, cmd: AdminCmdAction): void;
+
+    /** Sets verified-only mode on all running games and all future games. */
+    abstract setServerVerified(state: boolean): void;
 
     abstract onOpen(socketId: string, socket: WebSocket<GameSocketData>): void;
 
@@ -52,6 +64,8 @@ export class SingleThreadGameManager implements GameManager {
 
     readonly gamesById = new Map<string, Game>();
     readonly games: Game[] = [];
+
+    serverVerifiedOnly = false;
 
     constructor() {
         // setInterval on windows sucks
@@ -92,13 +106,38 @@ export class SingleThreadGameManager implements GameManager {
                 this.gamesById.delete(game.id);
                 continue;
             }
-            game.update();
+            try {
+                game.update();
+            } catch (err) {
+                // Single-thread mode runs every game in THIS (the only) process, so an
+                // unguarded throw here crashes the whole server and every other game on
+                // it. Isolate the failure: stop just this game; it is reaped next tick.
+                this.reportGameCrash(game, "update", err);
+            }
         }
     }
 
     netSync(): void {
         for (let i = 0; i < this.games.length; i++) {
-            this.games[i].netSync();
+            try {
+                this.games[i].netSync();
+            } catch (err) {
+                this.reportGameCrash(this.games[i], "netSync", err);
+            }
+        }
+    }
+
+    private reportGameCrash(game: Game, context: string, err: unknown): void {
+        const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
+        gameLogger.error(`[SingleThread] game.${context} crashed (game ${game.id}): ${details}`);
+        void logErrorToWebhook("server", `[SingleThread] game.${context} crashed`, err);
+        try {
+            game.stop();
+        } catch (stopErr) {
+            gameLogger.error(`[SingleThread] stop() also failed (game ${game.id}):`, stopErr);
+            // Force-mark so the broken game is removed on the next update() tick even
+            // if stop() itself threw.
+            game.stopped = true;
         }
     }
 
@@ -134,6 +173,7 @@ export class SingleThreadGameManager implements GameManager {
             },
         );
         await game.init();
+        game.verifiedOnly = this.serverVerifiedOnly;
         this.games.push(game);
         this.gamesById.set(id, game);
         return game;
@@ -163,8 +203,31 @@ export class SingleThreadGameManager implements GameManager {
             });
         }
 
+        if (game.verifiedOnly && body.playerData.some((p) => !p.userId)) {
+            return "player_not_verified";
+        }
+
         game.addJoinTokens(body.playerData, body.autoFill);
 
+        return game.id;
+    }
+
+    async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
+        const game = await this.newGame({
+            teamMode: body.teamMode,
+            mapName: body.mapName as keyof typeof MapDefs,
+            isPrivate: true,
+            arenaRoles: body.arenaRoles,
+            advancedSettings: body.advancedSettings,
+            customLoadout: body.customLoadout,
+            customLoadoutEnabled: body.customLoadoutEnabled,
+            publicSpectating: body.publicSpectating,
+        });
+
+        game.addGroupedJoinTokens(body.teams);
+        if (body.spectators?.length) {
+            game.addJoinTokensAsSpectator(body.spectators, false);
+        }
         return game.id;
     }
 
@@ -193,8 +256,20 @@ export class SingleThreadGameManager implements GameManager {
         return this.gamesById.get(gameId)?.getPlayerDataForDashboard() ?? [];
     }
 
+    async getGameFeed(gameId: string): Promise<import("../utils/types").KillFeedEntry[]> {
+        return this.gamesById.get(gameId)?.recentKills ?? [];
+    }
+
     sendAdminCmd(gameId: string, cmd: AdminCmdAction): void {
         this.gamesById.get(gameId)?.executeAdminCmd(cmd);
+    }
+
+    setServerVerified(state: boolean): void {
+        this.serverVerifiedOnly = state;
+        const cmd: AdminCmdAction = { action: state ? "verify" : "unverify" };
+        for (const game of this.games) {
+            game.executeAdminCmd(cmd);
+        }
     }
 
     onOpen(socketId: string, socket: WebSocket<GameSocketData>): void {

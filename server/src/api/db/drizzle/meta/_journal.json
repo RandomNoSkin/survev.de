@@ -5,64 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1745172979186,
-      "tag": "0000_same_falcon",
+      "when": 1781272234082,
+      "tag": "0000_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1750964146027,
-      "tag": "0001_lovely_skrulls",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1751241098146,
-      "tag": "0002_brown_lizard",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1756778270320,
-      "tag": "0003_cool_skrulls",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1760380431165,
-      "tag": "0004_famous_mulholland_black",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1774344867631,
-      "tag": "0005_spotty_blue_shield",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1774964033051,
-      "tag": "0006_charming_dragon_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1774966739851,
-      "tag": "0007_dizzy_swarm",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1780174976950,
-      "tag": "0008_sweet_mole_man",
+      "when": 1781277007470,
+      "tag": "0001_ban_history",
       "breakpoints": true
     }
   ]
