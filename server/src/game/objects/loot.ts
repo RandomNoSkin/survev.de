@@ -326,6 +326,22 @@ export class Loot extends BaseGameObject {
         this.push(dir ?? v2.randomUnit(), pushSpeed);
     }
 
+    /**
+     * Whether this loot needs loot-to-loot collision resolution this tick.
+     * Settled loot (no velocity and didn't move last tick) is "asleep" and only
+     * participates as a collision *target* — never as the driver — so big settled
+     * piles don't cost O(n²) every tick. Mirrors the velocity/pos terms of the
+     * `shouldUpdate` check in `update()` (the forceUpdateTicker wake only matters for
+     * obstacle re-resolution, not loot-loot, so it's intentionally excluded here).
+     */
+    isAwake(): boolean {
+        return (
+            Math.abs(this.vel.x) > 0.001 ||
+            Math.abs(this.vel.y) > 0.001 ||
+            !v2.eq(this.oldPos, this.pos)
+        );
+    }
+
     updatePos(newPos: Vec2): void {
         this.pos = v2.copy(newPos);
         this.game.map.clampToMapBounds(this.pos, this.rad);

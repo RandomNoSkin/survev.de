@@ -21,6 +21,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             port: 8001,
             apiServerUrl: "",
             thisRegion: "local",
+            maxGames: 12,
         },
         vite: {
             host: "127.0.0.1",

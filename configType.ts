@@ -52,6 +52,15 @@ export interface ConfigType {
          * Should be a valid key from the `regions` object.
          */
         thisRegion: string;
+
+        /**
+         * Hard cap on the number of concurrent game processes (multi-process mode).
+         * Each game runs in its own Node process (~50-100MB), so on a small box this
+         * bounds total memory and prevents the fork/retry storm from OOM-killing the
+         * server. When the cap is reached, find_game/createPrivateGame fail fast and the
+         * client retries shortly instead of spawning unbounded processes.
+         */
+        maxGames: number;
     };
 
     /**
