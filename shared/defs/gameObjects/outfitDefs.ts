@@ -1437,7 +1437,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             sprite: "loot-shirt-outfitBase.img",
             tint: 0x72cc85,
         }
-    )};
+    }),
     outfitNordCode: defineOutfitSkin("outfitBase", { //philipp and g0dak special DO NOT USE FOR PASS
         name: "Nord Code",
         rarity: Rarity.Mythic,
