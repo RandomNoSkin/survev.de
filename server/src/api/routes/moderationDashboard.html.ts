@@ -867,6 +867,40 @@ async function doLookup(query) {
   } catch (e) { res.innerHTML = '<div class="empty">No results found.</div>'; }
 }
 
+function banTypeLabel(t) {
+  return t === 'ip' ? 'IP' : t === 'account' ? 'ACCOUNT' : t === 'chat' ? 'CHAT' : esc(t);
+}
+
+// Inline "Ban History" card: from → until · by whom · reason · status.
+// Used in both the player and IP detail views (data.banHistory from the API).
+function renderBanHistory(history) {
+  const inner = (!history || !history.length)
+    ? '<div class="empty">No ban history.</div>'
+    : \`<table class="data-table">
+        <thead><tr><th>Type</th><th>From</th><th>Until</th><th>By</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>\${history.map(h => {
+          const lifted = !!h.unbannedAt;
+          const expired = !lifted && !h.permanent && h.expiresAt && new Date(h.expiresAt) <= new Date();
+          const status = lifted ? 'LIFTED' : expired ? 'EXPIRED' : 'ACTIVE';
+          const badge = status === 'ACTIVE' ? 'badge-perm' : status === 'LIFTED' ? 'badge-temp' : 'badge-disc';
+          const until = lifted
+            ? \`lifted \${fmtDate(h.unbannedAt)}\${h.unbannedBy ? ' by ' + esc(h.unbannedBy) : ''}\`
+            : h.permanent ? 'permanent'
+            : h.expiresAt ? fmtDate(h.expiresAt)
+            : 'until lifted';
+          return \`<tr>
+            <td><span class="badge badge-disc">\${banTypeLabel(h.banType)}</span></td>
+            <td style="white-space:nowrap;font-size:11px;">\${fmtDate(h.bannedAt)}</td>
+            <td style="white-space:nowrap;font-size:11px;">\${until}</td>
+            <td>\${esc(h.bannedBy || '–')}</td>
+            <td>\${esc(h.reason || '–')}</td>
+            <td><span class="badge \${badge}">\${status}</span></td>
+          </tr>\`;
+        }).join('')}</tbody>
+      </table>\`;
+  return \`<div class="detail-card" style="margin-top:12px;"><h3>Ban History</h3>\${inner}</div>\`;
+}
+
 function renderIpDetail(data, container) {
   const banInfo = data.banned
     ? \`<span class="badge badge-perm">BANNED</span> \${esc(data.banRecord?.reason || '')}\`
@@ -898,6 +932,7 @@ function renderIpDetail(data, container) {
       </div>
       <div id="chat-log-panel" style="display:none;margin-top:10px;"></div>
     </div>
+    \${renderBanHistory(data.banHistory)}
     <div style="margin-top:12px;">
       <table class="data-table">
         <thead><tr><th>Name</th><th>Slug</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>
@@ -925,6 +960,7 @@ function renderPlayerDetail(data, container) {
       </div>
     </div>
     <div id="chat-log-panel" style="display:none;margin-top:12px;"></div>
+    \${renderBanHistory(data.banHistory)}
     <div style="margin-top:12px;">
       <table class="data-table">
         <thead><tr><th>IP Hash</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>

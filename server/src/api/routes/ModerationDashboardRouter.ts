@@ -27,7 +27,7 @@
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
  */
 
-import { and, asc, desc, eq, gt, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
@@ -35,7 +35,7 @@ import { util } from "../../../../shared/utils/util";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { banCommentsTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
+import { banCommentsTable, banHistoryTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
 import { server } from "../apiServer";
 import type { Context } from "..";
 import { z } from "zod";
@@ -95,6 +95,32 @@ async function fetchAllBans() {
         db.query.chatBannedIpsTable.findMany({ orderBy: [desc(chatBannedIpsTable.createdAt)] }),
     ]);
     return { ipBans, accountBans, chatBans };
+}
+
+/** Appends a ban event to the audit log (`ban_history`). */
+async function recordBan(entry: {
+    banType: "ip" | "account" | "chat";
+    banTarget: string;
+    reason: string;
+    bannedBy: string;
+    expiresAt: Date | null;
+    permanent: boolean;
+}) {
+    await db.insert(banHistoryTable).values(entry);
+}
+
+/** Closes all still-active history entries for a target (sets unban time + actor). */
+async function recordUnban(banType: "ip" | "account" | "chat", banTarget: string, unbannedBy: string) {
+    await db
+        .update(banHistoryTable)
+        .set({ unbannedAt: new Date(), unbannedBy })
+        .where(
+            and(
+                eq(banHistoryTable.banType, banType),
+                eq(banHistoryTable.banTarget, banTarget),
+                isNull(banHistoryTable.unbannedAt),
+            ),
+        );
 }
 
 /**
@@ -183,6 +209,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     .where(inArray(usersTable.id, userIds));
             }
 
+            await recordBan({ banType: "ip", banTarget: ip, reason, bannedBy: admin.slug, expiresAt: expiresIn, permanent });
+
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -203,6 +231,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .update(usersTable)
                 .set({ banned: true, banReason: reason, bannedBy: admin.slug })
                 .where(eq(usersTable.slug, slug));
+
+            await recordBan({ banType: "account", banTarget: slug, reason, bannedBy: admin.slug, expiresAt: null, permanent: false });
 
             broadcastBans();
             return c.json({ ok: true });
@@ -231,6 +261,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     set: { reason, expiresIn, permanent, bannedBy: admin.slug },
                 });
 
+            await recordBan({ banType: "chat", banTarget: ip, reason, bannedBy: admin.slug, expiresAt: expiresIn, permanent });
+
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -241,6 +273,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
         "/api/unban/ip",
         validateParams(z.object({ ip: z.string() })),
         async (c) => {
+            const admin = c.get("user")!;
             const { ip } = c.req.valid("json");
 
             await db.delete(bannedIpsTable).where(eq(bannedIpsTable.encodedIp, ip));
@@ -259,6 +292,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     .where(inArray(usersTable.id, userIds));
             }
 
+            await recordUnban("ip", ip, admin.slug);
+
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -269,11 +304,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
         "/api/unban/account",
         validateParams(z.object({ slug: z.string() })),
         async (c) => {
+            const admin = c.get("user")!;
             const { slug } = c.req.valid("json");
             await db
                 .update(usersTable)
                 .set({ banned: false, banReason: "", bannedBy: "" })
                 .where(eq(usersTable.slug, slug));
+            await recordUnban("account", slug, admin.slug);
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -284,8 +321,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
         "/api/unban/chat",
         validateParams(z.object({ ip: z.string() })),
         async (c) => {
+            const admin = c.get("user")!;
             const { ip } = c.req.valid("json");
             await db.delete(chatBannedIpsTable).where(eq(chatBannedIpsTable.encodedIp, ip));
+            await recordUnban("chat", ip, admin.slug);
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -336,7 +375,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/ip/:hash", async (c) => {
         const hash = c.req.param("hash");
 
-        const [banRecord, rows] = await Promise.all([
+        const [banRecord, rows, banHistory] = await Promise.all([
             db.query.bannedIpsTable.findFirst({
                 where: eq(bannedIpsTable.encodedIp, hash),
             }),
@@ -355,6 +394,18 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
                 .orderBy(desc(ipLogsTable.createdAt))
                 .limit(200),
+            // Full ban history for this IP (IP + chat bans target the hash directly).
+            db
+                .select()
+                .from(banHistoryTable)
+                .where(
+                    and(
+                        inArray(banHistoryTable.banType, ["ip", "chat"]),
+                        eq(banHistoryTable.banTarget, hash),
+                    ),
+                )
+                .orderBy(desc(banHistoryTable.bannedAt))
+                .limit(100),
         ]);
 
         // Collect ISP and deduplicate recent names from ip_logs
@@ -396,7 +447,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
         }
 
-        return c.json({ hash, isp, banned: !!banRecord, banRecord, accounts });
+        return c.json({ hash, isp, banned: !!banRecord, banRecord, accounts, banHistory });
     })
 
     /**
@@ -514,7 +565,36 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
         }
 
-        return c.json({ name, ips });
+        // Aggregate ban history across all of this player's targets: their IP hashes
+        // (ip + chat bans) and any linked account slug(s) (account bans).
+        const hashes = [...seenIps];
+        const slugs = [...new Set(ips.map((i) => i.slug).filter((s): s is string => !!s))];
+        const banHistory =
+            hashes.length || slugs.length
+                ? await db
+                      .select()
+                      .from(banHistoryTable)
+                      .where(
+                          or(
+                              hashes.length
+                                  ? and(
+                                        inArray(banHistoryTable.banType, ["ip", "chat"]),
+                                        inArray(banHistoryTable.banTarget, hashes),
+                                    )
+                                  : undefined,
+                              slugs.length
+                                  ? and(
+                                        eq(banHistoryTable.banType, "account"),
+                                        inArray(banHistoryTable.banTarget, slugs),
+                                    )
+                                  : undefined,
+                          ),
+                      )
+                      .orderBy(desc(banHistoryTable.bannedAt))
+                      .limit(100)
+                : [];
+
+        return c.json({ name, ips, banHistory });
     })
 
     // ─────────────────────────────────────────────────────────────────────────

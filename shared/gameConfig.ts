@@ -237,8 +237,14 @@ export const GameConfig = {
                 "Weekend 2": {
                     maps: ["comp"],
                     start: "2026-06-12T00:00:00Z",
-                    end:   "2026-06-14T23:59:59Z",
+                    end:   "2026-06-13T23:59:59Z",
                     boost: 2,
+                },
+                "Philipp Birthday": {
+                    maps: ["local", "comp", "two_vs_two"],
+                    start: "2026-06-14T00:00:00Z",
+                    end:   "2026-06-14T23:59:59Z",
+                    boost: 2.5,
                 },
                 "Weekend 3": {
                     maps: ["local", "comp"],
