@@ -63,6 +63,24 @@ process.on("message", async (msg: ProcessMsg) => {
     }
 
     try {
+    if (msg.type === ProcessMsgType.Create && game) {
+        // The parent only ever sends Create to a process whose previous game has
+        // stopped (stop() resets `game` to undefined synchronously). If `game` is still
+        // set here, parent/child state has desynced. Do NOT clobber it — it might be a
+        // live game with real players. Just log loudly so the desync is visible; the
+        // parent-side fix (findGame skips stopped procs + canJoin=false when stopped)
+        // should prevent this from ever happening.
+        gameLogger.warn(
+            "Create received while a game still existed — ignoring (parent/child desync)",
+        );
+        void logErrorToWebhook(
+            "server",
+            "Create received while a game still existed (parent/child desync)",
+            new Error("stale game on Create"),
+        );
+        return;
+    }
+
     if (msg.type === ProcessMsgType.Create && !game) {
         game = new Game(
             msg.id,
@@ -89,28 +107,19 @@ process.on("message", async (msg: ProcessMsg) => {
             },
         );
 
-        // Break creation down so the find_game creation timeout is explainable in
-        // Discord: process startup (fork + Node bootstrap + module load) vs map
-        // generation (game.init). startupMs ≈ time from this child being spawned to
-        // it actually starting the map build.
-        const startupMs = Math.round(process.uptime() * 1000);
+        // Measure just the map generation (game.init). The overall create→ready latency
+        // (incl. fork + Node bootstrap for a fresh process) is measured authoritatively
+        // by the PARENT via createStartTime; we send initMs along so the parent can log
+        // the breakdown (latency − init = fork/boot overhead). Note: the old code logged
+        // `process.uptime()` as "startup", which for a REUSED process is the process age
+        // (minutes) — pure noise that spammed false "slow creation" webhooks.
         const initStart = Date.now();
         await game.init();
         const initMs = Date.now() - initStart;
-        gameLogger.info(
-            `Game "${msg.config.mapName}" ready — startup ${startupMs}ms + init ${initMs}ms`,
-        );
-        // Surface the breakdown to the webhook when it gets close to the creation
-        // timeout, so we can see WHY find_game timed out (startup vs map-gen).
-        if (startupMs + initMs > 3000) {
-            void logErrorToWebhook(
-                "server",
-                `Slow game creation for "${msg.config.mapName}" (teamMode=${msg.config.teamMode}): ` +
-                    `process startup ${startupMs}ms + map/init ${initMs}ms = ${startupMs + initMs}ms total`,
-            );
-        }
+        gameLogger.info(`Game "${msg.config.mapName}" ready — init ${initMs}ms`);
         sendMsg({
             type: ProcessMsgType.Created,
+            initMs,
         });
     }
 

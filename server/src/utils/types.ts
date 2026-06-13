@@ -157,6 +157,10 @@ export interface CreateGameMsg {
 
 export interface GameCreatedMsg {
     type: ProcessMsgType.Created;
+    /** Time spent inside game.init() (map gen + plugins), measured in the child. The
+     *  parent logs this alongside the create→ready latency so the cold-fork overhead
+     *  (latency minus init) is visible. */
+    initMs?: number;
 }
 
 export interface KeepAliveMsg {

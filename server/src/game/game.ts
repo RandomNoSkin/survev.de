@@ -317,6 +317,10 @@ export class Game {
 
         if (tickTime > 1000) {
             let errString = `Tick took over 1 second! ${tickTime.toFixed(2)}ms\n`;
+            // Loot count is the key signal: an unbounded, dense loot pile is what made the
+            // loot collision pass blow a tick up to 24-84s in prod. Surface it in the
+            // webhook alongside the profiler so the cause is obvious at a glance.
+            errString += `Objects: loots=${this.lootBarn.loots.length}, players=${this.playerBarn.players.length}, objSlots=${this.objectRegister.objects.length}\n`;
             errString += "Profiler stats:\n";
             errString += this.profiler.getStats();
             this.logger.error(errString);
@@ -328,6 +332,7 @@ export class Game {
 
             if (this.gameTickWarnings > 20) {
                 let errString = `Server is overloaded! Increasing tickTimeWarnThreshold.\n`;
+                errString += `Objects: loots=${this.lootBarn.loots.length}, players=${this.playerBarn.players.length}, objSlots=${this.objectRegister.objects.length}\n`;
                 errString += "Profiler stats:\n";
                 errString += this.profiler.getStats();
                 this.logger.warn(errString);
@@ -400,6 +405,12 @@ export class Game {
 
     get canJoin(): boolean {
         return (
+            // A stopped game must never advertise itself as joinable. An empty game is
+            // reaped via `aliveCount === 0` WITHOUT setting `over`, so without this check
+            // a just-stopped game still reports canJoin=true in its final UpdateData —
+            // which made findGame match a dead process and wait for a "Created" that never
+            // comes (the repeated 8s find_game timeouts on the same game id).
+            !this.stopped &&
             !this.isPrivate &&
             this.aliveCount < this.map.mapDef.gameMode.maxPlayers &&
             !this.over &&

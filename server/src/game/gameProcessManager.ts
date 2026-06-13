@@ -5,6 +5,7 @@ import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import type { TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import { util } from "../../../shared/utils/util";
+import { Config } from "../config";
 import { ServerLogger } from "../utils/logger";
 import {
     type AdminCmdAction,
@@ -85,20 +86,24 @@ class GameProcess implements GameData {
                     this.created = true;
                     this.stopped = false;
                     this.creating = false;
-                    // How long fork + map generation took. This is the latency that,
-                    // under load, can exceed the find_game abort timeout — log it (and
-                    // warn when it gets close) so the bottleneck is visible.
+                    // Real create→ready latency (what find_game actually waits on):
+                    // from when we sent Create to this "Created". For a fresh fork this
+                    // includes fork + Node bootstrap; for a reused process it's basically
+                    // just init. `initMs` (map gen, from the child) lets us split out the
+                    // fork/boot overhead so a slow number points at the right cause.
                     const elapsed = this.createStartTime
                         ? Date.now() - this.createStartTime
                         : 0;
+                    const initMs = msg.initMs ?? 0;
+                    const overhead = Math.max(elapsed - initMs, 0);
                     this.manager.logger.info(
-                        `Game #${this.id.substring(0, 4)} (${this.mapName}) created in ${elapsed}ms`,
+                        `Game #${this.id.substring(0, 4)} (${this.mapName}) created in ${elapsed}ms (init ${initMs}ms, overhead ${overhead}ms)`,
                     );
                     if (elapsed > 3000) {
-                        // .error so it reaches the webhook — slow creation is the
-                        // thing that pushes find_game toward the abort timeout.
+                        // .error so it reaches the webhook. overhead ≫ init ⇒ cold fork /
+                        // boot is the cost; init ≫ overhead ⇒ map gen is the cost.
                         this.manager.logger.error(
-                            `Slow game creation: ${elapsed}ms for ${this.mapName} (PID ${this.process.pid})`,
+                            `Slow game creation: ${elapsed}ms for ${this.mapName} (init ${initMs}ms, overhead ${overhead}ms, PID ${this.process.pid})`,
                         );
                     }
                     for (const cb of this.onCreatedCbs) {
@@ -297,6 +302,9 @@ export class GameProcessManager implements GameManager {
 
     readonly logger = new ServerLogger("Game Process Manager");
 
+    /** Counts the 5s watchdog ticks so the heartbeat log fires roughly every 30s. */
+    private heartbeatTicks = 0;
+
     constructor() {
         process.on("beforeExit", () => {
             for (const gameProc of this.processes) {
@@ -314,9 +322,14 @@ export class GameProcessManager implements GameManager {
                     this.logger.warn(
                         `Process ${gameProc.process.pid} - #${gameProc.id.substring(0, 4)} did not send a message in more 10 seconds, killing`,
                     );
-                    // sigquit can dump a core of the process
-                    // useful for debugging infinite loops
-                    this.killProcess(gameProc, "SIGQUIT");
+                    // SIGQUIT dumps a core, which is useful for debugging infinite loops
+                    // locally — but in prod a loot blowup wedges several processes at once,
+                    // and a core dump per wedged process floods the disk/IO and makes the
+                    // outage worse. Use SIGKILL in prod, SIGQUIT only in dev.
+                    this.killProcess(
+                        gameProc,
+                        process.env.NODE_ENV === "production" ? "SIGKILL" : "SIGQUIT",
+                    );
                 } else if (
                     gameProc.stopped &&
                     Date.now() - gameProc.stoppedTime > 60000
@@ -325,6 +338,29 @@ export class GameProcessManager implements GameManager {
                         `Process ${gameProc.process.pid} - #${gameProc.id.substring(0, 4)} stopped more than a minute ago, killing`,
                     );
                     this.killProcess(gameProc);
+                }
+            }
+
+            // Heartbeat (~every 30s): the OOM that took the server down was driven by the
+            // number of game processes (each its own ~50-100MB Node instance), so log the
+            // process census as the early-warning signal. main-process RSS is included for
+            // completeness, but it only covers THIS process — the children are separate.
+            if (++this.heartbeatTicks >= 6) {
+                this.heartbeatTicks = 0;
+                const active = this.processes.filter((p) => !p.stopped).length;
+                const creating = this.processes.filter((p) => p.creating).length;
+                const totalPlayers = this.processes.reduce((a, p) => a + p.aliveCount, 0);
+                const rssMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+                const maxGames = Config.gameServer.maxGames;
+                const summary =
+                    `Heartbeat: procs=${this.processes.length}/${maxGames} ` +
+                    `(active=${active}, creating=${creating}), players=${totalPlayers}, mainRss=${rssMb}MB`;
+                // Warn loudly (→ webhook) once we're near the cap: that's when a further
+                // spike risks OOM and find_game starts fast-failing.
+                if (this.processes.length >= maxGames * 0.8) {
+                    this.logger.error(`${summary} — near maxGames cap`);
+                } else {
+                    this.logger.info(summary);
                 }
             }
         }, 5000);
@@ -336,7 +372,15 @@ export class GameProcessManager implements GameManager {
         }, 0);
     }
 
-    newGame(config: ServerGameConfig): GameProcess {
+    /**
+     * Returns a game process to host `config`, reusing an idle (stopped) process if one
+     * is free. Returns `undefined` when a new process would have to be forked but the
+     * `maxGames` cap is already reached — the caller must fail the request fast (the
+     * client retries) rather than spawn unbounded processes. Forking past the host's RAM
+     * budget is what OOM-killed the server: each game is its own ~50-100MB Node process,
+     * and a find_game/retry storm forks them faster than they're reaped.
+     */
+    newGame(config: ServerGameConfig): GameProcess | undefined {
         let gameProc: GameProcess | undefined;
 
         for (let i = 0; i < this.processes.length; i++) {
@@ -349,6 +393,13 @@ export class GameProcessManager implements GameManager {
 
         const id = randomUUID();
         if (!gameProc) {
+            if (this.processes.length >= Config.gameServer.maxGames) {
+                this.logger.warn(
+                    `maxGames cap (${Config.gameServer.maxGames}) reached — refusing to fork a new process; failing request ` +
+                        `[procs=${this.processes.length}, active=${this.processes.filter((p) => !p.stopped).length}, creating=${this.processes.filter((p) => p.creating).length}]`,
+                );
+                return undefined;
+            }
             gameProc = new GameProcess(this, id, config);
 
             this.processes.push(gameProc);
@@ -416,9 +467,13 @@ export class GameProcessManager implements GameManager {
     }
 
     async findGame(body: FindGamePrivateBody): Promise<string> {
-        let game = this.processes
+        let game: GameProcess | undefined = this.processes
             .filter((proc) => {
                 return (
+                    // Never match a stopped process: its child has no game and will never
+                    // send "Created", so waiting on it just burns the 8s find_game timeout
+                    // (and a stopped game could still report a stale canJoin=true).
+                    !proc.stopped &&
                     (proc.canJoin || proc.creating) &&
                     proc.avaliableSlots > 0 &&
                     proc.teamMode === body.teamMode &&
@@ -434,6 +489,12 @@ export class GameProcessManager implements GameManager {
                 teamMode: body.teamMode,
                 mapName: body.mapName as keyof typeof MapDefs,
             });
+        }
+
+        // Cap reached (no idle process and at maxGames) — fail fast so the client
+        // retries in a moment instead of us forking past the RAM budget.
+        if (!game) {
+            return "";
         }
 
         // if the game has not finished creating
@@ -502,17 +563,32 @@ export class GameProcessManager implements GameManager {
             publicSpectating: body.publicSpectating,
         });
 
+        // Cap reached — no process available to host the private lobby right now.
+        if (!game) {
+            return "";
+        }
+
         // if the game has not finished creating
         // wait for it to be created before registering the join groups
         if (!game.created) {
-            return await new Promise((resolve) => {
+            return await new Promise<string>((resolve) => {
+                let settled = false;
+                const settle = (value: string) => {
+                    if (settled) return;
+                    settled = true;
+                    resolve(value);
+                };
                 game.onCreatedCbs.push((game) => {
                     game.addGroupedJoinTokens(body.teams);
                     if (body.spectators?.length) {
                         game.addJoinTokensAsSpectator(body.spectators, false);
                     }
-                    resolve(game.id);
+                    settle(game.id);
                 });
+                // Process died before "Created" — resolve immediately instead of hanging
+                // until the API server's abort timeout (the ~2 min find_private_game
+                // hangs seen in prod). Mirrors the onFailedCbs handling in findGame.
+                game.onFailedCbs.push(() => settle(""));
             });
         }
 
