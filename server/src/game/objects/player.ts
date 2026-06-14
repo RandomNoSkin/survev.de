@@ -4505,6 +4505,14 @@ export class Player extends BaseGameObject {
                             this.interactWith(interactable);
                         }
                     }
+
+                    // Interacting with a weapon upgrade bench starts a Modify
+                    // action. On mobile the client sends Interact followed by
+                    // Cancel in the same frame, so ignore that Cancel here to
+                    // avoid aborting the freshly started Modify (same as revive).
+                    if (this.isModifying()) {
+                        ignoreCancel = true;
+                    }
                     break;
                 }
                 case GameConfig.Input.Revive: {

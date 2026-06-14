@@ -8,6 +8,7 @@ export class ChatUi{
     chatInput = $("#ui-chat-wrapper");
     input = document.getElementById("ui-chat-input") as HTMLInputElement;
     button = document.getElementById("ui-chat-send");
+    chatButton = document.getElementById("ui-chat-button");
     game: Game;
     inputHandler: InputHandler;
     chatShown = false;
@@ -25,6 +26,12 @@ export class ChatUi{
         this.button?.addEventListener("click", () => {
             this.sendChatMessage.call(this);
         });
+        // Mobile: open the chat via the on-screen HUD button (no keyboard trigger)
+        this.chatButton?.style.setProperty("pointer-events", "auto");
+        this.chatButton?.addEventListener("touchstart", (e) => {
+            e.stopPropagation();
+            this.joinChat();
+        });
         // don't want to trigger keybinds (like L to fullscreen) while typing
             this.input.addEventListener("keyup", (e) => e.stopPropagation());
             this.input.addEventListener("keydown", (e) => {
@@ -39,9 +46,16 @@ export class ChatUi{
                     this.input.focus();
                 }
             });
-            window.addEventListener("mousedown", (e) =>{
+            // Close the chat when tapping/clicking outside of it. Must ignore
+            // taps inside the chat wrapper or on the chat button, otherwise on
+            // mobile focusing the input (or hitting send) would close it instantly.
+            const closeIfOutside = (e: Event) => {
+                const target = e.target as Node | null;
+                if (target && this.chatInput[0]?.contains(target)) return;
+                if (target && this.chatButton?.contains(target)) return;
                 this.leaveChat();
-            });
+            };
+            window.addEventListener("mousedown", closeIfOutside);
             window.addEventListener("keydown", (e) => {
                 if(e.key == "Escape" || e.key == "<"){
                     this.leaveChat();

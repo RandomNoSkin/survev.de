@@ -5880,6 +5880,31 @@ input [type="image"]:focus {
   color: #83af50;
 }
 
+/* Hidden by default; revealed inside the mobile media query further below. */
+.show-on-mobile {
+  display: none;
+}
+
+/* The rules modal has a fixed 860px width that overflows phone screens.
+   Make it responsive and shrink the long rules text on mobile. */
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #modal-rules .modal-content {
+    width: 92vw;
+    max-width: 92vw;
+    max-height: 88vh;
+  }
+
+  #modal-rules .modal-body p {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  #modal-rules .modal-footer h3 {
+    font-size: 16px;
+    padding: 12px 0;
+  }
+}
+
 #modal-customize {
   overflow: hidden;
   z-index: 4;
@@ -7789,7 +7814,8 @@ input [type="image"]:focus {
 
   #language-select-mobile-wrapper,
   #mobile-settings-front,
-  #btn-hamburger {
+  #btn-hamburger,
+  .show-on-mobile {
     display: block !important;
   }
 }
