@@ -457,11 +457,10 @@ export class Application {
                 if (errMsg == "player_not_verified") {
                     this.onJoinGameError(errMsg);
                 }
-
                 if (errMsg) {
                     this.showErrorModal(errMsg);
+                    console.error("Quitting", errMsg);
                 }
-                console.error("Quitting", errMsg);
                 SDK.gamePlayStop();
             };
             this.game = new Game(
