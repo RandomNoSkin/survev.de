@@ -172,6 +172,7 @@ export const _allowedEmotes = [
     "emote_logoswine",
     "emote_logohydra",
     "emote_logostorm",
+    "emote_logocult",
     "emote_flaghonduras",
     "emote_logocaduceus",
     "emote_impface",
@@ -254,6 +255,8 @@ export const _allowedEmotes = [
     "emote_flamingo",
     "emote_watermelon",
     "emote_palm",
+    "emote_smh",
+    "emote_dove",
 ];
 
 export interface UnlockDef {
@@ -432,7 +435,6 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_flagbosnia",
             "emote_logocloud",
             "emote_logotwins",
-
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,

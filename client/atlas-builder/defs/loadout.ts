@@ -150,6 +150,7 @@ export const LoadoutAtlas: AtlasDef = {
         "emotes/logo-surviv.svg",
         "emotes/logo-swine.svg",
         "emotes/logo-twins.svg",
+        "emotes/logo-cult.svg",
         "emotes/ok.svg",
         "emotes/pilgrim-hat.svg",
         "emotes/pineapple.svg",
@@ -177,6 +178,8 @@ export const LoadoutAtlas: AtlasDef = {
         "emotes/flamingo.svg",
         "emotes/watermelon.svg",
         "emotes/palm.svg",
+        "emotes/smh.svg",
+        "emotes/dove.svg",
 
         "gui/audio-off.svg",
         "gui/audio-on.svg",
