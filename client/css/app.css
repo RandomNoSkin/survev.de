@@ -3093,6 +3093,83 @@ a:active {
   width: 100%;
 }
 
+/* "Your item sold" popup — same layout as the new-item confirm, gold-themed. */
+#modal-sale-notify .modal-content {
+  animation-name: fadeIn;
+  animation-duration: 0.2s;
+  left: 50%;
+  text-decoration: none;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #modal-sale-notify .modal-content {
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+}
+#modal-sale-notify .modal-header {
+  background-color: #4a3a0c;
+}
+#modal-sale-notify .modal-header > h2 {
+  font-size: 24px;
+  text-align: center;
+}
+#modal-sale-notify .modal-body {
+  background-color: #6b540f;
+}
+#modal-sale-notify .modal-body p {
+  bottom: initial;
+  font-size: 20px;
+  line-height: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 1px 1px 1px #000;
+  top: 4px;
+  width: 100%;
+}
+#modal-sale-notify .modal-footer {
+  background-color: #4a3a0c;
+}
+#modal-sale-notify .modal-footer > .close-footer {
+  color: #fff;
+  font-size: 24px;
+  text-align: center;
+}
+#modal-sale-notify .modal-footer > .close-footer:hover,
+#modal-sale-notify .modal-footer > .close-footer:focus {
+  color: #ffdb7b;
+  cursor: pointer;
+  text-decoration: none;
+}
+#modal-sale-notify-image-outer {
+  background-color: rgba(0, 0, 0, 0.35);
+  border: 6px solid #f2d63b;
+  box-sizing: content-box;
+  margin: auto;
+  height: 160px;
+  width: 160px;
+}
+#modal-sale-notify-image-inner {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 132px;
+  height: 100%;
+  width: 100%;
+}
+.modal-sale-detail {
+  color: #ffdb7b;
+  margin-top: 8px;
+}
+/* Inline Golden Fries icon used in the "item sold" line (same SVG as the HUD). */
+.sale-fries-icon {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+  margin: 0 2px;
+  background: url(/img/gui/golden-fries.svg) center / contain no-repeat;
+}
+
 #modal-mobile-account > .modal-content {
   right: 0;
   bottom: 0;
@@ -5298,6 +5375,7 @@ a:active {
 #start-top-left > div {
   font-size: 16px;
   color: rgba(255, 255, 255, 0.9);
+  display: flex;
 }
 
 #start-top-left > img {
@@ -5305,6 +5383,706 @@ a:active {
   bottom: 12px;
   left: 0;
   width: 30px;
+}
+
+/* Golden Fries balance pill (top-left HUD) — dark interior, glowing gold border */
+#golden-fries-container{
+  position:relative;
+}
+
+#golden-fries-balance {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+  margin-left: 30px;
+  padding: 8px 26px;
+  width: 150px;
+  height: 40px;
+  background: linear-gradient(
+    180deg,
+    rgba(46, 42, 14, 0.85) 0%,
+    rgba(22, 20, 6, 0.92) 100%
+  );
+  border: 2px solid #f5d840;
+  border-radius: 14px;
+  box-shadow:
+    0 0 4px rgba(245, 216, 64, 0.9),
+    0 0 12px rgba(245, 216, 64, 0.4),
+    inset 0 0 10px rgba(0, 0, 0, 0.6);
+}
+
+/* Set font-size/color on the number directly: the `#start-top-left > div`
+   rule is more specific than `#golden-fries-balance` and would otherwise win. */
+#golden-fries-amount {
+  flex: 1;
+  text-align: center;
+  font-size: 25px;
+  font-weight: 700;
+  color: #f2d63b;
+  text-shadow: 0 0 4px rgba(245, 216, 64, 0.5);
+}
+
+.golden-fries-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  background-image: url(/img/gui/golden-fries.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+/* Golden Fries unlock animation: pill pulse/glow + icon bounce.
+   Fixed 2s duration to match FRIES_ANIM_MS in goldenFriesFx.ts. */
+.golden-fries-unlock {
+  animation: golden-fries-unlock 2s ease-in-out;
+}
+
+@keyframes golden-fries-unlock {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 0 4px rgba(245, 216, 64, 0.9),
+      0 0 12px rgba(245, 216, 64, 0.4),
+      inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+  25% {
+    transform: scale(1.12);
+    border-color: #fff0a0;
+    box-shadow:
+      0 0 10px rgba(245, 216, 64, 1),
+      0 0 28px rgba(245, 216, 64, 0.85),
+      inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 4px rgba(245, 216, 64, 0.9),
+      0 0 12px rgba(245, 216, 64, 0.4),
+      inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Keeps the -50% vertical centering while bouncing the icon. */
+.golden-fries-unlock .golden-fries-icon {
+  animation: golden-fries-icon-bounce 0.7s ease-in-out;
+}
+
+@keyframes golden-fries-icon-bounce {
+  0%,
+  100% {
+    transform: translateY(-50%) scale(1) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-50%) scale(1.35) rotate(-9deg);
+  }
+  60% {
+    transform: translateY(-50%) scale(1.12) rotate(7deg);
+  }
+}
+
+/* Full-screen fries particle overlay (non-interactive). */
+.golden-fries-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 100000;
+}
+
+.golden-fries-particle {
+  position: absolute;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  background: url(/img/gui/golden-fries.svg) center / contain no-repeat;
+  will-change: transform, opacity;
+  animation-name: golden-fries-rain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes golden-fries-rain {
+  0% {
+    transform: translate(0, -20vh) rotate(0deg) scale(var(--scale, 1));
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--drift, 0), 110vh) rotate(var(--rot, 0deg))
+      scale(var(--scale, 1));
+    opacity: 0;
+  }
+}
+
+/* ===== Golden Fries shop ===== */
+/* id-prefixed so it beats `#start-top-left > div` (colour/font-size). */
+#start-top-left .golden-fries-shop-btn {
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  display: flex;
+  margin-top: 12px;
+  margin-left: 30px;
+  padding: 8px 26px;
+  width: 150px;
+  height: 40px;
+  background: linear-gradient(180deg, #f5d840 0%, #caa022 100%);
+  color: #2a230a;
+  font-weight: 700;
+  font-size: 25px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(245, 216, 64, 0.6);
+  user-select: none;
+}
+#start-top-left .golden-fries-shop-btn:hover {
+  filter: brightness(1.08);
+}
+
+#modal-shop {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+#modal-shop .modal-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  max-width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #34401f;
+  border: 2px solid #f5d840;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.shop-header {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 12px;
+  background: #2a230a;
+  padding: 12px 18px;
+}
+.shop-header h2 {
+  position:absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  flex: 1;
+}
+
+.shop-header .close-corner {
+    margin-left: auto;
+}
+
+.shop-balance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 25px;
+}
+
+#shop-balance-amount {
+  font-size: 22px;
+}
+
+.shop-fries-icon {
+  width: 32px;
+  height: 32px;
+  background: url(/img/gui/golden-fries.svg) center/contain no-repeat;
+  flex-shrink: 0;
+}
+.shop-tabs {
+  display: flex;
+  background: #2a230a;
+  border-top: 1px solid rgba(245, 216, 64, 0.25);
+}
+.shop-tab {
+  padding: 8px 18px;
+  cursor: pointer;
+  color: #ccc;
+  font-weight: 700;
+  border-bottom: 3px solid transparent;
+}
+.shop-tab-active {
+  color: #f2d63b;
+  border-bottom-color: #f5d840;
+}
+.shop-reset-timer {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #ccc;
+  white-space: nowrap;
+}
+.shop-reset-timer-value {
+  color: #f2d63b;
+  font-variant-numeric: tabular-nums;
+}
+.shop-body {
+  overflow-y: auto;
+  padding: 16px;
+}
+.shop-offers {
+  display: flex;
+  gap: 10%;
+  padding: 20px;
+  padding-top: 50px;
+  padding-bottom: 50px;
+  justify-content: center;
+}
+/* Market listings: wrap into rows of at most 3 (the max-width caps it at 3 of the
+ * fixed-280px cards). Flex-wrap means rows wrap instead of scrolling horizontally.
+ * Spacing matches the original single-row shop layout. */
+#market-listings.market-listings {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px 40px;
+  padding: 50px 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+#market-listings .shop-offer {
+  flex: 0 0 auto;
+}
+.shop-status {
+  color: #ddd;
+  padding: 24px;
+  text-align: center;
+  width: 100%;
+}
+.shop-offer {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.shop-offer-title {
+  color: #f2d63b;
+  font-weight: 700;
+  text-align: center;
+}
+.shop-offer-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  min-height: 96px;
+}
+.shop-item {
+  width: 110px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid #c5c5c5;
+  border-radius: 6px;
+  padding: 6px;
+  text-align: center;
+}
+.shop-item-img {
+  width: 100%;
+  height: 60px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+.shop-item-name {
+  font-size: 11px;
+  color: #fff;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shop-offer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+.shop-offer-price {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 22px;
+}
+.shop-buy-btn {
+  padding: 6px 22px;
+  display:flex;
+  background: #83af50;
+  color: #fff;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  justify-content: center;
+  align-items: center;
+}
+.shop-buy-disabled {
+  background: #555;
+  color: #aaa;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ---- Player marketplace (rendered inside the shop modal's Market tab) ---- */
+/* The sell dialog floats above everything (loadout modal is z-index 4). */
+#modal-market-sell {
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 100002;
+}
+#modal-market-sell .modal-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 340px;
+  max-width: 92vw;
+  background: #34401f;
+  border: 2px solid #f5d840;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.market-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.market-subtabs {
+  display: flex;
+  gap: 6px;
+  margin-right: auto;
+}
+.market-subtab {
+  padding: 4px 12px;
+  cursor: pointer;
+  color: #ccc;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.market-subtab-active {
+  color: #1d1808;
+  background: #f2d63b;
+}
+.market-select {
+  align-self: center;
+  background: #1d1808;
+  color: #f2d63b;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+.market-search {
+  align-self: center;
+  min-width: 180px;
+  background: #1d1808;
+  color: #f2d63b;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.market-search::placeholder {
+  color: rgba(242, 214, 59, 0.5);
+}
+.market-private-tag {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: #8fd6ff;
+  margin-bottom: 6px;
+}
+.market-storefront-banner {
+  color: #ddd;
+  padding: 6px 4px 12px;
+}
+.market-link {
+  color: #f2d63b;
+  cursor: pointer;
+}
+.market-link:hover {
+  text-decoration: underline;
+}
+.market-item-img {
+  margin: 0 auto;
+}
+.market-seller {
+  font-size: 12px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.market-provenance {
+  margin-bottom: 8px;
+}
+.market-stats {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #ddd;
+  margin-bottom: 4px;
+}
+.market-rarity {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: -4px;
+  margin-bottom: 2px;
+}
+.market-meta {
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+}
+.market-owners-toggle {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.market-owners-toggle:hover {
+  color: #ccc;
+}
+.market-owners-list {
+  font-size: 11px;
+  color: #ddd;
+  text-align: center;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-top: 4px;
+}
+.market-expiry {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #e0a23c;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.market-price {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.market-fee {
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 400;
+}
+.market-buy-btn,
+.market-cancel-btn {
+  margin-top: auto;
+}
+.market-cancel-btn {
+  background: #a33;
+}
+.market-loadmore {
+  display: block;
+  margin: 12px auto 0;
+  width: 160px;
+  text-align: center;
+  padding: 8px;
+  border-radius: 6px;
+  background: #2a230a;
+  color: #f2d63b;
+  font-weight: 700;
+  cursor: pointer;
+}
+.market-sell-body {
+  padding: 18px;
+  color: #ddd;
+}
+.market-sell-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f2d63b;
+  margin-bottom: 12px;
+}
+.market-sell-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.market-sell-price {
+  width: 120px;
+  background: #1d1808;
+  color: #fff;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  font-weight: 700;
+  padding: 6px 8px;
+}
+.market-sell-hint {
+  font-size: 13px;
+  color: #bbb;
+  margin-bottom: 4px;
+}
+.market-sell-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  min-height: 18px;
+  margin: 6px 0;
+}
+#market-sell-confirm {
+  margin-top: 8px;
+  width: 180px;
+}
+.customize-listed-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #f2d63b;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+/* Right-side item detail panel (skins/melee/heal/boost): info + ownership + sell. */
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 18px;
+  box-sizing: border-box;
+  color: #fff;
+}
+.detail-item-image {
+  width: 96px;
+  height: 96px;
+  margin: 4px auto 12px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+.detail-item-name {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+.detail-item-rarity {
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 14px;
+}
+.detail-section {
+  margin-bottom: 12px;
+}
+.detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 700;
+}
+.detail-value {
+  font-size: 15px;
+  color: #ffdb7b;
+  word-break: break-word;
+}
+.detail-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.detail-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  padding: 4px 2px;
+}
+.detail-stat-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffdb7b;
+  line-height: 1.1;
+}
+.detail-stat-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: rgba(0, 0, 0, 0.55);
+}
+.detail-market {
+  margin-top: auto;
+}
+.detail-listed {
+  color: #ffdb7b;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.detail-expiry {
+  color: #e0a23c;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.detail-market .shop-buy-btn {
+  width: 100%;
+  background: #50afab;
+  border-bottom: 2px solid #387c79;
+  box-shadow: inset 0 -2px #387c79;
+}
+
+.detail-market .market-cancel-btn {
+  width: 100%;
+  background: #FF2E00;
+  border-bottom: 2px solid #B01F00;
+  box-shadow: inset 0 -2px #B01F00;
+}
+
+/* "Info" toggle: swaps the right side between equip UI and the detail panel. */
+#modal-customize-info-toggle {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 3;
+  padding: 6px 18px;
+  border-radius: 6px;
+  background: #50afab;
+  border-bottom: 2px solid #387c79;
+  box-shadow: inset 0 -2px #387c79;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 #featured-youtuber {
@@ -6788,7 +7566,8 @@ input [type="image"]:focus {
   animation-name: fadeIn;
   animation-duration: 0.2s;
   height: 600px;
-  left: 52%;
+  /* Shifted left of centre so the live character (skin) preview shows on the right. */
+  left: 46%;
   pointer-events: none;
   position: fixed;
   top: 45%;

@@ -37,6 +37,16 @@ export const zSetClientThemeBody = z.object({
 
 export interface SaveGameBody {
     matchData: (MatchDataTable & { ip: string; findGameIp: string })[];
+    /** Per logged-in player: the cosmetic types they had equipped + their match result,
+     *  used server-side to attribute games/wins/kills/damage to the owned item instances.
+     *  Optional for backward-compat with locally-saved "lost" games. */
+    cosmeticStats?: {
+        userId: string;
+        won: boolean;
+        kills: number;
+        damage: number;
+        types: string[];
+    }[];
 }
 
 export interface ServerGameConfig {

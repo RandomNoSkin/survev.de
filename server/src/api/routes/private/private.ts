@@ -41,6 +41,71 @@ import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeS
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
 import { level } from "winston";
 
+/**
+ * Adds each player's match result (games +1, wins, kills, damage) to the owned item
+ * instances they had equipped at game start. For each equipped type the stats attach to
+ * the instance the player had *selected* (reported via /equipped_instances on join), and
+ * fall back to the oldest owned copy when no selection is known. The target is always
+ * scoped to the player's own items, so a forged/foreign id is simply never matched.
+ * One indexed UPDATE per player; failures are swallowed so they never break game saving.
+ */
+async function attributeCosmeticStats(
+    stats: NonNullable<SaveGameBody["cosmeticStats"]>,
+): Promise<void> {
+    // Batch-load each player's selected instance ids (their start-of-game snapshot).
+    const userIds = [...new Set(stats.map((s) => s.userId).filter(Boolean))];
+    const preferredByUser = new Map<string, number[]>();
+    if (userIds.length) {
+        const rows = await db
+            .select({ id: usersTable.id, ids: usersTable.equippedInstanceIds })
+            .from(usersTable)
+            .where(inArray(usersTable.id, userIds));
+        for (const r of rows) preferredByUser.set(r.id, r.ids ?? []);
+    }
+
+    let updated = 0;
+    for (const s of stats) {
+        if (!s.userId || !s.types.length) continue;
+        try {
+            const typeList = sql.join(
+                s.types.map((t) => sql`${t}`),
+                sql`, `,
+            );
+            const preferred = preferredByUser.get(s.userId) ?? [];
+            const preferredArr = preferred.length
+                ? sql`ARRAY[${sql.join(
+                      preferred.map((id) => sql`${id}`),
+                      sql`, `,
+                  )}]::int[]`
+                : sql`ARRAY[]::int[]`;
+            // DISTINCT ON (type) picks ONE instance per equipped type: a selected
+            // instance sorts first (id = ANY(preferred)), else the oldest copy.
+            const res = await db.execute(sql`
+                UPDATE items SET
+                    games = games + 1,
+                    wins = wins + ${s.won ? 1 : 0},
+                    kills = kills + ${Math.max(0, Math.round(s.kills))},
+                    damage = damage + ${Math.max(0, Math.round(s.damage))}
+                WHERE id IN (
+                    SELECT DISTINCT ON (type) id
+                    FROM items
+                    WHERE user_id = ${s.userId}
+                      AND type IN (${typeList})
+                    ORDER BY type, (id = ANY(${preferredArr})) DESC, id ASC
+                )
+            `);
+            updated += res.rowCount ?? 0;
+        } catch (err) {
+            server.logger.warn(`Failed to attribute cosmetic stats for ${s.userId}:`, err);
+        }
+    }
+    if (updated > 0) {
+        server.logger.info(
+            `Attributed cosmetic stats to ${updated} item(s) across ${stats.length} player(s)`,
+        );
+    }
+}
+
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
     .route("/moderation", ModerationRouter)
@@ -151,6 +216,9 @@ export const PrivateRouter = new Hono<Context>()
             matchData.map((d) => ({ ...d, encodedIp: hashIp(d.ip) })),
         );
         await logPlayerIPs(matchData);
+        if (data.cosmeticStats?.length) {
+            await attributeCosmeticStats(data.cosmeticStats);
+        }
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);
     })

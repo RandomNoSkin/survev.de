@@ -2,17 +2,33 @@ import { and, eq, gte, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import {
+    type AckSalesResponse,
+    type BuyListingResponse,
+    type BuyShopResponse,
+    type CancelListingResponse,
     type GetPassResponse,
+    type ListItemResponse,
     type LoadoutResponse,
+    type MarketListResponse,
     type ProfileResponse,
     type RefreshQuestResponse,
     type SetPassUnlockResponse,
+    type EquippedInstancesResponse,
+    type ShopResponse,
     type UsernameResponse,
+    zAckSalesRequest,
+    zBuyListingRequest,
+    zEquippedInstancesRequest,
+    zBuyShopRequest,
+    zCancelListingRequest,
     zGetPassRequest,
+    zListItemRequest,
     zLoadoutRequest,
+    zMarketBrowseRequest,
     zRefreshQuestRequest,
     zSetItemStatusRequest,
     zSetPassUnlockRequest,
+    zStorefrontRequest,
     zUsernameRequest,
 } from "../../../../../shared/types/user";
 import loadout from "../../../../../shared/utils/loadout";
@@ -25,6 +41,20 @@ import {
     validateParams,
 } from "../../auth/middleware";
 import { db } from "../../db";
+import { awardNewPassGoldenFries } from "../../db/goldenFries";
+import { grantPassItems } from "../../db/passGrants";
+import { buyShopOffer, getShopForUser } from "../../db/shop";
+import {
+    ackSales,
+    buyListing,
+    cancelListing,
+    getMarketListings,
+    getPrivateOffers,
+    getStorefront,
+    getUnackedSales,
+    getUserListings,
+    listItem,
+} from "../../db/market";
 import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
 import type { Context } from "../../index";
 import {
@@ -57,6 +87,7 @@ UserRouter.post("/profile", async (c) => {
         lastUsernameChangeTime,
         banned,
         banReason,
+        goldenFries,
     } = user;
 
     if (banned) {
@@ -75,10 +106,16 @@ UserRouter.post("/profile", async (c) => {
 
     const items = await db
         .select({
+            id: itemsTable.id,
             type: itemsTable.type,
             timeAcquired: itemsTable.timeAcquired,
             source: itemsTable.source,
             status: itemsTable.status,
+            previousOwners: itemsTable.previousOwners,
+            games: itemsTable.games,
+            wins: itemsTable.wins,
+            kills: itemsTable.kills,
+            damage: itemsTable.damage,
         })
         .from(itemsTable)
         .where(
@@ -97,9 +134,12 @@ UserRouter.post("/profile", async (c) => {
                 username,
                 usernameSet,
                 usernameChangeTime: timeUntilNextChange,
+                goldenFries,
             },
             loadout,
             items: items,
+            listings: await getUserListings(user.id),
+            sales: await getUnackedSales(user.id),
         },
         200,
     );
@@ -227,6 +267,95 @@ UserRouter.post("/set_item_status", validateParams(zSetItemStatusRequest), async
     return c.json({}, 200);
 });
 
+UserRouter.post("/shop", async (c) => {
+    const user = c.get("user")!;
+    const shop = await getShopForUser(user.id);
+    return c.json<ShopResponse>(shop, 200);
+});
+
+UserRouter.post("/shop/buy", validateParams(zBuyShopRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slot } = c.req.valid("json");
+    const result = await buyShopOffer(user.id, slot);
+    return c.json<BuyShopResponse>(result, 200);
+});
+
+//
+// MARKET (player-to-player marketplace)
+//
+
+UserRouter.post("/market/list", validateParams(zListItemRequest), async (c) => {
+    const user = c.get("user")!;
+    const { itemId, price, buyerSlug } = c.req.valid("json");
+    const result = await listItem(user.id, itemId, price, buyerSlug);
+    return c.json<ListItemResponse>(result, 200);
+});
+
+UserRouter.post("/market/listings", validateParams(zMarketBrowseRequest), async (c) => {
+    const { category, rarity, sellerSlug, page, search, searchTypes } =
+        c.req.valid("json");
+    const result = await getMarketListings({
+        category,
+        rarity,
+        sellerSlug,
+        page,
+        search,
+        searchTypes,
+    });
+    return c.json<MarketListResponse>(result, 200);
+});
+
+UserRouter.post("/market/storefront", validateParams(zStorefrontRequest), async (c) => {
+    const { slug } = c.req.valid("json");
+    const result = await getStorefront(slug);
+    return c.json<MarketListResponse>(result, 200);
+});
+
+UserRouter.post("/market/private", async (c) => {
+    const user = c.get("user")!;
+    const result = await getPrivateOffers(user.slug);
+    return c.json<MarketListResponse>(result, 200);
+});
+
+UserRouter.post("/market/buy", validateParams(zBuyListingRequest), async (c) => {
+    const user = c.get("user")!;
+    const { listingId } = c.req.valid("json");
+    const result = await buyListing(user.id, user.slug, listingId);
+    return c.json<BuyListingResponse>(result, 200);
+});
+
+UserRouter.post("/market/cancel", validateParams(zCancelListingRequest), async (c) => {
+    const user = c.get("user")!;
+    const { listingId } = c.req.valid("json");
+    const result = await cancelListing(user.id, listingId);
+    return c.json<CancelListingResponse>(result, 200);
+});
+
+UserRouter.post("/market/ack_sales", validateParams(zAckSalesRequest), async (c) => {
+    const user = c.get("user")!;
+    const { listingIds } = c.req.valid("json");
+    await ackSales(user.id, listingIds);
+    return c.json<AckSalesResponse>({ success: true }, 200);
+});
+
+// Reported by the client on game join: the owned instance ids it currently has equipped.
+// Stored as a per-game snapshot so cosmetic match stats attach to the exact copy the
+// player selected (see attributeCosmeticStats). Only the caller's own items can ever be
+// affected — the attribution query is scoped to the user — so unowned/forged ids are inert.
+UserRouter.post(
+    "/equipped_instances",
+    validateParams(zEquippedInstancesRequest),
+    async (c) => {
+        const user = c.get("user")!;
+        const { ids } = c.req.valid("json");
+        await db
+            .update(usersTable)
+            .set({ equippedInstanceIds: ids })
+            .where(eq(usersTable.id, user.id));
+        return c.json<EquippedInstancesResponse>({ success: true }, 200);
+    },
+);
+
 UserRouter.post("/reset_stats", async (c) => {
     const user = c.get("user")!;
 
@@ -329,40 +458,21 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
     const { level, xp } = getPassLevelAndXp(passType, newTotalXp);
 
 
-    const allowedItems = [
-                    ...new Set([
-                        ..._allowedHealEffects,
-                        ..._allowedMeleeSkins,
-                        ..._allowedOutfits,
-                        ..._allowedEmotes,
-                        ..._allowedCrosshairs,
-                    ]),
-                ];
+    // Grant any pass cosmetics the player has reached but not yet been granted
+    // (idempotent via pass_item_grants — survives selling the item later).
+    const newUnlocks = await grantPassItems(user.id, passType, level);
 
-        const passDef = PassDefs[passType as keyof typeof PassDefs];
-
-        const unlockedItems = passDef.items.filter(
-                    (item) => item.level <= level
-                );
-                const ownedItems = await db
-                    .select({ type: itemsTable.type })
-                    .from(itemsTable)
-                    .where(eq(itemsTable.userId, user.id));
-        
-                const ownedSet = new Set(ownedItems.map((i) => i.type));
-                const newUnlocks = unlockedItems.filter((item) => !ownedSet.has(item.item) && allowedItems.includes(item.item));
-        
-                if (newUnlocks.length > 0) {
-                    await db.insert(itemsTable).values(
-                        newUnlocks.map((item) => ({
-                            userId: user.id,
-                            type: item.item,
-                            source: passType,
-                            timeAcquired: Date.now(),
-                        }))
-                    );
-                }
-                console.log(`User ${user.username} has ${totalXp} XP, level ${level}, ${newUnlocks.length} new unlocks`);
+    // Pay out pass Golden Fries for levels the player just crossed since
+    // their last recorded pass level. Retroactive backfill of older levels
+    // is handled separately by the moderation "reconcile" action.
+    const oldLevel = userXpRecord?.level ?? 0;
+    const goldenFriesAwarded = await awardNewPassGoldenFries(
+        user.id,
+        passType,
+        oldLevel,
+        level,
+    );
+    console.log(`User ${user.username} has ${totalXp} XP, level ${level}, ${newUnlocks} new unlocks, golden fries awarded: ${goldenFriesAwarded}`);
 
     const pass = {
         type: passType,
@@ -371,7 +481,7 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
         newTotalXp,
         newItems: false,
     };
-    if (newUnlocks.length > 0) {
+    if (newUnlocks > 0) {
         pass.newItems = true;
     }
 
@@ -417,6 +527,7 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
             pass,
             quests,
             questPriv: "",
+            goldenFriesAwarded,
         },
         200,
     );

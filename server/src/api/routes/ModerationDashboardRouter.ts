@@ -35,14 +35,14 @@ import { util } from "../../../../shared/utils/util";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { banCommentsTable, banHistoryTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
+import { reconcileAllPasses } from "../db/passReconcile";
+import { awardGoldenFries } from "../db/goldenFries";
+import { banCommentsTable, banHistoryTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
 import { server } from "../apiServer";
 import type { Context } from "..";
 import { z } from "zod";
 import { dashboardHtml } from "./moderationDashboard.html";
-import { getMapDefById, MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig } from "../../../../shared/gameConfig";
-import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 
 // ─── Admin guard middleware ────────────────────────────────────────────────────
 
@@ -855,6 +855,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             banned: usersTable.banned,
             admin: usersTable.admin,
             userCreated: usersTable.userCreated,
+            goldenFries: usersTable.goldenFries,
         }).from(usersTable);
 
         // 2. All userXp rows → Map<userId, Map<passType, {level, xp}>>
@@ -887,147 +888,36 @@ export const ModerationDashboardRouter = new Hono<Context>()
         return c.json({ accounts, passTypes });
     })
 
-    /** Reconciles pass XP + item unlocks for ALL passes for all users. */
+    /** Grants (or, with a negative amount, removes) Golden Fries for an account. */
+    .post(
+        "/api/account/golden-fries",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                amount: z.number().int().gte(-1_000_000).lte(1_000_000),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, amount } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+
+            const balance = await awardGoldenFries(
+                target.id,
+                amount,
+                `admin_grant:${admin.slug}`,
+            );
+            return c.json({ ok: true, balance });
+        },
+    )
+
+    /** Reconciles pass XP + item unlocks + Golden Fries for ALL passes for all users. */
     .post("/api/reconcile_pass_xp", async (c) => {
-        const allPasses = (GameConfig.serverSettings as any).passes as Record<string, { passMaxLevel: number; seasonStart: string; seasonEnd: string }>;
-        const mapIdToName = Object.fromEntries(
-            Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
-        ) as Record<number, string>;
-
-        let usersReconciled = 0;
-        let totalXpAdded = 0;
-        let totalUnlocksGranted = 0;
-
-        for (const [passType, passCfg] of Object.entries(allPasses)) {
-            const seasonStart = new Date(passCfg.seasonStart);
-            const seasonEnd   = new Date(passCfg.seasonEnd);
-            const passMaxLevel = passCfg.passMaxLevel;
-
-            const allUserXp = await db
-                .select()
-                .from(userXpTable)
-                .where(eq(userXpTable.passType, passType));
-
-            for (const record of allUserXp) {
-                const currentXp = Number(record.xp);
-
-                const stats = await db
-                    .select({
-                        gameId: matchDataTable.gameId,
-                        kills: sql<number>`max(${matchDataTable.kills})`,
-                        damage: sql<number>`max(${matchDataTable.damageDealt})`,
-                        timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
-                        rank: sql<number>`min(${matchDataTable.rank})`,
-                        mapId: sql<number>`max(${matchDataTable.mapId})`,
-                        createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
-                    })
-                    .from(matchDataTable)
-                    .where(
-                        and(
-                            eq(matchDataTable.userId, record.userId),
-                            gte(matchDataTable.createdAt, seasonStart),
-                            lte(matchDataTable.createdAt, seasonEnd),
-                        ),
-                    )
-                    .groupBy(matchDataTable.gameId)
-                    .having(sql`count(*) = 1`);
-
-                let correctXp = 0;
-                for (const stat of stats) {
-                    const mapDef = getMapDefById(stat.mapId);
-                    const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
-                        kill: 0, damage: 0, win: 0, timeSurvived: 0,
-                    };
-                    const mapTypeName = mapIdToName[stat.mapId] ?? "";
-                    const boostEvents = (GameConfig.serverSettings as any).xpBoostEvents?.[passType];
-                    let boost = 1;
-                    if (boostEvents) {
-                        const t = stat.createdAt instanceof Date
-                            ? stat.createdAt.getTime()
-                            : new Date(stat.createdAt).getTime();
-                        for (const event of Object.values(boostEvents) as any[]) {
-                            if (
-                                t >= new Date(event.start).getTime() &&
-                                t <= new Date(event.end).getTime() &&
-                                event.maps.includes(mapTypeName)
-                            ) { boost = event.boost; break; }
-                        }
-                    }
-                    let matchXp = 0;
-                    matchXp += stat.kills * xpMultiplier.kill;
-                    matchXp += stat.damage * xpMultiplier.damage;
-                    matchXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
-                    matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
-                    correctXp += matchXp * boost;
-                }
-                correctXp = Math.round(correctXp * 1e5) / 1e5;
-
-                if (correctXp > currentXp) {
-                    const { level } = getPassLevelAndXp(passType, correctXp, passMaxLevel);
-                    await db
-                        .update(userXpTable)
-                        .set({ xp: String(correctXp), level, lastUpdated: new Date() })
-                        .where(
-                            and(
-                                eq(userXpTable.userId, record.userId),
-                                eq(userXpTable.passType, passType),
-                            ),
-                        );
-                    usersReconciled++;
-                    totalXpAdded += correctXp - currentXp;
-                }
-
-                // Reconcile item unlocks for this pass (only missing ones — PK constraint prevents duplicates)
-                const { level: currentLevel } = getPassLevelAndXp(passType, Math.max(correctXp, currentXp), passMaxLevel);
-                const passDef = PassDefs[passType as keyof typeof PassDefs];
-                if (passDef) {
-                    const expectedItems = (passDef as any).items
-                        .filter((i: any) => i.level <= currentLevel)
-                        .map((i: any) => i.item as string);
-
-                    const ownedItems = await db
-                        .select({ type: itemsTable.type })
-                        .from(itemsTable)
-                        .where(eq(itemsTable.userId, record.userId));
-                    const ownedSet = new Set(ownedItems.map((i) => i.type));
-                    const missing = expectedItems.filter((item: string) => !ownedSet.has(item));
-                    if (missing.length > 0) {
-                        await db
-                            .insert(itemsTable)
-                            .values(
-                                missing.map((item: string) => ({
-                                    userId: record.userId,
-                                    type: item,
-                                    source: passType,
-                                    timeAcquired: Date.now(),
-                                    status: 0,
-                                })),
-                            )
-                            .onConflictDoNothing();
-                        totalUnlocksGranted += missing.length;
-                    }
-                }
-            }
-        }
-
-        return c.json({ ok: true, usersReconciled, totalXpAdded, totalUnlocksGranted });
+        const result = await reconcileAllPasses();
+        return c.json({ ok: true, ...result });
     });
-
-function getPassLevelXp(passType: string, level: number): number {
-    const passDef = PassDefs[passType as keyof typeof PassDefs];
-    const levelIdx = level - 1;
-    return levelIdx < passDef.xp.length ? passDef.xp[levelIdx] : passDef.xp[passDef.xp.length - 1];
-}
-
-function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {
-    const maxLevel = passMaxLevel ?? GameConfig.serverSettings.passMaxLevel;
-    let xp = passXp;
-    let level = 1;
-    while (level < maxLevel) {
-        const levelXp = getPassLevelXp(passType, level);
-        if (xp < levelXp) break;
-        xp -= levelXp;
-        level++;
-    }
-    return { level, xp };
-}

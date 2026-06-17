@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "equipped_instance_ids" json DEFAULT '[]'::json NOT NULL;

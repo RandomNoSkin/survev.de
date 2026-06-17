@@ -1,11 +1,14 @@
 import $ from "jquery";
 import loadout from "../../../shared/utils/loadout";
 import type { Account } from "../account";
+import type { SaleNotification } from "../../../shared/types/user";
+import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { api } from "../api";
 import { device } from "../device";
 import { helpers } from "../helpers";
 import { proxy } from "../proxy";
 import { SDK } from "../sdk/sdk";
+import { playGoldenFriesUnlock } from "./goldenFriesFx";
 import type { LoadoutMenu } from "./loadoutMenu";
 import type { Localization } from "./localization";
 import { MenuModal } from "./menuModal";
@@ -74,7 +77,21 @@ function createLoginOptions(
 
     if (proxy.loginSupported("mock")) {
         addLoginOption("mock", () => {
-            window.location.href = api.resolveUrl("/api/auth/mock");
+            // Dev-only: pick a mock account by name so you can create/switch between
+            // several (e.g. to test trading). Blank = the default shared account.
+            const last = localStorage.getItem("mockAccountName") ?? "";
+            const name = window.prompt(
+                "Mock account name (blank = default, e.g. alice / bob):",
+                last,
+            );
+            // Cancel → abort; otherwise remember the choice for next time.
+            if (name === null) return;
+            const trimmed = name.trim();
+            localStorage.setItem("mockAccountName", trimmed);
+            const url = trimmed
+                ? `/api/auth/mock?name=${encodeURIComponent(trimmed)}`
+                : "/api/auth/mock";
+            window.location.href = api.resolveUrl(url);
         });
     }
 }
@@ -89,6 +106,17 @@ export class ProfileUi {
 
     loginOptionsModalMobile!: MenuModal;
     modalMobileAccount!: MenuModal;
+
+    // True while the Golden Fries unlock animation owns the counter element.
+    friesAnimating = false;
+
+    // "Your item sold" popup (mirrors the new-item confirm flow).
+    saleNotifyModal: MenuModal | null = null;
+    /** Sales still queued to be shown one at a time. */
+    pendingSales: SaleNotification[] = [];
+    /** All listing ids in the batch currently being shown (acked when dismissed). */
+    saleBatchIds: number[] = [];
+    showingSales = false;
 
     constructor(
         public account: Account,
@@ -106,11 +134,20 @@ export class ProfileUi {
         account.addEventListener("loadout", this.onLoadoutUpdated.bind(this));
         account.addEventListener("items", this.onItemsUpdated.bind(this));
         account.addEventListener("request", this.render.bind(this));
+        account.addEventListener("sales", this.maybeShowSales.bind(this));
         this.initUi();
         this.render();
     }
 
     initUi() {
+        // "Your item sold" popup — mirrors the new-item confirm flow (same screen block).
+        this.saleNotifyModal = new MenuModal($("#modal-sale-notify"));
+        this.saleNotifyModal.onShow(() => $("#modal-screen-block").fadeIn(200));
+        this.saleNotifyModal.onHide((e) => {
+            if (e?.target?.dataset?.confirmAll) this.pendingSales = [];
+            this.showNextSale();
+        });
+
         // Set username
         const clearNamePrompt = function () {
             $("#modal-body-warning").css("display", "none");
@@ -451,11 +488,109 @@ export class ProfileUi {
             this.account.loggedIn ? "block" : "none",
         );
         $("#account-login").css("display", this.account.loggedIn ? "none" : "block");
+
+        // Golden Fries balance (top-left HUD), only shown while logged in
+        this.renderGoldenFries();
         this.updateUserIcon();
         if (this.account.profile.usernameChangeTime <= 0) {
             $(".btn-account-change-name").removeClass("btn-account-disabled");
         } else {
             $(".btn-account-change-name").addClass("btn-account-disabled");
         }
+    }
+
+    renderGoldenFries() {
+        const balance = this.account.profile.goldenFries ?? 0;
+        const config = this.account.config;
+
+        $("#golden-fries-balance").css(
+            "display",
+            this.account.loggedIn ? "flex" : "none",
+        );
+        $("#golden-fries-shop-btn").css(
+            "display",
+            this.account.loggedIn ? "flex" : "none",
+        );
+
+        if (!this.account.loggedIn) return;
+
+        // The animation owns the counter while it runs.
+        if (this.friesAnimating) return;
+
+        const slug = this.account.profile.slug ?? "";
+        const seen = config.get("goldenFriesSeen") ?? 0;
+        const seenSlug = config.get("goldenFriesSeenSlug") ?? "";
+
+        // No persisted baseline for this account on this device yet → set it
+        // silently so we don't fire a huge from-zero animation on the first view.
+        if (seenSlug !== slug) {
+            $("#golden-fries-amount").text(balance);
+            config.set("goldenFriesSeen", balance);
+            config.set("goldenFriesSeenSlug", slug);
+            return;
+        }
+
+        if (balance > seen) {
+            // Player has more than the last time they looked → celebrate.
+            this.friesAnimating = true;
+            playGoldenFriesUnlock(seen, balance, () => {
+                this.friesAnimating = false;
+                config.set("goldenFriesSeen", balance);
+            });
+        } else {
+            $("#golden-fries-amount").text(balance);
+            if (balance !== seen) config.set("goldenFriesSeen", balance);
+        }
+    }
+
+    /**
+     * Starts the "your item sold" popup queue if there are un-acknowledged sales and a
+     * batch isn't already showing. Fired on every profile load (account "sales" event),
+     * so a sale that happened while away pops as soon as the player is back in the menu.
+     */
+    maybeShowSales() {
+        if (this.showingSales || !this.account.loggedIn) return;
+        const sales = this.account.sales;
+        if (!sales.length) return;
+
+        this.showingSales = true;
+        this.pendingSales = [...sales];
+        this.saleBatchIds = sales.map((s) => s.listingId);
+        this.showNextSale();
+    }
+
+    /** Shows the next queued sale, or finishes the batch (ack + hide) when empty. */
+    private showNextSale() {
+        const sale = this.pendingSales.shift();
+        if (!sale) {
+            this.showingSales = false;
+            this.saleNotifyModal?.hide();
+            $("#modal-screen-block").fadeOut(300);
+            // Acknowledge the whole batch so it won't pop again on the next load.
+            this.account.ackSales(this.saleBatchIds);
+            this.account.sales = [];
+            this.saleBatchIds = [];
+            return;
+        }
+
+        const objDef = GameObjectDefs[sale.type] as { rarity?: number; name?: string };
+        const name =
+            this.localization.translate(`game-${sale.type}`) ||
+            objDef?.name ||
+            sale.type;
+        const svg = helpers.getSvgFromGameType(sale.type);
+        const transform = helpers.getCssTransformFromGameType(sale.type);
+
+        $("#modal-sale-notify-name").html(helpers.htmlEscape(name));
+        $("#modal-sale-notify-detail").html(
+            `Sold for <b>${sale.price}</b> <span class="sale-fries-icon"></span> to ` +
+                helpers.htmlEscape(sale.buyerName),
+        );
+        $("#modal-sale-notify-image-inner").css({
+            "background-image": `url(${svg})`,
+            transform,
+        });
+        // Re-open after a tick so the fadeOut from the previous card can settle.
+        setTimeout(() => this.saleNotifyModal?.show(), 200);
     }
 }
