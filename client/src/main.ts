@@ -33,6 +33,8 @@ import { LoadoutDisplay } from "./ui/opponentDisplay";
 import { Pass } from "./ui/pass";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
+import { MarketUi } from "./ui/marketUi";
+import { ShopUi } from "./ui/shopUi";
 import { TeamMenu } from "./ui/teamMenu";
 import { loadStaticDomImages } from "./ui/ui2";
 import { MatchData, SpectatorMenu } from "./ui/spectatorMenu";
@@ -82,6 +84,8 @@ export class Application {
     loadoutMenu!: LoadoutMenu;
     pass!: Pass;
     profileUi!: ProfileUi;
+    shopUi!: ShopUi;
+    marketUi!: MarketUi;
 
     pingTest = new PingTest();
     audioManager = new AudioManager();
@@ -135,6 +139,12 @@ export class Application {
             this.loadoutMenu,
             this.errorModal,
         );
+        this.marketUi = new MarketUi(this.account, this.localization);
+        this.shopUi = new ShopUi(this.account, this.localization);
+        this.shopUi.marketUi = this.marketUi;
+        $("#golden-fries-shop-btn").on("click", () => this.shopUi.open());
+        // Let the loadout menu open the sell dialog for an owned item.
+        this.loadoutMenu.marketUi = this.marketUi;
         this.siteInfo = new SiteInfo(this.config, this.localization);
         this.siteInfo.onModesUpdated = () => {
             const modes = this.siteInfo.getModesForSelectedRegion();
@@ -457,11 +467,10 @@ export class Application {
                 if (errMsg == "player_not_verified") {
                     this.onJoinGameError(errMsg);
                 }
-
                 if (errMsg) {
                     this.showErrorModal(errMsg);
+                    console.error("Quitting", errMsg);
                 }
-                console.error("Quitting", errMsg);
                 SDK.gamePlayStop();
             };
             this.game = new Game(
@@ -1023,6 +1032,9 @@ export class Application {
             }, 250);
             return;
         }
+        // Snapshot the equipped instance ids so this game's cosmetic stats land on the
+        // exact owned copies the player selected (start-of-game snapshot).
+        this.account.reportEquippedInstances();
         const hosts = matchData.hosts || [];
         const urls: string[] = [];
         for (let i = 0; i < hosts.length; i++) {

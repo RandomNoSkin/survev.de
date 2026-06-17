@@ -975,6 +975,62 @@ img {
   width: 42px;
 }
 
+/* Mobile chat: HUD button to open the chat + the input wrapper itself
+   (the wrapper had no styling at all before). Hidden on desktop; shown on
+   touch devices via Touch.setMobileStyling(). */
+#ui-chat-button {
+  background: rgba(0, 0, 0, 0.4);
+  background-image: url(/img/gui/chat.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 26px;
+  border-radius: 21px;
+  display: none;
+  height: 42px;
+  position: absolute;
+  right: 108px;
+  bottom: 50px;
+  width: 42px;
+  pointer-events: auto;
+}
+
+#ui-chat-wrapper {
+  position: absolute;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  z-index: 50;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+#ui-chat-input {
+  width: 260px;
+  max-width: 60vw;
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 4px 0 0 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  /* 16px keeps iOS from auto-zooming when the field is focused */
+  font-size: 16px;
+  outline: none;
+  vertical-align: middle;
+}
+
+#ui-chat-send {
+  height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 0 4px 4px 0;
+  background: #83af50;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
   #ui-emote-button {
     background-size: 20px;
@@ -5063,6 +5119,16 @@ span.ui-stats-header-value {
     width: 28px;
   }
 
+  #ui-chat-button {
+    background-size: 18px;
+    border-radius: 14px;
+    bottom: 52px;
+    height: 28px;
+    right: 4px;
+    top: initial;
+    width: 28px;
+  }
+
   /**
    * ui-stats, end game screen
    */
@@ -5665,6 +5731,17 @@ span.ui-stats-header-value {
     left: initial;
     right: 4px;
     top: 62%;
+    width: 28px;
+  }
+
+  #ui-chat-button {
+    background-size: 18px;
+    border-radius: 14px;
+    bottom: initial;
+    height: 28px;
+    left: initial;
+    right: 4px;
+    top: calc(62% - 34px);
     width: 28px;
   }
 

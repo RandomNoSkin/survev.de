@@ -5,6 +5,8 @@ import type { Vec2 } from "../../utils/v2";
 export interface MeleeDef {
     readonly type: "melee";
     name: string;
+    /** When true, this item can appear in the Golden Fries daily shop. */
+    shop?: boolean;
     perk?: string;
     quality: number;
     autoAttack: boolean;

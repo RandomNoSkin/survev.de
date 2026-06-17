@@ -27,6 +27,8 @@ export interface OutfitDef {
     baseType?: string;
     noDropOnDeath?: boolean;
     rarity?: number;
+    /** When true, this item can appear in the Golden Fries daily shop. */
+    shop?: boolean;
     lore?: string;
     noDrop?: boolean;
     obstacleType?: string;

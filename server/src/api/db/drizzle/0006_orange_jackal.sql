@@ -1,0 +1,1 @@
+ALTER TABLE "market_listings" ADD COLUMN "rarity" integer DEFAULT 0 NOT NULL;

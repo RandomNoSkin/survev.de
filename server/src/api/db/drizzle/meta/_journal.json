@@ -15,6 +15,69 @@
       "when": 1781277007470,
       "tag": "0001_ban_history",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781477531399,
+      "tag": "0002_quiet_the_liberteens",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781530121852,
+      "tag": "0003_unique_sleepwalker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781562145945,
+      "tag": "0004_yellow_moon_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781616710045,
+      "tag": "0005_mature_luke_cage",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781617744230,
+      "tag": "0006_orange_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781619024308,
+      "tag": "0007_opposite_ezekiel",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781640469732,
+      "tag": "0008_famous_zemo",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781643417177,
+      "tag": "0009_lively_thanos",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781645732515,
+      "tag": "0010_robust_killraven",
+      "breakpoints": true
     }
   ]
 }

@@ -1762,6 +1762,11 @@ export class Player extends BaseGameObject {
         emotes: [...GameConfig.defaultEmoteLoadout],
     };
 
+    /** Non-default cosmetic types this player equipped at spawn (outfit/melee/heal/boost/
+     *  emotes). Snapshotted in setLoadout and reported at game-end so match stats attach
+     *  to the owned item instances (provenance for the marketplace). */
+    equippedCosmetics: string[] = [];
+
     emoteSoftTicker = 0;
     emoteHardTicker = 0;
     emoteCounter = 0;
@@ -4505,6 +4510,14 @@ export class Player extends BaseGameObject {
                             this.interactWith(interactable);
                         }
                     }
+
+                    // Interacting with a weapon upgrade bench starts a Modify
+                    // action. On mobile the client sends Interact followed by
+                    // Cancel in the same frame, so ignore that Cancel here to
+                    // avoid aborting the freshly started Modify (same as revive).
+                    if (this.isModifying()) {
+                        ignoreCancel = true;
+                    }
                     break;
                 }
                 case GameConfig.Input.Revive: {
@@ -5344,22 +5357,32 @@ export class Player extends BaseGameObject {
             return true;
         };
 
+        // Snapshot non-default cosmetics so game-end stats attach to the owned instance.
+        const equipped = new Set<string>();
+        const trackCosmetic = (type: string) => {
+            if (type && !defaltUnlocks.includes(type)) equipped.add(type);
+        };
+
         if (
             isItemInLoadout(loadout.outfit, "outfit") &&
             loadout.outfit !== "outfitBase"
         ) {
             this.setOutfit(loadout.outfit);
+            trackCosmetic(loadout.outfit);
         }
 
         if (isItemInLoadout(loadout.melee, "melee") && loadout.melee != "fists") {
             this.weapons[GameConfig.WeaponSlot.Melee].type = loadout.melee;
+            trackCosmetic(loadout.melee);
         }
 
         if (isItemInLoadout(loadout.heal, "heal_effect")) {
             this.loadout.heal = loadout.heal;
+            trackCosmetic(loadout.heal);
         }
         if (isItemInLoadout(loadout.boost, "boost_effect")) {
             this.loadout.boost = loadout.boost;
+            trackCosmetic(loadout.boost);
         }
 
         const emotes = loadout.emotes;
@@ -5372,7 +5395,10 @@ export class Player extends BaseGameObject {
             }
 
             this.loadout.emotes[i] = emote;
+            trackCosmetic(emote);
         }
+
+        this.equippedCosmetics = [...equipped];
     }
 
     emoteFromMsg(msg: net.EmoteMsg) {

@@ -26,6 +26,9 @@ import { server } from "./apiServer";
 import { deleteExpiredSessions, validateSessionToken } from "./auth";
 import { rateLimitMiddleware, validateParams } from "./auth/middleware";
 import type { SessionTableSelect, UsersTableSelect } from "./db/schema";
+import { reconcileAllPasses } from "./db/passReconcile";
+import { backfillPassItemGrants } from "./db/passGrants";
+import { expireOldListings } from "./db/market";
 import { cleanupOldLogs, isBanned } from "./routes/private/ModerationRouter";
 import { ModerationDashboardRouter } from "./routes/ModerationDashboardRouter";
 import { PrivateRouter } from "./routes/private/private";
@@ -319,6 +322,25 @@ setInterval(() => {
     }
 }, 60000);
 
+// Take back marketplace listings older than their 24h TTL, freeing the item to be
+// re-listed. Reads are already cutoff-guarded, so this just keeps the DB state truthful.
+setInterval(() => {
+    expireOldListings()
+        .then((n) => {
+            if (n > 0) server.logger.info(`Expired ${n} stale market listings`);
+        })
+        .catch((err) => server.logger.error("Failed to expire market listings", err));
+}, 10 * 60 * 1000);
+
+// One-time backfill of pass item grants for existing accounts (no-op after the
+// first run). Must finish before requests are served so the new grant logic doesn't
+// duplicate items that pre-date the grant ledger.
+try {
+    await backfillPassItemGrants();
+} catch (err) {
+    server.logger.error("Failed to backfill pass item grants", err);
+}
+
 const honoServer = serve({
     fetch: app.fetch,
     port: Config.apiServer.port,
@@ -333,6 +355,18 @@ new Cron("0 0 * * *", async () => {
         server.logger.info("Deleted old logs and expired sessions");
     } catch (err) {
         server.logger.error("Failed to run cleanup script", err);
+    }
+
+    // Daily full pass reconcile for all users (XP + item unlocks + Golden Fries).
+    // Separate try/catch so a reconcile failure never blocks the cleanup above.
+    try {
+        const r = await reconcileAllPasses();
+        server.logger.info(
+            `Daily pass reconcile: ${r.usersReconciled} users fixed, +${r.totalXpAdded} XP, ` +
+                `${r.totalUnlocksGranted} unlocks, ${r.totalGoldenFriesAwarded} golden fries`,
+        );
+    } catch (err) {
+        server.logger.error("Failed to run daily pass reconcile", err);
     }
 });
 

@@ -1,7 +1,10 @@
 import $ from "jquery";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import type { EmoteDef } from "../../../shared/defs/gameObjects/emoteDefs";
-import { PassDefs } from "../../../shared/defs/gameObjects/passDefs";
+import {
+    DEFAULT_PASS_GOLDEN_FRIES,
+    PassDefs,
+} from "../../../shared/defs/gameObjects/passDefs";
 import { QuestDefs } from "../../../shared/defs/gameObjects/questDefs";
 import { MapDefs } from "../../../shared/defs/mapDefs";
 import { math } from "../../../shared/utils/math";
@@ -12,13 +15,15 @@ import type { Localization } from "./localization";
 import { passUtil } from "./passUtil";
 import { GameConfig } from "../../../shared/gameConfig";
 
-function i(e: string, t: number) {
-    for (let r = PassDefs[e], a = 0; a < r.items.length; a++) {
-        if (r.items[a].level == t + 1) {
-            return r.items[a].item;
+/** The reward unlocked at the level *after* `level` (i.e. the next unlock preview). */
+function nextPassReward(passType: string, level: number) {
+    const def = PassDefs[passType];
+    for (let a = 0; a < def.items.length; a++) {
+        if (def.items[a].level == level + 1) {
+            return def.items[a];
         }
     }
-    return "";
+    return null;
 }
 function humanizeTime(time: number, minutesFloor = false) {
     // const minutesFloor =
@@ -347,8 +352,8 @@ export class Pass {
         $("#pass-locked").css("display", "none");
         $("#pass-loading").css("display", "none");
         $("#pass-xp-info").css("display", "block");
-        const b = i(this.pass.data.type, this.pass.currentLevel);
-        this.setPassUnlockImage(b);
+        const reward = nextPassReward(this.pass.data.type, this.pass.currentLevel);
+        this.setPassUnlockImage(reward?.item ?? "", reward?.amount);
         const x = this.localization.translate(pass.type).toUpperCase();
         $("#pass-name-text").html(x);
         $("#pass-progress-level").html(this.pass.currentLevel);
@@ -400,7 +405,28 @@ export class Pass {
         }
     }
 
-    setPassUnlockImage(item: string) {
+    setPassUnlockImage(item: string, amount?: number) {
+        // Golden Fries are a currency reward, not a GameObjectDef cosmetic, so render
+        // the fries icon + amount instead of falling back to the greyed placeholder.
+        if (item === "golden_fries") {
+            $("#pass-progress-unlock").css({
+                opacity: 1,
+                transform: "translate(-50%, -50%)",
+            });
+            $("#pass-progress-unlock-image").css({
+                "background-image": "url(/img/gui/golden-fries.svg)",
+            });
+            const fries = amount ?? DEFAULT_PASS_GOLDEN_FRIES;
+            const tooltip = $("#pass-unlock-tooltip");
+            tooltip.css("opacity", 1);
+            tooltip
+                .find(".tooltip-pass-title")
+                .html(this.localization.translate("pass-golden-fries") || "GOLDEN FRIES");
+            tooltip.find(".tooltip-pass-desc").html(`+${fries}`);
+            // No loadout category for a currency reward — hide the type badge.
+            $("#pass-progress-unlock-type-wrapper").css({ display: "none" });
+            return;
+        }
         const t = GameObjectDefs[item] as EmoteDef;
         const r = t ? helpers.getSvgFromGameType(item) : "img/emotes/surviv.svg";
         const a = `url(${r})`;
@@ -461,8 +487,8 @@ export class Pass {
             })
             .delay(250)
             .queue((t) => {
-                const r = i(this.pass.data.type, this.pass.currentLevel);
-                this.setPassUnlockImage(r);
+                const reward = nextPassReward(this.pass.data.type, this.pass.currentLevel);
+                this.setPassUnlockImage(reward?.item ?? "", reward?.amount);
                 a.removeClass("pass-unlock-pulse");
                 o.animate(
                     {
@@ -530,6 +556,11 @@ export class Pass {
         if (this.updatePass && this.updatePassTicker < 0) {
             this.updatePass = false;
             this.account.getPass(false);
+            // The match just saved server-side (the delay above waits for that), which
+            // also attributed cosmetic stats to the equipped items. Refresh the profile
+            // so the loadout/market show the freshly-earned games/wins/kills/damage even
+            // when no pass level-up happened (getPass only reloads on unlocks/fries).
+            this.account.loadProfile();
         }
         for (let i = 0; i < this.quests.length; i++) {
             const fixedQuest = this.quests[i];
@@ -640,7 +671,7 @@ export class Pass {
         $("#pass-progress-level").html(1);
         $("#pass-progress-xp-current").html(0);
         $("#pass-progress-xp-target").html(def.xp[0]);
-        this.setPassUnlockImage(def.items[0].item);
+        this.setPassUnlockImage(def.items[0].item, def.items[0].amount);
         $("#pass-xp-earn-text").text(this.localization.translate("pass-xp-earn") || "Earn XP");
     }
 }

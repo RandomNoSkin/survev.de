@@ -92,6 +92,8 @@ const defaultConfig = {
     touchMoveStyle: "anywhere" as "locked" | "anywhere",
     touchAimStyle: "anywhere" as "locked" | "anywhere",
     touchAimLine: true,
+    touchAimAssist: true,
+    touchAutoSwitch: true,
     profile: null as { slug: string } | null,
     playerName: "",
     region: "na",
@@ -108,9 +110,18 @@ const defaultConfig = {
     perkModeRole: "",
     arenaModeRole: "",
     loadout: loadout.defaultLoadout(),
+    /** Per-category instance id of the item last selected in the loadout menu, so the
+     *  exact owned copy stays selected across reloads (the loadout itself only stores
+     *  the equipped *type*). Falls back to the equipped type when the id is gone. */
+    selectedItemIds: {} as Record<string, number>,
     sessionCookie: "" as string | null,
     binds: "",
     rulesAcceptedVersion: 0,
+    /** Last Golden Fries balance the player saw (persisted so the unlock animation
+     *  fires whenever the current balance is higher than this), and the account slug
+     *  it belongs to (guards against cross-account false triggers on one device). */
+    goldenFriesSeen: 0,
+    goldenFriesSeenSlug: "",
     cachedBgImg: "img/main_splash.png",
     version: 1,
     /* STRIP_FROM_PROD_CLIENT:START */

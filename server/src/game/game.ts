@@ -65,8 +65,8 @@ export class Game {
     verifiedOnly = false;
     startedTime = 0;
     stopTicker = 0;
-    /** Seconds a private game has been running with 0 connected players and not yet started. */
-    privateIdleTime = 0;
+    /** Seconds the game has had 0 connected players (abandoned lobby / emptied game). */
+    emptyTime = 0;
     /** True once the game has started for the first time; prevents the idle timer from re-arming after a freeze-phase reset. */
     hasEverStarted = false;
     id: string;
@@ -230,6 +230,21 @@ export class Game {
         if (this.over) {
             this.stopTicker -= dt;
             if (this.stopTicker <= 0) {
+                this.stop();
+                return;
+            }
+        }
+
+        // Reap empty games: stop any game that has had no connected players for 3 minutes.
+        // The socket-close path reaps a game the instant its last player leaves; this also
+        // catches lobbies that were created but never joined (players.length stays 0, so no
+        // socket-close ever fires) and any game everyone left without a clean disconnect.
+        if (this.playerBarn.players.some((p) => !p.disconnected)) {
+            this.emptyTime = 0;
+        } else {
+            this.emptyTime += dt;
+            if (this.emptyTime > 180) {
+                this.logger.info("Stopping empty game (no connected players for 3 min)");
                 this.stop();
                 return;
             }
@@ -945,6 +960,23 @@ export class Game {
             };
         });
 
+        // Per logged-in player with equipped cosmetics: their result, so the API can
+        // attribute games/wins/kills/damage to the owned item instances (provenance).
+        const cosmeticStats = players
+            .filter(
+                ({ player }) =>
+                    !player.spectator &&
+                    player.userId &&
+                    player.equippedCosmetics.length,
+            )
+            .map(({ player, rank }) => ({
+                userId: player.userId!,
+                won: rank === 1,
+                kills: player.kills,
+                damage: Math.round(player.damageDealt),
+                types: player.equippedCosmetics,
+            }));
+
         // only save the game if it has more than 2 players lol
         if (values.length < 2) return;
 
@@ -957,6 +989,7 @@ export class Game {
             res = await apiPrivateRouter.save_game.$post({
                 json: {
                     matchData: values,
+                    cosmeticStats,
                 },
             });
         } catch (err) {

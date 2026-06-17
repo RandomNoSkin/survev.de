@@ -625,9 +625,7 @@ export class Game {
                 const curWeapon = activePlayer.m_localData.m_weapons[curWeapIdx];
                 const weaponDef = GameObjectDefs[curWeapon?.type];
 
-                console.log("WeaponDef:", weaponDef);
-
-                if(touchAimMovement.touched && this.m_touch.shotDetected && weaponDef?.type === "gun" && weaponDef.aimAssist === true){
+                if(touchAimMovement.touched && this.m_touch.shotDetected && weaponDef?.type === "gun" && weaponDef.aimAssist === true && this.m_config.get("touchAimAssist")){
                     aimDir = this.getMobileAimAssistDir(aimDir);
                 }
 
@@ -1295,6 +1293,7 @@ export class Game {
             device.touch &&
             weaponDef?.type === "gun" &&
             weaponDef.autoSwitch === true &&
+            this.m_config.get("touchAutoSwitch") &&
             oldWeaponType === newWeapon?.type &&
             oldAmmo > newAmmo
         ) {
