@@ -281,7 +281,13 @@ export class PrivateLobbyMenu {
         });
     }
 
-    connect(create: boolean, roomUrl: string, importGroupId?: string, teamId?: number, spectator = false) {
+    connect(
+        create: boolean,
+        roomUrl: string,
+        importGroupId?: string,
+        teamId?: number,
+        spectator = false,
+    ) {
         if (!this.active || roomUrl !== this.roomData.roomUrl) {
             const roomHost = api.resolveRoomHost();
             const url = `w${
@@ -566,7 +572,9 @@ export class PrivateLobbyMenu {
         const self = player.playerId == this.localPlayerId;
         const member = $("<div/>", {
             class: `team-menu-member private-lobby-player${
-                player.playerId == this.selectedPlayerId ? " private-lobby-player-selected" : ""
+                player.playerId == this.selectedPlayerId
+                    ? " private-lobby-player-selected"
+                    : ""
             }${player.afk ? " private-lobby-player-afk" : ""}`,
             "data-playerid": player.playerId,
         });
@@ -696,7 +704,11 @@ export class PrivateLobbyMenu {
             this.refreshUi();
         });
 
-        if (player.spectator || !this.roomData.customLoadoutEnabled) {
+        if (
+            player.spectator ||
+            !this.roomData.customLoadoutEnabled ||
+            !this.roomData.advancedSettings
+        ) {
             return member;
         }
 
@@ -712,11 +724,13 @@ export class PrivateLobbyMenu {
             class: "private-lobby-player-loadout-select",
         });
         for (let i = 0; i < loadouts.length; i++) {
-            loadoutSelect.append($("<option/>", {
-                value: i,
-                html: helpers.htmlEscape(this.getLoadoutLabel(i)),
-                selected: i === player.loadoutIndex,
-            }));
+            loadoutSelect.append(
+                $("<option/>", {
+                    value: i,
+                    html: helpers.htmlEscape(this.getLoadoutLabel(i)),
+                    selected: i === player.loadoutIndex,
+                }),
+            );
         }
         if (this.isLeader) {
             loadoutSelect.on("click", (e) => e.stopPropagation());
@@ -748,7 +762,7 @@ export class PrivateLobbyMenu {
         // allow custom layouts (e.g. splitting a squad-mode lobby into more, smaller
         // teams), not just the mode's nominal team count (maxPlayers / teamSize).
         // Spectators are excluded here; they get their own section at the bottom.
-        const spectatorPlayers = this.players.filter(p => p.spectator);
+        const spectatorPlayers = this.players.filter((p) => p.spectator);
         const playersByTeam = new Map<number, PrivateLobbyMenuPlayer[]>();
         const unassigned: PrivateLobbyMenuPlayer[] = [];
         for (const player of this.players) {
@@ -802,9 +816,12 @@ export class PrivateLobbyMenu {
             // Left: team name + invite code text
             const headerLeft = $("<div/>", { class: "private-lobby-spectator-label" });
             const wins = this.teamScores[t] ?? 0;
-            const winsTag = wins > 0 ? ` <span class="private-lobby-team-wins">${wins}W</span>` : "";
+            const winsTag =
+                wins > 0 ? ` <span class="private-lobby-team-wins">${wins}W</span>` : "";
             headerLeft.append(
-                $("<span/>", { html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})${winsTag}` }),
+                $("<span/>", {
+                    html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})${winsTag}`,
+                }),
             );
             if (teamSize > 1 && this.roomData.roomUrl) {
                 const teamCodeText = $("<span/>", {
@@ -822,7 +839,9 @@ export class PrivateLobbyMenu {
             if (teamSize > 1) {
                 const copyLinkBtn = $("<a/>", {
                     class: "private-lobby-team-copy-link",
-                    title: this.localization.translate("index-private-lobby-copy-team-link"),
+                    title: this.localization.translate(
+                        "index-private-lobby-copy-team-link",
+                    ),
                 });
                 copyLinkBtn.on("click", (e) => {
                     e.stopPropagation();
@@ -864,10 +883,14 @@ export class PrivateLobbyMenu {
         // button is reachable even when no spectators are present yet.
         // Clicking anywhere on the section toggles the local player's spectator status.
         const localPlayerForSpectator = this.getPlayerById(this.localPlayerId);
-        const spectatorSection = $("<div/>", { class: "private-lobby-team private-lobby-team-spectators" });
+        const spectatorSection = $("<div/>", {
+            class: "private-lobby-team private-lobby-team-spectators",
+        });
         spectatorSection.on("click", (e) => {
             if (localPlayerForSpectator) {
-                this.sendMessage("setSpectator", { spectator: !localPlayerForSpectator.spectator });
+                this.sendMessage("setSpectator", {
+                    spectator: !localPlayerForSpectator.spectator,
+                });
             }
         });
 
@@ -875,7 +898,9 @@ export class PrivateLobbyMenu {
         // Left: "Spectators" label + invite code text
         const spectatorLabel = $("<div/>", { class: "private-lobby-spectator-label" });
         spectatorLabel.append(
-            $("<span/>", { html: this.localization.translate("index-private-lobby-spectators") }),
+            $("<span/>", {
+                html: this.localization.translate("index-private-lobby-spectators"),
+            }),
         );
         if (this.roomData.roomUrl) {
             const spectatorCodeText = $("<span/>", {
@@ -927,16 +952,21 @@ export class PrivateLobbyMenu {
         // "Create Team" is leader-only, and disabled while an empty team is
         // already revealed or there's no room left for another team slot
         // (can't usefully have more teams than total player capacity).
-        const hasFreeSlot = (playersByTeam.size + this.extraEmptyTeamIds.size) < maxPlayers;
+        const hasFreeSlot = playersByTeam.size + this.extraEmptyTeamIds.size < maxPlayers;
         const limitOk = !this.limitEmptyTeams || this.extraEmptyTeamIds.size === 0;
         const canCreateTeam = hasFreeSlot && limitOk;
         this.createTeamBtn.css("display", this.isLeader ? "block" : "none");
         this.createTeamBtn.removeClass("btn-darken btn-disabled btn-opaque");
-        this.createTeamBtn.addClass(canCreateTeam ? "btn-darken" : "btn-disabled btn-opaque");
+        this.createTeamBtn.addClass(
+            canCreateTeam ? "btn-darken" : "btn-disabled btn-opaque",
+        );
         this.createTeamBtn.prop("disabled", !canCreateTeam);
 
         const localPlayer = this.getPlayerById(this.localPlayerId);
-        this.afkBtn.css("display", (this.isLeader || localPlayer?.spectator) ? "none" : "block");
+        this.afkBtn.css(
+            "display",
+            this.isLeader || localPlayer?.spectator ? "none" : "block",
+        );
         this.afkBtn.toggleClass("afk-active", !!localPlayer?.afk);
     }
 
@@ -1065,7 +1095,9 @@ export class PrivateLobbyMenu {
         if (this.roomData.advancedSettings) {
             tabs.push({
                 id: "advancedSettings",
-                label: this.localization.translate("index-private-lobby-tab-advanced-settings"),
+                label: this.localization.translate(
+                    "index-private-lobby-tab-advanced-settings",
+                ),
             });
         }
         return tabs;
@@ -1086,7 +1118,9 @@ export class PrivateLobbyMenu {
         for (const tab of tabs) {
             const btn = $("<a/>", {
                 class: `private-lobby-settings-tab${
-                    tab.id === this.activeSettingsTab ? " private-lobby-settings-tab-active" : ""
+                    tab.id === this.activeSettingsTab
+                        ? " private-lobby-settings-tab-active"
+                        : ""
                 }`,
                 html: tab.label,
             });
@@ -1115,56 +1149,80 @@ export class PrivateLobbyMenu {
     /** "General" tab: lobby-wide settings the leader can toggle. */
     renderGeneralSettingsTab() {
         const wrapper = $("<div/>", { class: "private-lobby-general-settings" });
-        wrapper.append(this.renderSettingRow(
-            this.localization.translate("index-private-lobby-allow-members-join-teams"),
-            !!this.roomData.allowMembersJoinTeams,
-            this.isLeader,
-            () => {
-                this.roomData.allowMembersJoinTeams = !this.roomData.allowMembersJoinTeams;
-                this.sendMessage("setRoomProps", this.roomData);
-                this.refreshUi();
-            },
-        ));
-        wrapper.append(this.renderSettingRow(
-            this.localization.translate("index-private-lobby-limit-empty-teams"),
-            this.limitEmptyTeams,
-            this.isLeader,
-            () => {
-                this.limitEmptyTeams = !this.limitEmptyTeams;
-                this.refreshUi();
-            },
-        ));
-        wrapper.append(this.renderSettingRow(
-            this.localization.translate("index-private-lobby-public-spectating"),
-            this.roomData.publicSpectating ?? true,
-            this.isLeader,
-            () => {
-                this.roomData.publicSpectating = !(this.roomData.publicSpectating ?? true);
-                this.sendMessage("setRoomProps", this.roomData);
-                this.refreshUi();
-            },
-        ));
-        wrapper.append(this.renderSettingRow(
-            this.localization.translate("index-private-lobby-advanced-settings-toggle"),
-            !!this.roomData.advancedSettings,
-            this.isLeader,
-            () => {
-                this.roomData.advancedSettings = !this.roomData.advancedSettings;
-                this.sendMessage("setRoomProps", this.roomData);
-                this.refreshUi();
-            },
-        ));
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate(
+                    "index-private-lobby-allow-members-join-teams",
+                ),
+                !!this.roomData.allowMembersJoinTeams,
+                this.isLeader,
+                () => {
+                    this.roomData.allowMembersJoinTeams =
+                        !this.roomData.allowMembersJoinTeams;
+                    this.sendMessage("setRoomProps", this.roomData);
+                    this.refreshUi();
+                },
+            ),
+        );
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate("index-private-lobby-limit-empty-teams"),
+                this.limitEmptyTeams,
+                this.isLeader,
+                () => {
+                    this.limitEmptyTeams = !this.limitEmptyTeams;
+                    this.refreshUi();
+                },
+            ),
+        );
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate("index-private-lobby-public-spectating"),
+                this.roomData.publicSpectating ?? true,
+                this.isLeader,
+                () => {
+                    this.roomData.publicSpectating = !(
+                        this.roomData.publicSpectating ?? true
+                    );
+                    this.sendMessage("setRoomProps", this.roomData);
+                    this.refreshUi();
+                },
+            ),
+        );
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate(
+                    "index-private-lobby-advanced-settings-toggle",
+                ),
+                !!this.roomData.advancedSettings,
+                this.isLeader,
+                () => {
+                    this.roomData.advancedSettings = !this.roomData.advancedSettings;
+                    this.sendMessage("setRoomProps", this.roomData);
+                    this.refreshUi();
+                },
+            ),
+        );
         if (this.roomData.advancedSettings) {
-            wrapper.append($("<div/>", {
-                class: "private-lobby-advanced-settings-warning",
-                html: this.localization.translate("index-private-lobby-advanced-settings-warning"),
-            }));
+            wrapper.append(
+                $("<div/>", {
+                    class: "private-lobby-advanced-settings-warning",
+                    html: this.localization.translate(
+                        "index-private-lobby-advanced-settings-warning",
+                    ),
+                }),
+            );
         }
         return wrapper;
     }
 
     /** Renders a single label + ON/OFF toggle row for the General settings tab. */
-    renderSettingRow(label: string, enabled: boolean, canToggle: boolean, onToggle: () => void) {
+    renderSettingRow(
+        label: string,
+        enabled: boolean,
+        canToggle: boolean,
+        onToggle: () => void,
+    ) {
         const row = $("<div/>", { class: "private-lobby-setting-row" });
         row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
         const toggle = $("<a/>", {
@@ -1216,10 +1274,14 @@ export class PrivateLobbyMenu {
     /** "Advanced Settings" tab: shown only when the leader has enabled the advanced-settings toggle. Warns that matches won't earn XP. */
     renderAdvancedSettingsTab() {
         const wrapper = $("<div/>", { class: "private-lobby-advanced-settings" });
-        wrapper.append($("<div/>", {
-            class: "private-lobby-advanced-settings-warning",
-            html: this.localization.translate("index-private-lobby-advanced-settings-warning"),
-        }));
+        wrapper.append(
+            $("<div/>", {
+                class: "private-lobby-advanced-settings-warning",
+                html: this.localization.translate(
+                    "index-private-lobby-advanced-settings-warning",
+                ),
+            }),
+        );
         const update = () => {
             this.sendMessage("setRoomProps", this.roomData);
             this.refreshUi();
@@ -1231,12 +1293,18 @@ export class PrivateLobbyMenu {
             this.roomData.extraCustomLoadouts ??= [];
             customLoadoutRow.append(this.renderLoadoutLabel(0, update));
         } else {
-            customLoadoutRow.append($("<span/>", {
-                class: "private-lobby-setting-label",
-                html: this.localization.translate("index-private-lobby-custom-loadout-toggle"),
-            }));
+            customLoadoutRow.append(
+                $("<span/>", {
+                    class: "private-lobby-setting-label",
+                    html: this.localization.translate(
+                        "index-private-lobby-custom-loadout-toggle",
+                    ),
+                }),
+            );
         }
-        const customLoadoutControls = $("<div/>", { class: "private-lobby-setting-row-controls" });
+        const customLoadoutControls = $("<div/>", {
+            class: "private-lobby-setting-row-controls",
+        });
         const customLoadoutToggle = $("<a/>", {
             class: `private-lobby-setting-toggle${this.roomData.customLoadoutEnabled ? " private-lobby-setting-toggle-on" : ""}${this.isLeader ? "" : " private-lobby-setting-toggle-disabled"}`,
             html: this.roomData.customLoadoutEnabled
@@ -1249,7 +1317,9 @@ export class PrivateLobbyMenu {
                 if (this.roomData.customLoadoutEnabled) {
                     this.roomData.enabledArenaRoles = [];
                     const isArenaMap = !!this.getSelectedMapDef()?.gameMode.arenaMode;
-                    const loadout = this.roomData.customLoadout ?? structuredClone(DEFAULT_CUSTOM_LOADOUT);
+                    const loadout =
+                        this.roomData.customLoadout ??
+                        structuredClone(DEFAULT_CUSTOM_LOADOUT);
                     if (isArenaMap) loadout.arenaMode = true;
                     loadout.allowPickup = isArenaMap;
                     this.roomData.customLoadout = loadout;
@@ -1267,14 +1337,19 @@ export class PrivateLobbyMenu {
 
         if (this.roomData.customLoadoutEnabled) {
             if (!this.collapsedLoadouts.has(0)) {
-                wrapper.append(this.renderCustomLoadoutBuilder(this.roomData.customLoadout, update));
+                wrapper.append(
+                    this.renderCustomLoadoutBuilder(this.roomData.customLoadout, update),
+                );
             }
 
             for (let i = 0; i < this.roomData.extraCustomLoadouts.length; i++) {
                 wrapper.append(this.renderExtraLoadoutSection(i + 1, update));
             }
 
-            if (this.isLeader && this.roomData.extraCustomLoadouts.length < MAX_EXTRA_CUSTOM_LOADOUTS) {
+            if (
+                this.isLeader &&
+                this.roomData.extraCustomLoadouts.length < MAX_EXTRA_CUSTOM_LOADOUTS
+            ) {
                 wrapper.append(this.renderAddLoadoutButton(update));
             }
         }
@@ -1319,10 +1394,12 @@ export class PrivateLobbyMenu {
         wrapper.append(row);
 
         if (!this.collapsedLoadouts.has(loadoutIndex)) {
-            wrapper.append(this.renderCustomLoadoutBuilder(
-                this.roomData.extraCustomLoadouts[loadoutIndex - 1],
-                update,
-            ));
+            wrapper.append(
+                this.renderCustomLoadoutBuilder(
+                    this.roomData.extraCustomLoadouts[loadoutIndex - 1],
+                    update,
+                ),
+            );
         }
         return wrapper;
     }
@@ -1336,7 +1413,9 @@ export class PrivateLobbyMenu {
         });
         btn.on("click", () => {
             const loadouts = this.getLoadouts();
-            const copy = structuredClone(loadouts[loadouts.length - 1] ?? DEFAULT_CUSTOM_LOADOUT);
+            const copy = structuredClone(
+                loadouts[loadouts.length - 1] ?? DEFAULT_CUSTOM_LOADOUT,
+            );
             copy.name = undefined;
             this.roomData.extraCustomLoadouts.push(copy);
             update();
@@ -1347,7 +1426,10 @@ export class PrivateLobbyMenu {
 
     /** All configured loadouts: index 0 = `customLoadout`, 1+ = `extraCustomLoadouts`. */
     getLoadouts(): CustomLoadoutConfig[] {
-        return [this.roomData.customLoadout, ...(this.roomData.extraCustomLoadouts ?? [])];
+        return [
+            this.roomData.customLoadout,
+            ...(this.roomData.extraCustomLoadouts ?? []),
+        ];
     }
 
     /** Display label for loadout `index`: its player-given name if set, otherwise the default ("Custom Loadout"/"Custom Loadout 0N"). */
@@ -1357,7 +1439,9 @@ export class PrivateLobbyMenu {
 
     /** Default label for loadout `index` (0 = "Custom Loadout", 1+ = "Custom Loadout 0N"), ignoring any player-given name. */
     getDefaultLoadoutLabel(index: number): string {
-        const base = this.localization.translate("index-private-lobby-custom-loadout-toggle");
+        const base = this.localization.translate(
+            "index-private-lobby-custom-loadout-toggle",
+        );
         return index === 0 ? base : `${base} ${String(index).padStart(2, "0")}`;
     }
 
@@ -1376,13 +1460,18 @@ export class PrivateLobbyMenu {
             // wipe what the leader is typing.
             input.val(this.editingLoadoutValue ?? loadout.name ?? "");
             const submit = () => {
-                loadout.name = (input.val() as string).trim().slice(0, CUSTOM_LOADOUT_NAME_MAX_LEN) || undefined;
+                loadout.name =
+                    (input.val() as string)
+                        .trim()
+                        .slice(0, CUSTOM_LOADOUT_NAME_MAX_LEN) || undefined;
                 this.editingLoadoutName = null;
                 this.editingLoadoutValue = null;
                 update();
             };
             input.on("click", (e) => e.stopPropagation());
-            input.on("input", () => { this.editingLoadoutValue = input.val() as string; });
+            input.on("input", () => {
+                this.editingLoadoutValue = input.val() as string;
+            });
             input.on("keydown", (e) => {
                 if (e.which === 13) {
                     submit();
@@ -1415,25 +1504,37 @@ export class PrivateLobbyMenu {
 
     /** Translates an item type id to its display name, falling back to the def's `name` field. */
     itemLabel(type: string): string {
-        if (!type) return this.localization.translate("index-private-lobby-custom-loadout-none");
+        if (!type)
+            return this.localization.translate("index-private-lobby-custom-loadout-none");
         const def = GameObjectDefs[type] as { name?: string } | undefined;
         return this.localization.translate(`game-${type}`) || def?.name || type;
     }
 
     /** Loadout builder shown when "Custom Loadout" is enabled: lets the leader configure the spawn loadout for every player. */
-    renderCustomLoadoutBuilder(loadout: CustomLoadoutConfig | undefined, update: () => void) {
+    renderCustomLoadoutBuilder(
+        loadout: CustomLoadoutConfig | undefined,
+        update: () => void,
+    ) {
         const wrapper = $("<div/>", { class: "private-lobby-custom-loadout" });
 
         // Defensive: never deref an undefined loadout (e.g. a stale index after a
         // loadout was removed) — that would throw and break the whole lobby render.
         if (!loadout) return wrapper;
 
-        const noneOption = { value: "", label: this.localization.translate("index-private-lobby-custom-loadout-none") };
+        const noneOption = {
+            value: "",
+            label: this.localization.translate("index-private-lobby-custom-loadout-none"),
+        };
 
-        const weaponOptions = (types: string[]) => [noneOption, ...types.map((type) => ({ value: type, label: this.itemLabel(type) }))];
-        const itemOptions = (types: readonly string[]) => types.map((type) => ({ value: type, label: this.itemLabel(type) }));
+        const weaponOptions = (types: string[]) => [
+            noneOption,
+            ...types.map((type) => ({ value: type, label: this.itemLabel(type) })),
+        ];
+        const itemOptions = (types: readonly string[]) =>
+            types.map((type) => ({ value: type, label: this.itemLabel(type) }));
 
-        const backpackLevel = parseInt((loadout.backpack || "backpack00").slice(-1), 10) || 0;
+        const backpackLevel =
+            parseInt((loadout.backpack || "backpack00").slice(-1), 10) || 0;
 
         // Selecting a gun immediately tops up its ammo type to the gun's `ammoSpawnCount`.
         const setWeapon = (slot: 0 | 1, value: string) => {
@@ -1448,192 +1549,301 @@ export class PrivateLobbyMenu {
         };
 
         // Weapons
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-weapons", [
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-primary"),
-                weaponOptions(CUSTOM_LOADOUT_GUNS),
-                loadout.weapons[0],
-                this.isLeader,
-                (value) => setWeapon(0, value),
-            ),
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-secondary"),
-                weaponOptions(CUSTOM_LOADOUT_GUNS),
-                loadout.weapons[1],
-                this.isLeader,
-                (value) => setWeapon(1, value),
-            ),
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-melee"),
-                weaponOptions(CUSTOM_LOADOUT_MELEES),
-                loadout.weapons[2],
-                this.isLeader,
-                (value) => { loadout.weapons[2] = value; update(); },
-            ),
-        ]));
+        wrapper.append(
+            this.renderGroup("index-private-lobby-custom-loadout-group-weapons", [
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-primary",
+                    ),
+                    weaponOptions(CUSTOM_LOADOUT_GUNS),
+                    loadout.weapons[0],
+                    this.isLeader,
+                    (value) => setWeapon(0, value),
+                ),
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-secondary",
+                    ),
+                    weaponOptions(CUSTOM_LOADOUT_GUNS),
+                    loadout.weapons[1],
+                    this.isLeader,
+                    (value) => setWeapon(1, value),
+                ),
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-melee",
+                    ),
+                    weaponOptions(CUSTOM_LOADOUT_MELEES),
+                    loadout.weapons[2],
+                    this.isLeader,
+                    (value) => {
+                        loadout.weapons[2] = value;
+                        update();
+                    },
+                ),
+            ]),
+        );
 
         // Armor
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-armor", [
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-helmet"),
-                itemOptions(CUSTOM_LOADOUT_HELMETS),
-                loadout.helmet,
-                this.isLeader,
-                (value) => { loadout.helmet = value; update(); },
-            ),
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-chest"),
-                itemOptions(CUSTOM_LOADOUT_CHESTS),
-                loadout.chest,
-                this.isLeader,
-                (value) => { loadout.chest = value; update(); },
-            ),
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-backpack"),
-                itemOptions(CUSTOM_LOADOUT_BACKPACKS),
-                loadout.backpack || "backpack00",
-                this.isLeader,
-                (value) => { loadout.backpack = value; update(); },
-            ),
-        ]));
+        wrapper.append(
+            this.renderGroup("index-private-lobby-custom-loadout-group-armor", [
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-helmet",
+                    ),
+                    itemOptions(CUSTOM_LOADOUT_HELMETS),
+                    loadout.helmet,
+                    this.isLeader,
+                    (value) => {
+                        loadout.helmet = value;
+                        update();
+                    },
+                ),
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-chest",
+                    ),
+                    itemOptions(CUSTOM_LOADOUT_CHESTS),
+                    loadout.chest,
+                    this.isLeader,
+                    (value) => {
+                        loadout.chest = value;
+                        update();
+                    },
+                ),
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-backpack",
+                    ),
+                    itemOptions(CUSTOM_LOADOUT_BACKPACKS),
+                    loadout.backpack || "backpack00",
+                    this.isLeader,
+                    (value) => {
+                        loadout.backpack = value;
+                        update();
+                    },
+                ),
+            ]),
+        );
 
         // Scopes
         const scopeRows: JQuery[] = [];
 
         // Extra scopes carried in the inventory besides 1x (which is always carried).
-        const inventoryScopes = CUSTOM_LOADOUT_SCOPES.filter((s) => s !== "1xscope" && loadout.inventory[s]);
+        const inventoryScopes = CUSTOM_LOADOUT_SCOPES.filter(
+            (s) => s !== "1xscope" && loadout.inventory[s],
+        );
 
         // Active scope can only be 1x or one of the extra scopes added below.
         const activeScopeOptions: string[] = ["1xscope", ...inventoryScopes];
-        const activeScope = activeScopeOptions.includes(loadout.scope) ? loadout.scope : "1xscope";
-        scopeRows.push(this.renderSelectRow(
-            this.localization.translate("index-private-lobby-custom-loadout-scope"),
-            itemOptions(activeScopeOptions),
-            activeScope,
-            this.isLeader,
-            (value) => { loadout.scope = value; update(); },
-        ));
+        const activeScope = activeScopeOptions.includes(loadout.scope)
+            ? loadout.scope
+            : "1xscope";
+        scopeRows.push(
+            this.renderSelectRow(
+                this.localization.translate("index-private-lobby-custom-loadout-scope"),
+                itemOptions(activeScopeOptions),
+                activeScope,
+                this.isLeader,
+                (value) => {
+                    loadout.scope = value;
+                    update();
+                },
+            ),
+        );
 
         for (const scope of inventoryScopes) {
-            scopeRows.push(this.renderRemovableRow(
-                this.itemLabel(scope),
-                this.isLeader,
-                () => {
+            scopeRows.push(
+                this.renderRemovableRow(this.itemLabel(scope), this.isLeader, () => {
                     delete loadout.inventory[scope];
                     if (loadout.scope === scope) loadout.scope = "1xscope";
                     update();
-                },
-            ));
+                }),
+            );
         }
 
-        const addableScopes = CUSTOM_LOADOUT_SCOPES.filter((s) => s !== "1xscope" && !loadout.inventory[s]);
+        const addableScopes = CUSTOM_LOADOUT_SCOPES.filter(
+            (s) => s !== "1xscope" && !loadout.inventory[s],
+        );
         if (this.isLeader && addableScopes.length > 0) {
-            scopeRows.push(this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-add-scope"),
-                [
-                    { value: "", label: this.localization.translate("index-private-lobby-custom-loadout-add-scope-placeholder") },
-                    ...itemOptions(addableScopes),
-                ],
-                "",
-                true,
-                (value) => {
-                    if (!value) return;
-                    loadout.inventory[value as InventoryItem] = 1;
-                    update();
-                },
-            ));
+            scopeRows.push(
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-add-scope",
+                    ),
+                    [
+                        {
+                            value: "",
+                            label: this.localization.translate(
+                                "index-private-lobby-custom-loadout-add-scope-placeholder",
+                            ),
+                        },
+                        ...itemOptions(addableScopes),
+                    ],
+                    "",
+                    true,
+                    (value) => {
+                        if (!value) return;
+                        loadout.inventory[value as InventoryItem] = 1;
+                        update();
+                    },
+                ),
+            );
         }
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-scopes", scopeRows));
+        wrapper.append(
+            this.renderGroup(
+                "index-private-lobby-custom-loadout-group-scopes",
+                scopeRows,
+            ),
+        );
 
         // Ammo
         const ammoRows: JQuery[] = [];
-        const inventoryAmmos = CUSTOM_LOADOUT_AMMOS.filter((a) => loadout.inventory[a] !== undefined);
+        const inventoryAmmos = CUSTOM_LOADOUT_AMMOS.filter(
+            (a) => loadout.inventory[a] !== undefined,
+        );
         for (const ammo of inventoryAmmos) {
             const max = GameConfig.bagSizes[ammo][backpackLevel];
-            ammoRows.push(this.renderRemovableNumberRow(
-                this.itemLabel(ammo),
-                loadout.inventory[ammo] ?? 0,
-                0,
-                max,
-                this.isLeader,
-                (value) => { loadout.inventory[ammo] = value; update(); },
-                () => { delete loadout.inventory[ammo]; update(); },
-            ));
+            ammoRows.push(
+                this.renderRemovableNumberRow(
+                    this.itemLabel(ammo),
+                    loadout.inventory[ammo] ?? 0,
+                    0,
+                    max,
+                    this.isLeader,
+                    (value) => {
+                        loadout.inventory[ammo] = value;
+                        update();
+                    },
+                    () => {
+                        delete loadout.inventory[ammo];
+                        update();
+                    },
+                ),
+            );
         }
 
-        const addableAmmos = CUSTOM_LOADOUT_AMMOS.filter((a) => loadout.inventory[a] === undefined);
+        const addableAmmos = CUSTOM_LOADOUT_AMMOS.filter(
+            (a) => loadout.inventory[a] === undefined,
+        );
         if (this.isLeader && addableAmmos.length > 0) {
-            ammoRows.push(this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-add-ammo"),
-                [
-                    { value: "", label: this.localization.translate("index-private-lobby-custom-loadout-add-ammo-placeholder") },
-                    ...itemOptions(addableAmmos),
-                ],
-                "",
-                true,
-                (value) => {
-                    if (!value) return;
-                    const ammo = value as InventoryItem;
-                    loadout.inventory[ammo] = GameConfig.bagSizes[ammo][backpackLevel];
-                    update();
-                },
-            ));
+            ammoRows.push(
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-add-ammo",
+                    ),
+                    [
+                        {
+                            value: "",
+                            label: this.localization.translate(
+                                "index-private-lobby-custom-loadout-add-ammo-placeholder",
+                            ),
+                        },
+                        ...itemOptions(addableAmmos),
+                    ],
+                    "",
+                    true,
+                    (value) => {
+                        if (!value) return;
+                        const ammo = value as InventoryItem;
+                        loadout.inventory[ammo] =
+                            GameConfig.bagSizes[ammo][backpackLevel];
+                        update();
+                    },
+                ),
+            );
         }
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-ammo", ammoRows));
+        wrapper.append(
+            this.renderGroup("index-private-lobby-custom-loadout-group-ammo", ammoRows),
+        );
 
         // Grenades
         const grenadeRows: JQuery[] = [];
-        const inventoryGrenades = CUSTOM_LOADOUT_GRENADES.filter((g) => loadout.inventory[g] !== undefined);
+        const inventoryGrenades = CUSTOM_LOADOUT_GRENADES.filter(
+            (g) => loadout.inventory[g] !== undefined,
+        );
         for (const grenade of inventoryGrenades) {
             const max = GameConfig.bagSizes[grenade][backpackLevel];
-            grenadeRows.push(this.renderRemovableNumberRow(
-                this.itemLabel(grenade),
-                loadout.inventory[grenade] ?? 0,
-                0,
-                max,
-                this.isLeader,
-                (value) => { loadout.inventory[grenade] = value; update(); },
-                () => { delete loadout.inventory[grenade]; update(); },
-            ));
+            grenadeRows.push(
+                this.renderRemovableNumberRow(
+                    this.itemLabel(grenade),
+                    loadout.inventory[grenade] ?? 0,
+                    0,
+                    max,
+                    this.isLeader,
+                    (value) => {
+                        loadout.inventory[grenade] = value;
+                        update();
+                    },
+                    () => {
+                        delete loadout.inventory[grenade];
+                        update();
+                    },
+                ),
+            );
         }
 
-        const addableGrenades = CUSTOM_LOADOUT_GRENADES.filter((g) => loadout.inventory[g] === undefined);
+        const addableGrenades = CUSTOM_LOADOUT_GRENADES.filter(
+            (g) => loadout.inventory[g] === undefined,
+        );
         if (this.isLeader && addableGrenades.length > 0) {
-            grenadeRows.push(this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-add-grenade"),
-                [
-                    { value: "", label: this.localization.translate("index-private-lobby-custom-loadout-add-grenade-placeholder") },
-                    ...itemOptions(addableGrenades),
-                ],
-                "",
-                true,
-                (value) => {
-                    if (!value) return;
-                    loadout.inventory[value as InventoryItem] = 1;
-                    update();
-                },
-            ));
+            grenadeRows.push(
+                this.renderSelectRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-add-grenade",
+                    ),
+                    [
+                        {
+                            value: "",
+                            label: this.localization.translate(
+                                "index-private-lobby-custom-loadout-add-grenade-placeholder",
+                            ),
+                        },
+                        ...itemOptions(addableGrenades),
+                    ],
+                    "",
+                    true,
+                    (value) => {
+                        if (!value) return;
+                        loadout.inventory[value as InventoryItem] = 1;
+                        update();
+                    },
+                ),
+            );
         }
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-grenades", grenadeRows));
+        wrapper.append(
+            this.renderGroup(
+                "index-private-lobby-custom-loadout-group-grenades",
+                grenadeRows,
+            ),
+        );
 
         // Heals
-        const healLabels: Record<typeof CUSTOM_LOADOUT_HEALS[number], string> = {
+        const healLabels: Record<(typeof CUSTOM_LOADOUT_HEALS)[number], string> = {
             bandage: "index-private-lobby-custom-loadout-bandages",
             healthkit: "index-private-lobby-custom-loadout-healthkits",
             soda: "index-private-lobby-custom-loadout-soda",
             painkiller: "index-private-lobby-custom-loadout-painkillers",
         };
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-heals", CUSTOM_LOADOUT_HEALS.map((heal) => {
-            const max = GameConfig.bagSizes[heal][backpackLevel];
-            return this.renderNumberRow(
-                this.localization.translate(healLabels[heal]),
-                loadout.inventory[heal] ?? 0,
-                0,
-                max,
-                this.isLeader,
-                (value) => { loadout.inventory[heal] = value; update(); },
-            );
-        })));
+        wrapper.append(
+            this.renderGroup(
+                "index-private-lobby-custom-loadout-group-heals",
+                CUSTOM_LOADOUT_HEALS.map((heal) => {
+                    const max = GameConfig.bagSizes[heal][backpackLevel];
+                    return this.renderNumberRow(
+                        this.localization.translate(healLabels[heal]),
+                        loadout.inventory[heal] ?? 0,
+                        0,
+                        max,
+                        this.isLeader,
+                        (value) => {
+                            loadout.inventory[heal] = value;
+                            update();
+                        },
+                    );
+                }),
+            ),
+        );
 
         // Perks
         const perkLabels = [
@@ -1641,28 +1851,33 @@ export class PrivateLobbyMenu {
             "index-private-lobby-custom-loadout-perk2",
             "index-private-lobby-custom-loadout-perk3",
         ];
-        wrapper.append(this.renderGroup("index-private-lobby-custom-loadout-group-perks", perkLabels.map((labelKey, i) =>
-            this.renderSelectRow(
-                this.localization.translate(labelKey),
-                weaponOptions(CUSTOM_LOADOUT_PERKS),
-                loadout.perks[i] ?? "",
-                this.isLeader,
-                (value) => {
-                    if (value) {
-                        loadout.perks[i] = value;
-                    } else {
-                        loadout.perks.splice(i, 1);
-                    }
-                    // Keep perks a dense string[]: assigning to a non-contiguous
-                    // slot (e.g. picking the 3rd perk while the 2nd is still
-                    // empty) leaves a hole that JSON-serializes to null, fails the
-                    // server's schema, disconnects the leader and corrupts their
-                    // saved settings (permanently breaking lobby creation).
-                    loadout.perks = loadout.perks.filter((p): p is string => !!p);
-                    update();
-                },
+        wrapper.append(
+            this.renderGroup(
+                "index-private-lobby-custom-loadout-group-perks",
+                perkLabels.map((labelKey, i) =>
+                    this.renderSelectRow(
+                        this.localization.translate(labelKey),
+                        weaponOptions(CUSTOM_LOADOUT_PERKS),
+                        loadout.perks[i] ?? "",
+                        this.isLeader,
+                        (value) => {
+                            if (value) {
+                                loadout.perks[i] = value;
+                            } else {
+                                loadout.perks.splice(i, 1);
+                            }
+                            // Keep perks a dense string[]: assigning to a non-contiguous
+                            // slot (e.g. picking the 3rd perk while the 2nd is still
+                            // empty) leaves a hole that JSON-serializes to null, fails the
+                            // server's schema, disconnects the leader and corrupts their
+                            // saved settings (permanently breaking lobby creation).
+                            loadout.perks = loadout.perks.filter((p): p is string => !!p);
+                            update();
+                        },
+                    ),
+                ),
             ),
-        )));
+        );
 
         return wrapper;
     }
@@ -1670,7 +1885,8 @@ export class PrivateLobbyMenu {
     /** Arena Mode + (when off) Unlimited Adrenaline/Ammo settings, shown below the Custom Loadout section while it's enabled. */
     renderArenaModeSettings() {
         const wrapper = $("<div/>", { class: "private-lobby-custom-loadout" });
-        const loadout = this.roomData.customLoadout ?? structuredClone(DEFAULT_CUSTOM_LOADOUT);
+        const loadout =
+            this.roomData.customLoadout ?? structuredClone(DEFAULT_CUSTOM_LOADOUT);
         this.roomData.customLoadout = loadout;
 
         const update = () => {
@@ -1681,61 +1897,91 @@ export class PrivateLobbyMenu {
         // Arena roles (e.g. arena1/arena2) already grant the "arena" perk
         // (unlimited ammo + adrenaline), so when they're active Arena Mode
         // is locked on and can't be toggled by the leader.
-        const arenaRolesActive = !!this.getSelectedMapDef()?.gameMode.arenaMode && !this.roomData.customLoadoutEnabled;
+        const arenaRolesActive =
+            !!this.getSelectedMapDef()?.gameMode.arenaMode &&
+            !this.roomData.customLoadoutEnabled;
         const arenaModeOn = !!loadout.arenaMode || arenaRolesActive;
 
-        wrapper.append(this.renderSettingRow(
-            this.localization.translate("index-private-lobby-custom-loadout-arena-mode"),
-            arenaModeOn,
-            this.isLeader && !arenaRolesActive,
-            () => {
-                loadout.arenaMode = !loadout.arenaMode;
-                update();
-            },
-        ));
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate(
+                    "index-private-lobby-custom-loadout-arena-mode",
+                ),
+                arenaModeOn,
+                this.isLeader && !arenaRolesActive,
+                () => {
+                    loadout.arenaMode = !loadout.arenaMode;
+                    update();
+                },
+            ),
+        );
 
         if (!arenaModeOn) {
-            wrapper.append(this.renderSettingRow(
-                this.localization.translate("index-private-lobby-custom-loadout-unlimited-adren"),
-                !!loadout.unlimitedAdren,
-                this.isLeader,
-                () => {
-                    loadout.unlimitedAdren = !loadout.unlimitedAdren;
-                    update();
-                },
-            ));
-            wrapper.append(this.renderSettingRow(
-                this.localization.translate("index-private-lobby-custom-loadout-unlimited-ammo"),
-                !!loadout.unlimitedAmmo,
-                this.isLeader,
-                () => {
-                    loadout.unlimitedAmmo = !loadout.unlimitedAmmo;
-                    update();
-                },
-            ));
+            wrapper.append(
+                this.renderSettingRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-unlimited-adren",
+                    ),
+                    !!loadout.unlimitedAdren,
+                    this.isLeader,
+                    () => {
+                        loadout.unlimitedAdren = !loadout.unlimitedAdren;
+                        update();
+                    },
+                ),
+            );
+            wrapper.append(
+                this.renderSettingRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-unlimited-ammo",
+                    ),
+                    !!loadout.unlimitedAmmo,
+                    this.isLeader,
+                    () => {
+                        loadout.unlimitedAmmo = !loadout.unlimitedAmmo;
+                        update();
+                    },
+                ),
+            );
         }
 
-        wrapper.append(this.renderSettingRow(
-            this.localization.translate("index-private-lobby-custom-loadout-allow-pickup"),
-            !!loadout.allowPickup,
-            this.isLeader,
-            () => {
-                loadout.allowPickup = !loadout.allowPickup;
-                update();
-            },
-        ));
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate(
+                    "index-private-lobby-custom-loadout-allow-pickup",
+                ),
+                !!loadout.allowPickup,
+                this.isLeader,
+                () => {
+                    loadout.allowPickup = !loadout.allowPickup;
+                    update();
+                },
+            ),
+        );
 
         return wrapper;
     }
 
     /** Renders a label + `<select>` dropdown row, used by the Custom Loadout builder. */
-    renderSelectRow(label: string, options: { value: string; label: string }[], selected: string, canEdit: boolean, onChange: (value: string) => void) {
+    renderSelectRow(
+        label: string,
+        options: { value: string; label: string }[],
+        selected: string,
+        canEdit: boolean,
+        onChange: (value: string) => void,
+    ) {
         const row = $("<div/>", { class: "private-lobby-setting-row" });
         row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
         const select = $("<select/>", { class: "private-lobby-setting-select" });
         if (!canEdit) select.prop("disabled", true);
         for (const opt of options) {
-            select.append($("<option/>", { value: opt.value, html: opt.label, selected: opt.value === selected }));
+            select.append(
+                $("<option/>", {
+                    value: opt.value,
+                    html: opt.label,
+                    selected: opt.value === selected,
+                }),
+            );
         }
         if (canEdit) {
             select.on("change", () => onChange(select.val() as string));
@@ -1756,7 +2002,14 @@ export class PrivateLobbyMenu {
     }
 
     /** Renders a label + number input row, used by the Custom Loadout builder. */
-    renderNumberRow(label: string, value: number, min: number, max: number, canEdit: boolean, onChange: (value: number) => void) {
+    renderNumberRow(
+        label: string,
+        value: number,
+        min: number,
+        max: number,
+        canEdit: boolean,
+        onChange: (value: number) => void,
+    ) {
         const row = $("<div/>", { class: "private-lobby-setting-row" });
         row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
         const input = $("<input/>", {
@@ -1769,7 +2022,10 @@ export class PrivateLobbyMenu {
         if (!canEdit) input.prop("disabled", true);
         if (canEdit) {
             input.on("change", () => {
-                const parsed = Math.max(min, Math.min(max, Math.floor(Number(input.val())) || 0));
+                const parsed = Math.max(
+                    min,
+                    Math.min(max, Math.floor(Number(input.val())) || 0),
+                );
                 input.val(parsed);
                 onChange(parsed);
             });
@@ -1779,7 +2035,15 @@ export class PrivateLobbyMenu {
     }
 
     /** Renders a label + number input + "x" remove button row, used to list added grenades/inventory items in the Custom Loadout builder. */
-    renderRemovableNumberRow(label: string, value: number, min: number, max: number, canEdit: boolean, onChange: (value: number) => void, onRemove: () => void) {
+    renderRemovableNumberRow(
+        label: string,
+        value: number,
+        min: number,
+        max: number,
+        canEdit: boolean,
+        onChange: (value: number) => void,
+        onRemove: () => void,
+    ) {
         const row = $("<div/>", { class: "private-lobby-setting-row" });
         row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
         const controls = $("<div/>", { class: "private-lobby-setting-row-controls" });
@@ -1793,7 +2057,10 @@ export class PrivateLobbyMenu {
         if (!canEdit) input.prop("disabled", true);
         if (canEdit) {
             input.on("change", () => {
-                const parsed = Math.max(min, Math.min(max, Math.floor(Number(input.val())) || 0));
+                const parsed = Math.max(
+                    min,
+                    Math.min(max, Math.floor(Number(input.val())) || 0),
+                );
                 input.val(parsed);
                 onChange(parsed);
             });
@@ -1810,7 +2077,12 @@ export class PrivateLobbyMenu {
     /** Wraps a set of Custom Loadout rows in a titled group for visual separation. */
     renderGroup(titleKey: string, rows: JQuery[]) {
         const group = $("<div/>", { class: "private-lobby-loadout-group" });
-        group.append($("<div/>", { class: "private-lobby-loadout-group-title", html: this.localization.translate(titleKey) }));
+        group.append(
+            $("<div/>", {
+                class: "private-lobby-loadout-group-title",
+                html: this.localization.translate(titleKey),
+            }),
+        );
         for (const row of rows) group.append(row);
         return group;
     }
@@ -1874,10 +2146,22 @@ export class PrivateLobbyMenu {
 
         // Show/hide lobby connecting/contents
         if (this.active) {
-            $("#private-lobby-menu-joining-text").css("display", this.create ? "none" : "block");
-            $("#private-lobby-menu-creating-text").css("display", this.create ? "block" : "none");
-            $("#private-lobby-menu-connecting").css("display", this.joined ? "none" : "block");
-            $("#private-lobby-menu-contents").css("display", this.joined ? "block" : "none");
+            $("#private-lobby-menu-joining-text").css(
+                "display",
+                this.create ? "none" : "block",
+            );
+            $("#private-lobby-menu-creating-text").css(
+                "display",
+                this.create ? "block" : "none",
+            );
+            $("#private-lobby-menu-connecting").css(
+                "display",
+                this.joined ? "none" : "block",
+            );
+            $("#private-lobby-menu-contents").css(
+                "display",
+                this.joined ? "block" : "none",
+            );
             $("#btn-private-lobby-leave").css("display", this.joined ? "block" : "none");
         }
 
@@ -1889,7 +2173,9 @@ export class PrivateLobbyMenu {
                 const region = regions[i];
                 const count = regionPops[region].playerCount;
                 const players = this.localization.translate("index-players");
-                const sel = $("#private-lobby-server-opts").children(`option[value="${region}"]`);
+                const sel = $("#private-lobby-server-opts").children(
+                    `option[value="${region}"]`,
+                );
                 sel.html(`${sel.attr("data-label")} [${count} ${players}]`);
             }
 
@@ -1999,8 +2285,14 @@ export class PrivateLobbyMenu {
                             `${afkNames} ${this.localization.translate("index-private-lobby-afk-warning")}`,
                         );
                 }
-                this.afkConfirmContainer.css("display", showAfkConfirm ? "block" : "none");
-                this.playBtn.css("display", showWaitMessage || showAfkConfirm ? "none" : "block");
+                this.afkConfirmContainer.css(
+                    "display",
+                    showAfkConfirm ? "block" : "none",
+                );
+                this.playBtn.css(
+                    "display",
+                    showWaitMessage || showAfkConfirm ? "none" : "block",
+                );
             } else {
                 this.afkConfirmContainer.css("display", "none");
                 this.stopGameBtn.css("display", "none");

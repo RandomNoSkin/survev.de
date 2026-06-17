@@ -66,9 +66,15 @@ class GameProcess implements GameData {
     avaliableSlots = 0;
 
     /** Pending GetPlayerData callbacks, keyed by requestId. */
-    readonly pendingPlayerDataRequests = new Map<string, (players: DashboardPlayer[]) => void>();
+    readonly pendingPlayerDataRequests = new Map<
+        string,
+        (players: DashboardPlayer[]) => void
+    >();
     /** Pending GetGameFeed callbacks, keyed by requestId. */
-    readonly pendingGameFeedRequests = new Map<string, (entries: KillFeedEntry[]) => void>();
+    readonly pendingGameFeedRequests = new Map<
+        string,
+        (entries: KillFeedEntry[]) => void
+    >();
 
     constructor(manager: GameProcessManager, id: string, config: ServerGameConfig) {
         this.manager = manager;
@@ -213,6 +219,13 @@ class GameProcess implements GameData {
         this.mapName = config.mapName;
         this.stopped = false;
         this.creating = true;
+        // Set the privacy flags up front (not just when the child reports UpdateData):
+        // during the create window (fork + map gen) the child hasn't reported yet, and on
+        // process reuse the stale value of the previous game would persist. Public
+        // matchmaking (findGame) relies on isPrivate being correct here to never hand a
+        // still-creating private lobby to a public player.
+        this.isPrivate = config.isPrivate ?? false;
+        this.publicSpectating = config.publicSpectating ?? true;
 
         const mapDef = MapDefs[this.mapName as keyof typeof MapDefs] as MapDef;
         this.avaliableSlots = mapDef.gameMode.maxPlayers;
@@ -246,7 +259,10 @@ class GameProcess implements GameData {
         });
         this.avaliableSlots--;
     }
-    addJoinTokensAsSpectator(tokens: FindGamePrivateBody["playerData"], autoFill: boolean) {
+    addJoinTokensAsSpectator(
+        tokens: FindGamePrivateBody["playerData"],
+        autoFill: boolean,
+    ) {
         this.send({
             type: ProcessMsgType.AddJoinTokenAsSpectator,
             autoFill,
@@ -291,7 +307,10 @@ export class GameProcessManager implements GameManager {
     ipHasAccount(ip: string): boolean {
         const expires = this.accountIpCache.get(ip);
         if (expires === undefined) return false;
-        if (expires < Date.now()) { this.accountIpCache.delete(ip); return false; }
+        if (expires < Date.now()) {
+            this.accountIpCache.delete(ip);
+            return false;
+        }
         return true;
     }
 
@@ -474,6 +493,10 @@ export class GameProcessManager implements GameManager {
                     // send "Created", so waiting on it just burns the 8s find_game timeout
                     // (and a stopped game could still report a stale canJoin=true).
                     !proc.stopped &&
+                    // Never hand a private lobby to a public matchmaking request — even
+                    // while it's still creating (canJoin is only false once the child
+                    // reports back, so rely on isPrivate, which create() sets up front).
+                    !proc.isPrivate &&
                     (proc.canJoin || proc.creating) &&
                     proc.avaliableSlots > 0 &&
                     proc.teamMode === body.teamMode &&
@@ -511,7 +534,10 @@ export class GameProcessManager implements GameManager {
                 };
 
                 game.onCreatedCbs.push(() => {
-                    if (this.serverVerifiedOnly && body.playerData.some((p) => !p.userId)) {
+                    if (
+                        this.serverVerifiedOnly &&
+                        body.playerData.some((p) => !p.userId)
+                    ) {
                         settle("player_not_verified");
                         return;
                     }
@@ -531,7 +557,10 @@ export class GameProcessManager implements GameManager {
                     const sinceMsg = Date.now() - game.lastMsgTime;
                     const active = this.processes.filter((p) => !p.stopped).length;
                     const creating = this.processes.filter((p) => p.creating).length;
-                    const totalPlayers = this.processes.reduce((a, p) => a + p.aliveCount, 0);
+                    const totalPlayers = this.processes.reduce(
+                        (a, p) => a + p.aliveCount,
+                        0,
+                    );
                     this.logger.error(
                         `Game #${game.id.substring(0, 4)} (${game.mapName}) creation timed out after ${GAME_CREATE_TIMEOUT_MS}ms — failing find_game ` +
                             `[childAlive=${!game.process.killed}, lastChildMsg=${sinceMsg}ms ago, pid=${game.process.pid}, ` +
@@ -599,7 +628,11 @@ export class GameProcessManager implements GameManager {
         return game.id;
     }
 
-    async findGameById(gameId: string, playerData: any[], autoFill: boolean): Promise<string> {
+    async findGameById(
+        gameId: string,
+        playerData: any[],
+        autoFill: boolean,
+    ): Promise<string> {
         let game = this.processById.get(gameId);
 
         if (!game || game.aliveCount < 0) {
