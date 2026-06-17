@@ -4,6 +4,10 @@ import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { EmoteCategory, type EmoteDef } from "../../../shared/defs/gameObjects/emoteDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import type { UnlockDef } from "../../../shared/defs/gameObjects/unlockDefs";
+import {
+    getMarketPriceBounds,
+    MARKET_LISTING_TTL_MS,
+} from "../../../shared/defs/shopConfig";
 import { EmoteSlot, Rarity } from "../../../shared/gameConfig";
 import type { ItemStatus } from "../../../shared/utils/loadout";
 import { type Crosshair, type Loadout, loadout } from "../../../shared/utils/loadout";
@@ -13,6 +17,7 @@ import { crosshair } from "../crosshair";
 import { device } from "../device";
 import { helpers } from "../helpers";
 import type { Localization } from "./localization";
+import type { MarketUi } from "./marketUi";
 import { MenuModal } from "./menuModal";
 import type { LoadoutDisplay } from "./opponentDisplay";
 
@@ -93,13 +98,31 @@ const sortTypes: Record<string, any> = {
 };
 
 export interface Item {
+    /** Inventory instance id (absent for virtual default-unlock items). */
+    id?: number;
     type: string;
     source: string;
     timeAcquired: number;
     status?: ItemStatus;
     ackd?: ItemStatus.Ackd;
+    /** Ownership history (slugs), present for traded items. */
+    previousOwners?: string[];
+    /** Lifetime match stats accrued by this instance while equipped. */
+    games?: number;
+    wins?: number;
+    kills?: number;
+    damage?: number;
 }
 interface ItemInfo {
+    /** Inventory instance id, so duplicate copies of a type can be told apart. */
+    id?: number;
+    /** Ownership history (slugs) for the detail panel. */
+    previousOwners?: string[];
+    /** Lifetime match stats for the detail panel. */
+    games?: number;
+    wins?: number;
+    kills?: number;
+    damage?: number;
     type: string;
     loadoutType: string;
     rarity: number;
@@ -114,6 +137,12 @@ interface ItemInfo {
 
 // use itemInfo?
 interface EquippedItem {
+    id?: number;
+    previousOwners?: string[];
+    games?: number;
+    wins?: number;
+    kills?: number;
+    damage?: number;
     loadoutType: string;
     type: string;
     rarity: number;
@@ -128,6 +157,10 @@ export class LoadoutMenu {
     items: Item[] = [];
 
     loadoutDisplay: LoadoutDisplay | null = null;
+    /** Set by main.ts so the item detail panel can open the marketplace sell dialog. */
+    marketUi: MarketUi | null = null;
+    /** When true, the right side shows the item detail panel instead of the equip UI. */
+    detailMode = false;
     loadout = loadout.defaultLoadout();
     localPendingConfirm: Item[] = [];
     localConfirmed: Item[] = [];
@@ -165,6 +198,12 @@ export class LoadoutMenu {
     selectedItem: {
         prevSlot: JQuery<HTMLElement> | null;
         img: string;
+        id?: number;
+        previousOwners?: string[];
+        games?: number;
+        wins?: number;
+        kills?: number;
+        damage?: number;
         type: string;
         rarity?: number;
         displayName?: string;
@@ -300,6 +339,7 @@ export class LoadoutMenu {
             this.itemSort.on("change", (e) => {
                 this.sortItems(e.target.value);
             });
+            $("#modal-customize-info-toggle").on("click", () => this.toggleDetailMode());
             this.modalCustomizeItemName.on("click", () => {
                 const elements = document.getElementsByClassName(
                     "customize-list-item-selected",
@@ -442,9 +482,11 @@ export class LoadoutMenu {
             if (
                 item.status! < loadout.ItemStatus.Ackd &&
                 !this.localAckItems.find((x) => {
-                    return x.type == item.type;
+                    return x.id === item.id;
                 })
             ) {
+                // Track the specific new instance, not the type — otherwise an
+                // already-owned duplicate of a new type would also get the "new" tag.
                 this.localAckItems.push(item);
             }
         }
@@ -748,6 +790,12 @@ export class LoadoutMenu {
         this.selectedItem = {
             prevSlot: isListItem ? null : parent,
             img: image.data("img"),
+            id: selectedItem.id,
+            previousOwners: selectedItem.previousOwners,
+            games: selectedItem.games,
+            wins: selectedItem.wins,
+            kills: selectedItem.kills,
+            damage: selectedItem.damage,
             type: selectedItem.type,
             rarity: selectedItem.rarity,
             displayName: selectedItem.displayName || "",
@@ -756,6 +804,13 @@ export class LoadoutMenu {
             loadoutType: selectedItem.loadoutType,
             subcat: selectedItem.subcat,
         };
+        // Remember this exact instance (persisted) so re-entering the category — or
+        // reloading the page — re-selects the same owned copy, not just the type.
+        if (this.selectedItem.id != null && this.selectedItem.loadoutType) {
+            const ids = { ...(this.account.config.get("selectedItemIds") ?? {}) };
+            ids[this.selectedItem.loadoutType] = this.selectedItem.id;
+            this.account.config.set("selectedItemIds", ids);
+        }
         this.modalCustomizeItemName.html(this.selectedItem.displayName!);
         const source =
             this.localization.translate(`loadout-${selectedItem.displaySource}`) ||
@@ -824,9 +879,10 @@ export class LoadoutMenu {
             }
         }
 
-        // Mark item as ackd
+        // Mark item as ackd — by instance id, so clicking one copy only clears that
+        // copy's "new" tag, not a same-type duplicate's.
         const itemIdx = this.localAckItems.findIndex((x) => {
-            return x.type == this.selectedItem.type;
+            return x.id === this.selectedItem.id;
         });
         if (itemIdx !== -1) {
             selector
@@ -834,6 +890,135 @@ export class LoadoutMenu {
                 .removeClass("account-alert account-alert-cat");
             this.localAckItems.splice(itemIdx, 1);
             this.setCategoryAlerts();
+        }
+
+        this.updateDetailPanel();
+    }
+
+    /** Toggle the right side between the equip UI (emote wheel/crosshair) and the
+     *  item detail/info panel. */
+    toggleDetailMode() {
+        this.detailMode = !this.detailMode;
+        $("#modal-customize-info-toggle").toggleClass("info-toggle-active", this.detailMode);
+        this.refreshRightPanels();
+    }
+
+    /** Apply the right-side panel visibility for the current category + detail mode. */
+    refreshRightPanels() {
+        const lt = this.categories[this.selectedCatIdx]?.loadoutType ?? "";
+        const showEmote = !this.detailMode && lt === "emote";
+        const showCrosshair = !this.detailMode && lt === "crosshair";
+        $("#modal-content-right-emote").css("display", showEmote ? "block" : "none");
+        $("#customize-emote-parent").css("display", showEmote ? "block" : "none");
+        $("#modal-content-right-crosshair").css("display", showCrosshair ? "block" : "none");
+        $("#customize-crosshair-parent").css("display", showCrosshair ? "block" : "none");
+        this.updateDetailPanel();
+    }
+
+    /**
+     * Populate and show the right-side detail panel for the selected instance: image,
+     * name, rarity, source, ownership history, and the Sell/Cancel action. Only while
+     * detail mode is on — otherwise the equip UI / character preview owns the right side.
+     */
+    updateDetailPanel() {
+        const panel = $("#modal-content-right-detail");
+        const item = this.selectedItem;
+        if (!this.detailMode || !item || !item.type) {
+            panel.css("display", "none");
+            return;
+        }
+        panel.css("display", "block");
+        const owned = item.id != null; // default unlocks have no instance id
+
+        $("#detail-item-image").css({
+            "background-image": `url(${helpers.getSvgFromGameType(item.type)})`,
+            transform: helpers.getCssTransformFromGameType(item.type),
+        });
+        $("#detail-item-name").html(item.displayName || "");
+
+        const rarityNames = ["stock", "common", "uncommon", "rare", "epic", "mythic"];
+        const rarityColors = ["#c5c5c5", "#c5c5c5", "#12ff00", "#00deff", "#f600ff", "#d96100"];
+        const r = item.rarity ?? 0;
+        $("#detail-item-rarity")
+            .html(this.localization.translate(`loadout-${rarityNames[r]}`) || "")
+            .css("color", rarityColors[r] ?? "#c5c5c5");
+
+        // Localize the source if a translation exists, else show the raw label.
+        const rawSource = item.displaySource || "";
+        $("#detail-item-source").html(
+            owned
+                ? this.localization.translate(`loadout-${rawSource}`) ||
+                      this.localization.translate(rawSource) ||
+                      rawSource ||
+                      "Unknown"
+                : "Default",
+        );
+
+        const owners = item.previousOwners ?? [];
+        $("#detail-item-owners").text(
+            owners.length ? owners.join("  →  ") : "Original owner",
+        );
+
+        // Lifetime match stats this instance earned while equipped.
+        const statsEl = $("#detail-item-stats");
+        if (owned) {
+            statsEl.css("display", "").html(
+                `<div class="detail-stat"><span class="detail-stat-val">${item.games ?? 0}</span><span class="detail-stat-lbl">Games</span></div>` +
+                    `<div class="detail-stat"><span class="detail-stat-val">${item.wins ?? 0}</span><span class="detail-stat-lbl">Wins</span></div>` +
+                    `<div class="detail-stat"><span class="detail-stat-val">${item.kills ?? 0}</span><span class="detail-stat-lbl">Kills</span></div>` +
+                    `<div class="detail-stat"><span class="detail-stat-val">${item.damage ?? 0}</span><span class="detail-stat-lbl">Damage</span></div>`,
+            );
+        } else {
+            statsEl.css("display", "none").empty();
+        }
+
+        this.renderDetailMarketAction();
+    }
+
+    /** Compact "Xh Ym" until a listing created at `createdAt` (ms) auto-expires. */
+    private formatExpiry(createdAt: number): string {
+        const remaining = createdAt + MARKET_LISTING_TTL_MS - Date.now();
+        if (remaining <= 0) return "moments";
+        const totalMin = Math.floor(remaining / 60000);
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    /** The Sell / Cancel-listing button inside the detail panel. */
+    private renderDetailMarketAction() {
+        const el = $("#detail-item-market");
+        el.empty();
+        const item = this.selectedItem;
+        if (!item || item.id == null) return;
+
+        const listing = this.account.myListings.find((l) => l.itemId === item.id);
+        if (listing) {
+            el.append(`<div class="detail-listed">Listed for ${listing.price}</div>`);
+            if (listing.buyerSlug) {
+                el.append(
+                    `<div class="detail-expiry">🔒 Private → ${helpers.htmlEscape(
+                        listing.buyerSlug,
+                    )}</div>`,
+                );
+            }
+            el.append(
+                `<div class="detail-expiry">Auto-removed in ${this.formatExpiry(
+                    listing.createdAt,
+                )}</div>`,
+            );
+            const btn = $(
+                '<div class="shop-buy-btn market-cancel-btn menu-option btn-darken">Cancel listing</div>',
+            );
+            btn.on("click", () => {
+                btn.addClass("shop-buy-disabled").text("…");
+                this.account.cancelListing(listing.listingId, () => {});
+            });
+            el.append(btn);
+        } else if (getMarketPriceBounds(item.type)) {
+            const btn = $('<div class="shop-buy-btn menu-option btn-darken">Sell</div>');
+            btn.on("click", () => this.marketUi?.openSellDialog(item.id!, item.type));
+            el.append(btn);
         }
     }
 
@@ -865,6 +1050,7 @@ export class LoadoutMenu {
         this.modalCustomizeItemSource.html("");
         this.modalCustomizeItemLore.html("");
         this.modalCustomizeItemRarity.html("");
+        $("#modal-content-right-detail").css("display", "none");
     }
 
     updateSlotData(parent: JQuery<HTMLElement>, img: string, type: string) {
@@ -899,7 +1085,9 @@ export class LoadoutMenu {
             for (let i = this.localAckItems.length - 1; i >= 0; i--) {
                 const s = this.localAckItems[i];
                 const n = GameObjectDefs[s.type];
-                if (n.type == category.gameType) {
+                // Splice out items of the previous category — and any stale entry whose
+                // type no longer has a def, so a bad type can't crash the loop.
+                if (!n || n.type == category.gameType) {
                     this.localAckItems.splice(i, 1);
                 }
             }
@@ -946,25 +1134,34 @@ export class LoadoutMenu {
             .translate(`loadout-title-${category.loadoutType}`)
             .toUpperCase();
         $("#modal-customize-cat-title").html(localizedTitle);
+        // Equip panels only when NOT in detail mode (detail mode shows the info panel).
         $("#modal-content-right-crosshair").css(
             "display",
-            category.loadoutType == "crosshair" ? "block" : "none",
+            !this.detailMode && category.loadoutType == "crosshair" ? "block" : "none",
         );
         $("#modal-content-right-emote").css(
             "display",
-            category.loadoutType == "emote" ? "block" : "none",
+            !this.detailMode && category.loadoutType == "emote" ? "block" : "none",
         );
-        $("#customize-emote-parent").css("display", displayEmoteWheel ? "block" : "none");
+        $("#customize-emote-parent").css(
+            "display",
+            !this.detailMode && displayEmoteWheel ? "block" : "none",
+        );
         $("#customize-crosshair-parent").css(
             "display",
-            displayCrosshairAdjust ? "block" : "none",
+            !this.detailMode && displayCrosshairAdjust ? "block" : "none",
         );
         this.modalCustomizeItemName.html("");
         this.modalCustomizeItemSource.html("");
         this.modalCustomizeItemLore.html("");
         this.modalCustomizeItemRarity.html("");
+        $("#modal-content-right-detail").css("display", "none");
 
         const getItemSourceName = function (source: string) {
+            // Shop purchases store their source as "shop:YYYY-MM-DD".
+            if (source.startsWith("shop:")) {
+                return `Bought on ${source.slice(5)}`;
+            }
             const sourceDef = GameObjectDefs[source] as EmoteDef;
             if (sourceDef?.name) {
                 return sourceDef.name;
@@ -974,12 +1171,24 @@ export class LoadoutMenu {
 
         this.selectedCatItems = [];
         let loadoutItemDiv: JQuery<HTMLElement> | "" = "";
+        // The exact instance last selected in this category (preferred over the
+        // first tile matching the equipped type when the player owns duplicates).
+        let instanceMatchDiv: JQuery<HTMLElement> | "" = "";
+        const rememberedId = (this.account.config.get("selectedItemIds") ?? {})[
+            category.loadoutType
+        ];
         const listItems = $("<div/>");
         for (let i = 0; i < loadoutItems.length; i++) {
             const item = loadoutItems[i];
             const objDef = GameObjectDefs[item.type] as MeleeDef;
 
             const itemInfo: ItemInfo = {
+                id: item.id,
+                previousOwners: item.previousOwners,
+                games: item.games,
+                wins: item.wins,
+                kills: item.kills,
+                damage: item.damage,
                 loadoutType: category.loadoutType,
                 type: item.type,
                 rarity: objDef.rarity || Rarity.Stock,
@@ -1013,10 +1222,11 @@ export class LoadoutMenu {
             });
             outerDiv.append(innerDiv);
 
-            // Notification pulse
+            // Notification pulse — only on the specific new instance, so an
+            // already-owned duplicate of the same type doesn't get the "new" tag.
             if (
                 this.localAckItems.findIndex((x) => {
-                    return x.type == item.type;
+                    return x.id === item.id;
                 }) !== -1
             ) {
                 const alertDiv = $("<div/>", {
@@ -1026,6 +1236,14 @@ export class LoadoutMenu {
                     },
                 });
                 outerDiv.append(alertDiv);
+            }
+
+            // Marker for an instance that's currently listed on the marketplace.
+            if (
+                item.id != null &&
+                this.account.myListings.some((l) => l.itemId === item.id)
+            ) {
+                outerDiv.append('<div class="customize-listed-badge">Listed</div>');
             }
 
             // Crosshair specific styling
@@ -1045,6 +1263,9 @@ export class LoadoutMenu {
             // Add the itemInfo to the currently selected items array
             itemInfo.outerDiv = outerDiv;
             this.selectedCatItems.push(itemInfo);
+            if (rememberedId != null && item.id === rememberedId) {
+                instanceMatchDiv = itemInfo.outerDiv;
+            }
             if (!loadoutItemDiv) {
                 if (
                     category.loadoutType == "crosshair" &&
@@ -1091,7 +1312,11 @@ export class LoadoutMenu {
         this.setItemListeners(category.loadoutType);
         this.setCategoryAlerts();
 
-        // Select loadout item
+        // Select loadout item — prefer the exact instance last selected here (emotes
+        // keep their own slot-based selection, so don't force one there).
+        if (instanceMatchDiv != "" && category.loadoutType !== "emote") {
+            loadoutItemDiv = instanceMatchDiv;
+        }
         this.deselectItem();
         if (loadoutItemDiv != "") {
             this.selectItem(loadoutItemDiv);

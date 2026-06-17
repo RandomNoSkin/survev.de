@@ -276,7 +276,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div id="tab-accounts" class="tab-pane">
     <div class="toolbar">
       <input type="text" id="accounts-search" placeholder="Search by username or slug…">
-      <button class="btn btn-orange" id="reconcile-btn">⚡ Reconcile All Passes + Unlocks</button>
+      <button class="btn btn-orange" id="reconcile-btn">⚡ Reconcile All Passes + Unlocks + Fries</button>
       <span id="reconcile-result" style="font-size:11px;color:var(--text-dim);"></span>
     </div>
     <table class="data-table" id="accounts-table">
@@ -1476,12 +1476,26 @@ function renderAccounts() {
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
+        <span style="color:#e0a23c;font-size:11px;white-space:nowrap;">🍟 \${a.goldenFries ?? 0}</span>
+        <button class="btn btn-gray btn-sm" style="padding:1px 6px;" onclick="giveGoldenFries('\${esc(a.slug)}', \${a.goldenFries ?? 0})">+GP</button>
       </td>
       \${accountsPassTypes.map(pt => \`<td style="font-weight:600;text-align:center;">\${a.passes?.[pt]?.level ?? '–'}</td>\`).join('')}
     </tr>
   \`).join('') : \`<tr><td colspan="\${colCount}" class="empty">No accounts found.</td></tr>\`;
 }
 
+
+async function giveGoldenFries(slug, current) {
+  const input = prompt('Golden Fries für ' + slug + ' (aktuell ' + current + ').\\nBetrag (negativ zum Abziehen):', '100');
+  if (input === null) return;
+  const amount = parseInt(input, 10);
+  if (!Number.isFinite(amount) || amount === 0) { toast('Ungültiger Betrag', true); return; }
+  try {
+    const data = await post('/api/account/golden-fries', { slug, amount });
+    toast(slug + ': ' + (amount > 0 ? '+' : '') + amount + ' 🍟 → ' + data.balance);
+    await loadAccounts();
+  } catch (e) { toast('Fehler: ' + (e.message || 'Fehlgeschlagen'), true); }
+}
 
 document.getElementById('accounts-search').addEventListener('input', renderAccounts);
 
@@ -1507,7 +1521,7 @@ document.getElementById('reconcile-btn').addEventListener('click', async () => {
   result.textContent = '';
   try {
     const data = await post('/api/reconcile_pass_xp', {});
-    result.textContent = \`Done: \${data.usersReconciled} users fixed, +\${data.totalXpAdded} XP, \${data.totalUnlocksGranted} unlocks granted\`;
+    result.textContent = \`Done: \${data.usersReconciled} users fixed, +\${data.totalXpAdded} XP, \${data.totalUnlocksGranted} unlocks granted, \${data.totalGoldenFriesAwarded} 🍟 fries\`;
     result.style.color = 'var(--green-t)';
     await loadAccounts();
   } catch (e) {

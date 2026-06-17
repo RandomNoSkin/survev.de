@@ -4,6 +4,8 @@ export interface HealEffectDef {
     readonly type: "heal_effect" | "boost_effect";
     name: string;
     rarity: Rarity;
+    /** When true, this item can appear in the Golden Fries daily shop. */
+    shop?: boolean;
     texture: string;
     emitter: string;
 }

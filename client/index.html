@@ -682,7 +682,14 @@
       <div id="start-main">
         <div id="start-top-left">
           <div id="btn-hamburger" class="icon-hamburger"></div>
-          <a id="btn-discord-top-right" style="display: none;" href="https://discord.gg/4mWfwvSKar" target="_blank" class="btn-social btn-darken btn-discord"></a>
+          <div id="golden-fries-container">
+            <div id="golden-fries-balance" class="golden-fries-balance" style="display:none">
+              <div class="golden-fries-icon"></div>
+              <span id="golden-fries-amount">0</span>
+            </div>
+            <div id="golden-fries-shop-btn" class="golden-fries-shop-btn" style="display:none" title="Shop">Shop</div>
+            <a id="btn-discord-top-right" style="display: none;" href="https://discord.gg/4mWfwvSKar" target="_blank" class="btn-social btn-darken btn-discord"></a>
+          </div>
           <div id="start-top-left-desktop">
             <div id="featured-streamers">
               <div class="streaming-header">
@@ -1398,6 +1405,7 @@
               <div id="modal-customize-item-source"></div>
               <div id="modal-customize-item-lore"></div>
             </div>
+            <div id="modal-customize-info-toggle" class="btn-darken" title="More info">Info</div>
           </div>
           <div id="modal-content-right-crosshair" class="modal-content-right modal-content-shadow">
             <div class="modal-spacer"></div>
@@ -1420,6 +1428,26 @@
                   <input type="range" min="0.0" max="1.5" value="0.0" step="0.025" class="crosshair-slider" id="crosshair-stroke">
                 </div>
               </div>
+            </div>
+          </div>
+          <div id="modal-content-right-detail" class="modal-content-right modal-content-shadow">
+            <div class="detail-card">
+              <div id="detail-item-image" class="detail-item-image"></div>
+              <div id="detail-item-name" class="detail-item-name"></div>
+              <div id="detail-item-rarity" class="detail-item-rarity"></div>
+              <div class="detail-section">
+                <div class="detail-label">Acquired</div>
+                <div id="detail-item-source" class="detail-value"></div>
+              </div>
+              <div class="detail-section">
+                <div class="detail-label">Ownership</div>
+                <div id="detail-item-owners" class="detail-value"></div>
+              </div>
+              <div class="detail-section">
+                <div class="detail-label">Stats</div>
+                <div id="detail-item-stats" class="detail-stats"></div>
+              </div>
+              <div id="detail-item-market" class="detail-market"></div>
             </div>
           </div>
           <div id="modal-content-right-emote" class="modal-content-right modal-content-shadow">
@@ -1636,6 +1664,82 @@
           </div>
         </div>
       </div>
+      <div id="modal-shop" class="modal">
+        <div class="modal-content">
+          <div class="modal-header shop-header">
+            <div class="shop-balance">
+              <div class="shop-fries-icon"></div>
+              <span id="shop-balance-amount">0</span>
+            </div>
+            <h2>Shop</h2>
+            <span class="close close-corner"></span>
+          </div>
+          <div class="shop-tabs">
+            <div class="shop-tab shop-tab-active" data-shop-tab="daily">Daily</div>
+            <div class="shop-tab" data-shop-tab="market">Market</div>
+            <div id="shop-reset-timer" class="shop-reset-timer">
+              <span class="shop-reset-timer-label">Resets in</span>
+              <span id="shop-reset-timer-value" class="shop-reset-timer-value">--:--:--</span>
+            </div>
+          </div>
+          <div class="modal-body shop-body">
+            <div id="shop-daily-offers" class="shop-offers"></div>
+            <div id="shop-market" style="display:none">
+              <div class="market-toolbar">
+                <div class="market-subtabs">
+                  <div id="market-tab-browse" class="market-subtab market-subtab-active">Browse</div>
+                  <div id="market-tab-private" class="market-subtab">Private</div>
+                  <div id="market-tab-mine" class="market-subtab">My Listings</div>
+                </div>
+                <input id="market-search" class="market-search" type="text" placeholder="Search name / source / owner" />
+                <select id="market-category-filter" class="market-select">
+                  <option value="">All categories</option>
+                  <option value="outfit">Skins</option>
+                  <option value="melee">Melee</option>
+                  <option value="emote">Emotes</option>
+                  <option value="particle">Particles</option>
+                </select>
+                <select id="market-rarity-filter" class="market-select">
+                  <option value="">All rarities</option>
+                  <option value="1">Common</option>
+                  <option value="2">Uncommon</option>
+                  <option value="3">Rare</option>
+                  <option value="4">Epic</option>
+                  <option value="5">Mythic</option>
+                </select>
+              </div>
+              <div id="market-storefront-banner" class="market-storefront-banner" style="display:none"></div>
+              <div id="market-listings" class="shop-offers market-listings"></div>
+              <div id="market-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="modal-market-sell" class="modal">
+        <div class="modal-content market-sell-content">
+          <div class="modal-header shop-header">
+            <h2>Sell item</h2>
+            <span class="close close-corner"></span>
+          </div>
+          <div class="modal-body market-sell-body">
+            <div id="market-sell-name" class="market-sell-name"></div>
+            <div class="market-sell-row">
+              <label for="market-sell-price">Price</label>
+              <input id="market-sell-price" class="market-sell-price" type="number" min="1" />
+              <div class="shop-fries-icon"></div>
+            </div>
+            <div id="market-sell-bounds" class="market-sell-hint"></div>
+            <div id="market-sell-total" class="market-sell-hint"></div>
+            <div class="market-sell-row">
+              <label for="market-sell-buyer">Private buyer</label>
+              <input id="market-sell-buyer" class="market-sell-price" type="text" placeholder="player slug (optional)" />
+            </div>
+            <div class="market-sell-hint">Leave empty to list publicly for everyone.</div>
+            <div id="market-sell-error" class="market-sell-error"></div>
+            <div id="market-sell-confirm" class="shop-buy-btn menu-option btn-darken">List for sale</div>
+          </div>
+        </div>
+      </div>
       <div id="modal-rules" class="modal">
         <div class="modal-content modal-close">
           <div class="modal-header">
@@ -1662,6 +1766,26 @@
               </div>
               <div class="modal-settings-item">
                 <p id="modal-item-confirm-name" class="modal-body-text"></p>
+              </div>
+            </div>
+            <div class="modal-footer modal-footer-name modal-footer-round">
+              <h3 class="close close-footer" data-l10n="index-confirm">Confirm</h3>
+              <h3 class='close close-footer' data-l10n='index-confirm-all' data-confirm-all="true">Confirm All</h3>
+            </div>
+          </div>
+        </div>
+        <div id="modal-sale-notify" class="modal">
+          <div class="modal-content modal-close">
+            <div class="modal-header modal-header-name">
+              <h2>Item sold!</h2>
+            </div>
+            <div class="modal-body modal-body-name">
+              <div id="modal-sale-notify-image-outer">
+                <div id="modal-sale-notify-image-inner"></div>
+              </div>
+              <div class="modal-settings-item">
+                <p id="modal-sale-notify-name" class="modal-body-text"></p>
+                <p id="modal-sale-notify-detail" class="modal-body-text modal-sale-detail"></p>
               </div>
             </div>
             <div class="modal-footer modal-footer-name modal-footer-round">

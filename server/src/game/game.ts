@@ -960,6 +960,23 @@ export class Game {
             };
         });
 
+        // Per logged-in player with equipped cosmetics: their result, so the API can
+        // attribute games/wins/kills/damage to the owned item instances (provenance).
+        const cosmeticStats = players
+            .filter(
+                ({ player }) =>
+                    !player.spectator &&
+                    player.userId &&
+                    player.equippedCosmetics.length,
+            )
+            .map(({ player, rank }) => ({
+                userId: player.userId!,
+                won: rank === 1,
+                kills: player.kills,
+                damage: Math.round(player.damageDealt),
+                types: player.equippedCosmetics,
+            }));
+
         // only save the game if it has more than 2 players lol
         if (values.length < 2) return;
 
@@ -972,6 +989,7 @@ export class Game {
             res = await apiPrivateRouter.save_game.$post({
                 json: {
                     matchData: values,
+                    cosmeticStats,
                 },
             });
         } catch (err) {

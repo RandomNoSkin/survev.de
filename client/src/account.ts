@@ -1,14 +1,23 @@
 import $ from "jquery";
 import type {
+    BuyListingResponse,
+    BuyShopResponse,
+    CancelListingResponse,
+    ListItemResponse,
     LoadoutRequest,
     LoadoutResponse,
+    MarketBrowseRequest,
+    MarketListResponse,
+    MyListing,
     ProfileResponse,
     RefreshQuestRequest,
     RefreshQuestResponse,
+    SaleNotification,
     SetItemStatusRequest,
     SetPassUnlockRequest,
     SetPassUnlockResponse,
     SetQuestRequest,
+    ShopResponse,
     UsernameRequest,
     UsernameResponse,
 } from "../../shared/types/user";
@@ -92,10 +101,15 @@ export class Account {
         username: "",
         slug: "",
         usernameChangeTime: 0,
+        goldenFries: 0,
     };
 
     loadout = loadouts.defaultLoadout();
     items: Item[] = [];
+    /** The caller's own active marketplace listings (from the profile response). */
+    myListings: MyListing[] = [];
+    /** Marketplace sales the seller hasn't acknowledged yet (drives the sold popup). */
+    sales: SaleNotification[] = [];
     quests: Quest[] = [];
     questPriv = "";
     pass: Record<string, PassType> = {};
@@ -223,6 +237,8 @@ export class Account {
             this.loggedIn = false;
             this.profile = {} as this["profile"];
             this.items = [];
+            this.myListings = [];
+            this.sales = [];
             if (err) {
                 errorLogManager.storeGeneric("account", "load_profile_error");
             } else if (data.banned) {
@@ -231,6 +247,8 @@ export class Account {
                 this.loggedIn = true;
                 this.profile = data.profile;
                 this.items = data.items;
+                this.myListings = data.listings ?? [];
+                this.sales = data.sales ?? [];
                 this.loadout = data.loadout;
                 const profile = this.config.get("profile") || { slug: "" };
                 profile.slug = data.profile.slug;
@@ -244,6 +262,34 @@ export class Account {
             }
             this.emit("items", this.items);
             this.emit("loadout", this.loadout);
+            this.emit("sales", this.sales);
+        });
+    }
+
+    /**
+     * Reports the instance ids the player currently has selected/equipped, so the server
+     * can attach this game's cosmetic stats to the exact owned copy (not just the oldest
+     * of a type). Called on game join — a snapshot of "what's equipped at the start".
+     */
+    reportEquippedInstances() {
+        if (!this.loggedIn) return;
+        const ids = Object.values(this.config.get("selectedItemIds") ?? {}).filter(
+            (id): id is number => typeof id === "number",
+        );
+        this.ajaxRequest("/api/user/equipped_instances", { ids }, (err) => {
+            if (err) errorLogManager.storeGeneric("account", "equipped_instances_error");
+        });
+    }
+
+    /** Acknowledges sale notifications so the "your item sold" popup won't fire again. */
+    ackSales(listingIds: number[], cb?: (err: unknown) => void) {
+        if (!listingIds.length) {
+            cb?.(null);
+            return;
+        }
+        this.ajaxRequest("/api/user/market/ack_sales", { listingIds }, (err) => {
+            if (err) errorLogManager.storeGeneric("account", "ack_sales_error");
+            cb?.(err);
         });
     }
 
@@ -315,13 +361,13 @@ export class Account {
 
     setItemStatus(status: ItemStatus, itemTypes: string[]) {
         if (itemTypes.length != 0) {
-            // Preemptively mark the item status as modified on our local copy
-            for (let i = 0; i < itemTypes.length; i++) {
-                const item = this.items.find((x) => {
-                    return x.type == itemTypes[i];
-                });
-                if (item) {
-                    item.status = Math.max(item.status!, status);
+            // Preemptively mark the item status as modified on our local copy.
+            // Update every instance of each type (matching the server's bulk update),
+            // not just the first match — otherwise duplicate-type items stay below the
+            // new status and keep re-triggering setItemsAckd/setItemStatus.
+            for (const item of this.items) {
+                if (itemTypes.includes(item.type)) {
+                    item.status = Math.max(item.status ?? loadouts.ItemStatus.New, status);
                 }
             }
 
@@ -363,7 +409,9 @@ export class Account {
                     return a.idx - b.idx;
                 });
                 this.emit("pass", this.pass, this.quests, true);
-                if (this.pass.newItems) {
+                // Reload the profile if new cosmetics OR Golden Fries were granted,
+                // so the items list and the top-left fries balance stay in sync.
+                if (this.pass.newItems || (res.goldenFriesAwarded ?? 0) > 0) {
                     this.loadProfile();
                 }
             }
@@ -405,6 +453,113 @@ export class Account {
                     // Give the pass UI a chance to update quests
                     this.emit("pass", this.pass, this.quests, false);
                 }
+            },
+        );
+    }
+
+    getShop(cb: (err: unknown, res?: ShopResponse) => void) {
+        this.ajaxRequest("/api/user/shop", {}, (err, res: ShopResponse) => {
+            if (err) {
+                errorLogManager.storeGeneric("account", "get_shop_error");
+            }
+            cb(err, res);
+        });
+    }
+
+    buyShopOffer(slot: number, cb: (err: unknown, res?: BuyShopResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/shop/buy",
+            { slot },
+            (err, res: BuyShopResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "buy_shop_error");
+                } else if (res.success) {
+                    // Refresh balance + inventory after a purchase.
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    //
+    // MARKET (player-to-player marketplace)
+    //
+
+    getMarket(
+        filters: MarketBrowseRequest,
+        cb: (err: unknown, res?: MarketListResponse) => void,
+    ) {
+        this.ajaxRequest("/api/user/market/listings", filters, (err, res) => {
+            if (err) errorLogManager.storeGeneric("account", "get_market_error");
+            cb(err, res);
+        });
+    }
+
+    getStorefront(slug: string, cb: (err: unknown, res?: MarketListResponse) => void) {
+        this.ajaxRequest("/api/user/market/storefront", { slug }, (err, res) => {
+            if (err) errorLogManager.storeGeneric("account", "get_storefront_error");
+            cb(err, res);
+        });
+    }
+
+    getPrivateOffers(cb: (err: unknown, res?: MarketListResponse) => void) {
+        this.ajaxRequest("/api/user/market/private", {}, (err, res) => {
+            if (err) errorLogManager.storeGeneric("account", "get_private_offers_error");
+            cb(err, res);
+        });
+    }
+
+    listItem(
+        itemId: number,
+        price: number,
+        buyerSlug: string | undefined,
+        cb: (err: unknown, res?: ListItemResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/market/list",
+            buyerSlug ? { itemId, price, buyerSlug } : { itemId, price },
+            (err, res: ListItemResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "list_item_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    buyListing(listingId: number, cb: (err: unknown, res?: BuyListingResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/market/buy",
+            { listingId },
+            (err, res: BuyListingResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "buy_listing_error");
+                } else if (res.success) {
+                    // Refresh balance + inventory after a purchase.
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    cancelListing(
+        listingId: number,
+        cb: (err: unknown, res?: CancelListingResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/market/cancel",
+            { listingId },
+            (err, res: CancelListingResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "cancel_listing_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
             },
         );
     }
