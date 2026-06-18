@@ -89,6 +89,13 @@ export class Projectile extends BaseGameObject {
 
     obstacleBellowId = 0;
 
+    // proximity mine state (see ThrowableDef.proximityMine)
+    mineArmTimer = 0;
+    mineArmed = false;
+    // networked so the client can blink faster once the mine has been tripped
+    mineTriggered = false;
+    mineTriggerTimer = 0;
+
     strobe?: {
         timeToPing: number;
         airstrikesTotal: number;
@@ -169,6 +176,65 @@ export class Projectile extends BaseGameObject {
                 this.strobe.airstrikeTicker = this.strobe.airstrikeDelay;
             }
         }
+    }
+
+    updateMine(dt: number): void {
+        const def = GameObjectDefs[this.type] as ThrowableDef;
+        if (!def.proximityMine) return;
+
+        // once it has landed, plant it firmly so it doesn't slide on the ground
+        if (this.posZ <= 0) {
+            this.vel = v2.create(0, 0);
+        }
+
+        // once tripped, count down before detonating (committed even if the
+        // enemy walks back out of range)
+        if (this.mineTriggered) {
+            this.mineTriggerTimer += dt;
+            if (this.mineTriggerTimer >= def.proximityMine.triggerDelay) {
+                this.explode();
+            }
+            return;
+        }
+
+        // only start arming once the mine has settled on the ground
+        if (this.posZ > 0) return;
+
+        if (!this.mineArmed) {
+            this.mineArmTimer += dt;
+            if (this.mineArmTimer >= def.proximityMine.armTime) {
+                this.mineArmed = true;
+            }
+            return;
+        }
+
+        // armed: trip when ANY player enters the trigger radius
+        // (the thrower and their teammates included, by design)
+        const triggerRad = def.proximityMine.triggerRad;
+        const objs = this.game.grid.intersectCollider(
+            collider.createCircle(this.pos, triggerRad),
+        );
+        for (const obj of objs) {
+            if (
+                obj.__type !== ObjectType.Player ||
+                obj.dead ||
+                !util.sameLayer(this.layer, obj.layer)
+            ) {
+                continue;
+            }
+            if (coldet.testCircleCircle(this.pos, triggerRad, obj.pos, obj.rad)) {
+                this.triggerMine();
+                return;
+            }
+        }
+    }
+
+    /** Trip an armed proximity mine; also called when a bullet hits it. */
+    triggerMine(): void {
+        if (this.mineTriggered) return;
+        this.mineTriggered = true;
+        this.mineTriggerTimer = 0;
+        this.setPartDirty();
     }
 
     update(dt: number) {
@@ -296,6 +362,10 @@ export class Projectile extends BaseGameObject {
             }
 
             this.game.grid.updateObject(this);
+
+            if (def.proximityMine) {
+                this.updateMine(dt);
+            }
 
             if (this.posZ === 0 && def.explodeOnImpact) {
                 this.explode();

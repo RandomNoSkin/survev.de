@@ -54,6 +54,8 @@ export interface ObjectsPartialData {
         pos: Vec2;
         posZ: number;
         dir: Vec2;
+        // proximity mines: true once tripped, so the client blinks faster
+        mineTriggered: boolean;
     };
     [ObjectType.Smoke]: {
         pos: Vec2;
@@ -576,6 +578,7 @@ export const ObjectSerializeFns: {
             s.writeMapPos(data.pos);
             s.writeFloat(data.posZ, 0, GameConfig.projectile.maxHeight, 10);
             s.writeUnitVec(data.dir, 7);
+            s.writeBoolean(data.mineTriggered);
         },
         serializeFull: (s, data) => {
             s.writeGameType(data.type);
@@ -587,6 +590,7 @@ export const ObjectSerializeFns: {
             data.pos = s.readMapPos();
             data.posZ = s.readFloat(0, GameConfig.projectile.maxHeight, 10);
             data.dir = s.readUnitVec(7);
+            data.mineTriggered = s.readBoolean();
         },
         deserializeFull: (s, data) => {
             data.type = s.readGameType();
