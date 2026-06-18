@@ -300,7 +300,7 @@ export const Comp: MapDef = {
         tier_chrys_case: [
             { name: "", count: 1, weight: 5 }, // ?
             { name: "tier_katanas", count: 1, weight: 3 }, // ?
-            { name: "naginata", count: 1, weight: 1 }, // ?
+            { name: "naginata", count: 1, weight: 2 }, // ?
         ],
         tier_crow_case_melee: [{ name: "crowbar", count: 1, weight: 1 }],
         tier_crow_case_skin: [
@@ -1009,6 +1009,14 @@ export const Comp: MapDef = {
             { name: "backpack03", count: 1, weight: 0.32 },
             { name: "chest03", count: 1, weight: 0.23 },
             { name: "helmet03", count: 1, weight: 0.25 },
+        ],
+        tier_supply_melee: [
+            { name: "crowbar", count: 1, weight: 0.15 },
+            { name: "saw", count: 1, weight: 0.1 },
+            { name: "spade", count: 1, weight: 0.25 },
+            { name: "kukri_trad", count: 1, weight: 0.25 },
+            { name: "Hook", count: 1, weight: 0.1 },
+            { name: "sledgehammer", count: 1, weight: 0.01 },
         ],
         tier_armor_3: [
             { name: "backpack03", count: 1, weight: 0.28 },
