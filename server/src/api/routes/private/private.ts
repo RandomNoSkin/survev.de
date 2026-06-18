@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { saveConfig } from "../../../../../config";
 import { GameObjectDefs } from "../../../../../shared/defs/gameObjectDefs";
-import { MapDefs } from "../../../../../shared/defs/mapDefs";
+import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
 import { ExperienceConverter, GameConfig, TeamMode } from "../../../../../shared/gameConfig";
 import {
     zCheckForUnlocksParams,
@@ -33,12 +33,78 @@ import {
     type MatchDataTable,
     matchDataTable,
     usersTable,
+    userXpTable,
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { getActiveChatBan, hashIp, isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
 import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
 import { level } from "winston";
+
+/**
+ * Adds each player's match result (games +1, wins, kills, damage) to the owned item
+ * instances they had equipped at game start. For each equipped type the stats attach to
+ * the instance the player had *selected* (reported via /equipped_instances on join), and
+ * fall back to the oldest owned copy when no selection is known. The target is always
+ * scoped to the player's own items, so a forged/foreign id is simply never matched.
+ * One indexed UPDATE per player; failures are swallowed so they never break game saving.
+ */
+async function attributeCosmeticStats(
+    stats: NonNullable<SaveGameBody["cosmeticStats"]>,
+): Promise<void> {
+    // Batch-load each player's selected instance ids (their start-of-game snapshot).
+    const userIds = [...new Set(stats.map((s) => s.userId).filter(Boolean))];
+    const preferredByUser = new Map<string, number[]>();
+    if (userIds.length) {
+        const rows = await db
+            .select({ id: usersTable.id, ids: usersTable.equippedInstanceIds })
+            .from(usersTable)
+            .where(inArray(usersTable.id, userIds));
+        for (const r of rows) preferredByUser.set(r.id, r.ids ?? []);
+    }
+
+    let updated = 0;
+    for (const s of stats) {
+        if (!s.userId || !s.types.length) continue;
+        try {
+            const typeList = sql.join(
+                s.types.map((t) => sql`${t}`),
+                sql`, `,
+            );
+            const preferred = preferredByUser.get(s.userId) ?? [];
+            const preferredArr = preferred.length
+                ? sql`ARRAY[${sql.join(
+                      preferred.map((id) => sql`${id}`),
+                      sql`, `,
+                  )}]::int[]`
+                : sql`ARRAY[]::int[]`;
+            // DISTINCT ON (type) picks ONE instance per equipped type: a selected
+            // instance sorts first (id = ANY(preferred)), else the oldest copy.
+            const res = await db.execute(sql`
+                UPDATE items SET
+                    games = games + 1,
+                    wins = wins + ${s.won ? 1 : 0},
+                    kills = kills + ${Math.max(0, Math.round(s.kills))},
+                    damage = damage + ${Math.max(0, Math.round(s.damage))}
+                WHERE id IN (
+                    SELECT DISTINCT ON (type) id
+                    FROM items
+                    WHERE user_id = ${s.userId}
+                      AND type IN (${typeList})
+                    ORDER BY type, (id = ANY(${preferredArr})) DESC, id ASC
+                )
+            `);
+            updated += res.rowCount ?? 0;
+        } catch (err) {
+            server.logger.warn(`Failed to attribute cosmetic stats for ${s.userId}:`, err);
+        }
+    }
+    if (updated > 0) {
+        server.logger.info(
+            `Attributed cosmetic stats to ${updated} item(s) across ${stats.length} player(s)`,
+        );
+    }
+}
 
 export const PrivateRouter = new Hono<Context>()
     .use(privateMiddleware)
@@ -150,6 +216,9 @@ export const PrivateRouter = new Hono<Context>()
             matchData.map((d) => ({ ...d, encodedIp: hashIp(d.ip) })),
         );
         await logPlayerIPs(matchData);
+        if (data.cosmeticStats?.length) {
+            await attributeCosmeticStats(data.cosmeticStats);
+        }
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);
     })
@@ -405,7 +474,104 @@ export const PrivateRouter = new Hono<Context>()
                 server.refreshRegionModes();
                 return c.json({ success: true }, 200);
         }
-    );
+    )
+    .post("/reconcile_pass_xp", databaseEnabledMiddleware, async (c) => {
+        const passType = GameConfig.serverSettings.currentPass;
+        const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
+
+        const allUserXp = await db
+            .select()
+            .from(userXpTable)
+            .where(eq(userXpTable.passType, passType));
+
+        const mapIdToName = Object.fromEntries(
+            Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
+        ) as Record<number, string>;
+
+        let usersReconciled = 0;
+        let totalXpAdded = 0;
+
+        for (const record of allUserXp) {
+            const currentXp = Number(record.xp);
+
+            const stats = await db
+                .select({
+                    gameId: matchDataTable.gameId,
+                    kills: sql<number>`max(${matchDataTable.kills})`,
+                    damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                    timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                    rank: sql<number>`min(${matchDataTable.rank})`,
+                    mapId: sql<number>`max(${matchDataTable.mapId})`,
+                    createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+                })
+                .from(matchDataTable)
+                .where(
+                    and(
+                        eq(matchDataTable.userId, record.userId),
+                        gte(matchDataTable.createdAt, seasonStart),
+                    ),
+                )
+                .groupBy(matchDataTable.gameId)
+                .having(sql`count(*) = 1`);
+
+            let correctXp = 0;
+            for (const stat of stats) {
+                const mapDef = getMapDefById(stat.mapId);
+                const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
+                    kill: 0,
+                    damage: 0,
+                    win: 0,
+                    timeSurvived: 0,
+                };
+                const mapTypeName = mapIdToName[stat.mapId] ?? "";
+
+                const boostEvents = GameConfig.serverSettings.xpBoostEvents?.[passType];
+                let boost = 1;
+                if (boostEvents) {
+                    const t =
+                        stat.createdAt instanceof Date
+                            ? stat.createdAt.getTime()
+                            : new Date(stat.createdAt).getTime();
+                    for (const event of Object.values(boostEvents)) {
+                        if (
+                            t >= new Date(event.start).getTime() &&
+                            t <= new Date(event.end).getTime() &&
+                            event.maps.includes(mapTypeName)
+                        ) {
+                            boost = event.boost;
+                            break;
+                        }
+                    }
+                }
+
+                let matchXp = 0;
+                matchXp += stat.kills * xpMultiplier.kill;
+                matchXp += stat.damage * xpMultiplier.damage;
+                matchXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
+                matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
+                correctXp += matchXp * boost;
+            }
+            // round to avoid float drift while preserving fractional XP (smallest multiplier is 0.00025)
+            correctXp = Math.round(correctXp * 1e5) / 1e5;
+
+            if (correctXp > currentXp) {
+                const { level } = getPassLevelAndXp(passType, correctXp);
+                await db
+                    .update(userXpTable)
+                    .set({ xp: String(correctXp), level, lastUpdated: new Date() })
+                    .where(
+                        and(
+                            eq(userXpTable.userId, record.userId),
+                            eq(userXpTable.passType, passType),
+                        ),
+                    );
+                usersReconciled++;
+                totalXpAdded += correctXp - currentXp;
+            }
+        }
+
+        return c.json({ success: true, usersReconciled, totalXpAdded });
+    });
 
     function getPassLevelXp(passType: string, level: number) {
         const passDef = PassDefs[passType];

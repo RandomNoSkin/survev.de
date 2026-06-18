@@ -1,1 +1,0 @@
-ALTER TABLE "user_xp" ALTER COLUMN "xp" SET DATA TYPE numeric;

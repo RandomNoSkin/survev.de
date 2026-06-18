@@ -99,6 +99,7 @@ export class Game {
     m_disconnectMsg!: string;
     m_playing!: boolean;
     m_gameOver!: boolean;
+    m_wonGame!: boolean;
     m_spectating!: boolean;
     //m_spectateCooldown!: number;
     m_inputMsgTimeout!: number;
@@ -402,6 +403,7 @@ export class Game {
         this.m_disconnectMsg = "";
         this.m_playing = false;
         this.m_gameOver = false;
+        this.m_wonGame = false;
         this.m_spectating = false;
         //this.m_spectateCooldown = 0;
         this.m_inputMsgTimeout = 0;
@@ -623,9 +625,7 @@ export class Game {
                 const curWeapon = activePlayer.m_localData.m_weapons[curWeapIdx];
                 const weaponDef = GameObjectDefs[curWeapon?.type];
 
-                console.log("WeaponDef:", weaponDef);
-
-                if(touchAimMovement.touched && this.m_touch.shotDetected && weaponDef?.type === "gun" && weaponDef.aimAssist === true){
+                if(touchAimMovement.touched && this.m_touch.shotDetected && weaponDef?.type === "gun" && weaponDef.aimAssist === true && this.m_config.get("touchAimAssist")){
                     aimDir = this.getMobileAimAssistDir(aimDir);
                 }
 
@@ -1293,6 +1293,7 @@ export class Game {
             device.touch &&
             weaponDef?.type === "gun" &&
             weaponDef.autoSwitch === true &&
+            this.m_config.get("touchAutoSwitch") &&
             oldWeaponType === newWeapon?.type &&
             oldAmmo > newAmmo
         ) {
@@ -1759,6 +1760,7 @@ export class Game {
                     this.m_ui2Manager,
                 );
                 if (localTeamId == msg.winningTeamId) {
+                    this.m_wonGame = true;
                     this.victoryMusic = this.m_audioManager.playSound("menu_music", {
                         channel: "music",
                         delay: 1300,

@@ -29,6 +29,11 @@ export class AirdropBarn {
     }
 
     addSupplyDrop(pos: Vec2, type: string) {
+        if (!MapObjectDefs[type]) {
+            console.error("[AirdropBarn] invalid drop type", type, pos);
+            gameLogger.error("[AirdropBarn] invalid drop type", { type, pos });
+            return;
+        }
         const airdrop = new Airdrop(this.game, pos, type);
         this.airdrops.push(airdrop);
         this.game.playerBarn.addMapPing("ping_supplydrop", pos);
@@ -98,50 +103,55 @@ export class Airdrop extends BaseGameObject {
             this.landed = true;
             this.setDirty();
 
-            const objs = this.game.grid.intersectCollider(this.crateCollision);
-            for (const obj of objs) {
-                if (!util.sameLayer(obj.layer, this.layer)) continue;
+            // Isolate all landing side effects: a single misbehaving object
+            // (damage/kill, ceiling collapse, obstacle generation) must never
+            // throw out of the game update loop and crash the whole process.
+            // landed/setDirty above already ran, so a failure here just means
+            // this one airdrop skips its impact — the game keeps running.
+            try {
+                const objs = this.game.grid.intersectCollider(this.crateCollision);
+                for (const obj of objs) {
+                    if (!util.sameLayer(obj.layer, this.layer)) continue;
 
-                if (
-                    obj.__type === ObjectType.Player ||
-                    obj.__type === ObjectType.Obstacle
-                ) {
-                    let collider: Collider;
-                    if (obj.__type === ObjectType.Player) {
-                        collider = obj.collider;
-                    } else {
-                        collider = obj.obstacleAABB || obj.collider;
-                    }
-                    if (coldet.test(collider, this.crateCollision)) {
-                        obj.damage({
-                            amount: obj.__type === ObjectType.Player ? 100 : 1e10,
-                            damageType: GameConfig.DamageType.Airdrop,
-                            dir: "dir" in obj ? obj.dir : v2.create(0, 0),
-                        });
-                    }
-                } else if (
-                    obj.__type === ObjectType.Building &&
-                    !obj.ceilingDead &&
-                    obj.wallsToDestroy < Infinity
-                ) {
-                    for (const zoomRegion of obj.zoomRegions) {
-                        if (!zoomRegion.zoomIn) continue;
-                        if (coldet.test(zoomRegion.zoomIn, this.crateCollision)) {
-                            obj.ceilingDead = true;
-                            obj.setPartDirty();
-                            break;
+                    if (
+                        obj.__type === ObjectType.Player ||
+                        obj.__type === ObjectType.Obstacle
+                    ) {
+                        let collider: Collider;
+                        if (obj.__type === ObjectType.Player) {
+                            collider = obj.collider;
+                        } else {
+                            collider = obj.obstacleAABB || obj.collider;
+                        }
+                        if (coldet.test(collider, this.crateCollision)) {
+                            obj.damage({
+                                amount: obj.__type === ObjectType.Player ? 100 : 1e10,
+                                damageType: GameConfig.DamageType.Airdrop,
+                                dir: "dir" in obj ? obj.dir : v2.create(0, 0),
+                            });
+                        }
+                    } else if (
+                        obj.__type === ObjectType.Building &&
+                        !obj.ceilingDead &&
+                        obj.wallsToDestroy < Infinity
+                    ) {
+                        for (const zoomRegion of obj.zoomRegions) {
+                            if (!zoomRegion.zoomIn) continue;
+                            if (coldet.test(zoomRegion.zoomIn, this.crateCollision)) {
+                                obj.ceilingDead = true;
+                                obj.setPartDirty();
+                                break;
+                            }
                         }
                     }
                 }
-            }
 
-            try {
                 this.game.map.genObstacle(this.obstacleType, this.pos, 0);
             } catch (err) {
-                gameLogger.error("[Airdrop] genObstacle crash", {
+                gameLogger.error("[Airdrop] landing crash", {
                     obstacleType: this.obstacleType,
                     pos: this.pos,
-                    err,
+                    err: err instanceof Error ? (err.stack ?? err.message) : err,
                 });
             }
         } else {

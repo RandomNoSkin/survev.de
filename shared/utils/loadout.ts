@@ -6,11 +6,20 @@ import { GameConfig } from "../gameConfig";
 import { deepEqual } from "./deepEqual";
 
 export type Item = {
+    /** Inventory instance id (absent for virtual default-unlock items). */
+    id?: number;
     type: string;
     timeAcquired: number;
     source: string;
     status?: ItemStatus;
     ackd?: ItemStatus.Ackd;
+    /** Ownership history (slugs), present for traded items. */
+    previousOwners?: string[];
+    /** Lifetime match stats accrued by this instance while equipped. */
+    games?: number;
+    wins?: number;
+    kills?: number;
+    damage?: number;
 };
 
 export const loadoutSchema = z.object({
@@ -146,7 +155,11 @@ export const loadout = {
         for (let i = 0; i < heroItems.length; i++) {
             items.push(heroItems[i]);
         }
-        return items;
+        // Duplicates are intentionally kept (each owned copy is listed separately).
+        // Only drop items whose type no longer exists as a game object (e.g. a cosmetic
+        // renamed/removed in the defs but still owned in the DB) — those can't render
+        // and would crash the unguarded def lookups in the loadout menu.
+        return items.filter((item) => !!GameObjectDefs[item.type]);
     },
 };
 export default loadout;

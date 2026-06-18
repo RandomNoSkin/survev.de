@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
     bigint,
     boolean,
@@ -11,6 +12,7 @@ import {
     text,
     timestamp,
     unique,
+    uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
 import { TeamMode } from "../../../../shared/gameConfig";
@@ -49,27 +51,143 @@ export const usersTable = pgTable("users", {
         .notNull()
         .default(loadout.validate({} as Loadout))
         .$type<Loadout>(),
+    goldenFries: integer("golden_fries").notNull().default(0),
+    // Instance ids the player had selected/equipped at their last game join, so match
+    // stats can attach to the exact owned copy (snapshot per game; falls back to the
+    // oldest instance of a type when absent). The client reports these on join.
+    equippedInstanceIds: json("equipped_instance_ids")
+        .$type<number[]>()
+        .notNull()
+        .default([]),
 });
 
 export type UsersTableInsert = typeof usersTable.$inferInsert;
 export type UsersTableSelect = typeof usersTable.$inferSelect;
 
-export const itemsTable = pgTable("items", {
-    userId: text("user_id")
-        .notNull()
-        .references(() => usersTable.id, {
-            onDelete: "cascade",
-            onUpdate: "cascade",
-        }),
-    type: text("type").notNull(),
-    timeAcquired: bigint("time_acquired", { mode: "number" }).notNull(),
-    source: text("source").notNull().default("unlock_new_account"),
-    status: integer("status").notNull().default(ItemStatus.New),
-},
+// Instance-based inventory: one row per owned item instance, so a player can own
+// the same `type` multiple times (needed for trading). Equipping stays type-based.
+export const itemsTable = pgTable(
+    "items",
+    {
+        id: serial("id").primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        type: text("type").notNull(),
+        timeAcquired: bigint("time_acquired", { mode: "number" }).notNull(),
+        source: text("source").notNull().default("unlock_new_account"),
+        status: integer("status").notNull().default(ItemStatus.New),
+        // Ownership history (slugs), appended each time the instance is traded.
+        previousOwners: json("previous_owners").$type<string[]>().notNull().default([]),
+        // Lifetime match stats accrued by this instance while equipped in a game.
+        games: integer("games").notNull().default(0),
+        wins: integer("wins").notNull().default(0),
+        kills: integer("kills").notNull().default(0),
+        damage: integer("damage").notNull().default(0),
+    },
+    (table) => [
+        index("items_user_idx").on(table.userId),
+        index("items_user_type_idx").on(table.userId, table.type),
+    ],
+);
+
+export type ItemsTableSelect = typeof itemsTable.$inferSelect;
+
+// Idempotent record of pass/premium item grants, independent of current ownership
+// (so selling a pass item can't make the reconcile re-grant it for free). The item
+// is part of the key so newly-added items on a level get granted retroactively.
+export const passItemGrantsTable = pgTable(
+    "pass_item_grants",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        // e.g. "pass:pass_survivr1:5:outfitWhite" or "premium:pass_survivr1:8:..."
+        grantKey: text("grant_key").notNull(),
+        grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    },
     (table) => ({
-        pk: primaryKey({ columns: [table.userId, table.type] }),
+        pk: primaryKey({ columns: [table.userId, table.grantKey] }),
     }),
 );
+
+// One row per purchased daily shop offer, to prevent buying the same slot twice a day.
+export const shopPurchasesTable = pgTable(
+    "shop_purchases",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        day: text("day").notNull(), // UTC date "YYYY-MM-DD"
+        slot: integer("slot").notNull(),
+        purchasedAt: timestamp("purchased_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.userId, table.day, table.slot] }),
+    }),
+);
+
+// Player-to-player marketplace listings. `status` moves active → sold | cancelled.
+// The partial-unique index on item_id (where status='active') is the lock that
+// prevents the same item instance being listed twice at once.
+export const marketListingsTable = pgTable(
+    "market_listings",
+    {
+        id: serial("id").primaryKey(),
+        itemId: integer("item_id")
+            .notNull()
+            .references(() => itemsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        sellerId: text("seller_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        // Denormalized for storefront/display and category filtering without joins.
+        sellerSlug: text("seller_slug").notNull(),
+        type: text("type").notNull(),
+        category: text("category").notNull(), // shop category, for browse filtering
+        rarity: integer("rarity").notNull().default(0), // denormalized, for browse filtering
+        price: integer("price").notNull(), // seller's ask (what the seller receives)
+        status: text("status").notNull().default("active"), // active | sold | cancelled | expired
+        // Target buyer's slug for a private listing (null = public, anyone may buy).
+        buyerSlug: text("target_buyer_slug"),
+        buyerId: text("buyer_id"),
+        // false until the seller has seen the "your item sold" notification.
+        sellerAcked: boolean("seller_acked").notNull().default(false),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        closedAt: timestamp("closed_at", { withTimezone: true }),
+    },
+    (table) => [
+        uniqueIndex("market_active_item_idx")
+            .on(table.itemId)
+            .where(sql`${table.status} = 'active'`),
+        index("market_status_created_idx").on(table.status, table.createdAt),
+        index("market_status_cat_created_idx").on(
+            table.status,
+            table.category,
+            table.createdAt,
+        ),
+        index("market_seller_status_idx").on(table.sellerId, table.status),
+        index("market_buyer_status_idx").on(table.buyerSlug, table.status),
+    ],
+);
+
+export type MarketListingSelect = typeof marketListingsTable.$inferSelect;
 
 export const matchDataTable = pgTable(
     "match_data",
@@ -194,6 +312,51 @@ export const chatBannedIpsTable = pgTable("chat_banned_ips", {
     bannedBy: text("banned_by").notNull().default("admin"),
 });
 
+export const banCommentsTable = pgTable(
+    "ban_comments",
+    {
+        id: serial().primaryKey(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        banType: text("ban_type").notNull(), // "ip" | "account" | "chat"
+        banTarget: text("ban_target").notNull(), // encoded IP hash or account slug
+        comment: text("comment").notNull(),
+        createdBy: text("created_by").notNull(),
+    },
+    (table) => [
+        index("ban_comments_target_idx").on(table.banType, table.banTarget, table.createdAt),
+    ],
+);
+
+export type BanCommentsTable = typeof banCommentsTable.$inferSelect;
+
+/**
+ * Append-only audit log of ban actions, so the full history survives even after a
+ * ban is lifted (the live `banned_ips`/`chat_banned_ips` rows are deleted on unban).
+ * One row per ban action; the matching active row(s) get `unbannedAt`/`unbannedBy`
+ * set when the ban is removed. Mirrors the `banType`/`banTarget` convention used by
+ * `ban_comments` (target = encoded IP hash for ip/chat, account slug for account).
+ */
+export const banHistoryTable = pgTable(
+    "ban_history",
+    {
+        id: serial().primaryKey(),
+        banType: text("ban_type").notNull(), // "ip" | "account" | "chat"
+        banTarget: text("ban_target").notNull(), // encoded IP hash or account slug
+        reason: text("reason").notNull().default(""),
+        bannedBy: text("banned_by").notNull(), // admin slug
+        bannedAt: timestamp("banned_at", { withTimezone: true }).notNull().defaultNow(),
+        expiresAt: timestamp("expires_at", { withTimezone: true }), // null = no auto-expiry (account bans)
+        permanent: boolean("permanent").notNull().default(false),
+        unbannedAt: timestamp("unbanned_at", { withTimezone: true }), // null = still active
+        unbannedBy: text("unbanned_by"), // null = still active
+    },
+    (table) => [
+        index("ban_history_target_idx").on(table.banType, table.banTarget, table.bannedAt),
+    ],
+);
+
+export type BanHistoryTable = typeof banHistoryTable.$inferSelect;
+
 export const userXpTable = pgTable("user_xp", {
     userId: text("user_id").notNull()
     .references(() => usersTable.id, {
@@ -209,3 +372,36 @@ export const userXpTable = pgTable("user_xp", {
         pk: primaryKey({ columns: [table.userId, table.passType] }),
     }),
 );
+
+/**
+ * Append-only ledger of every Golden Fries balance change (earn or spend).
+ * `amount` is a signed delta (+ earn, - spend); `balanceAfter` is the user's
+ * `users.golden_fries` value right after the transaction was applied.
+ */
+export const goldenFriesLedgerTable = pgTable(
+    "golden_fries_ledger",
+    {
+        id: serial().primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        amount: integer("amount").notNull(), // + = earn, - = spend
+        reason: text("reason").notNull(), // e.g. "pass_level", "admin_grant", "purchase:<item>"
+        balanceAfter: integer("balance_after").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        index("golden_fries_ledger_user_idx").on(table.userId, table.createdAt),
+        // Idempotency lock for pass fries payouts: at most one ledger row per
+        // (user, pass-level reason), so concurrent /get_pass or reconcile can't
+        // double-award. Scoped to `pass:%` so market/shop reasons are unaffected.
+        uniqueIndex("golden_fries_ledger_pass_reason_idx")
+            .on(table.userId, table.reason)
+            .where(sql`${table.reason} LIKE 'pass:%'`),
+    ],
+);
+
+export type GoldenFriesLedgerTable = typeof goldenFriesLedgerTable.$inferSelect;

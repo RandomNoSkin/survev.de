@@ -176,8 +176,8 @@ a:active {
   background-position: center;
   height: 300px;
   margin: auto;
-  margin-top: 75px;
-  margin-bottom: 0px;
+  margin-top: 20px;
+  margin-bottom: 65px;
   position: relative;
   /* In case of logo change, update this value to width divided by 2 ceiled  */
   width: 500px;
@@ -206,11 +206,11 @@ a:active {
   color: red;
   font-size: 18px;
   font-weight: 700;
-  height: 30px;
   left: 0;
-  line-height: 30px;
+  line-height: 1.3;
   margin: auto;
   opacity: 0;
+  padding: 5px 10px;
   position: absolute;
   right: 0;
   text-align: center;
@@ -220,8 +220,7 @@ a:active {
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
   #server-warning {
     font-size: 12px;
-    height: 18px;
-    line-height: 20px;
+    line-height: 1.3;
     position: relative;
     top: 82px;
     width: 200px;
@@ -273,7 +272,6 @@ a:active {
   border-radius: 5px;
   box-sizing: border-box;
   display: block;
-  max-height: 325px;
 }
 
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
@@ -499,6 +497,7 @@ a:active {
 }
 
 #start-menu {
+  max-height: 412px;
   padding: 20px;
   width: 300px;
 }
@@ -1163,7 +1162,8 @@ a:active {
   }
 }
 
-#btn-team-leave {
+#btn-team-leave,
+#btn-private-lobby-leave {
   background: #7a7a7a;
   border-bottom: 2px solid #3e3e3e;
   bottom: -32px;
@@ -1385,7 +1385,8 @@ a:active {
 
 
 @media (max-height: 800px) {
-  #btn-team-leave {
+  #btn-team-leave,
+  #btn-private-lobby-leave {
     font-size: 16px;
     right: 14px;
     top: 20px;
@@ -1396,7 +1397,8 @@ a:active {
 }
 
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
-  #btn-team-leave {
+  #btn-team-leave,
+  #btn-private-lobby-leave {
     box-shadow: none;
     font-size: 14px;
     line-height: 28px;
@@ -1408,7 +1410,6 @@ a:active {
 
 #team-menu {
   display: none;
-  height: 325px;
   padding: 12px;
   position: relative;
   width: 625px;
@@ -1510,6 +1511,19 @@ a:active {
   filter: brightness(60%);
 }
 
+.team-menu-member > .icon-promote {
+  background-image: url(/img/gui/star.svg);
+  background-position: 49%;
+  background-size: 60%;
+  opacity: 1;
+  cursor: pointer;
+}
+
+.team-menu-member > .icon-promote:hover {
+  color: inherit;
+  filter: brightness(60%);
+}
+
 .team-menu-member > .icon-in-game {
   background-image: url(/img/gui/player-gui.svg);
   background-size: 85%;
@@ -1521,6 +1535,7 @@ a:active {
   background-size: 75%;
   cursor: pointer;
 }
+
 
 .team-menu-member > .icon-submit-name-change:hover {
   color: inherit;
@@ -1645,6 +1660,708 @@ a:active {
   }
 }
 
+#private-lobby-menu {
+  display: none;
+  height: 660px;
+  /* Escape .menu-block's 325px clamp. The header/donate column are hidden
+     while the lobby is open (see privateLobby.ts), which frees enough
+     vertical space for this box to fit without scrolling or overflowing. */
+  max-height: none !important;
+  margin-top: -100px;
+  padding: 12px;
+  position: relative;
+  width: 1000px;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-menu {
+    height: 300px;
+    width: 418px;
+  }
+}
+
+#private-lobby-menu-columns {
+  height: 560px;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-menu-columns {
+    height: 300px;
+    margin-top: -4px;
+  }
+}
+
+#private-lobby-menu-connecting {
+  display: none;
+  margin-top: 120px;
+  text-align: center;
+  width: 100%;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-menu-connecting {
+    margin-top: 64px;
+  }
+}
+
+#private-lobby-menu-members {
+  display: flex;
+  flex-direction: column;
+  float: left;
+  height: 100%;
+  max-height: none;
+  padding: 12px 0;
+  width: 420px;
+}
+
+#btn-private-lobby-create-team,
+#btn-private-lobby-afk {
+  flex-shrink: 0;
+}
+
+#btn-private-lobby-afk.afk-active {
+  background: #b94a3a;
+  border-bottom: 2px solid #8a362b;
+  box-shadow: inset 0 -2px #8a362b;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-menu-members {
+    width: 240px;
+  }
+}
+
+#private-lobby-menu-team-grid {
+  flex: 1;
+  /* Lets the grid shrink below its content size so it scrolls internally
+     instead of pushing the "Create Team" button out of the members box. */
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.private-lobby-team {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  margin-bottom: 8px;
+  padding: 6px;
+}
+
+.private-lobby-team-header {
+  align-items: center;
+  color: #fff;
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding: 0 4px;
+}
+
+.private-lobby-team-copy-link {
+  background-color: transparent;
+  background-image: url(/img/gui/copy.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 26px;
+  border: none;
+  cursor: pointer;
+  flex: 0 0 auto;
+  height: 32px;
+  width: 32px;
+}
+
+.private-lobby-invite-code-text {
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 11px;
+  margin-left: 4px;
+  user-select: none;
+}
+
+.private-lobby-invite-code-text:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.private-lobby-team-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.private-lobby-player {
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.private-lobby-player-selected {
+  background-color: rgba(124, 252, 0, 0.15);
+  outline: 2px solid #7cfc00;
+}
+
+.private-lobby-player-afk {
+  background-color: rgba(231, 76, 60, 0.1);
+  outline: 2px solid #e74c3c;
+}
+
+.private-lobby-player-empty {
+  background-color: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  height: 40px;
+}
+
+.private-lobby-player-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.private-lobby-player-loadout-select {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  width: 100%;
+}
+
+.private-lobby-player-loadout-select option {
+  background-color: #fff;
+  color: #000;
+}
+
+.private-lobby-player-loadout-select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.private-lobby-team-unassigned {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.private-lobby-team-spectators {
+  background-color: rgba(100, 149, 237, 0.05);
+  border-top: 1px solid rgba(100, 149, 237, 0.2);
+  margin-top: 8px;
+}
+
+.private-lobby-team-spectators .private-lobby-team-header {
+  color: rgba(100, 149, 237, 0.85);
+}
+
+.private-lobby-spectator-label {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+}
+
+
+.private-lobby-team-spectators:not(.no-hover) {
+  cursor: pointer;
+}
+
+.private-lobby-team-spectators:hover {
+  background-color: rgba(100, 149, 237, 0.12);
+}
+
+.private-lobby-team-joinable {
+  cursor: pointer;
+}
+
+.private-lobby-team-joinable:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  outline: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.private-lobby-team-wins {
+  background-color: rgba(255, 215, 0, 0.25);
+  border-radius: 4px;
+  color: #ffd700;
+  font-weight: 700;
+  margin-left: 6px;
+  padding: 1px 5px;
+}
+
+.private-lobby-reset-scores-btn {
+  background: rgba(180, 40, 40, 0.7);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  width: 100%;
+}
+
+.private-lobby-reset-scores-btn:hover {
+  background: rgba(200, 60, 60, 0.9);
+}
+
+.private-lobby-general-settings {
+  width: 100%;
+}
+
+.private-lobby-advanced-settings {
+  width: 100%;
+}
+
+.private-lobby-advanced-settings-warning {
+  color: red;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.private-lobby-setting-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.private-lobby-setting-label {
+  color: #fff;
+  font-size: 14px;
+}
+
+.private-lobby-setting-toggle {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  user-select: none;
+}
+
+.private-lobby-setting-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.private-lobby-setting-toggle-on {
+  background-color: rgba(124, 252, 0, 0.2);
+  color: #7cfc00;
+  outline: 1px solid rgba(124, 252, 0, 0.5);
+}
+
+.private-lobby-setting-toggle-on:hover {
+  background-color: rgba(124, 252, 0, 0.3);
+}
+
+.private-lobby-setting-toggle-disabled {
+  cursor: default;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.private-lobby-setting-remove {
+  background-color: rgba(255, 255, 255, 0.1);
+  background-image: url(/img/gui/close.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 50%;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  height: 24px;
+  width: 24px;
+}
+
+.private-lobby-setting-remove:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.private-lobby-loadout-group {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+}
+
+.private-lobby-loadout-group-title {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.private-lobby-loadout-group .private-lobby-setting-row:last-child {
+  margin-bottom: 0;
+}
+
+.private-lobby-custom-loadout {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 12px;
+  padding-top: 12px;
+  width: 100%;
+}
+
+.private-lobby-setting-row-controls {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.private-lobby-collapse-toggle {
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 4px 6px;
+  user-select: none;
+}
+
+.private-lobby-collapse-toggle:hover {
+  color: #fff;
+}
+
+.private-lobby-setting-select,
+.private-lobby-setting-number {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+
+.private-lobby-setting-select {
+  max-width: 60%;
+}
+
+.private-lobby-setting-select option {
+  background-color: #fff;
+  color: #000;
+}
+
+.private-lobby-setting-number {
+  width: 70px;
+}
+
+.private-lobby-setting-select:disabled,
+.private-lobby-setting-number:disabled {
+  opacity: 0.6;
+}
+
+.private-lobby-setting-label-editable {
+  cursor: text;
+}
+
+.private-lobby-setting-label-input {
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 0;
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  outline: none;
+  padding: 0;
+}
+
+.private-lobby-add-loadout-btn {
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-align: center;
+  user-select: none;
+  width: 100%;
+}
+
+.private-lobby-add-loadout-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+#private-lobby-menu-options {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  float: right;
+  height: 100%;
+  max-height: none;
+  padding: 12px;
+  width: 520px;
+}
+
+/* .btn-hollow sets flex: 1, which would stretch this select to fill the column
+   (and resize whenever the settings panel below it appears/disappears) */
+#private-lobby-server-select {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-menu-options {
+    float: right;
+    padding: 12px 0;
+    width: 170px;
+  }
+}
+
+#private-lobby-menu-settings {
+  display: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: auto;
+  min-height: 0;
+  padding-top: 8px;
+}
+
+#private-lobby-settings-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.private-lobby-settings-tab {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  color: #fff;
+  cursor: pointer;
+  flex: 0 1 auto;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 14px;
+  text-align: center;
+}
+
+.private-lobby-settings-tab:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.private-lobby-settings-tab-active {
+  background-color: rgba(255, 255, 255, 0.15);
+  outline: 2px solid #7cfc00;
+}
+
+#private-lobby-settings-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.private-lobby-arena-roles {
+  display: flex;
+  gap: 8px;
+}
+
+.private-lobby-arena-role {
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  flex: 0 1 calc(50% - 4px);
+  gap: 10px;
+  padding: 8px;
+}
+
+.private-lobby-arena-role:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.private-lobby-arena-role-enabled {
+  background-color: rgba(124, 252, 0, 0.15);
+  outline: 2px solid #7cfc00;
+}
+
+.private-lobby-arena-role-readonly {
+  cursor: default;
+}
+
+.private-lobby-arena-role-icon {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  flex-shrink: 0;
+  height: 36px;
+  width: 36px;
+}
+
+.private-lobby-arena-role-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  .private-lobby-settings-tab,
+  .private-lobby-arena-role-name {
+    font-size: 11px;
+  }
+
+  .private-lobby-arena-role {
+    flex: 0 1 100%;
+  }
+
+  .private-lobby-arena-role-icon {
+    height: 28px;
+    width: 28px;
+  }
+}
+
+#private-lobby-menu-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+#private-lobby-menu-modes > a {
+  flex: 0 1 calc(50% - 2px);
+  margin-right: 0;
+}
+
+#private-lobby-menu-modes .btn-custom-mode-select {
+  background-position: 8px center;
+  background-size: 22px;
+  text-indent: 15px;
+}
+
+#btn-start-private-lobby {
+  display: block;
+}
+
+#private-lobby-menu-options-start {
+  flex: 0 0 auto;
+}
+
+#btn-stop-private-lobby-game {
+  display: none;
+  background: #b94a3a;
+  border-bottom: 2px solid #8a362b;
+  box-shadow: inset 0 -2px #8a362b;
+  color: #fff;
+  font-size: 16px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  margin-top: 6px;
+}
+
+#private-lobby-afk-confirm {
+  margin-top: 4px;
+  text-align: center;
+}
+
+#private-lobby-afk-confirm-text {
+  color: #e74c3c;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+#btn-private-lobby-start-anyway {
+  background: #b94a3a;
+  border-bottom: 2px solid #8a362b;
+  box-shadow: inset 0 -2px #8a362b;
+  color: #fff;
+  display: block;
+  font-size: 16px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+#btn-private-lobby-cancel-start {
+  display: block;
+  margin-top: 4px;
+}
+
+#private-lobby-desc {
+  font-size: 14px;
+  display: inline-block;
+  margin-bottom: 10px;
+  text-align: center;
+  width: 85%;
+}
+
+#private-lobby-desc-text {
+  display: inline;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#private-lobby-desc-text span#private-lobby-invite-link-text {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+#private-lobby-desc-text span {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+#private-lobby-code-text {
+  display: block;
+  font-size: 18px;
+  margin: 2px auto 0;
+  color: #fff;
+  font-weight: 700;
+  width: 60%;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-code-text {
+    font-size: 12px;
+    margin-top: initial;
+  }
+}
+
+#private-lobby-invite-code-text {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+#msg-private-lobby-wait-reason {
+  animation: msgStartWaitingPulse 3s ease-out infinite;
+  display: none;
+  font-size: 14px;
+  margin: auto;
+  margin-top: 8px;
+  text-align: center;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #msg-private-lobby-wait-reason {
+    margin-top: 0;
+  }
+}
+
+#team-join-lobby-input {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: #fff;
+  flex: 1;
+  font-size: 14px;
+  margin-right: 4px;
+  min-width: 0;
+  padding: 0 8px;
+}
+
 #team-mobile-link {
   display: none;
   height: 250px;
@@ -1682,6 +2399,31 @@ a:active {
 }
 
 #team-mobile-link-warning {
+  display: none;
+  color: red;
+  font-weight: 700;
+}
+
+#private-lobby-mobile-link {
+  display: none;
+  height: 250px;
+  padding: 12px;
+  width: 625px;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #private-lobby-mobile-link {
+    width: 418px;
+    height: 186px;
+    padding: 12px;
+  }
+}
+
+#private-lobby-mobile-link-desc {
+  display: block;
+}
+
+#private-lobby-mobile-link-warning {
   display: none;
   color: red;
   font-weight: 700;
@@ -2349,6 +3091,83 @@ a:active {
   background-size: 132px;
   height: 100%;
   width: 100%;
+}
+
+/* "Your item sold" popup — same layout as the new-item confirm, gold-themed. */
+#modal-sale-notify .modal-content {
+  animation-name: fadeIn;
+  animation-duration: 0.2s;
+  left: 50%;
+  text-decoration: none;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #modal-sale-notify .modal-content {
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+}
+#modal-sale-notify .modal-header {
+  background-color: #4a3a0c;
+}
+#modal-sale-notify .modal-header > h2 {
+  font-size: 24px;
+  text-align: center;
+}
+#modal-sale-notify .modal-body {
+  background-color: #6b540f;
+}
+#modal-sale-notify .modal-body p {
+  bottom: initial;
+  font-size: 20px;
+  line-height: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 1px 1px 1px #000;
+  top: 4px;
+  width: 100%;
+}
+#modal-sale-notify .modal-footer {
+  background-color: #4a3a0c;
+}
+#modal-sale-notify .modal-footer > .close-footer {
+  color: #fff;
+  font-size: 24px;
+  text-align: center;
+}
+#modal-sale-notify .modal-footer > .close-footer:hover,
+#modal-sale-notify .modal-footer > .close-footer:focus {
+  color: #ffdb7b;
+  cursor: pointer;
+  text-decoration: none;
+}
+#modal-sale-notify-image-outer {
+  background-color: rgba(0, 0, 0, 0.35);
+  border: 6px solid #f2d63b;
+  box-sizing: content-box;
+  margin: auto;
+  height: 160px;
+  width: 160px;
+}
+#modal-sale-notify-image-inner {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 132px;
+  height: 100%;
+  width: 100%;
+}
+.modal-sale-detail {
+  color: #ffdb7b;
+  margin-top: 8px;
+}
+/* Inline Golden Fries icon used in the "item sold" line (same SVG as the HUD). */
+.sale-fries-icon {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+  margin: 0 2px;
+  background: url(/img/gui/golden-fries.svg) center / contain no-repeat;
 }
 
 #modal-mobile-account > .modal-content {
@@ -3912,6 +4731,11 @@ a:active {
   background-color: rgba(0, 0, 0, 0.35);
 }
 
+#btn-team-join-lobby {
+  background-color: #83af50;
+  border-color: #5b7a3800 !important;
+}
+
 .right-column-toggle {
   background-repeat: no-repeat;
   background-size: 28px;
@@ -4551,6 +5375,7 @@ a:active {
 #start-top-left > div {
   font-size: 16px;
   color: rgba(255, 255, 255, 0.9);
+  display: flex;
 }
 
 #start-top-left > img {
@@ -4558,6 +5383,706 @@ a:active {
   bottom: 12px;
   left: 0;
   width: 30px;
+}
+
+/* Golden Fries balance pill (top-left HUD) — dark interior, glowing gold border */
+#golden-fries-container{
+  position:relative;
+}
+
+#golden-fries-balance {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 12px;
+  margin-left: 30px;
+  padding: 8px 26px;
+  width: 150px;
+  height: 40px;
+  background: linear-gradient(
+    180deg,
+    rgba(46, 42, 14, 0.85) 0%,
+    rgba(22, 20, 6, 0.92) 100%
+  );
+  border: 2px solid #f5d840;
+  border-radius: 14px;
+  box-shadow:
+    0 0 4px rgba(245, 216, 64, 0.9),
+    0 0 12px rgba(245, 216, 64, 0.4),
+    inset 0 0 10px rgba(0, 0, 0, 0.6);
+}
+
+/* Set font-size/color on the number directly: the `#start-top-left > div`
+   rule is more specific than `#golden-fries-balance` and would otherwise win. */
+#golden-fries-amount {
+  flex: 1;
+  text-align: center;
+  font-size: 25px;
+  font-weight: 700;
+  color: #f2d63b;
+  text-shadow: 0 0 4px rgba(245, 216, 64, 0.5);
+}
+
+.golden-fries-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  background-image: url(/img/gui/golden-fries.svg);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+/* Golden Fries unlock animation: pill pulse/glow + icon bounce.
+   Fixed 2s duration to match FRIES_ANIM_MS in goldenFriesFx.ts. */
+.golden-fries-unlock {
+  animation: golden-fries-unlock 2s ease-in-out;
+}
+
+@keyframes golden-fries-unlock {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 0 4px rgba(245, 216, 64, 0.9),
+      0 0 12px rgba(245, 216, 64, 0.4),
+      inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+  25% {
+    transform: scale(1.12);
+    border-color: #fff0a0;
+    box-shadow:
+      0 0 10px rgba(245, 216, 64, 1),
+      0 0 28px rgba(245, 216, 64, 0.85),
+      inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 4px rgba(245, 216, 64, 0.9),
+      0 0 12px rgba(245, 216, 64, 0.4),
+      inset 0 0 10px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Keeps the -50% vertical centering while bouncing the icon. */
+.golden-fries-unlock .golden-fries-icon {
+  animation: golden-fries-icon-bounce 0.7s ease-in-out;
+}
+
+@keyframes golden-fries-icon-bounce {
+  0%,
+  100% {
+    transform: translateY(-50%) scale(1) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-50%) scale(1.35) rotate(-9deg);
+  }
+  60% {
+    transform: translateY(-50%) scale(1.12) rotate(7deg);
+  }
+}
+
+/* Full-screen fries particle overlay (non-interactive). */
+.golden-fries-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 100000;
+}
+
+.golden-fries-particle {
+  position: absolute;
+  top: 0;
+  width: 48px;
+  height: 48px;
+  background: url(/img/gui/golden-fries.svg) center / contain no-repeat;
+  will-change: transform, opacity;
+  animation-name: golden-fries-rain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes golden-fries-rain {
+  0% {
+    transform: translate(0, -20vh) rotate(0deg) scale(var(--scale, 1));
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--drift, 0), 110vh) rotate(var(--rot, 0deg))
+      scale(var(--scale, 1));
+    opacity: 0;
+  }
+}
+
+/* ===== Golden Fries shop ===== */
+/* id-prefixed so it beats `#start-top-left > div` (colour/font-size). */
+#start-top-left .golden-fries-shop-btn {
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  display: flex;
+  margin-top: 12px;
+  margin-left: 30px;
+  padding: 8px 26px;
+  width: 150px;
+  height: 40px;
+  background: linear-gradient(180deg, #f5d840 0%, #caa022 100%);
+  color: #2a230a;
+  font-weight: 700;
+  font-size: 25px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(245, 216, 64, 0.6);
+  user-select: none;
+}
+#start-top-left .golden-fries-shop-btn:hover {
+  filter: brightness(1.08);
+}
+
+#modal-shop {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+#modal-shop .modal-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  max-width: 92vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: #34401f;
+  border: 2px solid #f5d840;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.shop-header {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 12px;
+  background: #2a230a;
+  padding: 12px 18px;
+}
+.shop-header h2 {
+  position:absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  flex: 1;
+}
+
+.shop-header .close-corner {
+    margin-left: auto;
+}
+
+.shop-balance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 25px;
+}
+
+#shop-balance-amount {
+  font-size: 22px;
+}
+
+.shop-fries-icon {
+  width: 32px;
+  height: 32px;
+  background: url(/img/gui/golden-fries.svg) center/contain no-repeat;
+  flex-shrink: 0;
+}
+.shop-tabs {
+  display: flex;
+  background: #2a230a;
+  border-top: 1px solid rgba(245, 216, 64, 0.25);
+}
+.shop-tab {
+  padding: 8px 18px;
+  cursor: pointer;
+  color: #ccc;
+  font-weight: 700;
+  border-bottom: 3px solid transparent;
+}
+.shop-tab-active {
+  color: #f2d63b;
+  border-bottom-color: #f5d840;
+}
+.shop-reset-timer {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #ccc;
+  white-space: nowrap;
+}
+.shop-reset-timer-value {
+  color: #f2d63b;
+  font-variant-numeric: tabular-nums;
+}
+.shop-body {
+  overflow-y: auto;
+  padding: 16px;
+}
+.shop-offers {
+  display: flex;
+  gap: 10%;
+  padding: 20px;
+  padding-top: 50px;
+  padding-bottom: 50px;
+  justify-content: center;
+}
+/* Market listings: wrap into rows of at most 3 (the max-width caps it at 3 of the
+ * fixed-280px cards). Flex-wrap means rows wrap instead of scrolling horizontally.
+ * Spacing matches the original single-row shop layout. */
+#market-listings.market-listings {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px 40px;
+  padding: 50px 20px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+#market-listings .shop-offer {
+  flex: 0 0 auto;
+}
+.shop-status {
+  color: #ddd;
+  padding: 24px;
+  text-align: center;
+  width: 100%;
+}
+.shop-offer {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.shop-offer-title {
+  color: #f2d63b;
+  font-weight: 700;
+  text-align: center;
+}
+.shop-offer-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  min-height: 96px;
+}
+.shop-item {
+  width: 110px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid #c5c5c5;
+  border-radius: 6px;
+  padding: 6px;
+  text-align: center;
+}
+.shop-item-img {
+  width: 100%;
+  height: 60px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+.shop-item-name {
+  font-size: 11px;
+  color: #fff;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shop-offer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+.shop-offer-price {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 22px;
+}
+.shop-buy-btn {
+  padding: 6px 22px;
+  display:flex;
+  background: #83af50;
+  color: #fff;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  justify-content: center;
+  align-items: center;
+}
+.shop-buy-disabled {
+  background: #555;
+  color: #aaa;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ---- Player marketplace (rendered inside the shop modal's Market tab) ---- */
+/* The sell dialog floats above everything (loadout modal is z-index 4). */
+#modal-market-sell {
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 100002;
+}
+#modal-market-sell .modal-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 340px;
+  max-width: 92vw;
+  background: #34401f;
+  border: 2px solid #f5d840;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.market-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.market-subtabs {
+  display: flex;
+  gap: 6px;
+  margin-right: auto;
+}
+.market-subtab {
+  padding: 4px 12px;
+  cursor: pointer;
+  color: #ccc;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.market-subtab-active {
+  color: #1d1808;
+  background: #f2d63b;
+}
+.market-select {
+  align-self: center;
+  background: #1d1808;
+  color: #f2d63b;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  font-weight: 700;
+  padding: 4px 8px;
+}
+.market-search {
+  align-self: center;
+  min-width: 180px;
+  background: #1d1808;
+  color: #f2d63b;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.market-search::placeholder {
+  color: rgba(242, 214, 59, 0.5);
+}
+.market-private-tag {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: #8fd6ff;
+  margin-bottom: 6px;
+}
+.market-storefront-banner {
+  color: #ddd;
+  padding: 6px 4px 12px;
+}
+.market-link {
+  color: #f2d63b;
+  cursor: pointer;
+}
+.market-link:hover {
+  text-decoration: underline;
+}
+.market-item-img {
+  margin: 0 auto;
+}
+.market-seller {
+  font-size: 12px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.market-provenance {
+  margin-bottom: 8px;
+}
+.market-stats {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: #ddd;
+  margin-bottom: 4px;
+}
+.market-rarity {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: -4px;
+  margin-bottom: 2px;
+}
+.market-meta {
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+}
+.market-owners-toggle {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.market-owners-toggle:hover {
+  color: #ccc;
+}
+.market-owners-list {
+  font-size: 11px;
+  color: #ddd;
+  text-align: center;
+  word-break: break-word;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-top: 4px;
+}
+.market-expiry {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #e0a23c;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.market-price {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.market-fee {
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 400;
+}
+.market-buy-btn,
+.market-cancel-btn {
+  margin-top: auto;
+}
+.market-cancel-btn {
+  background: #a33;
+}
+.market-loadmore {
+  display: block;
+  margin: 12px auto 0;
+  width: 160px;
+  text-align: center;
+  padding: 8px;
+  border-radius: 6px;
+  background: #2a230a;
+  color: #f2d63b;
+  font-weight: 700;
+  cursor: pointer;
+}
+.market-sell-body {
+  padding: 18px;
+  color: #ddd;
+}
+.market-sell-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f2d63b;
+  margin-bottom: 12px;
+}
+.market-sell-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.market-sell-price {
+  width: 120px;
+  background: #1d1808;
+  color: #fff;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  font-weight: 700;
+  padding: 6px 8px;
+}
+.market-sell-hint {
+  font-size: 13px;
+  color: #bbb;
+  margin-bottom: 4px;
+}
+.market-sell-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  min-height: 18px;
+  margin: 6px 0;
+}
+#market-sell-confirm {
+  margin-top: 8px;
+  width: 180px;
+}
+.customize-listed-badge {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #f2d63b;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+/* Right-side item detail panel (skins/melee/heal/boost): info + ownership + sell. */
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 18px;
+  box-sizing: border-box;
+  color: #fff;
+}
+.detail-item-image {
+  width: 96px;
+  height: 96px;
+  margin: 4px auto 12px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+.detail-item-name {
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+.detail-item-rarity {
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 14px;
+}
+.detail-section {
+  margin-bottom: 12px;
+}
+.detail-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 700;
+}
+.detail-value {
+  font-size: 15px;
+  color: #ffdb7b;
+  word-break: break-word;
+}
+.detail-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.detail-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  padding: 4px 2px;
+}
+.detail-stat-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffdb7b;
+  line-height: 1.1;
+}
+.detail-stat-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: rgba(0, 0, 0, 0.55);
+}
+.detail-market {
+  margin-top: auto;
+}
+.detail-listed {
+  color: #ffdb7b;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.detail-expiry {
+  color: #e0a23c;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.detail-market .shop-buy-btn {
+  width: 100%;
+  background: #50afab;
+  border-bottom: 2px solid #387c79;
+  box-shadow: inset 0 -2px #387c79;
+}
+
+.detail-market .market-cancel-btn {
+  width: 100%;
+  background: #FF2E00;
+  border-bottom: 2px solid #B01F00;
+  box-shadow: inset 0 -2px #B01F00;
+}
+
+/* "Info" toggle: swaps the right side between equip UI and the detail panel. */
+#modal-customize-info-toggle {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 3;
+  padding: 6px 18px;
+  border-radius: 6px;
+  background: #50afab;
+  border-bottom: 2px solid #387c79;
+  box-shadow: inset 0 -2px #387c79;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 #featured-youtuber {
@@ -5131,6 +6656,31 @@ input [type="image"]:focus {
 
 #btn-rules-accept {
   color: #83af50;
+}
+
+/* Hidden by default; revealed inside the mobile media query further below. */
+.show-on-mobile {
+  display: none;
+}
+
+/* The rules modal has a fixed 860px width that overflows phone screens.
+   Make it responsive and shrink the long rules text on mobile. */
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #modal-rules .modal-content {
+    width: 92vw;
+    max-width: 92vw;
+    max-height: 88vh;
+  }
+
+  #modal-rules .modal-body p {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  #modal-rules .modal-footer h3 {
+    font-size: 16px;
+    padding: 12px 0;
+  }
 }
 
 #modal-customize {
@@ -6016,7 +7566,8 @@ input [type="image"]:focus {
   animation-name: fadeIn;
   animation-duration: 0.2s;
   height: 600px;
-  left: 52%;
+  /* Shifted left of centre so the live character (skin) preview shows on the right. */
+  left: 46%;
   pointer-events: none;
   position: fixed;
   top: 45%;
@@ -7042,7 +8593,8 @@ input [type="image"]:focus {
 
   #language-select-mobile-wrapper,
   #mobile-settings-front,
-  #btn-hamburger {
+  #btn-hamburger,
+  .show-on-mobile {
     display: block !important;
   }
 }
@@ -7306,7 +8858,8 @@ input [type="image"]:focus {
     transform: translateX(-50%);
   }
 
-  #btn-team-leave {
+  #btn-team-leave,
+  #btn-private-lobby-leave {
     bottom: initial;
     top: 400px;
   }

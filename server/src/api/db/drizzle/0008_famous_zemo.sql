@@ -1,0 +1,1 @@
+ALTER TABLE "market_listings" ADD COLUMN "seller_acked" boolean DEFAULT false NOT NULL;

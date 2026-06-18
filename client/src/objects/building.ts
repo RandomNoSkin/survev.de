@@ -476,6 +476,8 @@ export class Building implements AbstractObject {
                     5,
                     debug.buildings?.ceiling,
                     debugLines,
+                    // open doors must not block the "peek inside" reveal
+                    true,
                 )
             ) {
                 canSeeInside = true;

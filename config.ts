@@ -21,6 +21,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             port: 8001,
             apiServerUrl: "",
             thisRegion: "local",
+            maxGames: 12,
         },
         vite: {
             host: "127.0.0.1",
@@ -151,6 +152,17 @@ export function getConfig(isProduction: boolean, dir: string) {
         mock: config.debug.allowMockAccount,
         ...(config.proxies[baseUrl.hostname] ?? {}),
     };
+
+    // In dev, also register a catch-all proxy so the login UI (incl. Fake Auth) shows up
+    // no matter which hostname you open the client on (localhost / 127.0.0.1 / LAN IP).
+    // The client falls back to PROXY_DEFS.default when no hostname matches.
+    if (isDev && !config.proxies.default) {
+        config.proxies.default = {
+            google: googleLogin,
+            discord: discordLogin,
+            mock: config.debug.allowMockAccount,
+        };
+    }
 
     if (isDev) {
         config.regions.local ??= {

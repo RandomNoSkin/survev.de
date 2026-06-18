@@ -12,6 +12,11 @@ interface Obstacle {
     height: number;
     layer: number;
     collider: Collider;
+    // Optional so callers that don't track pooling/door state keep their behaviour.
+    // `active === false` marks a freed pool entry whose collider is stale.
+    active?: boolean;
+    isDoor?: boolean;
+    door?: { open: boolean } | null;
 }
 
 //
@@ -24,16 +29,25 @@ function intersectSegmentObstacle(
     height: number,
     layer: number,
     hackStairs: boolean,
+    ignoreOpenDoors = false,
 ) {
     const o = obstacle;
 
     if (
+        o.active === false ||
         o.dead ||
         !o.collidable ||
         o.isWindow ||
         o.height < height ||
         !util.sameLayer(o.layer, layer)
     ) {
+        return null;
+    }
+
+    // For the ceiling-reveal vision scan an open door must not occlude line of
+    // sight (the panel swings aside in the doorway). Only set by scanCollider;
+    // bullet/movement collision keep treating the open panel as solid.
+    if (ignoreOpenDoors && o.isDoor && o.door?.open) {
         return null;
     }
 
@@ -55,6 +69,7 @@ function getIntersectSegmentEnd(
     dir: Vec2,
     len: number,
     layer: number,
+    ignoreOpenDoors = false,
 ) {
     const dist = collisionHelpers.intersectSegmentDist(
         obstacles,
@@ -64,6 +79,7 @@ function getIntersectSegmentEnd(
         0.0,
         layer,
         false,
+        ignoreOpenDoors,
     );
     return v2.add(pos, v2.mul(dir, dist));
 }
@@ -106,12 +122,21 @@ export const collisionHelpers = {
         height: number,
         layer: number,
         hackStairs: boolean,
+        ignoreOpenDoors = false,
     ) {
         let dist = len;
         const end = v2.add(pos, v2.mul(dir, len));
         for (let i = 0; i < obstacles.length; i++) {
             const o = obstacles[i];
-            const res = intersectSegmentObstacle(o, pos, end, height, layer, hackStairs);
+            const res = intersectSegmentObstacle(
+                o,
+                pos,
+                end,
+                height,
+                layer,
+                hackStairs,
+                ignoreOpenDoors,
+            );
             if (res) {
                 dist = math.min(dist, v2.length(v2.sub(res.point, pos)));
             }
@@ -131,6 +156,7 @@ export const collisionHelpers = {
         debugLines?: {
             addRay: (pos: Vec2, dir: Vec2, dist: number, color: number) => void;
         },
+        ignoreOpenDoors = false,
     ) {
         const toCol = collider.intersectCircle(col, pos, scanDist);
         if (!toCol) {
@@ -149,6 +175,7 @@ export const collisionHelpers = {
             v2.neg(perp),
             0.5 * scanWidth,
             layer,
+            ignoreOpenDoors,
         );
         const scanEnd = getIntersectSegmentEnd(
             obstacles,
@@ -156,6 +183,7 @@ export const collisionHelpers = {
             perp,
             0.5 * scanWidth,
             layer,
+            ignoreOpenDoors,
         );
         let scanDir = v2.sub(scanEnd, scanStart);
         const scanLen = v2.length(scanDir);
@@ -185,6 +213,7 @@ export const collisionHelpers = {
                 rayHeight,
                 layer,
                 true,
+                ignoreOpenDoors,
             );
             const res = collider.intersectSegment(
                 col,

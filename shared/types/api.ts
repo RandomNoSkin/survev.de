@@ -21,6 +21,8 @@ export interface FindGameMatchData {
     hosts: string[];
     addrs: string[];
     data: string;
+    /** True when the client should join as a spectator (sent by the private lobby server). */
+    spectator?: boolean;
 }
 
 export type FindGameError =
@@ -37,7 +39,9 @@ export type FindGameError =
     | "behind_proxy"
     | "invalid_captcha"
     | "kicked_by_admin"
-    | "player_not_verified";
+    | "player_not_verified"
+    | "invalid_map"
+    | "invalid_team_mode";
 
 export type FindGameResponse =
     | {

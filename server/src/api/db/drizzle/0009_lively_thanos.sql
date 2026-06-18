@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "golden_fries_ledger_pass_reason_idx" ON "golden_fries_ledger" USING btree ("user_id","reason") WHERE "golden_fries_ledger"."reason" LIKE 'pass:%';

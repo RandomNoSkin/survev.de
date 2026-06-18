@@ -5,6 +5,8 @@ import type { Vec2 } from "../../utils/v2";
 export interface MeleeDef {
     readonly type: "melee";
     name: string;
+    /** When true, this item can appear in the Golden Fries daily shop. */
+    shop?: boolean;
     perk?: string;
     quality: number;
     autoAttack: boolean;
@@ -1218,6 +1220,28 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-karambit-drowned.img",
         },
     }),
+    karambit_fade: defineMeleeSkin("karambit", {
+        name: "Karambit Fade",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-karambit-fade.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-karambit-fade.img",
+        },
+    }),
+    karambit_dotexe: defineMeleeSkin("karambit", {
+        name: "Karambit Dotexe",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-karambit-dotexe.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-karambit-dotexe.img",
+        },
+    }),
     bayonet_rugged: defineMeleeSkin("bayonet", {
         name: "Bayonet Rugged",
         rarity: Rarity.Rare,
@@ -1238,6 +1262,17 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-bayonet-woodland.img",
+        },
+    }),
+    bayonet_Fade: defineMeleeSkin("bayonet", {
+        name: "Bayonet Fade",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bayonet-fade.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bayonet-fade.img",
         },
     }),
     huntsman_rugged: defineMeleeSkin("huntsman", {

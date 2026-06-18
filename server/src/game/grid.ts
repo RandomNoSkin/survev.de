@@ -321,44 +321,43 @@ export class HashGrid<T extends Loot = Loot> {
             }
         }
 
-        for (let y = 0; y < this.rows; y++) {
-            let row = this.grid[y];
-            if (!row) continue;
-
-            for (let x = 0; x < this.cols; x++) {
-                let col = row[x];
-                if (!col) continue;
-
-                this.bruteForceCheck(col, comparator, resolver);
-            }
-        }
-    }
-
-    /**
-     * The most basic implementation of collision detection, although it is suitable for lots of cases,
-     * specially if your system has few particles (< 100).
-     *
-     * @param loots thie list of particles to check collisions.
-     * @param comparator the function that, given two objects, return if they are colliding or not.
-     * @param resolver the collision resolver which will receive each collision pair occurrence.
-     */
-    bruteForceCheck(
-        loots: T[],
-        comparator: (a: T, b: T) => boolean,
-        resolver: (a: T, b: T) => void,
-    ) {
-        const length = loots.length;
-
-        if (length < 2) return;
-
+        // Resolution pass: only *awake* loot drives collision resolution. The old
+        // code brute-forced every pair in every cell (O(k²) per cell) over ALL loot
+        // including fully settled piles — which is what blew a single tick up to 24–84s
+        // in prod once thousands of loot accumulated. Now a settled pile (all asleep)
+        // costs ~0 here. Awake loot still collides with sleeping neighbours (they're in
+        // the grid as targets), so behaviour is unchanged; only the wasted sleeping↔
+        // sleeping checks are skipped.
+        //
+        // Each colliding pair is resolved exactly once: awake-vs-asleep is driven by the
+        // awake loot; two awake loot are resolved only from the lower-__id side (the same
+        // per-shared-cell semantics the old i<j brute force had).
         for (let i = 0; i < length; i++) {
-            const p1 = loots[i];
+            const a = loots[i];
+            if (a.destroyed || !a.isAwake()) continue;
 
-            for (let j = i + 1; j < length; j++) {
-                const p2 = loots[j];
+            const xMin = ((a.pos.x - a.lootRad) / this.cellSize) << 0;
+            const xMax = ((a.pos.x + a.lootRad) / this.cellSize) << 0;
+            const yMin = ((a.pos.y - a.lootRad) / this.cellSize) << 0;
+            const yMax = ((a.pos.y + a.lootRad) / this.cellSize) << 0;
 
-                if (comparator(p1, p2)) {
-                    resolver(p1, p2);
+            for (let y = yMin; y <= yMax; y++) {
+                const row = this.grid[y];
+                if (!row) continue;
+
+                for (let x = xMin; x <= xMax; x++) {
+                    const col = row[x];
+                    if (!col) continue;
+
+                    for (let k = 0; k < col.length; k++) {
+                        const b = col[k];
+                        if (b === a || b.destroyed) continue;
+                        // Skip the other half of an awake↔awake pair so it's resolved once.
+                        if (b.isAwake() && b.__id < a.__id) continue;
+                        if (comparator(a, b)) {
+                            resolver(a, b);
+                        }
+                    }
                 }
             }
         }

@@ -1,5 +1,6 @@
 import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
 import type { ExplosionDef } from "../../../../shared/defs/gameObjects/explosionsDefs";
+import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
@@ -124,6 +125,20 @@ export class ExplosionBarn {
                     mapSourceType: explosion.damageParams.mapSourceType,
                     dir: v2.randomUnit(),
                 });
+            }
+        }
+
+        // Trip any nearby armed proximity mine that has this explosion within
+        // its trigger radius (lets explosions chain-detonate mines)
+        for (const proj of this.game.projectileBarn.projectiles) {
+            if (proj.dead || proj.mineTriggered) continue;
+            if (!util.sameLayer(proj.layer, explosion.layer)) continue;
+            const projDef = GameObjectDefs[proj.type] as ThrowableDef;
+            if (!projDef.proximityMine) continue;
+            if (
+                v2.distance(explosion.pos, proj.pos) <= projDef.proximityMine.triggerRad
+            ) {
+                proj.triggerMine();
             }
         }
     }

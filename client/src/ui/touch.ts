@@ -432,6 +432,7 @@ export class Touch {
                 .find(".btn-game-container")
                 .css("display", "inline-block");
             $("#ui-emote-button").css("display", "block");
+            $("#ui-chat-button").css("display", "block");
         }
         if (device.uiLayout == device.UiLayout.Sm) {
             $("#ui-map-wrapper")

@@ -1,3 +1,5 @@
+import { Config } from "../../config";
+
 /** HTML template for the moderation dashboard SPA. Served inline by Hono so auth is enforced server-side. */
 export const dashboardHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -140,6 +142,37 @@ export const dashboardHtml = `<!DOCTYPE html>
     #msg-input { flex: 1; min-width: 200px; background: var(--surface2); border: 1px solid var(--border2); border-radius: 5px; padding: 6px 10px; color: var(--text); font-family: inherit; font-size: 12px; outline: none; }
     #msg-input:focus { border-color: var(--blue); }
 
+    /* ── Ban comment threads ── */
+    .comments-row > td { background: var(--surface2); padding: 10px 14px; }
+    .ban-comments { display: flex; flex-direction: column; gap: 6px; }
+    .ban-comment { font-size: 11px; }
+    .ban-comment-meta { color: var(--text-dim); font-size: 10px; }
+    .ban-comment-text { color: var(--text); margin-top: 2px; white-space: pre-wrap; }
+    .ban-comment-input-row { display: flex; gap: 6px; margin-top: 4px; }
+    .ban-comment-input {
+      flex: 1; background: var(--surface); border: 1px solid var(--border2); border-radius: 5px;
+      padding: 5px 8px; color: var(--text); font-family: inherit; font-size: 11px; outline: none;
+    }
+    .ban-comment-input:focus { border-color: var(--blue); }
+
+    /* ── Global chat log ── */
+    .chat-game-group { border: 1px solid var(--border2); border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+    .chat-game-header { background: var(--surface2); padding: 8px 12px; font-size: 11px; color: var(--text-dim); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .chat-game-header .gid { font-family: monospace; color: var(--blue-t); cursor: pointer; text-decoration: underline; }
+    .chat-msg { display: flex; gap: 10px; padding: 5px 12px; font-size: 12px; border-top: 1px solid var(--border); cursor: pointer; }
+    .chat-msg:hover { background: var(--surface2); }
+    .chat-msg .t { color: var(--text-muted); font-size: 10px; white-space: nowrap; min-width: 122px; }
+    .chat-msg .nm { min-width: 150px; color: var(--text); font-weight: 500; }
+    .chat-msg .ch { font-size: 10px; font-weight: 600; min-width: 34px; }
+    .chat-msg .mg { flex: 1; word-break: break-word; }
+    .chat-msg.highlight { background: rgba(88,166,255,0.20); box-shadow: inset 3px 0 0 var(--blue); }
+    .chat-msg mark { background: var(--blue); color: #fff; border-radius: 2px; padding: 0 2px; }
+    #chatlog-back { margin-bottom: 10px; }
+
+    /* ── Sortable table headers ── */
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: var(--text); }
+
     /* ── Empty / loading states ── */
     .empty { color: var(--text-muted); font-size: 12px; padding: 24px; text-align: center; }
     .loading { color: var(--text-dim); font-size: 12px; padding: 12px; text-align: center; }
@@ -163,6 +196,8 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn active" data-tab="bans">Bans</button>
   <button class="tab-btn"        data-tab="lookup">IP / Player</button>
   <button class="tab-btn"        data-tab="servers">Live Servers</button>
+  <button class="tab-btn"        data-tab="accounts">Accounts</button>
+  <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
 </div>
 
 <div id="main">
@@ -225,6 +260,37 @@ export const dashboardHtml = `<!DOCTYPE html>
         <tbody id="recent-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- ════════════════ TAB: GLOBAL CHAT LOG ════════════════ -->
+  <div id="tab-chatlog" class="tab-pane">
+    <div class="toolbar">
+      <input type="text" id="chatlog-search" placeholder="Search all chat messages…" style="max-width:420px">
+      <button class="btn btn-primary" id="chatlog-search-btn">Search</button>
+      <button class="btn btn-gray" id="chatlog-clear-btn">Clear</button>
+    </div>
+    <div id="chatlog-container"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- ════════════════ TAB 4: ACCOUNTS ════════════════ -->
+  <div id="tab-accounts" class="tab-pane">
+    <div class="toolbar">
+      <input type="text" id="accounts-search" placeholder="Search by username or slug…">
+      <button class="btn btn-orange" id="reconcile-btn">⚡ Reconcile All Passes + Unlocks + Fries</button>
+      <span id="reconcile-result" style="font-size:11px;color:var(--text-dim);"></span>
+    </div>
+    <table class="data-table" id="accounts-table">
+      <thead><tr id="accounts-thead-row">
+        <th>#</th>
+        <th class="sortable" data-col="username">Username</th>
+        <th>Slug</th>
+        <th style="white-space:nowrap">Created</th>
+        <th>Last IP</th>
+        <th>Flags</th>
+        <!-- pass-level columns injected by renderAccountsHeader() -->
+      </tr></thead>
+      <tbody id="accounts-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+    </table>
   </div>
 
   <!-- ════════════════ TAB 3: LIVE SERVERS ════════════════ -->
@@ -292,6 +358,17 @@ export const dashboardHtml = `<!DOCTYPE html>
           <tbody id="player-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
         </table>
       </div>
+
+      <!-- Live chat + kill feed panel -->
+      <div id="game-feed-panel" style="margin:10px 14px 0;border:1px solid var(--border2);border-radius:6px;overflow:hidden;">
+        <div style="background:var(--surface2);padding:6px 12px;font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:.5px;">LIVE CHAT &amp; KILL FEED</div>
+        <div id="game-feed-list" style="max-height:200px;overflow-y:auto;padding:6px 10px;display:flex;flex-direction:column;gap:3px;font-size:12px;"></div>
+        <div style="display:flex;gap:6px;padding:6px 10px;border-top:1px solid var(--border);">
+          <input id="chat-send-input" type="text" maxlength="150" placeholder="Send message to game chat…"
+            style="flex:1;background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:5px 8px;color:var(--text);font-family:inherit;font-size:12px;outline:none;">
+          <button class="btn btn-blue btn-sm" id="chat-send-btn">SEND</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -354,6 +431,9 @@ export const dashboardHtml = `<!DOCTYPE html>
 
 'use strict';
 
+// Base URL of the game client (Vite dev server in dev, same origin in prod) — used to open spectate tabs.
+const CLIENT_URL = ${JSON.stringify(Config.oauthRedirectURI)};
+
 // ── State ──────────────────────────────────────────────────────────────────
 let currentAdminId   = '';    // own userId (for "YOU" badge + hide self-buttons)
 let currentAdminSlug = '';    // own slug (shown as sender in announcements)
@@ -374,7 +454,11 @@ async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch('/moderation' + path, opts);
-  if (!res.ok) throw new Error(res.statusText);
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const j = await res.json(); msg = j.error ?? j.message ?? JSON.stringify(j); } catch {}
+    throw new Error(msg);
+  }
   return res.json();
 }
 const get  = (path)       => api('GET',  path);
@@ -448,6 +532,19 @@ function connectSSE(region, gameId) {
     renderPlayers();
   });
 
+  evtSource.addEventListener('feed', (e) => {
+    const { entries = [] } = JSON.parse(e.data);
+    const list = document.getElementById('game-feed-list');
+    if (!list) return;
+    for (const entry of entries) {
+      const div = document.createElement('div');
+      div.innerHTML = feedEntryHtml(entry);
+      list.prepend(div.firstChild);
+    }
+    // Cap feed display at 100 entries
+    while (list.children.length > 100) list.removeChild(list.lastChild);
+  });
+
   evtSource.onopen  = () => setLiveStatus(true);
   evtSource.onerror = () => {
     setLiveStatus(false);
@@ -481,6 +578,13 @@ function switchTab(name) {
     document.getElementById('recent-block').style.display = '';
     document.getElementById('lookup-input').value = '';
     loadRecent();
+  } else if (name === 'accounts') {
+    closeSSE();
+    loadAccounts();
+  } else if (name === 'chatlog') {
+    closeSSE();
+    // Skip when focusChatMessage drove the switch — it loads a focused view itself.
+    if (!chatlogFocusing) loadGlobalChatLog(document.getElementById('chatlog-search').value.trim());
   } else {
     closeSSE();
   }
@@ -519,15 +623,19 @@ function renderIpBans(q) {
     !q || b.encodedIp.includes(q) || (b.reason||'').toLowerCase().includes(q) || (b.bannedBy||'').toLowerCase().includes(q)
   );
   tbody.innerHTML = rows.length ? rows.map(b => \`
-    <tr>
+    <tr data-target="\${esc(b.encodedIp)}">
       <td>\${ipLink(b.encodedIp)}</td>
       <td>\${esc(b.reason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
       <td>\${b.permanent ? '<span class="badge badge-perm">PERMANENT</span>' : '<span class="badge badge-temp">TEMP</span>'}</td>
       <td>\${b.permanent ? '∞' : fmtDate(b.expiresIn)}</td>
-      <td><button class="btn btn-green btn-sm" onclick="unbanIp('\${esc(b.encodedIp)}')">Unban</button></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="unbanIp('\${esc(b.encodedIp)}')">Unban</button>
+        <button class="btn btn-gray btn-sm" onclick="toggleBanComments('ip','\${esc(b.encodedIp)}', this)">💬</button>
+      </td>
     </tr>
   \`).join('') : '<tr><td colspan="6" class="empty">No IP bans.</td></tr>';
+  reopenComments('ip', tbody);
 }
 
 function renderAccountBans(q) {
@@ -536,14 +644,18 @@ function renderAccountBans(q) {
     !q || b.slug.includes(q) || b.username.toLowerCase().includes(q) || (b.banReason||'').toLowerCase().includes(q)
   );
   tbody.innerHTML = rows.length ? rows.map(b => \`
-    <tr>
+    <tr data-target="\${esc(b.slug)}">
       <td>\${esc(b.slug)}</td>
       <td>\${esc(b.username)}</td>
       <td>\${esc(b.banReason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
-      <td><button class="btn btn-green btn-sm" onclick="unbanAccount('\${esc(b.slug)}')">Unban</button></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="unbanAccount('\${esc(b.slug)}')">Unban</button>
+        <button class="btn btn-gray btn-sm" onclick="toggleBanComments('account','\${esc(b.slug)}', this)">💬</button>
+      </td>
     </tr>
   \`).join('') : '<tr><td colspan="5" class="empty">No account bans.</td></tr>';
+  reopenComments('account', tbody);
 }
 
 function renderChatBans(q) {
@@ -552,15 +664,94 @@ function renderChatBans(q) {
     !q || b.encodedIp.includes(q) || (b.reason||'').toLowerCase().includes(q) || (b.bannedBy||'').toLowerCase().includes(q)
   );
   tbody.innerHTML = rows.length ? rows.map(b => \`
-    <tr>
+    <tr data-target="\${esc(b.encodedIp)}">
       <td>\${ipLink(b.encodedIp)}</td>
       <td>\${esc(b.reason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
       <td>\${b.permanent ? '<span class="badge badge-perm">PERMANENT</span>' : '<span class="badge badge-temp">TEMP</span>'}</td>
       <td>\${b.permanent ? '∞' : fmtDate(b.expiresIn)}</td>
-      <td><button class="btn btn-green btn-sm" onclick="unbanChat('\${esc(b.encodedIp)}')">Unban</button></td>
+      <td>
+        <button class="btn btn-green btn-sm" onclick="unbanChat('\${esc(b.encodedIp)}')">Unban</button>
+        <button class="btn btn-gray btn-sm" onclick="toggleBanComments('chat','\${esc(b.encodedIp)}', this)">💬</button>
+      </td>
     </tr>
   \`).join('') : '<tr><td colspan="6" class="empty">No chat bans.</td></tr>';
+  reopenComments('chat', tbody);
+}
+
+// ── Ban comment threads (expandable per-row) ──────────────────────────────
+
+const openBanComments = new Set(); // keys: "type::target"
+
+/** Re-opens comment threads that were open before the table was re-rendered. */
+function reopenComments(type, tbody) {
+  for (const row of tbody.querySelectorAll('tr[data-target]')) {
+    const key = type + '::' + row.dataset.target;
+    if (openBanComments.has(key)) insertCommentsRow(type, row.dataset.target, row);
+  }
+}
+
+function insertCommentsRow(type, target, row) {
+  const tr = document.createElement('tr');
+  tr.className = 'comments-row';
+  const td = document.createElement('td');
+  td.colSpan = row.children.length;
+  td.innerHTML = '<div class="loading">Loading comments…</div>';
+  tr.appendChild(td);
+  row.after(tr);
+  loadBanComments(type, target, td);
+}
+
+/** Toggles the comment thread below a ban row. */
+function toggleBanComments(type, target, btn) {
+  const row = btn.closest('tr');
+  const key = type + '::' + target;
+  const existing = row.nextElementSibling;
+  if (existing && existing.classList.contains('comments-row')) {
+    existing.remove();
+    openBanComments.delete(key);
+    return;
+  }
+  openBanComments.add(key);
+  insertCommentsRow(type, target, row);
+}
+
+async function loadBanComments(type, target, td) {
+  try {
+    const data = await get('/api/ban-comments/' + type + '/' + encodeURIComponent(target));
+    renderBanComments(type, target, td, data.comments ?? []);
+  } catch {
+    td.innerHTML = '<div class="empty">Failed to load comments.</div>';
+  }
+}
+
+function renderBanComments(type, target, td, comments) {
+  td.innerHTML = \`
+    <div class="ban-comments">
+      \${comments.length ? comments.map(c => \`
+        <div class="ban-comment">
+          <span class="ban-comment-meta">\${fmtDate(c.createdAt)} – <strong>\${esc(c.createdBy)}</strong></span>
+          <div class="ban-comment-text">\${esc(c.comment)}</div>
+        </div>
+      \`).join('') : '<div class="empty" style="padding:4px 0;">No comments yet.</div>'}
+      <div class="ban-comment-input-row">
+        <input type="text" class="ban-comment-input" placeholder="Add a comment…" maxlength="500">
+        <button class="btn btn-blue btn-sm">Add</button>
+      </div>
+    </div>
+  \`;
+  const input  = td.querySelector('.ban-comment-input');
+  const addBtn = td.querySelector('.ban-comment-input-row button');
+  const submit = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await post('/api/ban-comments', { type, target, comment: text });
+      await loadBanComments(type, target, td);
+    } catch (e) { toast('Error adding comment', true); }
+  };
+  addBtn.addEventListener('click', submit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 }
 
 document.getElementById('ban-search').addEventListener('input', renderBans);
@@ -676,6 +867,40 @@ async function doLookup(query) {
   } catch (e) { res.innerHTML = '<div class="empty">No results found.</div>'; }
 }
 
+function banTypeLabel(t) {
+  return t === 'ip' ? 'IP' : t === 'account' ? 'ACCOUNT' : t === 'chat' ? 'CHAT' : esc(t);
+}
+
+// Inline "Ban History" card: from → until · by whom · reason · status.
+// Used in both the player and IP detail views (data.banHistory from the API).
+function renderBanHistory(history) {
+  const inner = (!history || !history.length)
+    ? '<div class="empty">No ban history.</div>'
+    : \`<table class="data-table">
+        <thead><tr><th>Type</th><th>From</th><th>Until</th><th>By</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody>\${history.map(h => {
+          const lifted = !!h.unbannedAt;
+          const expired = !lifted && !h.permanent && h.expiresAt && new Date(h.expiresAt) <= new Date();
+          const status = lifted ? 'LIFTED' : expired ? 'EXPIRED' : 'ACTIVE';
+          const badge = status === 'ACTIVE' ? 'badge-perm' : status === 'LIFTED' ? 'badge-temp' : 'badge-disc';
+          const until = lifted
+            ? \`lifted \${fmtDate(h.unbannedAt)}\${h.unbannedBy ? ' by ' + esc(h.unbannedBy) : ''}\`
+            : h.permanent ? 'permanent'
+            : h.expiresAt ? fmtDate(h.expiresAt)
+            : 'until lifted';
+          return \`<tr>
+            <td><span class="badge badge-disc">\${banTypeLabel(h.banType)}</span></td>
+            <td style="white-space:nowrap;font-size:11px;">\${fmtDate(h.bannedAt)}</td>
+            <td style="white-space:nowrap;font-size:11px;">\${until}</td>
+            <td>\${esc(h.bannedBy || '–')}</td>
+            <td>\${esc(h.reason || '–')}</td>
+            <td><span class="badge \${badge}">\${status}</span></td>
+          </tr>\`;
+        }).join('')}</tbody>
+      </table>\`;
+  return \`<div class="detail-card" style="margin-top:12px;"><h3>Ban History</h3>\${inner}</div>\`;
+}
+
 function renderIpDetail(data, container) {
   const banInfo = data.banned
     ? \`<span class="badge badge-perm">BANNED</span> \${esc(data.banRecord?.reason || '')}\`
@@ -707,6 +932,7 @@ function renderIpDetail(data, container) {
       </div>
       <div id="chat-log-panel" style="display:none;margin-top:10px;"></div>
     </div>
+    \${renderBanHistory(data.banHistory)}
     <div style="margin-top:12px;">
       <table class="data-table">
         <thead><tr><th>Name</th><th>Slug</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>
@@ -734,6 +960,7 @@ function renderPlayerDetail(data, container) {
       </div>
     </div>
     <div id="chat-log-panel" style="display:none;margin-top:12px;"></div>
+    \${renderBanHistory(data.banHistory)}
     <div style="margin-top:12px;">
       <table class="data-table">
         <thead><tr><th>IP Hash</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>
@@ -759,7 +986,7 @@ async function loadChatLog(query, by, btn) {
     panel.innerHTML = \`
       <table class="data-table">
         <thead><tr><th>Time</th><th>Name</th><th>Channel</th><th>Message</th><th>Game</th></tr></thead>
-        <tbody>\${msgs.map(m => \`<tr>
+        <tbody>\${msgs.map(m => \`<tr onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})" style="cursor:pointer" title="Open in Chat Log with context">
           <td style="white-space:nowrap;font-size:11px;">\${fmtDate(m.createdAt)}</td>
           <td>\${esc(m.username)}\${m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : ''}</td>
           <td><span style="font-size:10px;font-weight:600;color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'};">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span></td>
@@ -770,6 +997,101 @@ async function loadChatLog(query, by, btn) {
     \`;
   } catch { panel.innerHTML = '<div class="empty">Failed to load chat history.</div>'; }
 }
+
+// ── Global Chat Log tab ─────────────────────────────────────────────────────
+// True while focusChatMessage drives the tab switch, so switchTab's auto-reload
+// doesn't clobber the focused (single-game, context) view with the global list.
+let chatlogFocusing = false;
+
+function chatlogGroupByGame(messages) {
+  const map = new Map();
+  for (const m of messages) {
+    const g = m.gameId || 'unknown';
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(m);
+  }
+  const groups = [...map.entries()].map(([gameId, msgs]) => {
+    msgs.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return { gameId, msgs, first: msgs[0].createdAt, last: msgs[msgs.length - 1].createdAt };
+  });
+  // most recently active game first
+  groups.sort((a, b) => new Date(b.last) - new Date(a.last));
+  return groups;
+}
+
+function chatlogHighlight(escapedText, search) {
+  if (!search) return escapedText;
+  const safe = search.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+  try { return escapedText.replace(new RegExp('(' + safe + ')', 'gi'), '<mark>$1</mark>'); }
+  catch { return escapedText; }
+}
+
+function chatlogMsgRow(m, search, highlightId) {
+  const hl = (highlightId != null && m.id === highlightId) ? ' highlight' : '';
+  const message = search ? chatlogHighlight(esc(m.message), search) : esc(m.message);
+  const slug = m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : '';
+  return \`<div class="chat-msg\${hl}" id="chatmsg-\${m.id}" onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})">
+      <span class="t">\${fmtDate(m.createdAt)}</span>
+      <span class="nm">\${esc(m.username)}\${slug}</span>
+      <span class="ch" style="color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'}">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span>
+      <span class="mg">\${message}</span>
+    </div>\`;
+}
+
+function chatlogRenderGroups(messages, search) {
+  if (!messages.length) return '<div class="empty">No chat messages found.</div>';
+  return chatlogGroupByGame(messages).map(g => \`
+    <div class="chat-game-group">
+      <div class="chat-game-header">
+        <span class="gid" onclick="focusChatMessage('\${esc(g.gameId)}', null)" title="Open full game chat">\${esc(g.gameId.slice(0, 8))}…</span>
+        <span>\${g.msgs.length} msg\${g.msgs.length === 1 ? '' : 's'}</span>
+        <span>\${fmtDate(g.first)} – \${fmtDate(g.last)}</span>
+      </div>
+      \${g.msgs.map(m => chatlogMsgRow(m, search)).join('')}
+    </div>\`).join('');
+}
+
+async function loadGlobalChatLog(search) {
+  const cont = document.getElementById('chatlog-container');
+  cont.innerHTML = '<div class="loading">Loading chat log…</div>';
+  try {
+    const data = await get('/api/chatlog' + (search ? ('?search=' + encodeURIComponent(search)) : ''));
+    const msgs = data.messages ?? [];
+    const header = search
+      ? \`<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">\${msgs.length} match\${msgs.length === 1 ? '' : 'es'} for "\${esc(search)}" — grouped by game</div>\`
+      : '';
+    cont.innerHTML = header + chatlogRenderGroups(msgs, search);
+  } catch { cont.innerHTML = '<div class="empty">Failed to load chat log.</div>'; }
+}
+
+// Opens the full chat of one game and (optionally) highlights + scrolls to a
+// specific message, so a message clicked anywhere is shown with its context.
+async function focusChatMessage(gameId, messageId) {
+  chatlogFocusing = true;
+  switchTab('chatlog');
+  chatlogFocusing = false;
+
+  const cont = document.getElementById('chatlog-container');
+  cont.innerHTML = '<div class="loading">Loading game chat…</div>';
+  try {
+    const data = await get('/api/chatlog/game/' + encodeURIComponent(gameId));
+    const msgs = data.messages ?? [];
+    cont.innerHTML = \`
+      <button class="btn btn-gray btn-sm" id="chatlog-back" onclick="loadGlobalChatLog(document.getElementById('chatlog-search').value.trim())">← Back to all chats</button>
+      <div class="chat-game-group">
+        <div class="chat-game-header"><span class="gid">\${esc(gameId.slice(0, 8))}…</span><span>\${msgs.length} msg\${msgs.length === 1 ? '' : 's'}</span><span>full game chat</span></div>
+        \${msgs.map(m => chatlogMsgRow(m, '', messageId)).join('') || '<div class="empty" style="padding:10px">No messages in this game.</div>'}
+      </div>\`;
+    if (messageId != null) {
+      const el = document.getElementById('chatmsg-' + messageId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  } catch { cont.innerHTML = '<div class="empty">Failed to load game chat.</div>'; }
+}
+
+document.getElementById('chatlog-search-btn').addEventListener('click', () => loadGlobalChatLog(document.getElementById('chatlog-search').value.trim()));
+document.getElementById('chatlog-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadGlobalChatLog(e.target.value.trim()); });
+document.getElementById('chatlog-clear-btn').addEventListener('click', () => { document.getElementById('chatlog-search').value = ''; loadGlobalChatLog(''); });
 
 function quickBanIp(hash) {
   // Pre-fill the ban modal and open it
@@ -814,6 +1136,9 @@ function renderServers() {
         <div style="margin-top:6px;">
           <button class="btn btn-blue btn-sm" style="width:100%" onclick="event.stopPropagation();spectateGame('\${esc(region.regionId)}','\${esc(g.id)}')">👁 SPECTATE</button>
         </div>
+        <div style="margin-top:4px;">
+          <button class="btn btn-red btn-sm" style="width:100%" onclick="event.stopPropagation();killGame('\${esc(region.regionId)}','\${esc(g.id)}')">✕ KILL</button>
+        </div>
       </div>\`;
     }).join('') : '<div class="empty">No running games.</div>';
 
@@ -833,13 +1158,56 @@ async function spectateGame(region, gameId) {
     const data = await get('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/spectate-token');
     const matchData = data?.res?.[0];
     if (!matchData) { toast('Could not get spectate token', true); return; }
-    sessionStorage.setItem('dashboardSpectate', JSON.stringify(matchData));
-    window.open('/', '_blank');
+    // CLIENT_URL may be a different origin (e.g. dev: dashboard on :8000, client on :3000),
+    // so pass the match data via URL param instead of sessionStorage.
+    const url = CLIENT_URL + '/?spectate=' + encodeURIComponent(JSON.stringify(matchData));
+    window.open(url, '_blank');
     toast('Opening spectator view…');
   } catch (e) { toast('Spectate failed', true); }
 }
 
+/** Force-stops a running game immediately (private games that are empty/stuck). */
+async function killGame(region, gameId) {
+  if (!confirm('Force-stop this game?')) return;
+  try {
+    await post('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/cmd', { action: 'stop' });
+    toast('Game stopped');
+    refreshData();
+  } catch (e) { toast('Kill failed', true); }
+}
+
 /** Selects a game and reconnects SSE with the gameId so player events start flowing. */
+function feedEntryHtml(entry) {
+  if (entry.channel === -1) {
+    const parts = (entry.message || '').split('|');
+    const victim = parts[0] ?? '?';
+    const weapon = parts[1] ?? '';
+    return \`<div class="feed-kill" style="color:var(--red-t)">💀 <b>\${esc(entry.username||'?')}</b> killed <b>\${esc(victim)}</b> [\${esc(weapon)}]</div>\`;
+  }
+  if (entry.channel === -2) {
+    const parts = (entry.message || '').split('|');
+    const victim = parts[0] ?? '?';
+    const weapon = parts[1] ?? '';
+    return \`<div class="feed-down" style="color:var(--orange-t)">💥 <b>\${esc(entry.username||'?')}</b> knocked <b>\${esc(victim)}</b> [\${esc(weapon)}]</div>\`;
+  }
+  return \`<div class="feed-chat" style="color:var(--blue-t)">💬 <b>\${esc(entry.username||'?')}</b>: \${esc(entry.message||'')}</div>\`;
+}
+
+async function loadGameFeedHistory(region, gameId) {
+  const list = document.getElementById('game-feed-list');
+  if (!list) return;
+  list.innerHTML = '';
+  try {
+    const data = await get('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/chat');
+    const entries = data.messages ?? [];
+    for (const entry of entries) {
+      const div = document.createElement('div');
+      div.innerHTML = feedEntryHtml(entry);
+      list.appendChild(div.firstChild);
+    }
+  } catch { /* non-critical */ }
+}
+
 function selectGame(region, gameId) {
   activeGameRegion = region;
   activeGameId     = gameId;
@@ -851,6 +1219,9 @@ function selectGame(region, gameId) {
   updateVerifyButtons(gameData?.verifiedOnly ?? false);
   currentPlayers = [];
   document.getElementById('player-tbody').innerHTML = '<tr><td colspan="6" class="loading">Lade…</td></tr>';
+
+  // Load existing feed history immediately
+  loadGameFeedHistory(region, gameId);
 
   // Re-open SSE with the selected gameId – server now streams player data too
   connectSSE(region, gameId);
@@ -875,9 +1246,11 @@ function renderPlayers() {
     // Status badges: alive/dead + spectator (can be combined); disconnected overrides
     const aliveBadge = p.disconnected
       ? '<span class="badge badge-disc">DISCONNECTED</span>'
-      : p.alive
-        ? '<span class="badge badge-alive">ALIVE</span>'
-        : '<span class="badge badge-dead">DEAD</span>';
+      : p.isSpectator
+        ? ''
+        : p.alive
+          ? '<span class="badge badge-alive">ALIVE</span>'
+          : '<span class="badge badge-dead">DEAD</span>';
     const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
     const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>' : '';
     const isSelf     = p.userId === currentAdminId;
@@ -1013,6 +1386,165 @@ document.getElementById('gd-close-btn').addEventListener('click', () => {
   // Revert to server-only SSE (no player stream)
   connectSSE(null, null);
   renderServers();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 4 – ACCOUNTS + XP
+// ═══════════════════════════════════════════════════════════════════════════
+
+let accountsData = [];
+let accountsPassTypes = [];
+let accountsSortCol = 'currentXp';
+let accountsSortDir = -1; // -1 = desc, 1 = asc
+
+function renderAccountsHeader() {
+  const headerRow = document.getElementById('accounts-thead-row');
+  // Remove any previously injected pass columns (keep static cols: #, Username, Slug, Created, Last IP, Flags = 6)
+  while (headerRow.children.length > 6) headerRow.removeChild(headerRow.lastChild);
+  for (const pt of accountsPassTypes) {
+    const shortName = pt.replace('pass_survivr', 'S');
+    const th = document.createElement('th');
+    th.className = 'sortable';
+    th.dataset.col = 'pass_' + pt;
+    th.textContent = shortName + ' Lvl';
+    headerRow.appendChild(th);
+  }
+  // Update sort arrows
+  document.querySelectorAll('#accounts-table .sortable').forEach(th => {
+    const col = th.dataset.col;
+    const base = th.textContent.replace(/ [▲▼]$/, '');
+    th.textContent = col === accountsSortCol ? base + (accountsSortDir === 1 ? ' ▲' : ' ▼') : base;
+  });
+}
+
+async function loadAccounts() {
+  const colCount = 6 + accountsPassTypes.length;
+  document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="\${colCount}" class="loading">Loading…</td></tr>\`;
+  try {
+    const data = await get('/api/accounts');
+    accountsData = data.accounts ?? [];
+    accountsPassTypes = data.passTypes ?? [];
+    renderAccountsHeader();
+    renderAccounts();
+  } catch (e) {
+    console.error('loadAccounts error:', e);
+    document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="6" class="empty">Failed to load accounts: \${esc(String(e?.message ?? e))} | \${esc(e?.stack?.split('\\n')[1] ?? '')}</td></tr>\`;
+  }
+}
+
+function renderAccounts() {
+  const q = document.getElementById('accounts-search').value.toLowerCase();
+  let rows = accountsData.filter(a =>
+    !q || (a.username||'').toLowerCase().includes(q) || (a.slug||'').toLowerCase().includes(q)
+  );
+
+  // Sort
+  rows = [...rows].sort((a, b) => {
+    let av, bv;
+    if (accountsSortCol.startsWith('pass_')) {
+      const pt = accountsSortCol.slice(5);
+      av = Number(a.passes?.[pt]?.level ?? -1);
+      bv = Number(b.passes?.[pt]?.level ?? -1);
+    } else if (accountsSortCol === 'userCreated') {
+      av = a.userCreated ? new Date(a.userCreated).getTime() : -1;
+      bv = b.userCreated ? new Date(b.userCreated).getTime() : -1;
+    } else {
+      av = (a[accountsSortCol] ?? '').toString().toLowerCase();
+      bv = (b[accountsSortCol] ?? '').toString().toLowerCase();
+    }
+    if (av < bv) return -accountsSortDir;
+    if (av > bv) return  accountsSortDir;
+    return 0;
+  });
+
+  // Update header arrows
+  document.querySelectorAll('#accounts-table .sortable').forEach(th => {
+    const col = th.dataset.col;
+    const base = th.textContent.replace(/ [▲▼]$/, '');
+    th.textContent = col === accountsSortCol ? base + (accountsSortDir === 1 ? ' ▲' : ' ▼') : base;
+  });
+
+  const colCount = 6 + accountsPassTypes.length;
+  const tbody = document.getElementById('accounts-tbody');
+  tbody.innerHTML = rows.length ? rows.map((a, i) => \`
+    <tr>
+      <td style="color:var(--text-muted);font-size:11px;">\${i+1}</td>
+      <td><span style="color:var(--blue-t)">\${esc(a.username||'–')}</span></td>
+      <td style="font-size:11px;color:var(--text-dim);">\${esc(a.slug||'–')}</td>
+      <td style="font-size:11px;color:var(--text-muted);white-space:nowrap;">\${fmtDate(a.userCreated)}</td>
+      <td style="font-size:11px;font-family:monospace;">\${a.lastIp ? ipLink(a.lastIp) : '–'}</td>
+      <td>
+        \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
+        \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
+        <span style="color:#e0a23c;font-size:11px;white-space:nowrap;">🍟 \${a.goldenFries ?? 0}</span>
+        <button class="btn btn-gray btn-sm" style="padding:1px 6px;" onclick="giveGoldenFries('\${esc(a.slug)}', \${a.goldenFries ?? 0})">+GP</button>
+      </td>
+      \${accountsPassTypes.map(pt => \`<td style="font-weight:600;text-align:center;">\${a.passes?.[pt]?.level ?? '–'}</td>\`).join('')}
+    </tr>
+  \`).join('') : \`<tr><td colspan="\${colCount}" class="empty">No accounts found.</td></tr>\`;
+}
+
+
+async function giveGoldenFries(slug, current) {
+  const input = prompt('Golden Fries für ' + slug + ' (aktuell ' + current + ').\\nBetrag (negativ zum Abziehen):', '100');
+  if (input === null) return;
+  const amount = parseInt(input, 10);
+  if (!Number.isFinite(amount) || amount === 0) { toast('Ungültiger Betrag', true); return; }
+  try {
+    const data = await post('/api/account/golden-fries', { slug, amount });
+    toast(slug + ': ' + (amount > 0 ? '+' : '') + amount + ' 🍟 → ' + data.balance);
+    await loadAccounts();
+  } catch (e) { toast('Fehler: ' + (e.message || 'Fehlgeschlagen'), true); }
+}
+
+document.getElementById('accounts-search').addEventListener('input', renderAccounts);
+
+document.getElementById('accounts-table').addEventListener('click', (e) => {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const col = th.dataset.col;
+  if (accountsSortCol === col) {
+    accountsSortDir *= -1;
+  } else {
+    accountsSortCol = col;
+    accountsSortDir = (col.startsWith('pass_') || col === 'userCreated') ? -1 : 1;
+  }
+  renderAccounts();
+  renderAccountsHeader();
+});
+
+document.getElementById('reconcile-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('reconcile-btn');
+  const result = document.getElementById('reconcile-result');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  result.textContent = '';
+  try {
+    const data = await post('/api/reconcile_pass_xp', {});
+    result.textContent = \`Done: \${data.usersReconciled} users fixed, +\${data.totalXpAdded} XP, \${data.totalUnlocksGranted} unlocks granted, \${data.totalGoldenFriesAwarded} 🍟 fries\`;
+    result.style.color = 'var(--green-t)';
+    await loadAccounts();
+  } catch (e) {
+    result.textContent = 'Error: ' + e.message;
+    result.style.color = 'var(--red-t)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Reconcile All Passes + Unlocks';
+  }
+});
+
+// ── Admin chat send ────────────────────────────────────────────────────────
+
+document.getElementById('chat-send-btn').addEventListener('click', async () => {
+  const input = document.getElementById('chat-send-input');
+  const text = input.value.trim();
+  if (!text || !activeGameId) return;
+  input.value = '';
+  await gameCmd({ action: 'chat', text, sender: currentAdminSlug || 'ADMIN' });
+});
+
+document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('chat-send-btn').click();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

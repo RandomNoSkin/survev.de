@@ -3995,6 +3995,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireDelay: 0.12,
         isDual: false,
         fireMode: "auto",
+        dualWieldType: undefined,
         speed: { equip: 2.5, attack: 3.5 },
         upgraded: undefined,
         modifiedSound: "p30l_01",

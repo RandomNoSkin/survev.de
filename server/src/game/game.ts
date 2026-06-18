@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
+import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
+import { MapId } from "../../../shared/defs/types/misc";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import type { Loadout } from "../../../shared/utils/loadout";
@@ -8,7 +10,7 @@ import { math } from "../../../shared/utils/math";
 import { v2 } from "../../../shared/utils/v2";
 import { Config } from "../config";
 import { ServerLogger } from "../utils/logger";
-import { apiPrivateRouter } from "../utils/serverHelpers";
+import { apiPrivateRouter, logErrorToWebhook } from "../utils/serverHelpers";
 import {
     type AdminCmdAction,
     type DashboardPlayer,
@@ -37,12 +39,15 @@ import { SmokeBarn } from "./objects/smoke";
 import { PluginManager } from "./pluginManager";
 import { Profiler } from "./profiler";
 import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
+import { gameLogger } from "../utils/betterLogger";
 
 export interface JoinTokenData {
     expiresAt: number;
     userId: string | null;
     findGameIp: string;
     loadout?: Loadout;
+    /** Per-player resolved Custom Loadout (see `Room.getPlayerCustomLoadout`); overrides `Game.customLoadout` for this player when `Game.customLoadoutEnabled` is true. */
+    customLoadout?: CustomLoadoutConfig;
     admin: boolean;
     groupData: {
         autoFill: boolean;
@@ -60,10 +65,18 @@ export class Game {
     verifiedOnly = false;
     startedTime = 0;
     stopTicker = 0;
+    /** Seconds the game has had 0 connected players (abandoned lobby / emptied game). */
+    emptyTime = 0;
+    /** True once the game has started for the first time; prevents the idle timer from re-arming after a freeze-phase reset. */
+    hasEverStarted = false;
     id: string;
     teamMode: TeamMode;
     mapName: string;
     isTeamMode: boolean;
+    /** Isolated match created from a private lobby; excluded from public matchmaking, see `canJoin`. */
+    isPrivate: boolean;
+    /** Private lobby "Public Spectating" toggle; when false, this match is hidden from `/api/game_infos`. Default true. */
+    publicSpectating: boolean = true;
     config: ServerGameConfig;
     pluginManager = new PluginManager(this);
     modeManager: GameModeManager;
@@ -124,6 +137,23 @@ export class Game {
     arenaRoles: string[] = [];
     choosenArenaRoles: string[] = [];
 
+    /** True if the private lobby that created this match had "Advanced Settings" enabled; matches are saved with MapId.Custom and excluded from XP. */
+    advancedSettings: boolean = false;
+
+    /** Leader-configured loadout from a private lobby's "Custom Loadout" toggle; when set, contains the lobby's loadout/Arena Mode settings. */
+    customLoadout?: CustomLoadoutConfig;
+
+    /** True if the private lobby leader enabled "Custom Loadout"; when true, every player spawns with `customLoadout`'s items instead of the map's default items. */
+    customLoadoutEnabled: boolean = false;
+
+    /** In-memory kill event buffer for the live moderation dashboard (capped at 200). */
+    recentKills: import("../utils/types").KillFeedEntry[] = [];
+
+    logKillFeedEntry(entry: import("../utils/types").KillFeedEntry) {
+        this.recentKills.push(entry);
+        if (this.recentKills.length > 200) this.recentKills.shift();
+    }
+
     constructor(
         id: string,
         config: ServerGameConfig,
@@ -140,6 +170,14 @@ export class Game {
         this.teamMode = config.teamMode;
         this.mapName = config.mapName;
         this.isTeamMode = this.teamMode !== TeamMode.Solo;
+        this.isPrivate = config.isPrivate ?? false;
+        this.publicSpectating = config.publicSpectating ?? true;
+        // Private lobby leader narrowed the arena role pool down (see `RoomData.enabledArenaRoles`);
+        // takes priority over the map's full `arenaModeRoles` list (see `Player.playerJoin`/`playerRoleSelect`).
+        this.arenaRoles = config.customLoadoutEnabled ? [] : config.arenaRoles?.length ? [...config.arenaRoles] : [];
+        this.advancedSettings = config.advancedSettings ?? false;
+        this.customLoadout = config.customLoadout;
+        this.customLoadoutEnabled = config.customLoadoutEnabled ?? false;
 
         this.map = new GameMap(this);
         this.grid = new Grid(this.map.width, this.map.height);
@@ -197,9 +235,25 @@ export class Game {
             }
         }
 
+        // Reap empty games: stop any game that has had no connected players for 3 minutes.
+        // The socket-close path reaps a game the instant its last player leaves; this also
+        // catches lobbies that were created but never joined (players.length stays 0, so no
+        // socket-close ever fires) and any game everyone left without a clean disconnect.
+        if (this.playerBarn.players.some((p) => !p.disconnected)) {
+            this.emptyTime = 0;
+        } else {
+            this.emptyTime += dt;
+            if (this.emptyTime > 180) {
+                this.logger.info("Stopping empty game (no connected players for 3 min)");
+                this.stop();
+                return;
+            }
+        }
+
         if (!this.started) {
             this.started = this.modeManager.isGameStarted();
             if (this.started) {
+                this.hasEverStarted = true;
                 this.gas.advanceGasStage();
             }
         }
@@ -278,6 +332,10 @@ export class Game {
 
         if (tickTime > 1000) {
             let errString = `Tick took over 1 second! ${tickTime.toFixed(2)}ms\n`;
+            // Loot count is the key signal: an unbounded, dense loot pile is what made the
+            // loot collision pass blow a tick up to 24-84s in prod. Surface it in the
+            // webhook alongside the profiler so the cause is obvious at a glance.
+            errString += `Objects: loots=${this.lootBarn.loots.length}, players=${this.playerBarn.players.length}, objSlots=${this.objectRegister.objects.length}\n`;
             errString += "Profiler stats:\n";
             errString += this.profiler.getStats();
             this.logger.error(errString);
@@ -289,6 +347,7 @@ export class Game {
 
             if (this.gameTickWarnings > 20) {
                 let errString = `Server is overloaded! Increasing tickTimeWarnThreshold.\n`;
+                errString += `Objects: loots=${this.lootBarn.loots.length}, players=${this.playerBarn.players.length}, objSlots=${this.objectRegister.objects.length}\n`;
                 errString += "Profiler stats:\n";
                 errString += this.profiler.getStats();
                 this.logger.warn(errString);
@@ -361,6 +420,13 @@ export class Game {
 
     get canJoin(): boolean {
         return (
+            // A stopped game must never advertise itself as joinable. An empty game is
+            // reaped via `aliveCount === 0` WITHOUT setting `over`, so without this check
+            // a just-stopped game still reports canJoin=true in its final UpdateData —
+            // which made findGame match a dead process and wait for a "Created" that never
+            // comes (the repeated 8s find_game timeouts on the same game id).
+            !this.stopped &&
+            !this.isPrivate &&
             this.aliveCount < this.map.mapDef.gameMode.maxPlayers &&
             !this.over &&
             this.startedTime < (this.map.mapDef.gameMode.joinTime || 60)
@@ -527,41 +593,54 @@ export class Game {
             return;
         }
 
-        switch (type) {
-            case net.MsgType.Input: {
-                player.handleInput(msg as net.InputMsg);
-                break;
+        // A throw while handling one player's input (e.g. a custom-loadout / role /
+        // spectate edge case) must not crash the whole game process — it's dispatched
+        // from the async IPC message handler, where an uncaught throw becomes an
+        // unhandled rejection. Isolate it: log the full stack (file + webhook) and
+        // drop just this player's socket instead of taking everyone down.
+        try {
+            switch (type) {
+                case net.MsgType.Input: {
+                    player.handleInput(msg as net.InputMsg);
+                    break;
+                }
+                case net.MsgType.Emote: {
+                    player.emoteFromMsg(msg as net.EmoteMsg);
+                    break;
+                }
+                case net.MsgType.DropItem: {
+                    player.dropItem(msg as net.DropItemMsg);
+                    break;
+                }
+                case net.MsgType.Spectate: {
+                    player.spectate(msg as net.SpectateMsg);
+                    break;
+                }
+                case net.MsgType.PerkModeRoleSelect: {
+                    player.roleSelect((msg as net.PerkModeRoleSelectMsg).role);
+                    break;
+                }
+                case net.MsgType.RoleSelect: {
+                    if(player.role)return;
+                    player.playerRoleSelect((msg as net.RoleSelectMsg).role);
+                    break;
+                }
+                case net.MsgType.Edit: {
+                    if(!player.isAdmin && !Config.debug.allowEditMsg) break;
+                    player.processEditMsg(msg as net.EditMsg);
+                    break;
+                }
+                case net.MsgType.KillFeed: {
+                    player.processKillFeedMsg(msg as net.KillFeedMsg);
+                    break;
+                }
             }
-            case net.MsgType.Emote: {
-                player.emoteFromMsg(msg as net.EmoteMsg);
-                break;
-            }
-            case net.MsgType.DropItem: {
-                player.dropItem(msg as net.DropItemMsg);
-                break;
-            }
-            case net.MsgType.Spectate: {
-                player.spectate(msg as net.SpectateMsg);
-                break;
-            }
-            case net.MsgType.PerkModeRoleSelect: {
-                player.roleSelect((msg as net.PerkModeRoleSelectMsg).role);
-                break;
-            }
-            case net.MsgType.RoleSelect: {
-                if(player.role)return;
-                player.playerRoleSelect((msg as net.RoleSelectMsg).role);
-                break;
-            }
-            case net.MsgType.Edit: {
-                if(!player.isAdmin && !Config.debug.allowEditMsg) break;
-                player.processEditMsg(msg as net.EditMsg);
-                break;
-            }
-            case net.MsgType.KillFeed: {
-                player.processKillFeedMsg(msg as net.KillFeedMsg);
-                break;
-            }
+        } catch (err) {
+            const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
+            this.logger.error(`handleMsg dispatch crashed (type=${type}): ${details}`);
+            gameLogger.error(`handleMsg dispatch crashed (type=${type}): ${details}`);
+            void logErrorToWebhook("server", `handleMsg dispatch crashed (type=${type})`, err);
+            this.closeSocket(socketId);
         }
     }
 
@@ -582,10 +661,10 @@ export class Game {
                 source: player.downedBy,
             });
         }else
-        if (player.canDespawn() && this.map.mapDef.gameMode.canDespawn || !this.started && !player.spectator) {
+        if (player.spectator || (player.canDespawn() && this.map.mapDef.gameMode.canDespawn) || (!this.started && !player.spectator)) {
             player.game.playerBarn.removePlayer(player);
             player.mapIndicator?.kill();
-        }else {
+        } else {
             player.kill({
                 damageType: GameConfig.DamageType.Disconnect,
                 dir: player.dir,
@@ -593,6 +672,19 @@ export class Game {
             });
         }
 
+        // Stop the game once nobody is left to play it. `aliveCount === 0` covers the
+        // normal case; the every-disconnected check also reaps "zombie" games whose
+        // players are technically still alive but all disconnected (no connected player
+        // remains), which the `b90628e2 "Removing game Stoppings"` change stopped doing
+        // and which would otherwise keep running — and accumulating planes/state — forever.
+        if (
+            !this.stopped &&
+            (this.aliveCount === 0 ||
+                (this.playerBarn.players.length > 0 &&
+                    this.playerBarn.players.every((p) => p.disconnected)))
+        ) {
+            this.stop();
+        }
     }
 
     broadcastMsg(type: net.MsgType, msg: net.Msg) {
@@ -601,6 +693,7 @@ export class Game {
 
     checkGameOver(): void {
         if (this.over) return;
+
         const didGameEnd: boolean = this.modeManager.handleGameEnd();
 
         if (didGameEnd) {
@@ -674,6 +767,9 @@ export class Game {
     /** Executes an admin command sent from the moderation dashboard via IPC. */
     executeAdminCmd(cmd: AdminCmdAction) {
         switch (cmd.action) {
+            case "stop":
+                this.stop();
+                break;
             case "freeze":
                 this.frozen = true;
                 this.broadcastAnnounce("Game frozen by moderator", "#ff4444");
@@ -700,6 +796,15 @@ export class Game {
             case "announce_player":
                 this.announceToPlayer(cmd.target, cmd.text, cmd.color, cmd.sender);
                 break;
+            case "chat": {
+                const chatMsg = new net.KillFeedMsg();
+                chatMsg.type = net.KillFeedMsgType.ChatMsg;
+                chatMsg.player = cmd.sender ?? "ADMIN";
+                chatMsg.string = cmd.text;
+                chatMsg.chatType = 0;
+                this.broadcastMsg(net.MsgType.KillFeed, chatMsg);
+                break;
+            }
         }
     }
 
@@ -719,6 +824,7 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                customLoadout: token.customLoadout,
                 admin: token.admin,
             });
         }
@@ -738,8 +844,39 @@ export class Game {
                 groupData,
                 findGameIp: token.ip,
                 loadout: token.loadout,
+                customLoadout: token.customLoadout,
                 admin: token.admin,
             });
+        }
+    }
+
+    /**
+     * Like addJoinTokens, but registers one separate `groupData` per team batch
+     * so each batch ends up in its own in-game Group instead of all sharing one.
+     * Used for private lobbies, where the leader assigns players to teams beforehand.
+     * Never auto-fills empty slots with bots/randoms.
+     */
+    addGroupedJoinTokens(teams: FindGamePrivateBody["playerData"][]) {
+        for (const tokens of teams) {
+            if (!tokens.length) continue;
+
+            const groupData = {
+                playerCount: tokens.length,
+                groupHashToJoin: "",
+                autoFill: false,
+            };
+
+            for (const token of tokens) {
+                this.joinTokens.set(token.token, {
+                    expiresAt: Date.now() + 10000,
+                    userId: token.userId,
+                    groupData,
+                    findGameIp: token.ip,
+                    loadout: token.loadout,
+                    customLoadout: token.customLoadout,
+                    admin: token.admin,
+                });
+            }
         }
     }
 
@@ -750,6 +887,8 @@ export class Game {
             teamMode: this.teamMode,
             mapName: this.mapName,
             canJoin: this.canJoin,
+            isPrivate: this.isPrivate,
+            publicSpectating: this.publicSpectating,
             aliveCount: this.aliveCount,
             startedTime: this.startedTime,
             stopped: this.stopped,
@@ -767,7 +906,10 @@ export class Game {
         }
         this.logger.info("Game Ended");
         this.updateData();
-        this._saveGameToDatabase();
+        void this._saveGameToDatabase().catch((err) => {
+            this.logger.error("Failed to save game:", err);
+            gameLogger.error("Failed to save game:", err);
+        });
     }
 
     private async _saveGameToDatabase() {
@@ -808,7 +950,7 @@ export class Game {
                 damageTaken: Math.round(player.damageTaken),
                 killerId: player.killedBy?.matchDataId || 0,
                 gameId: this.id,
-                mapId: this.map.mapId,
+                mapId: this.advancedSettings ? MapId.Custom : this.map.mapId,
                 mapSeed: this.map.seed,
                 killedIds: player.killedIds,
                 assistedIds: player.assistedIds,
@@ -817,6 +959,23 @@ export class Game {
                 findGameIp: player.findGameIp,
             };
         });
+
+        // Per logged-in player with equipped cosmetics: their result, so the API can
+        // attribute games/wins/kills/damage to the owned item instances (provenance).
+        const cosmeticStats = players
+            .filter(
+                ({ player }) =>
+                    !player.spectator &&
+                    player.userId &&
+                    player.equippedCosmetics.length,
+            )
+            .map(({ player, rank }) => ({
+                userId: player.userId!,
+                won: rank === 1,
+                kills: player.kills,
+                damage: Math.round(player.damageDealt),
+                types: player.equippedCosmetics,
+            }));
 
         // only save the game if it has more than 2 players lol
         if (values.length < 2) return;
@@ -830,6 +989,7 @@ export class Game {
             res = await apiPrivateRouter.save_game.$post({
                 json: {
                     matchData: values,
+                    cosmeticStats,
                 },
             });
         } catch (err) {
@@ -842,15 +1002,20 @@ export class Game {
                 `[${region}] Failed to save game data, saving locally instead`,
             );
 
-            const dir = path.resolve("lost_game_data");
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir);
+            try {
+                const dir = path.resolve("lost_game_data");
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir);
+                }
+
+                fs.writeFileSync(
+                    path.join(dir, `${this.id}.json`),
+                    JSON.stringify(values),
+                    "utf8",
+                );
+            } catch (err) {
+                this.logger.error("Failed to write lost_game_data:", err);
             }
-            fs.writeFileSync(
-                path.join(dir, `${this.id}.json`),
-                JSON.stringify(values),
-                "utf8",
-            );
         }
     }
 
