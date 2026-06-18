@@ -1474,9 +1474,13 @@ export class WeaponManager {
         const weaponAmmoType = gunDef.ammo;
         const weaponAmmoCount = curWeap.ammo;
 
-        //calc new ammo / drop if too much
+        // Check if the new weapon should preserve ammo from the previous form
+        const newWeaponDef = GameObjectDefs[newWeaponType] as GunDef;
+        const shouldPreserveAmmo = newWeaponDef && newWeaponDef.preserveSecondAmmo;
+
+        //calc new ammo / drop if too much (only if not preserving ammo)
         let amountToDrop = 0;
-        if (!this.isInfinite(gunDef)) {
+        if (!shouldPreserveAmmo && !this.isInfinite(gunDef)) {
             const res = this.player.invManager.give(
                 weaponAmmoType as InventoryItem,
                 weaponAmmoCount,
@@ -1485,8 +1489,13 @@ export class WeaponManager {
             if (amountToDrop > 0)
             this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
         }
-        this.setWeapon(this.curWeapIdx, newWeaponType, 0);
-        this.tryReload();
+
+        const ammoToSet = shouldPreserveAmmo ? weaponAmmoCount : 0;
+        
+        this.setWeapon(this.curWeapIdx, newWeaponType, ammoToSet);
+        if (!shouldPreserveAmmo) {
+            this.tryReload();
+        }
     }
 
     upgradeCurrentWeapon(): void {

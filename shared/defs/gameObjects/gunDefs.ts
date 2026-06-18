@@ -12,6 +12,7 @@ export interface GunDef {
     caseTiming: "shoot" | "reload";
     ammo: string;
     secondAmmo?: string;
+    preserveSecondAmmo?: boolean;
     ammoSpawnCount: number;
     maxClip: number;
     maxReload: number;
@@ -4261,6 +4262,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_saiga: defineGunSkin("saiga", {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga_grenade",
+        preserveSecondAmmo: true,
         bulletType: "bullet_buckshot",
         upgraded: undefined,
         modifiedSound: "saiga_01",
@@ -4271,6 +4273,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_saiga_grenade: defineGunSkin("saiga", {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga",
+        preserveSecondAmmo: true,
         bulletCount: 2,
         bulletType: "bullet_saiga_modified",
         upgraded: undefined,
