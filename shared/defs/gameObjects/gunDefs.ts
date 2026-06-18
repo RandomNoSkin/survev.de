@@ -4161,6 +4161,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle: defineGunSkin("deagle", {
         name: "DEagle 50 [+]",
         secondAmmo: "modified_deagle_45acp",
+        preserveSecondAmmo: true,
         dualWieldType: "modified_deagle_dual",
         bulletType: "bullet_deagle_modified",
         fireDelay: 0.18,
@@ -4176,6 +4177,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle_45acp: defineGunSkin("deagle", {
         name: "DEagle 45 [+]",
         secondAmmo: "modified_deagle",
+        preserveSecondAmmo: true,
         fireMode: "auto",
         reloadTime: 1.8,
         fireDelay: 0.1,
@@ -4192,6 +4194,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle_dual: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 50 [+]",
         secondAmmo: "modified_deagle_dual_45acp",
+        preserveSecondAmmo: true,
         bulletType: "bullet_deagle_modified",
         moveSpread: 3,
         shotSpread: 1.5,
@@ -4205,6 +4208,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 45 [+]",
         secondAmmo: "modified_deagle_dual",
+        preserveSecondAmmo: true,
         ammo: "45acp",
         reloadTime: 3.5,
         fireDelay: 0.08,
