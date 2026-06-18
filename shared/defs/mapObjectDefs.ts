@@ -14563,6 +14563,13 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 scale: 1,
                 ori: 1,
             },
+            {
+                type: "table_04",
+                pos: v2.create(7.7, 0),
+                scale: 0.9,
+                ori: 3,
+                inheritOri: true,
+            },
         ],
     },
     bunker_chrys_compartment_02b: {
@@ -29030,16 +29037,11 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 0,
             },
             {
-                type: "bookshelf_01",
-                pos: v2.create(10.5, 13),
-                scale: 1,
-                ori: 0,
-            },
-            {
-                type: "bed_sm_01",
-                pos: v2.create(10.5, 10),
-                scale: 1,
-                ori: 3,
+                type: "table_04",
+                pos: v2.create(10.2, 12.2),
+                scale: 0.85,
+                ori: 2,
+                inheritOri: true,
             },
             {
                 type: "crate_01",
