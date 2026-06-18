@@ -64,12 +64,14 @@ export const CUSTOM_LOADOUT_MELEES = Object.keys(MeleeDefs).filter(
 );
 export const CUSTOM_LOADOUT_GRENADES = [
     "frag",
+    "impact",
     "smoke",
     "mirv",
     "strobe",
     "snowball",
     "potato",
     "coconut",
+    "mine",
 ] as const;
 export const CUSTOM_LOADOUT_HELMETS = ["", "helmet01", "helmet02", "helmet03", "helmet04"];
 export const CUSTOM_LOADOUT_CHESTS = ["", "chest01", "chest02", "chest03", "chest04"];
