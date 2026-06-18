@@ -3982,6 +3982,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "MP220 [+]",
         fireMode: "dual",
         shotSpread: 4,
+        reloadTime: 2.7,
         upgraded: undefined,
         modifiedSound: "mp220_01",
         lootImg: {
@@ -3989,6 +3990,9 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-mp220-modified-01.img",
+        },
+        sound: {
+            reload: "mp220_modified_reload_01",
         },
     }),
     modified_p30l: defineGunSkin("p30l", {
