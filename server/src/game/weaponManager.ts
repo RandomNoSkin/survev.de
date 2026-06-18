@@ -1478,19 +1478,49 @@ export class WeaponManager {
         const newWeaponDef = GameObjectDefs[newWeaponType] as GunDef;
         const shouldPreserveAmmo = newWeaponDef && newWeaponDef.preserveSecondAmmo;
 
-        //calc new ammo / drop if too much (only if not preserving ammo)
-        let amountToDrop = 0;
-        if (!shouldPreserveAmmo && !this.isInfinite(gunDef)) {
-            const res = this.player.invManager.give(
-                weaponAmmoType as InventoryItem,
-                weaponAmmoCount,
-            );
-            amountToDrop = res.remaining;
-            if (amountToDrop > 0)
-            this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
-        }
+        let ammoToSet = 0;
 
-        const ammoToSet = shouldPreserveAmmo ? weaponAmmoCount : 0;
+        if (shouldPreserveAmmo) {
+            const ammoTypesMatch = weaponAmmoType === newWeaponDef.ammo;
+            
+            if (ammoTypesMatch) {
+                // Same ammo type: keep the ammo in the gun
+                ammoToSet = weaponAmmoCount;
+            } else {
+                // Different ammo types: return old ammo to inventory, take from new ammo type
+                if (!this.isInfinite(gunDef)) {
+                    const res = this.player.invManager.give(
+                        weaponAmmoType as InventoryItem,
+                        weaponAmmoCount,
+                    );
+                    let amountToDrop = res.remaining;
+                    if (amountToDrop > 0) {
+                        this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
+                    }
+                }
+
+                // Take from new ammo type inventory and load it
+                if (!this.isInfinite(newWeaponDef)) {
+                    const ammoAvailable = this.player.invManager.get(newWeaponDef.ammo as InventoryItem);
+                    ammoToSet = Math.min(weaponAmmoCount, ammoAvailable);
+                    if (ammoToSet > 0) {
+                        this.player.invManager.take(newWeaponDef.ammo as InventoryItem, ammoToSet);
+                    }
+                }
+            }
+        } else {
+            // Original behavior: return ammo to inventory and reload
+            let amountToDrop = 0;
+            if (!this.isInfinite(gunDef)) {
+                const res = this.player.invManager.give(
+                    weaponAmmoType as InventoryItem,
+                    weaponAmmoCount,
+                );
+                amountToDrop = res.remaining;
+                if (amountToDrop > 0)
+                    this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
+            }
+        }
         
         this.setWeapon(this.curWeapIdx, newWeaponType, ammoToSet);
         if (!shouldPreserveAmmo) {
