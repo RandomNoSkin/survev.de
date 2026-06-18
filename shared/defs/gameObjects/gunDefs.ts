@@ -4301,7 +4301,6 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "FAMAS [+]",
         bulletTypeExtra: "bullet_famas_modified",
         extraBulletTrigger: 3,
-        switchDelay: 0.15,
         upgraded: undefined,
         modifiedSound: "famas_01",
         lootImg: {
