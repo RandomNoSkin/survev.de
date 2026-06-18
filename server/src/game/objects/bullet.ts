@@ -746,7 +746,7 @@ export class Bullet {
                     dir: this.dir,
                 });
 
-                if (this.piercing && obstacle.destructible && !mapDef.reflectBullets) {
+                if (this.piercing && col.collidable && obstacle.destructible && !mapDef.reflectBullets) {
                     const def = GameObjectDefs[this.bulletType] as BulletDef;
                     const pierceDamageMult = def.pierceDamageMult ?? 0.5;
                     const pierceDistanceMult = def.pierceDistanceMult ?? 0.5;
