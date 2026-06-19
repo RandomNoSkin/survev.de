@@ -78,10 +78,10 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_scar_modified: {
         type: "bullet",
-        damage: 18,
+        damage: 15,
         obstacleDamage: 1,
-        falloff: 0.8,
-        distance: 26,
+        falloff: 0.5,
+        distance: 21,
         speed: 88,
         variance: 0,
         shrapnel: false,
