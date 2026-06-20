@@ -345,7 +345,7 @@ export class ProjectileBarn {
                 if (itemDef.proximityMine) {
                     if (p.posZ <= 0.1) {
                         p.mineBlinkTicker += dt;
-                        const period = p.mineTriggered ? 0.12 : 0.7;
+                        const period = p.mineTriggered ? 0.12 : 1;
                         const on = p.mineBlinkTicker % period < period * 0.5;
                         p.sprite.tint = on ? 0xff2222 : itemDef.worldImg.tint;
                         // beep on the rising edge of each blink

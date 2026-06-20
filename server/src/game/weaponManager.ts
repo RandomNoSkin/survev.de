@@ -1267,6 +1267,44 @@ export class WeaponManager {
         );
     }
 
+    /**
+     * Rough ground-landing prediction for a thrown projectile, mirroring the
+     * physics in server/src/game/objects/projectile.ts (used to validate mine
+     * placement before the throw is committed).
+     */
+    predictThrowLanding(def: ThrowableDef, spawnPos: Vec2, vel: Vec2): Vec2 {
+        const dt = 1 / 60;
+        const gravity = 10.5;
+        let pos = v2.copy(spawnPos);
+        let v = v2.copy(vel);
+        let posZ = 0.5; // matches spawnHeight in throwThrowable
+        let velZ = def.throwPhysics.velZ;
+        for (let i = 0; i < 600; i++) {
+            if (!def.forceMaxThrowDistance) {
+                v = v2.mul(v, 1 / (1 + dt * (posZ !== 0 ? 1.2 : 2)));
+            }
+            pos = v2.add(pos, v2.mul(v, dt));
+            velZ -= gravity * dt;
+            posZ += velZ * dt;
+            if (posZ <= 0) break;
+        }
+        return pos;
+    }
+
+    /** True if a live proximity mine sits within `radius` of `pos`. */
+    mineWithin(pos: Vec2, radius: number): boolean {
+        const objs = this.player.game.grid.intersectCollider(
+            collider.createCircle(pos, radius),
+        );
+        for (const obj of objs) {
+            if (obj.__type !== ObjectType.Projectile || obj.dead) continue;
+            const def = GameObjectDefs[obj.type] as ThrowableDef;
+            if (!def.proximityMine) continue;
+            if (v2.distance(pos, obj.pos) <= radius) return true;
+        }
+        return false;
+    }
+
     throwThrowable(noSpeed?: boolean): void {
         if (!this.cookingThrowable) return;
         this.cookingThrowable = false;
@@ -1370,6 +1408,22 @@ export class WeaponManager {
             // player mouse position is irrelevant for max throwing distance
             v2.mul(dir, throwStr),
         );
+
+        // mines can't be placed inside another mine's detection radius: if this
+        // one would land in one, abort the throw silently (no throw animation,
+        // mine not consumed) and tell the player the spot is already mined
+        if (throwableDef.proximityMine) {
+            const landing = this.predictThrowLanding(throwableDef, spawnPos, vel);
+            if (this.mineWithin(landing, throwableDef.proximityMine.triggerRad)) {
+                // reset the cook animation so the player doesn't stay stuck holding it
+                this.player.cancelAnim();
+                const msg = new net.PickupMsg();
+                msg.type = net.PickupMsgType.AlreadyMined;
+                msg.item = oldThrowableType;
+                this.player.msgsToSend.push({ type: net.MsgType.Pickup, msg });
+                return;
+            }
+        }
 
         const fuseTime = math.max(
             0.0,
