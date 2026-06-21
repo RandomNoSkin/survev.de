@@ -78,6 +78,20 @@
       "when": 1781645732515,
       "tag": "0010_robust_killraven",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782041284995,
+      "tag": "0011_nostalgic_komodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782041779721,
+      "tag": "0012_nice_ego",
+      "breakpoints": true
     }
   ]
 }
