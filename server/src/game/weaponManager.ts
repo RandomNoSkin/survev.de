@@ -484,7 +484,7 @@ export class WeaponManager {
         }
         let weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
         //checking if we have ammo if not check if we have secondary ammo then switch gunDef (only backend)
-        if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) <=0 && weaponDef.secondAmmo){
+        if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) <=0 && weaponDef.secondAmmo && !this.isInfinite(weaponDef)){
             const secondWeapon = weaponDef.secondAmmo;
             weaponDef = GameObjectDefs[weaponDef.secondAmmo] as GunDef;
             if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) >0 && this.weapons[this.curWeapIdx].ammo == 0){
@@ -1514,7 +1514,7 @@ export class WeaponManager {
             this.player.actionType === GameConfig.Action.Reload ||
             this.player.actionType === GameConfig.Action.ReloadAlt
         ) {
-            return;
+            this.player.cancelAction();
         }
         const curWeap = this.weapons[this.curWeapIdx];
         if (!curWeap.type) return;

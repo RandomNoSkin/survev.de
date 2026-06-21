@@ -9,6 +9,7 @@ import { Config } from "../../../../config";
 import { checkForBadWords } from "../../../../utils/serverHelpers";
 import { createSession, invalidateSession } from "../../../auth";
 import { db } from "../../../db";
+import { awardWelcomeGoldenFries } from "../../../db/goldenFries";
 import { itemsTable, type UsersTableInsert, usersTable } from "../../../db/schema";
 
 let oauthBaseURL: URL | undefined = undefined;
@@ -154,6 +155,9 @@ export async function createNewUser(payload: UsersTableInsert) {
 
         await tx.insert(itemsTable).values(items);
     });
+
+    // One-time welcome Golden Fries for the fresh account (idempotent).
+    await awardWelcomeGoldenFries(payload.id);
 }
 
 export function getRedirectUri(method: Provider) {
