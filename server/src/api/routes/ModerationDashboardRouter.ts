@@ -1115,12 +1115,28 @@ export const ModerationDashboardRouter = new Hono<Context>()
             // xp also sets the matching level.
             const level = PassDefs[passType] ? getPassLevelAndXp(passType, xp).level : 0;
 
+            // Anchor the reconcile job at this admin value + time, so it won't
+            // re-count old matches but keeps accruing XP from new ones.
+            const now = new Date();
             await db
                 .insert(userXpTable)
-                .values({ userId: user.id, passType, level, xp: String(xp) })
+                .values({
+                    userId: user.id,
+                    passType,
+                    level,
+                    xp: String(xp),
+                    reconcileBaseXp: String(xp),
+                    reconcileFrom: now,
+                })
                 .onConflictDoUpdate({
                     target: [userXpTable.userId, userXpTable.passType],
-                    set: { level, xp: String(xp), lastUpdated: new Date() },
+                    set: {
+                        level,
+                        xp: String(xp),
+                        reconcileBaseXp: String(xp),
+                        reconcileFrom: now,
+                        lastUpdated: now,
+                    },
                 });
 
             // Bring owned pass items exactly in line with the derived level:

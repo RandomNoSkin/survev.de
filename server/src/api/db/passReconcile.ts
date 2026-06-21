@@ -47,6 +47,13 @@ export async function reconcileAllPasses(): Promise<{
         for (const record of allUserXp) {
             const currentXp = Number(record.xp);
 
+            // Admin XP edits anchor the reconcile: only matches AFTER `reconcileFrom`
+            // count, added on top of `reconcileBaseXp` (0 / no anchor ⇒ whole season).
+            const windowStart =
+                record.reconcileFrom && record.reconcileFrom > seasonStart
+                    ? record.reconcileFrom
+                    : seasonStart;
+
             const stats = await db
                 .select({
                     gameId: matchDataTable.gameId,
@@ -61,14 +68,14 @@ export async function reconcileAllPasses(): Promise<{
                 .where(
                     and(
                         eq(matchDataTable.userId, record.userId),
-                        gte(matchDataTable.createdAt, seasonStart),
+                        gte(matchDataTable.createdAt, windowStart),
                         lte(matchDataTable.createdAt, seasonEnd),
                     ),
                 )
                 .groupBy(matchDataTable.gameId)
                 .having(sql`count(*) = 1`);
 
-            let correctXp = 0;
+            let correctXp = Number(record.reconcileBaseXp);
             for (const stat of stats) {
                 const mapDef = getMapDefById(stat.mapId);
                 const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
