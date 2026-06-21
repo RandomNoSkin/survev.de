@@ -2,7 +2,7 @@ import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import { getMapDefById, MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig } from "../../../../shared/gameConfig";
-import { reconcilePassGoldenFries } from "./goldenFries";
+import { backfillWelcomeGoldenFries, reconcilePassGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { grantPassItems } from "./passGrants";
 import { matchDataTable, userXpTable } from "./schema";
@@ -33,6 +33,10 @@ export async function reconcileAllPasses(): Promise<{
     let totalXpAdded = 0;
     let totalUnlocksGranted = 0;
     let totalGoldenFriesAwarded = 0;
+
+    // Retroactive one-time welcome Golden Fries for every account that predates the
+    // grant (idempotent; only the first run actually pays out).
+    totalGoldenFriesAwarded += await backfillWelcomeGoldenFries();
 
     for (const [passType, passCfg] of Object.entries(allPasses)) {
         const seasonStart = new Date(passCfg.seasonStart);
