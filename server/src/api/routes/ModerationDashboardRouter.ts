@@ -27,7 +27,7 @@
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
  */
 
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { streamSSE, type SSEStreamingApi } from "hono/streaming";
@@ -35,14 +35,53 @@ import { util } from "../../../../shared/utils/util";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { reconcileAllPasses } from "../db/passReconcile";
+import { reconcileAllPasses, getPassLevelAndXp } from "../db/passReconcile";
 import { awardGoldenFries } from "../db/goldenFries";
-import { banCommentsTable, banHistoryTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
+import { grantPassItems, revokePassItemsAbove } from "../db/passGrants";
+import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
+import { banCommentsTable, banHistoryTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
 import { server } from "../apiServer";
+import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
 import { z } from "zod";
 import { dashboardHtml } from "./moderationDashboard.html";
 import { GameConfig } from "../../../../shared/gameConfig";
+import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
+import {
+    _allowedCrosshairs,
+    _allowedEmotes,
+    _allowedHealEffects,
+    _allowedMeleeSkins,
+    _allowedOutfits,
+    UnlockDefs,
+} from "../../../../shared/defs/gameObjects/unlockDefs";
+
+/** Every cosmetic an admin may grant, by category, for the account-detail "Give" UI. */
+const COSMETIC_CATALOG = {
+    outfit: _allowedOutfits,
+    melee: _allowedMeleeSkins,
+    heal: _allowedHealEffects,
+    emote: _allowedEmotes,
+    crosshair: _allowedCrosshairs,
+};
+const ALLOWED_COSMETICS = [...new Set(Object.values(COSMETIC_CATALOG).flat())];
+
+/** Default-unlock item types that must never be removed (would break accounts). */
+const PROTECTED_ITEM_TYPES = [
+    ...(UnlockDefs.unlock_default?.unlocks ?? []),
+    ...(UnlockDefs.unlock_new_account?.unlocks ?? []),
+];
+
+/** Formats the executing admin for audit fields, adding a Discord @mention when linked. */
+function adminTag(admin: {
+    slug: string;
+    authId?: string | null;
+    linkedDiscord?: boolean;
+}): string {
+    return admin.linkedDiscord && admin.authId
+        ? `${admin.slug} (<@${admin.authId}>)`
+        : admin.slug;
+}
 
 // ─── Admin guard middleware ────────────────────────────────────────────────────
 
@@ -211,6 +250,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             await recordBan({ banType: "ip", banTarget: ip, reason, bannedBy: admin.slug, expiresAt: expiresIn, permanent });
 
+            void logModerationAction("🔨 IP banned", [
+                { name: "IP hash", value: ip },
+                { name: "Reason", value: reason || "–" },
+                { name: "Duration", value: permanent ? "permanent" : `${duration}d` },
+                { name: "By admin", value: adminTag(admin) },
+            ]);
+
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -233,6 +279,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .where(eq(usersTable.slug, slug));
 
             await recordBan({ banType: "account", banTarget: slug, reason, bannedBy: admin.slug, expiresAt: null, permanent: false });
+
+            void logModerationAction("🔨 Account banned", [
+                { name: "Account", value: slug },
+                { name: "Reason", value: reason || "–" },
+                { name: "By admin", value: adminTag(admin) },
+            ]);
 
             broadcastBans();
             return c.json({ ok: true });
@@ -262,6 +314,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 });
 
             await recordBan({ banType: "chat", banTarget: ip, reason, bannedBy: admin.slug, expiresAt: expiresIn, permanent });
+
+            void logModerationAction("🔇 Chat banned", [
+                { name: "IP hash", value: ip },
+                { name: "Reason", value: reason || "–" },
+                { name: "Duration", value: permanent ? "permanent" : `${duration}d` },
+                { name: "By admin", value: adminTag(admin) },
+            ]);
 
             broadcastBans();
             return c.json({ ok: true });
@@ -294,6 +353,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             await recordUnban("ip", ip, admin.slug);
 
+            void logModerationAction("♻️ IP unbanned", [
+                { name: "IP hash", value: ip },
+                { name: "By admin", value: adminTag(admin) },
+            ], 0x1a7a1a);
+
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -311,6 +375,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .set({ banned: false, banReason: "", bannedBy: "" })
                 .where(eq(usersTable.slug, slug));
             await recordUnban("account", slug, admin.slug);
+            void logModerationAction("♻️ Account unbanned", [
+                { name: "Account", value: slug },
+                { name: "By admin", value: adminTag(admin) },
+            ], 0x1a7a1a);
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -325,6 +393,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const { ip } = c.req.valid("json");
             await db.delete(chatBannedIpsTable).where(eq(chatBannedIpsTable.encodedIp, ip));
             await recordUnban("chat", ip, admin.slug);
+            void logModerationAction("♻️ Chat unbanned", [
+                { name: "IP hash", value: ip },
+                { name: "By admin", value: adminTag(admin) },
+            ], 0x1a7a1a);
             broadcastBans();
             return c.json({ ok: true });
         },
@@ -467,6 +539,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 username:  chatLogsTable.username,
                 channel:   chatLogsTable.channel,
                 message:   chatLogsTable.message,
+                encodedIp: chatLogsTable.encodedIp,
                 slug:      usersTable.slug,
             })
             .from(chatLogsTable)
@@ -490,6 +563,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/chatlog", async (c) => {
         const search = (c.req.query("search") ?? "").trim();
         const limit = Math.min(Math.max(Number(c.req.query("limit")) || 500, 1), 1000);
+        const channelParam = c.req.query("channel");
+        const channel =
+            channelParam !== undefined && channelParam !== "" && Number.isFinite(Number(channelParam))
+                ? Number(channelParam)
+                : undefined;
 
         const rows = await db
             .select({
@@ -499,10 +577,16 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 username:  chatLogsTable.username,
                 channel:   chatLogsTable.channel,
                 message:   chatLogsTable.message,
+                encodedIp: chatLogsTable.encodedIp,
                 slug:      usersTable.slug,
             })
             .from(chatLogsTable)
-            .where(search ? ilike(chatLogsTable.message, `%${search}%`) : undefined)
+            .where(
+                and(
+                    search ? ilike(chatLogsTable.message, `%${search}%`) : undefined,
+                    channel !== undefined ? eq(chatLogsTable.channel, channel) : undefined,
+                ),
+            )
             .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
             .orderBy(desc(chatLogsTable.createdAt))
             .limit(limit);
@@ -525,6 +609,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 username:  chatLogsTable.username,
                 channel:   chatLogsTable.channel,
                 message:   chatLogsTable.message,
+                encodedIp: chatLogsTable.encodedIp,
                 slug:      usersTable.slug,
             })
             .from(chatLogsTable)
@@ -856,6 +941,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
             admin: usersTable.admin,
             userCreated: usersTable.userCreated,
             goldenFries: usersTable.goldenFries,
+            authId: usersTable.authId,
+            linkedDiscord: usersTable.linkedDiscord,
+            linkedGoogle: usersTable.linkedGoogle,
         }).from(usersTable);
 
         // 2. All userXp rows → Map<userId, Map<passType, {level, xp}>>
@@ -879,6 +967,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         const accounts = users.map((u) => ({
             ...u,
+            discordId: u.linkedDiscord ? u.authId : null,
             lastIp: ipByUser.get(u.id) ?? null,
             passes: Object.fromEntries(
                 (xpByUser.get(u.id) ?? new Map()).entries(),
@@ -912,7 +1001,322 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 amount,
                 `admin_grant:${admin.slug}`,
             );
+            void logModerationAction("🍟 Golden Fries", [
+                { name: "Account", value: slug },
+                { name: "Amount", value: (amount > 0 ? "+" : "") + amount },
+                { name: "Balance", value: String(balance) },
+                { name: "By admin", value: adminTag(admin) },
+            ], 0xe0a23c);
             return c.json({ ok: true, balance });
+        },
+    )
+
+    /** Full account detail: identity (incl. discord id), per-pass XP, owned items grouped by source, recent matches. */
+    .get("/api/account/:slug", async (c) => {
+        const slug = c.req.param("slug");
+
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: {
+                id: true,
+                username: true,
+                slug: true,
+                authId: true,
+                linkedDiscord: true,
+                linkedGoogle: true,
+                linked: true,
+                banned: true,
+                banReason: true,
+                admin: true,
+                goldenFries: true,
+                userCreated: true,
+            },
+        });
+        if (!user) return c.json({ error: "account_not_found" }, 404);
+
+        const passTypes = Object.keys((GameConfig.serverSettings as any).passes ?? {});
+
+        const [xpRows, items, matches] = await Promise.all([
+            db.select().from(userXpTable).where(eq(userXpTable.userId, user.id)),
+            db
+                .select({ id: itemsTable.id, type: itemsTable.type, source: itemsTable.source })
+                .from(itemsTable)
+                .where(eq(itemsTable.userId, user.id)),
+            db
+                .select({
+                    gameId: matchDataTable.gameId,
+                    region: matchDataTable.region,
+                    mapId: matchDataTable.mapId,
+                    teamMode: matchDataTable.teamMode,
+                    createdAt: matchDataTable.createdAt,
+                    timeAlive: matchDataTable.timeAlive,
+                    rank: matchDataTable.rank,
+                    kills: matchDataTable.kills,
+                    damageDealt: matchDataTable.damageDealt,
+                    damageTaken: matchDataTable.damageTaken,
+                })
+                .from(matchDataTable)
+                .where(eq(matchDataTable.userId, user.id))
+                .orderBy(desc(matchDataTable.createdAt))
+                .limit(25),
+        ]);
+
+        const xp = xpRows.map((r) => ({
+            passType: r.passType,
+            level: r.level,
+            xp: Number(r.xp),
+        }));
+
+        // Owned items grouped by source so a whole source group (e.g. an S2 pass)
+        // can be removed at once.
+        const itemsBySource: Record<string, { id: number; type: string }[]> = {};
+        for (const it of items) {
+            (itemsBySource[it.source] ??= []).push({ id: it.id, type: it.type });
+        }
+
+        const prettyMatches = matches.map((m) => ({
+            ...m,
+            teamMode: TeamModeToString[m.teamMode],
+            mapId: MapId[m.mapId],
+        }));
+
+        return c.json({
+            user: { ...user, discordId: user.linkedDiscord ? user.authId : null },
+            passTypes,
+            xp,
+            itemsBySource,
+            matches: prettyMatches,
+        });
+    })
+
+    /** Sets a pass's level + xp absolutely, then grants the corresponding unlocks. */
+    .post(
+        "/api/account/set-xp",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                passType: z.string().min(1),
+                // level is ignored — it is derived from xp so the two stay in sync
+                level: z.number().int().gte(0).optional(),
+                xp: z.number().gte(0),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, passType, xp } = c.req.valid("json");
+
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+
+            // Derive the level from the (total) xp using the pass curve, so setting
+            // xp also sets the matching level.
+            const level = PassDefs[passType] ? getPassLevelAndXp(passType, xp).level : 0;
+
+            await db
+                .insert(userXpTable)
+                .values({ userId: user.id, passType, level, xp: String(xp) })
+                .onConflictDoUpdate({
+                    target: [userXpTable.userId, userXpTable.passType],
+                    set: { level, xp: String(xp), lastUpdated: new Date() },
+                });
+
+            // Bring owned pass items exactly in line with the derived level:
+            // grant everything up to it, take back anything above it.
+            const granted = await grantPassItems(user.id, passType, level);
+            const revoked = await revokePassItemsAbove(user.id, passType, level);
+
+            void logModerationAction("⭐ XP set", [
+                { name: "Account", value: slug },
+                { name: "Pass", value: passType },
+                { name: "Level / XP", value: `${level} / ${xp}` },
+                { name: "Items +/-", value: `+${granted} / -${revoked}` },
+                { name: "By admin", value: adminTag(admin) },
+            ], 0x3355ee);
+
+            return c.json({ ok: true, level, granted, revoked });
+        },
+    )
+
+    /** Grants a single cosmetic (or, with item:"all", every missing allowed cosmetic). */
+    .post(
+        "/api/account/give-item",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                item: z.string().min(1),
+                source: z.string().default("admin_grant"),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, item, source } = c.req.valid("json");
+
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+
+            if (item === "all") {
+                const owned = await db
+                    .select({ type: itemsTable.type })
+                    .from(itemsTable)
+                    .where(eq(itemsTable.userId, user.id));
+                const ownedTypes = new Set(owned.map((i) => i.type));
+                const missing = ALLOWED_COSMETICS.filter((t) => !ownedTypes.has(t));
+                if (!missing.length) return c.json({ ok: true, given: 0 });
+                const now = Date.now();
+                await db.insert(itemsTable).values(
+                    missing.map((type) => ({ userId: user.id, type, source, timeAcquired: now })),
+                );
+                void logModerationAction("🎁 Items given", [
+                    { name: "Account", value: slug },
+                    { name: "Item", value: `ALL (${missing.length})` },
+                    { name: "Source", value: source },
+                    { name: "By admin", value: adminTag(admin) },
+                ], 0x1a7a1a);
+                return c.json({ ok: true, given: missing.length });
+            }
+
+            if (!ALLOWED_COSMETICS.includes(item)) {
+                return c.json({ error: "item_not_allowed" }, 400);
+            }
+
+            const existing = await db.query.itemsTable.findFirst({
+                where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
+                columns: { id: true },
+            });
+            if (existing) return c.json({ ok: true, given: 0, message: "already owned" });
+
+            await db
+                .insert(itemsTable)
+                .values({ userId: user.id, type: item, source, timeAcquired: Date.now() });
+            void logModerationAction("🎁 Item given", [
+                { name: "Account", value: slug },
+                { name: "Item", value: item },
+                { name: "Source", value: source },
+                { name: "By admin", value: adminTag(admin) },
+            ], 0x1a7a1a);
+            return c.json({ ok: true, given: 1 });
+        },
+    )
+
+    /** Removes a single owned cosmetic by type (default-unlock items are protected). */
+    .post(
+        "/api/account/remove-item",
+        validateParams(z.object({ slug: z.string().min(1), item: z.string().min(1) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, item } = c.req.valid("json");
+
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+            if (PROTECTED_ITEM_TYPES.includes(item)) {
+                return c.json({ error: "item_protected" }, 400);
+            }
+
+            const res = await db
+                .delete(itemsTable)
+                .where(and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)))
+                .returning({ type: itemsTable.type });
+            if (res.length) {
+                void logModerationAction("➖ Item removed", [
+                    { name: "Account", value: slug },
+                    { name: "Item", value: item },
+                    { name: "By admin", value: adminTag(admin) },
+                ], 0xaa4400);
+            }
+            return c.json({ ok: true, removed: res.length });
+        },
+    )
+
+    /** Removes every owned item with the given source (e.g. all of one season's pass unlocks). */
+    .post(
+        "/api/account/remove-item-source",
+        validateParams(z.object({ slug: z.string().min(1), source: z.string().min(1) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, source } = c.req.valid("json");
+
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+
+            const res = await db
+                .delete(itemsTable)
+                .where(
+                    and(
+                        eq(itemsTable.userId, user.id),
+                        eq(itemsTable.source, source),
+                        PROTECTED_ITEM_TYPES.length
+                            ? notInArray(itemsTable.type, PROTECTED_ITEM_TYPES)
+                            : undefined,
+                    ),
+                )
+                .returning({ type: itemsTable.type });
+            if (res.length) {
+                void logModerationAction("➖ Items removed (source)", [
+                    { name: "Account", value: slug },
+                    { name: "Source", value: source },
+                    { name: "Removed", value: String(res.length) },
+                    { name: "By admin", value: adminTag(admin) },
+                ], 0xaa4400);
+            }
+            return c.json({ ok: true, removed: res.length });
+        },
+    )
+
+    /**
+     * Permanently deletes an account. The user row delete cascades to items, XP,
+     * sessions, pass grants, shop purchases, market listings and the golden-fries
+     * ledger (FK onDelete: cascade); match history is anonymized (userId → null).
+     */
+    .post(
+        "/api/account/delete",
+        validateParams(z.object({ slug: z.string().min(1) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true, username: true, admin: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+            if (target.id === admin.id) {
+                return c.json({ error: "cannot_delete_self" }, 400);
+            }
+            // Admin accounts can't be deleted from the dashboard.
+            if (target.admin) {
+                return c.json({ error: "cannot_delete_admin" }, 400);
+            }
+
+            await db.delete(usersTable).where(eq(usersTable.id, target.id));
+            await db
+                .update(matchDataTable)
+                .set({ userId: null })
+                .where(eq(matchDataTable.userId, target.id));
+
+            // Audit trail: server log + Discord.
+            server.logger.info(
+                `[MOD] Account deleted: ${slug} (${target.username || "?"}, id=${target.id}) by ${admin.slug}`,
+            );
+            void logModerationAction("🗑️ Account deleted", [
+                { name: "Account", value: slug },
+                { name: "Username", value: target.username || "–" },
+                { name: "User ID", value: target.id },
+                { name: "By admin", value: adminTag(admin) },
+            ]);
+
+            return c.json({ ok: true });
         },
     )
 

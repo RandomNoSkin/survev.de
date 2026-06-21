@@ -162,7 +162,7 @@ function getPassLevelXp(passType: string, level: number): number {
         : passDef.xp[passDef.xp.length - 1];
 }
 
-function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {
+export function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {
     const maxLevel = passMaxLevel ?? GameConfig.serverSettings.passMaxLevel;
     let xp = passXp;
     let level = 1;

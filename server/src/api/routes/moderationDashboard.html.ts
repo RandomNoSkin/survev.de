@@ -1,4 +1,37 @@
 import { Config } from "../../config";
+import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
+import { GameConfig } from "../../../../shared/gameConfig";
+import {
+    _allowedCrosshairs,
+    _allowedEmotes,
+    _allowedHealEffects,
+    _allowedMeleeSkins,
+    _allowedOutfits,
+} from "../../../../shared/defs/gameObjects/unlockDefs";
+
+/** Per-pass XP curve (xp[i] = xp needed for level i+1) + cap, for client-side level derivation. */
+const PASS_XP: Record<string, number[]> = Object.fromEntries(
+    Object.entries(PassDefs).map(([k, v]) => [k, v.xp]),
+);
+const PASS_MAX_LEVEL = GameConfig.serverSettings.passMaxLevel;
+
+/** Grantable cosmetics by category, embedded into the SPA for the account "Give" UI. */
+const COSMETIC_CATALOG = {
+    outfit: _allowedOutfits,
+    melee: _allowedMeleeSkins,
+    heal: _allowedHealEffects,
+    emote: _allowedEmotes,
+    crosshair: _allowedCrosshairs,
+};
+
+/** type → readable name (from the game defs) for every grantable cosmetic. */
+const COSMETIC_NAMES: Record<string, string> = {};
+for (const types of Object.values(COSMETIC_CATALOG)) {
+    for (const t of types) {
+        COSMETIC_NAMES[t] = (GameObjectDefs[t] as { name?: string })?.name || t;
+    }
+}
 
 /** HTML template for the moderation dashboard SPA. Served inline by Hono so auth is enforced server-side. */
 export const dashboardHtml = `<!DOCTYPE html>
@@ -248,7 +281,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <!-- ════════════════ TAB 2: IP / PLAYER LOOKUP ════════════════ -->
   <div id="tab-lookup" class="tab-pane">
     <div class="toolbar">
-      <input type="text" id="lookup-input" placeholder="Enter IP hash or player name…" style="max-width:420px">
+      <input type="text" id="lookup-input" placeholder="Enter IP hash, player name or account slug…" style="max-width:420px">
       <button class="btn btn-primary" id="lookup-btn">Search</button>
     </div>
     <div id="lookup-result"></div>
@@ -266,6 +299,12 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div id="tab-chatlog" class="tab-pane">
     <div class="toolbar">
       <input type="text" id="chatlog-search" placeholder="Search all chat messages…" style="max-width:420px">
+      <select id="chatlog-channel" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="">All channels</option>
+        <option value="0">Public (ALL)</option>
+        <option value="1">Team</option>
+        <option value="2">Spectator</option>
+      </select>
       <button class="btn btn-primary" id="chatlog-search-btn">Search</button>
       <button class="btn btn-gray" id="chatlog-clear-btn">Clear</button>
     </div>
@@ -284,6 +323,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <th>#</th>
         <th class="sortable" data-col="username">Username</th>
         <th>Slug</th>
+        <th>Discord</th>
         <th style="white-space:nowrap">Created</th>
         <th>Last IP</th>
         <th>Flags</th>
@@ -416,6 +456,17 @@ export const dashboardHtml = `<!DOCTYPE html>
   </div>
 </div>
 
+<!-- ── Account detail modal ── -->
+<div id="account-modal" style="display:none;position:fixed;inset:0;background:#000000aa;z-index:120;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 12px;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;width:820px;max-width:100%;padding:18px;display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div id="account-modal-title" style="font-weight:700;font-size:15px;color:#fff;">Account</div>
+      <button class="btn btn-gray btn-sm" id="account-modal-close" style="margin-left:auto;">✕ Close</button>
+    </div>
+    <div id="account-modal-body"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
 // Moderation Dashboard – client-side logic
@@ -433,6 +484,30 @@ export const dashboardHtml = `<!DOCTYPE html>
 
 // Base URL of the game client (Vite dev server in dev, same origin in prod) — used to open spectate tabs.
 const CLIENT_URL = ${JSON.stringify(Config.oauthRedirectURI)};
+// Grantable cosmetics by category (for the account-detail "Give" UI)
+const COSMETIC_CATALOG = ${JSON.stringify(COSMETIC_CATALOG)};
+// type → readable cosmetic name
+const COSMETIC_NAMES = ${JSON.stringify(COSMETIC_NAMES)};
+const cosmeticName = (t) => COSMETIC_NAMES[t] || t;
+// Pass XP curves, for deriving the level from XP live in the account editor
+const PASS_XP = ${JSON.stringify(PASS_XP)};
+const PASS_MAX_LEVEL = ${JSON.stringify(PASS_MAX_LEVEL)};
+function passLevelFromXp(passType, xp) {
+  const arr = PASS_XP[passType];
+  if (!arr || !arr.length) return 0;
+  let remaining = xp, level = 1;
+  while (level < PASS_MAX_LEVEL) {
+    const need = arr[(level - 1 < arr.length) ? level - 1 : arr.length - 1];
+    if (remaining < need) break;
+    remaining -= need;
+    level++;
+  }
+  return level;
+}
+function updateLvlFromXp(pt) {
+  const xp = parseFloat(document.getElementById('xp-xp-' + pt).value) || 0;
+  document.getElementById('xp-lvl-' + pt).value = passLevelFromXp(pt, xp);
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 let currentAdminId   = '';    // own userId (for "YOU" badge + hide self-buttons)
@@ -858,12 +933,25 @@ async function doLookup(query) {
   // Hide the recent list while a result is displayed
   document.getElementById('recent-block').style.display = 'none';
   res.innerHTML = '<div class="loading">Searching…</div>';
+
+  if (isIpHash(query)) {
+    try { renderIpDetail(await get('/api/ip/' + encodeURIComponent(query)), res); }
+    catch { res.innerHTML = '<div class="empty">No results found.</div>'; }
+    return;
+  }
+
+  // Try an account slug first — opens the account detail modal if it matches.
   try {
-    if (isIpHash(query)) {
-      renderIpDetail(await get('/api/ip/' + encodeURIComponent(query)), res);
-    } else {
-      renderPlayerDetail(await get('/api/player/' + encodeURIComponent(query)), res);
+    const acc = await get('/api/account/' + encodeURIComponent(query));
+    if (acc && acc.user) {
+      res.innerHTML = '<div class="empty">Opened account detail for slug "' + esc(query) + '".</div>';
+      openAccountDetail(query);
+      return;
     }
+  } catch { /* not an account slug — fall back to player-name lookup */ }
+
+  try {
+    renderPlayerDetail(await get('/api/player/' + encodeURIComponent(query)), res);
   } catch (e) { res.innerHTML = '<div class="empty">No results found.</div>'; }
 }
 
@@ -1030,9 +1118,13 @@ function chatlogMsgRow(m, search, highlightId) {
   const hl = (highlightId != null && m.id === highlightId) ? ' highlight' : '';
   const message = search ? chatlogHighlight(esc(m.message), search) : esc(m.message);
   const slug = m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : '';
+  // Clicking the name jumps to the player's IP (where they can be banned)
+  const nameClick = m.encodedIp
+    ? \` onclick="event.stopPropagation();gotoIp('\${esc(m.encodedIp)}')" style="cursor:pointer;color:var(--blue-t);text-decoration:underline;" title="View IP / ban"\`
+    : '';
   return \`<div class="chat-msg\${hl}" id="chatmsg-\${m.id}" onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})">
       <span class="t">\${fmtDate(m.createdAt)}</span>
-      <span class="nm">\${esc(m.username)}\${slug}</span>
+      <span class="nm"><span\${nameClick}>\${esc(m.username)}</span>\${slug}</span>
       <span class="ch" style="color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'}">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span>
       <span class="mg">\${message}</span>
     </div>\`;
@@ -1055,7 +1147,12 @@ async function loadGlobalChatLog(search) {
   const cont = document.getElementById('chatlog-container');
   cont.innerHTML = '<div class="loading">Loading chat log…</div>';
   try {
-    const data = await get('/api/chatlog' + (search ? ('?search=' + encodeURIComponent(search)) : ''));
+    const channel = document.getElementById('chatlog-channel').value;
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (channel !== '') params.set('channel', channel);
+    const qs = params.toString();
+    const data = await get('/api/chatlog' + (qs ? ('?' + qs) : ''));
     const msgs = data.messages ?? [];
     const header = search
       ? \`<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">\${msgs.length} match\${msgs.length === 1 ? '' : 'es'} for "\${esc(search)}" — grouped by game</div>\`
@@ -1092,6 +1189,14 @@ async function focusChatMessage(gameId, messageId) {
 document.getElementById('chatlog-search-btn').addEventListener('click', () => loadGlobalChatLog(document.getElementById('chatlog-search').value.trim()));
 document.getElementById('chatlog-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadGlobalChatLog(e.target.value.trim()); });
 document.getElementById('chatlog-clear-btn').addEventListener('click', () => { document.getElementById('chatlog-search').value = ''; loadGlobalChatLog(''); });
+document.getElementById('chatlog-channel').addEventListener('change', () => loadGlobalChatLog(document.getElementById('chatlog-search').value.trim()));
+
+// Jump to a player's IP detail (from chat name clicks) so they can be banned there.
+function gotoIp(hash) {
+  switchTab('lookup');
+  document.getElementById('lookup-input').value = hash;
+  doLookup(hash);
+}
 
 function quickBanIp(hash) {
   // Pre-fill the ban modal and open it
@@ -1399,8 +1504,8 @@ let accountsSortDir = -1; // -1 = desc, 1 = asc
 
 function renderAccountsHeader() {
   const headerRow = document.getElementById('accounts-thead-row');
-  // Remove any previously injected pass columns (keep static cols: #, Username, Slug, Created, Last IP, Flags = 6)
-  while (headerRow.children.length > 6) headerRow.removeChild(headerRow.lastChild);
+  // Remove any previously injected pass columns (keep static cols: #, Username, Slug, Discord, Created, Last IP, Flags = 7)
+  while (headerRow.children.length > 7) headerRow.removeChild(headerRow.lastChild);
   for (const pt of accountsPassTypes) {
     const shortName = pt.replace('pass_survivr', 'S');
     const th = document.createElement('th');
@@ -1418,7 +1523,7 @@ function renderAccountsHeader() {
 }
 
 async function loadAccounts() {
-  const colCount = 6 + accountsPassTypes.length;
+  const colCount = 7 + accountsPassTypes.length;
   document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="\${colCount}" class="loading">Loading…</td></tr>\`;
   try {
     const data = await get('/api/accounts');
@@ -1464,20 +1569,21 @@ function renderAccounts() {
     th.textContent = col === accountsSortCol ? base + (accountsSortDir === 1 ? ' ▲' : ' ▼') : base;
   });
 
-  const colCount = 6 + accountsPassTypes.length;
+  const colCount = 7 + accountsPassTypes.length;
   const tbody = document.getElementById('accounts-tbody');
   tbody.innerHTML = rows.length ? rows.map((a, i) => \`
-    <tr>
+    <tr style="cursor:pointer" onclick="onAccountRowClick(event,'\${esc(a.slug)}')" title="Open account detail">
       <td style="color:var(--text-muted);font-size:11px;">\${i+1}</td>
       <td><span style="color:var(--blue-t)">\${esc(a.username||'–')}</span></td>
       <td style="font-size:11px;color:var(--text-dim);">\${esc(a.slug||'–')}</td>
+      <td style="font-size:11px;font-family:monospace;color:var(--text-dim);">\${a.discordId ? esc(a.discordId) : '–'}</td>
       <td style="font-size:11px;color:var(--text-muted);white-space:nowrap;">\${fmtDate(a.userCreated)}</td>
       <td style="font-size:11px;font-family:monospace;">\${a.lastIp ? ipLink(a.lastIp) : '–'}</td>
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
         <span style="color:#e0a23c;font-size:11px;white-space:nowrap;">🍟 \${a.goldenFries ?? 0}</span>
-        <button class="btn btn-gray btn-sm" style="padding:1px 6px;" onclick="giveGoldenFries('\${esc(a.slug)}', \${a.goldenFries ?? 0})">+GP</button>
+        <button class="btn btn-gray btn-sm" style="padding:1px 6px;" onclick="event.stopPropagation();giveGoldenFries('\${esc(a.slug)}', \${a.goldenFries ?? 0})">+GP</button>
       </td>
       \${accountsPassTypes.map(pt => \`<td style="font-weight:600;text-align:center;">\${a.passes?.[pt]?.level ?? '–'}</td>\`).join('')}
     </tr>
@@ -1495,6 +1601,176 @@ async function giveGoldenFries(slug, current) {
     toast(slug + ': ' + (amount > 0 ? '+' : '') + amount + ' 🍟 → ' + data.balance);
     await loadAccounts();
   } catch (e) { toast('Fehler: ' + (e.message || 'Fehlgeschlagen'), true); }
+}
+
+// ── Account detail modal ────────────────────────────────────────────────────
+
+const accountModal = document.getElementById('account-modal');
+document.getElementById('account-modal-close').addEventListener('click', () => { accountModal.style.display = 'none'; });
+accountModal.addEventListener('click', (e) => { if (e.target === accountModal) accountModal.style.display = 'none'; });
+
+let currentAccountSlug = '';
+
+// Row click opens the detail, but ignore clicks on inner links/buttons (IP link, +GP)
+function onAccountRowClick(e, slug) {
+  if (e.target.closest('.ip-link') || e.target.closest('button')) return;
+  openAccountDetail(slug);
+}
+
+async function openAccountDetail(slug) {
+  currentAccountSlug = slug;
+  document.getElementById('account-modal-title').textContent = 'Account: ' + slug;
+  document.getElementById('account-modal-body').innerHTML = '<div class="loading">Loading…</div>';
+  accountModal.style.display = 'flex';
+  try {
+    renderAccountDetail(await get('/api/account/' + encodeURIComponent(slug)));
+  } catch (e) {
+    document.getElementById('account-modal-body').innerHTML = '<div class="empty">Account not found.</div>';
+  }
+}
+
+function buildCosmeticOptions() {
+  return Object.entries(COSMETIC_CATALOG).map(([cat, items]) =>
+    \`<optgroup label="\${esc(cat)}">\${items.map(t => \`<option value="\${esc(t)}" title="\${esc(t)}">\${esc(cosmeticName(t))}</option>\`).join('')}</optgroup>\`
+  ).join('');
+}
+
+function renderAccountDetail(data) {
+  const u = data.user;
+  const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
+  const flags = [
+    u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
+    u.banned ? '<span class="badge badge-perm">BANNED</span>'  : '',
+  ].join(' ');
+
+  const identity = \`
+    <div class="detail-card">
+      <h3>Identity</h3>
+      <div class="kv-row"><span class="kv-key">Username:</span><span class="kv-val">\${esc(u.username||'–')}</span></div>
+      <div class="kv-row"><span class="kv-key">Slug:</span><span class="kv-val">\${esc(u.slug)}</span></div>
+      <div class="kv-row"><span class="kv-key">Discord ID:</span><span class="kv-val">\${u.discordId ? esc(u.discordId) : '–'}</span></div>
+      <div class="kv-row"><span class="kv-key">Account:</span><span class="kv-val">\${esc(linked)}</span></div>
+      <div class="kv-row"><span class="kv-key">Created:</span><span class="kv-val">\${fmtDate(u.userCreated)}</span></div>
+      <div class="kv-row"><span class="kv-key">Golden Fries:</span><span class="kv-val">🍟 \${u.goldenFries ?? 0}</span></div>
+      <div style="margin-top:6px;">\${flags}</div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+        \${u.admin
+          ? '<span style="font-size:11px;color:var(--orange-t);">🛡 Admin account — cannot be deleted.</span>'
+          : '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
+      </div>
+    </div>\`;
+
+  const xpByType = {};
+  for (const x of (data.xp||[])) xpByType[x.passType] = x;
+  const xpRows = (data.passTypes||[]).map(pt => {
+    const cur = xpByType[pt] || { level: 0, xp: 0 };
+    return \`<tr>
+      <td style="font-size:11px;">\${esc(pt)}</td>
+      <td><input type="number" id="xp-lvl-\${esc(pt)}" value="\${cur.level}" readonly title="auto-derived from XP" style="width:70px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);padding:3px 6px;font-family:inherit;"></td>
+      <td><input type="number" id="xp-xp-\${esc(pt)}" value="\${cur.xp}" min="0" oninput="updateLvlFromXp('\${esc(pt)}')" style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:inherit;"></td>
+      <td><button class="btn btn-blue btn-sm" onclick="accSetXp('\${esc(pt)}')">Set</button></td>
+    </tr>\`;
+  }).join('');
+  const xpCard = \`
+    <div class="detail-card" style="margin-top:12px;">
+      <h3>XP / Pass Levels <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(level is derived from XP; setting it grants/revokes the matching unlocks)</span></h3>
+      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th></th></tr></thead>
+      <tbody>\${xpRows || '<tr><td colspan="4" class="empty">No passes.</td></tr>'}</tbody></table>
+    </div>\`;
+
+  const giveCard = \`
+    <div class="detail-card" style="margin-top:12px;">
+      <h3>Give Item</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <select id="give-item-select" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;max-width:320px;">\${buildCosmeticOptions()}</select>
+        <input id="give-source" type="text" value="admin_grant" title="source" style="width:130px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;">
+        <button class="btn btn-green btn-sm" onclick="accGiveItem()">Give</button>
+        <button class="btn btn-gray btn-sm" onclick="accGiveItem('all')">Give ALL</button>
+      </div>
+    </div>\`;
+
+  const groups = Object.entries(data.itemsBySource || {});
+  const removeInner = groups.length ? groups.map(([src, items]) => \`
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="font-size:11px;color:var(--text-dim);font-weight:600;">\${esc(src)} <span style="color:var(--text-muted)">(\${items.length})</span></span>
+        <button class="btn btn-red btn-sm" onclick="accRemoveSource('\${esc(src)}')">Remove all</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;">
+        \${items.map(it => \`<span class="badge badge-disc" style="display:inline-flex;align-items:center;gap:5px;" title="\${esc(it.type)}">\${esc(cosmeticName(it.type))} <span style="cursor:pointer;color:var(--red-t);font-weight:700;" onclick="accRemoveItem('\${esc(it.type)}')">✕</span></span>\`).join('')}
+      </div>
+    </div>\`).join('') : '<div class="empty">No items owned.</div>';
+  const removeCard = \`<div class="detail-card" style="margin-top:12px;"><h3>Owned Items</h3>\${removeInner}</div>\`;
+
+  const matchRows = (data.matches || []).map(m => \`<tr>
+    <td style="font-size:11px;white-space:nowrap;">\${fmtDate(m.createdAt)}</td>
+    <td>\${esc(m.mapId||'?')}</td>
+    <td>\${esc(m.teamMode||'?')}</td>
+    <td>#\${m.rank}</td>
+    <td>\${m.kills}</td>
+    <td>\${m.damageDealt}</td>
+    <td>\${m.timeAlive}s</td>
+  </tr>\`).join('');
+  const matchCard = \`
+    <div class="detail-card" style="margin-top:12px;">
+      <h3>Recent Matches</h3>
+      <table class="data-table"><thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Rank</th><th>Kills</th><th>Dmg</th><th>Alive</th></tr></thead>
+      <tbody>\${matchRows || '<tr><td colspan="7" class="empty">No matches.</td></tr>'}</tbody></table>
+    </div>\`;
+
+  document.getElementById('account-modal-body').innerHTML = identity + xpCard + giveCard + removeCard + matchCard;
+}
+
+async function accSetXp(passType) {
+  // Level is derived from XP server-side, so we only send the (total) XP.
+  const xp = parseFloat(document.getElementById('xp-xp-' + passType).value) || 0;
+  try {
+    const r = await post('/api/account/set-xp', { slug: currentAccountSlug, passType, xp });
+    toast(passType + ' → lvl ' + (r.level ?? '?') + ' (+' + (r.granted ?? 0) + ' / -' + (r.revoked ?? 0) + ' items)');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + e.message, true); }
+}
+
+async function accGiveItem(item) {
+  const it = item || document.getElementById('give-item-select').value;
+  const source = (document.getElementById('give-source').value || '').trim() || 'admin_grant';
+  try {
+    const r = await post('/api/account/give-item', { slug: currentAccountSlug, item: it, source });
+    toast('Gave ' + (r.given ?? 0) + ' item(s)');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + e.message, true); }
+}
+
+async function accRemoveItem(item) {
+  try {
+    const r = await post('/api/account/remove-item', { slug: currentAccountSlug, item });
+    toast('Removed ' + (r.removed ?? 0) + ' (' + item + ')');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + e.message, true); }
+}
+
+async function accRemoveSource(source) {
+  if (!confirm('Remove ALL items with source "' + source + '"?')) return;
+  try {
+    const r = await post('/api/account/remove-item-source', { slug: currentAccountSlug, source });
+    toast('Removed ' + (r.removed ?? 0) + ' items (' + source + ')');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + e.message, true); }
+}
+
+async function accDeleteAccount() {
+  const slug = currentAccountSlug;
+  const typed = prompt('⚠️ Permanently DELETE account "' + slug + '"?\\n' +
+    'This removes the user, their items, XP, passes, golden fries and sessions ' +
+    '(match history is anonymized). This cannot be undone.\\n\\nType the slug to confirm:');
+  if (typed === null) return;
+  if (typed !== slug) { toast('Slug mismatch — deletion aborted', true); return; }
+  try {
+    await post('/api/account/delete', { slug });
+    toast('Account "' + slug + '" deleted');
+    accountModal.style.display = 'none';
+    loadAccounts();
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }
 
 document.getElementById('accounts-search').addEventListener('input', renderAccounts);

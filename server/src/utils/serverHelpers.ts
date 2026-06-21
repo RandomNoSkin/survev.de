@@ -566,3 +566,39 @@ export async function logErrorToWebhook(from: "server" | "client", ...messages: 
         console.error("Failed to log error to webhook", err);
     }
 }
+
+/**
+ * Posts a moderation/audit event to the moderation webhook (falls back to the
+ * error webhook when `moderationWebhook` is unset). Used for things like account
+ * deletions so there is a Discord trail of admin actions.
+ */
+export async function logModerationAction(
+    title: string,
+    fields: { name: string; value: string }[],
+    color = 0xcc3333,
+) {
+    const url = Config.moderationWebhook || Config.errorLoggingWebhook;
+    if (!url) return;
+    try {
+        await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                embeds: [
+                    {
+                        color,
+                        title,
+                        timestamp: new Date().toISOString(),
+                        fields: fields.map((f) => ({
+                            name: f.name,
+                            value: f.value || "–",
+                            inline: true,
+                        })),
+                    },
+                ],
+            }),
+        });
+    } catch (err) {
+        console.error("Failed to log moderation action to webhook", err);
+    }
+}

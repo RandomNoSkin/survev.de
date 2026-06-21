@@ -207,6 +207,12 @@ export interface ConfigType {
     clientErrorLoggingWebhook?: string;
 
     /**
+     * Webhook URL for moderation/audit events (e.g. account deletions).
+     * Falls back to `errorLoggingWebhook` when unset.
+     */
+    moderationWebhook?: string;
+
+    /**
      * PostgreSQL Database configuration, this will enable features like accounts, IP bans, leaderboards etc.
      */
     database: {

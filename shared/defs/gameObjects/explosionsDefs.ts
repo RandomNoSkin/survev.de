@@ -43,7 +43,7 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
     },
     explosion_mine: {
         type: "explosion",
-        damage: 50,
+        damage: 30,
         obstacleDamage: 4,
         rad: { min: 10, max: 12 },
         shrapnelCount: 0,
