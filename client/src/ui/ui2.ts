@@ -162,10 +162,16 @@ class UiState {
     }));
 
     ammo = {
+        second: 0,
+        secondType: "",
+        secondIsGrenade: false,
         current: 0,
+        currentType: "",
+        currentIsGrenade: false,
         remaining: 0,
         displayCurrent: false,
         displayRemaining: false,
+        displaySecond: false,
     };
 
     interaction = {
@@ -277,6 +283,7 @@ export class UiManager2 {
             ammo: HTMLElement;
         }>,
         ammo: {
+            second: domElemById("ui-second-clip"),
             current: domElemById("ui-current-clip"),
             remaining: domElemById("ui-remaining-ammo"),
             reloadButton: domElemById("ui-reload-button-container"),
@@ -914,6 +921,30 @@ export class UiManager2 {
         state.ammo.remaining = fe;
         state.ammo.displayCurrent = weaponDef.type != "melee";
         state.ammo.displayRemaining = fe > 0;
+        // Zweites Magazin (M416 [+] Granaten-Launcher): zeigt das Magazin des
+        // jeweils inaktiven Modus links neben dem aktiven Magazin an.
+        const secondAmmoDef =
+            gunDef && gunDef.secondAmmo
+                ? (GameObjectDefs[gunDef.secondAmmo] as GunDef | undefined)
+                : undefined;
+        const isLauncherPair =
+            !!gunDef && (!!gunDef.launchThrowable || !!secondAmmoDef?.launchThrowable);
+        const curWeapData =
+            activePlayer.m_localData.m_weapons[activePlayer.m_localData.m_curWeapIdx];
+        state.ammo.second = curWeapData?.secondaryClip ?? 0;
+        state.ammo.displaySecond = isLauncherPair;
+        // Ist der inaktive Modus der Granaten-Launcher, zeige die geladene Granate
+        // als Icon statt einer Zahl an.
+        state.ammo.secondIsGrenade = !!secondAmmoDef?.launchThrowable;
+        state.ammo.secondType = state.ammo.secondIsGrenade
+            ? (curWeapData?.loadedThrowable ?? "")
+            : "";
+        // Ist der AKTIVE Modus der Granaten-Launcher (Granaten-Modus), zeige auch
+        // im großen Hauptfeld die geladene Granate als Icon statt einer Zahl.
+        state.ammo.currentIsGrenade = !!gunDef?.launchThrowable;
+        state.ammo.currentType = state.ammo.currentIsGrenade
+            ? (curWeapData?.loadedThrowable ?? "")
+            : "";
         for (let _e = 0; _e < state.scopes.length; _e++) {
             const be = state.scopes[_e];
             be.visible = activePlayer.m_localData.m_inventory[be.type] > 0;
@@ -1224,7 +1255,8 @@ export class UiManager2 {
                 if (fireModeEl) {
                     const gunDef = j as unknown as GunDef;
                     if (gunDef?.secondAmmo) {
-                        const modeName = gunDef.fireMode === "auto" ? "Auto" : "Single";
+                        const rawMode = gunDef.secondAmmoLabel ?? gunDef.fireMode ?? "";
+                        const modeName = rawMode.charAt(0).toUpperCase() + rawMode.slice(1);
                         const switchBind =
                             this.inputBinds.getBind(Input.SwitchAmmo)?.toString() || "B";
                         fireModeEl.textContent = `${modeName}  [${switchBind}]`;
@@ -1258,10 +1290,21 @@ export class UiManager2 {
                 R.number.innerHTML = L.bindStr[0] || "";
             }
         }
-        if (patch.ammo.current) {
-            const H = state.ammo.current;
-            dom.ammo.current.innerHTML = String(H == Number.MAX_VALUE ? "&#8734;" : H);
-            dom.ammo.current.style.color = H > 0 ? "white" : "red";
+        if (patch.ammo.current || patch.ammo.currentType || patch.ammo.currentIsGrenade) {
+            if (state.ammo.currentIsGrenade) {
+                // Granaten-Modus: geladene Granate als Icon, leere Kammer = "0"
+                const t = state.ammo.currentType;
+                if (t) {
+                    dom.ammo.current.innerHTML = `<img class="ui-current-clip-img" src="${helpers.getSvgFromGameType(t)}"/>`;
+                } else {
+                    dom.ammo.current.innerHTML = "0";
+                    dom.ammo.current.style.color = "red";
+                }
+            } else {
+                const H = state.ammo.current;
+                dom.ammo.current.innerHTML = String(H == Number.MAX_VALUE ? "&#8734;" : H);
+                dom.ammo.current.style.color = H > 0 ? "white" : "red";
+            }
         }
         if (patch.ammo.remaining) {
             const V = state.ammo.remaining;
@@ -1278,6 +1321,25 @@ export class UiManager2 {
             dom.ammo.reloadButton.style.opacity = String(
                 state.ammo.displayRemaining ? 1 : 0,
             );
+        }
+        if (patch.ammo.second || patch.ammo.secondType || patch.ammo.secondIsGrenade) {
+            if (state.ammo.secondIsGrenade) {
+                // geladene Granate als Icon, leere Kammer = "0"
+                const t = state.ammo.secondType;
+                if (t) {
+                    dom.ammo.second.innerHTML = `<img class="ui-second-clip-img" src="${helpers.getSvgFromGameType(t)}"/>`;
+                } else {
+                    dom.ammo.second.innerHTML = "0";
+                    dom.ammo.second.style.color = "red";
+                }
+            } else {
+                const S = state.ammo.second;
+                dom.ammo.second.innerHTML = String(S);
+                dom.ammo.second.style.color = S > 0 ? "white" : "red";
+            }
+        }
+        if (patch.ammo.displaySecond) {
+            dom.ammo.second.style.display = state.ammo.displaySecond ? "block" : "none";
         }
         for (let U = 0; U < patch.scopes.length; U++) {
             const W = patch.scopes[U];
