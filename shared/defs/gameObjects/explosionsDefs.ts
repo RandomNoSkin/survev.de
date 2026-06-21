@@ -43,10 +43,10 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
     },
     explosion_mine: {
         type: "explosion",
-        damage: 75,
+        damage: 30,
         obstacleDamage: 4,
-        rad: { min: 5, max: 11 },
-        shrapnelCount: 12,
+        rad: { min: 10, max: 12 },
+        shrapnelCount: 0,
         shrapnelType: "shrapnel_impact",
         explosionEffectType: "frag",
         decalType: "decal_frag_explosion",

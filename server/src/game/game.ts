@@ -235,7 +235,7 @@ export class Game {
             }
         }
 
-        // Reap empty games: stop any game that has had no connected players for 3 minutes.
+        // Reap empty games: stop any game that has had no connected players for 1 minute.
         // The socket-close path reaps a game the instant its last player leaves; this also
         // catches lobbies that were created but never joined (players.length stays 0, so no
         // socket-close ever fires) and any game everyone left without a clean disconnect.
@@ -243,8 +243,8 @@ export class Game {
             this.emptyTime = 0;
         } else {
             this.emptyTime += dt;
-            if (this.emptyTime > 180) {
-                this.logger.info("Stopping empty game (no connected players for 3 min)");
+            if (this.emptyTime > 60) {
+                this.logger.info("Stopping empty game (no connected players for 1 min)");
                 this.stop();
                 return;
             }

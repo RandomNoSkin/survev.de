@@ -1799,6 +1799,7 @@ export class UiManager2 {
             [PickupMsgType.WeaponUpgraded]: "game-weapon-upgraded",
             [PickupMsgType.NoWeaponUpgrade]: "game-no-weapon-upgrade",
             [PickupMsgType.NotEnoughResources]: "game-not-enough-resources",
+            [PickupMsgType.AlreadyMined]: "game-position-already-mined",
         };
         const key = typeMap[type] || typeMap[PickupMsgType.Full];
         return this.localization.translate(key);

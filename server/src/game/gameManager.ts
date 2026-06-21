@@ -176,6 +176,11 @@ export class SingleThreadGameManager implements GameManager {
         game.verifiedOnly = this.serverVerifiedOnly;
         this.games.push(game);
         this.gamesById.set(id, game);
+        // Diagnostic: log every game creation so duplicate/abandoned games are traceable.
+        gameLogger.info(
+            `[SingleThread] newGame #${id.slice(0, 4)} created ` +
+                `[private=${!!config.isPrivate}, mode=${config.teamMode}, map=${config.mapName}, totalGames=${this.games.length}]`,
+        );
         return game;
     }
 

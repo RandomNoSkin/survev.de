@@ -95,6 +95,61 @@ export async function grantPassItems(
 }
 
 /**
+ * Inverse of grantPassItems: removes this pass's granted cosmetics for levels
+ * ABOVE `level` (so lowering a pass level also takes back the items it gave).
+ * Only removes item instances whose source is this pass and whose type is not
+ * also a reward at or below the new level. Returns how many instances were removed.
+ */
+export async function revokePassItemsAbove(
+    userId: string,
+    passType: string,
+    level: number,
+): Promise<number> {
+    const passDef = PassDefs[passType];
+    if (!passDef) return 0;
+
+    const above = passDef.items.filter(
+        (it) => it.level > level && isGrantableItem(it.item),
+    );
+    if (above.length === 0) return 0;
+
+    // Keep item types that are still earned at/below the new level.
+    const keepTypes = new Set(
+        passDef.items.filter((it) => it.level <= level).map((it) => it.item),
+    );
+    const removeTypes = [...new Set(above.map((it) => it.item))].filter(
+        (t) => !keepTypes.has(t),
+    );
+    const aboveKeys = above.map((it) => passGrantKey(passType, it.level, it.item));
+
+    return await db.transaction(async (tx) => {
+        // Drop the grant markers so a later level-up re-grants them.
+        await tx
+            .delete(passItemGrantsTable)
+            .where(
+                and(
+                    eq(passItemGrantsTable.userId, userId),
+                    inArray(passItemGrantsTable.grantKey, aboveKeys),
+                ),
+            );
+
+        if (removeTypes.length === 0) return 0;
+
+        const removed = await tx
+            .delete(itemsTable)
+            .where(
+                and(
+                    eq(itemsTable.userId, userId),
+                    eq(itemsTable.source, passType),
+                    inArray(itemsTable.type, removeTypes),
+                ),
+            )
+            .returning({ id: itemsTable.id });
+        return removed.length;
+    });
+}
+
+/**
  * One-time backfill so existing accounts don't get their pass items duplicated by
  * the first reconcile/get_pass under the new grant-ledger logic: for every pass
  * reward, mark it granted for every user who already owns that item type.

@@ -128,16 +128,13 @@ export class ExplosionBarn {
             }
         }
 
-        // Trip any nearby armed proximity mine that has this explosion within
-        // its trigger radius (lets explosions chain-detonate mines)
+        // Trip any nearby armed proximity mine within its trigger radius (chains)
         for (const proj of this.game.projectileBarn.projectiles) {
-            if (proj.dead || proj.mineTriggered) continue;
+            if (proj.dead || proj.mineTriggered || !proj.mineArmed) continue;
             if (!util.sameLayer(proj.layer, explosion.layer)) continue;
             const projDef = GameObjectDefs[proj.type] as ThrowableDef;
             if (!projDef.proximityMine) continue;
-            if (
-                v2.distance(explosion.pos, proj.pos) <= projDef.proximityMine.triggerRad
-            ) {
+            if (v2.distance(explosion.pos, proj.pos) <= projDef.proximityMine.triggerRad) {
                 proj.triggerMine();
             }
         }
