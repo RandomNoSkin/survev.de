@@ -41,6 +41,8 @@ function serializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
         for (let i = 0; i < GameConfig.WeaponSlot.Count; i++) {
             s.writeGameType(data.weapons[i].type);
             s.writeUint8(data.weapons[i].ammo);
+            s.writeUint8(data.weapons[i].secondaryClip ?? 0);
+            s.writeGameType(data.weapons[i].loadedThrowable ?? "");
         }
     }
 
@@ -94,6 +96,8 @@ function deserializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
             data.weapons.push({
                 type: s.readGameType(),
                 ammo: s.readUint8(),
+                secondaryClip: s.readUint8(),
+                loadedThrowable: s.readGameType(),
             });
         }
     }
@@ -823,6 +827,11 @@ export interface LocalData {
     weapons: Array<{
         type: string;
         ammo: number;
+        // Magazin des inaktiven Modus beim Granaten-Launcher (M416 [+]),
+        // damit das HUD beide Magazine anzeigen kann
+        secondaryClip?: number;
+        // in der Kammer geladene Wurfwaffe (Granaten-Launcher), für das HUD-Icon
+        loadedThrowable?: string;
     }>;
     spectatorCount: number;
 }

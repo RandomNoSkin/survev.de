@@ -42,6 +42,7 @@ export class ProjectileBarn {
         damageType: DamageType,
         throwDir?: Vec2,
         weaponSourceType?: string,
+        damageMultiplier?: number,
     ): Projectile {
         const proj = new Projectile(
             this.game,
@@ -55,6 +56,7 @@ export class ProjectileBarn {
             damageType,
             throwDir,
             weaponSourceType,
+            damageMultiplier,
         );
 
         this.projectiles.push(proj);
@@ -77,6 +79,7 @@ export class Projectile extends BaseGameObject {
     // used for "heavy" potatos and snowballs
     // so the kill source is still the regular potato
     weaponSourceType: string;
+    damageMultiplier: number;
 
     rad: number;
 
@@ -121,6 +124,7 @@ export class Projectile extends BaseGameObject {
         damageType: DamageType,
         throwDir?: Vec2,
         weaponSourceType?: string,
+        damageMultiplier?: number,
     ) {
         super(game, pos);
         this.layer = layer;
@@ -133,7 +137,7 @@ export class Projectile extends BaseGameObject {
         this.dir = v2.normalizeSafe(vel);
         this.throwDir = throwDir ?? v2.copy(this.dir);
         this.weaponSourceType = weaponSourceType || this.type;
-
+        this.damageMultiplier = damageMultiplier || 1;
         const def = GameObjectDefs[type] as ThrowableDef;
         this.velZ = def.throwPhysics.velZ;
         this.rad = def.rad * 0.5;
@@ -474,6 +478,7 @@ export class Projectile extends BaseGameObject {
                     DamageType.Player,
                     undefined,
                     this.weaponSourceType,
+                    this.damageMultiplier,
                 );
             }
         }
@@ -488,6 +493,7 @@ export class Projectile extends BaseGameObject {
             const source = this.game.objectRegister.getById(this.playerId);
             this.game.explosionBarn.addExplosion(
                 explosionType,
+                this.damageMultiplier,
                 this.pos,
                 this.layer,
                 {

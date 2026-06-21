@@ -13,6 +13,7 @@ export interface GunDef {
     ammo: string;
     secondAmmo?: string;
     preserveSecondAmmo?: boolean;
+    secondAmmoLabel?: string;
     ammoSpawnCount: number;
     maxClip: number;
     maxReload: number;
@@ -99,6 +100,9 @@ export interface GunDef {
     isLauncher?: boolean;
     deployGroup?: number;
     projType?: string;
+    // Granaten-Modus: verschießt die aktuell gewählte Wurfwaffe aus dem Inventar
+    // statt eines festen projType/Geschosses (siehe modified_hk416_grenade)
+    launchThrowable?: boolean;
     ignoreDetune?: boolean;
     aimDelay?: boolean;
     isBullpup?: boolean;
@@ -583,6 +587,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_hk416",
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
+        upgraded: { gun: "modified_hk416", cost: 7 },
         lootImg: {
             sprite: "loot-weapon-hk416.img",
             tint: 65280,
@@ -4271,6 +4276,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga_grenade",
         preserveSecondAmmo: true,
+        secondAmmoLabel: "Auto",
         bulletType: "bullet_buckshot",
         upgraded: undefined,
         modifiedSound: "saiga_01",
@@ -4282,6 +4288,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga",
         preserveSecondAmmo: true,
+        secondAmmoLabel: "Grenade",
         bulletCount: 2,
         bulletType: "bullet_saiga_modified",
         upgraded: undefined,
@@ -4327,6 +4334,45 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         upgraded: undefined,
         modifiedSound: "m4a1_01",
         lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    // M416 [+]: Kugel-Modus, per SwitchAmmo (B) in den Granaten-Modus umschaltbar
+    modified_hk416: defineGunSkin("hk416", {
+        name: "M416 [+]",
+        secondAmmo: "modified_hk416_grenade",
+        preserveSecondAmmo: true,
+        secondAmmoLabel: "Auto",
+        moveSpread: 5,
+        shotSpread: 2,
+        fireDelay: 0.09,
+        bulletType: "bullet_hk416_modified",
+        upgraded: undefined,
+        modifiedSound: "hk416_01",
+        lootImg: {
+            sprite: "loot-weapon-hk416-modified.img",
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    // M416 [+]: Granaten-Modus – verschießt die aktuell gewählte Wurfwaffe aus dem
+    // Inventar (launchThrowable). 1-Schuss-Magazin, cursor-gezielt.
+    modified_hk416_grenade: defineGunSkin("hk416", {
+        name: "M416 [+]",
+        secondAmmo: "modified_hk416",
+        preserveSecondAmmo: true,
+        secondAmmoLabel: "Grenade",
+        launchThrowable: true,
+        fireMode: "single",
+        maxClip: 1,
+        maxReload: 1,
+        extendedClip: 1,
+        extendedReload: 1,
+        reloadTime: 1.0,
+        fireDelay: 0.5,
+        upgraded: undefined,
+        modifiedSound: "hk416_01",
+        lootImg: {
+            sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
         },
     }),

@@ -2415,6 +2415,45 @@ img {
   top: 18px;
 }
 
+/* Zweites Magazin (M416 [+] Granaten-Launcher), links neben dem aktiven Clip.
+   Per JS via display ein-/ausgeblendet. */
+#ui-bullet-counter #ui-second-clip {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  font-size: 24px;
+  font-weight: bold;
+  line-height: 32px;
+  width: 50px;
+  height: 32px;
+  right: 82%;
+  position: absolute;
+  text-align: center;
+  top: 18px;
+  display: none;
+}
+
+/* geladene Granate als Icon im zweiten Magazin (absolut mittig im Kästchen) */
+#ui-bullet-counter #ui-second-clip .ui-second-clip-img {
+  height: 26px;
+  width: auto;
+  max-width: 46px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* geladene Granate als Icon im großen Hauptfeld (absolut mittig im Kästchen) */
+#ui-bullet-counter #ui-current-clip .ui-current-clip-img {
+  height: 42px;
+  width: auto;
+  max-width: 92px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
 #ui-boost-counter {
   display: inline-flex;
   width: 412px;

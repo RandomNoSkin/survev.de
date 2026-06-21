@@ -358,6 +358,8 @@ export class Player implements AbstractObject {
         m_weapons: Array<{
             type: string;
             ammo: number;
+            secondaryClip?: number;
+            loadedThrowable?: string;
         }>;
         m_spectatorCount: number;
     };
@@ -633,12 +635,16 @@ export class Player implements AbstractObject {
                     const w = {
                         type: data.weapons[i].type,
                         ammo: data.weapons[i].ammo + ammo,
+                        secondaryClip: data.weapons[i].secondaryClip,
+                        loadedThrowable: data.weapons[i].loadedThrowable,
                     };
                     this.m_localData.m_weapons.push(w);
                 }else {
                     const w = {
                         type: data.weapons[i].type,
                         ammo: data.weapons[i].ammo,
+                        secondaryClip: data.weapons[i].secondaryClip,
+                        loadedThrowable: data.weapons[i].loadedThrowable,
                     };
                     this.m_localData.m_weapons.push(w);
                 }

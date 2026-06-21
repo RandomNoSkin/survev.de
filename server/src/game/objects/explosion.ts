@@ -119,7 +119,7 @@ export class ExplosionBarn {
                     damageType: explosion.damageParams.damageType,
                     playerId: explosion.damageParams.source?.__id ?? 0,
                     shotFx: false,
-                    damageMult: 1,
+                    damageMult: explosion.damageMultiplier,
                     varianceT: Math.random(),
                     gameSourceType: explosion.damageParams.gameSourceType!,
                     mapSourceType: explosion.damageParams.mapSourceType,
@@ -157,7 +157,7 @@ export class ExplosionBarn {
             return;
         }
 
-        let damage = def.damage;
+        let damage = def.damage * explosion.damageMultiplier;
 
         if (dist > def.rad.min) {
             damage = math.remap(dist, 0, def.rad.max, damage, 0);
@@ -216,6 +216,7 @@ export class ExplosionBarn {
 
     addExplosion(
         type: string,
+        damageMultiplier: number,
         pos: Vec2,
         layer: number,
         damageParams: Omit<DamageParams, "damage" | "dir">,
@@ -227,6 +228,7 @@ export class ExplosionBarn {
         const explosion: Explosion = {
             rad: def.rad.max,
             type,
+            damageMultiplier,
             pos,
             layer,
             damageParams,
@@ -240,6 +242,7 @@ export class ExplosionBarn {
 interface Explosion {
     rad: number;
     type: string;
+    damageMultiplier: number;
     pos: Vec2;
     layer: number;
     damageParams: Omit<DamageParams, "damage" | "dir">;
