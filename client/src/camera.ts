@@ -15,6 +15,9 @@ export default class Camera {
     m_localRotationEnabled = false;
     m_interpInterval = 0;
 
+    /** Advanced spectator: force building ceilings transparent when set. */
+    m_advSpecTransparent = false;
+
     m_z() {
         return this.m_ppu * this.m_zoom;
     }

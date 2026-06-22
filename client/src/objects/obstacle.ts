@@ -57,6 +57,7 @@ export class Obstacle implements AbstractObject {
     isWall!: boolean;
     isWindow!: boolean;
     isBush!: boolean;
+    isTree!: boolean;
     isDoor!: boolean;
     isButton!: boolean;
     isPuzzlePiece!: boolean;
@@ -167,6 +168,7 @@ export class Obstacle implements AbstractObject {
             this.isWall = !!def.isWall;
             this.isWindow = !!def.isWindow;
             this.isBush = !!def.isBush;
+            this.isTree = !!def.isTree;
             this.isDoor = def.door !== undefined;
             if (this.isDoor) {
                 this.door = {
@@ -493,6 +495,15 @@ export class Obstacle implements AbstractObject {
             this.sprite.scale.x *= -1;
         }
         this.sprite.rotation = -rot + this.imgRot;
+
+        // Advanced spectator "transparent surfaces": fade foliage (trees/bushes)
+        // so the spectator can see players hiding underneath, just like ceilings.
+        if (this.isBush || this.isTree) {
+            this.sprite.alpha =
+                camera.m_advSpecTransparent && !this.dead
+                    ? this.sprite.imgAlpha * 0.5
+                    : this.sprite.imgAlpha;
+        }
 
         if (this.isDoor && this.door?.casingSprite) {
             const casingPos = camera.m_pointToScreen(

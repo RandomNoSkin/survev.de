@@ -455,7 +455,10 @@ export class PlayerBarn {
 
         
 
-        if (this.game.isTeamMode || this.game.map.factionMode) {
+        // Player status normally only matters in team/faction modes, but advanced
+        // spectators need the extended stream (incl. health/boost) in every mode.
+        const advSpecWatching = this.players.some((p) => p.advSpecActive);
+        if (this.game.isTeamMode || this.game.map.factionMode || advSpecWatching) {
             this.playerStatusTicker += dt;
         }
 
@@ -801,6 +804,32 @@ export class Player extends BaseGameObject {
 
     spectator: boolean = false;
     announcedEnemies: boolean = false;
+
+    //
+    // Advanced spectator mode. Driven by SpectatorAdvancedMsg. Only honored for
+    // spectators that are admins — or for ANY spectator when the debug editor is
+    // enabled (Config.debug.allowEditMsg, dev-only), so the feature can be tested
+    // locally before being pushed to prod.
+    //
+    advSpecEnabled = false;
+    advSpecFreecam = false;
+    advSpecPos: Vec2 = v2.create(0, 0);
+    advSpecZoom = 0;
+
+    /**
+     * Whether this receiver is allowed to use advanced spectator at all. Single
+     * security chokepoint: admins always, plus any spectator when the debug editor
+     * is enabled. `allowEditMsg` defaults to off in production and already gates the
+     * (dev-only) building editor, so this can't be opened by accident via NODE_ENV.
+     */
+    get advSpecAllowed(): boolean {
+        return (this.isAdmin || Config.debug.allowEditMsg) && this.spectator;
+    }
+
+    /** True when this receiver should get the extended (full map + health) stream. */
+    get advSpecActive(): boolean {
+        return this.advSpecAllowed && this.advSpecEnabled;
+    }
 
     /**
      * set true if any member on the team changes health or disconnects
@@ -3024,6 +3053,10 @@ export class Player extends BaseGameObject {
             joinedMsg.teamMode = game.teamMode;
             joinedMsg.emotes = this.loadout.emotes;
             joinedMsg.isAdmin = this.isAdmin;
+            // Authoritative gate for the client's advanced-spectator button: only
+            // spectators, and only admins (or anyone when the dev debug editor is
+            // enabled). Purely cosmetic — the server re-checks advSpecAllowed.
+            joinedMsg.advancedSpectator = this.advSpecAllowed;
             this.sendMsg(net.MsgType.Joined, joinedMsg);
 
             const mapStream = game.map.mapStream.stream;
@@ -3074,8 +3107,20 @@ export class Player extends BaseGameObject {
             player = this;
         }
 
-        const radius = player._cullingZoom + 4;
-        let width = player._cullingZoom + 4;
+        // Advanced spectators stream the area around their free camera (or
+        // their custom zoom level), instead of around the spectated player.
+        let cullPos = player.pos;
+        let cullZoom = player._cullingZoom;
+        if (this.advSpecActive && this.advSpecZoom > 0) {
+            // clamp defensively so a single spectator can't request the whole map
+            cullZoom = math.clamp(this.advSpecZoom, 10, 320);
+            if (this.advSpecFreecam) {
+                cullPos = this.advSpecPos;
+            }
+        }
+
+        const radius = cullZoom + 4;
+        let width = cullZoom + 4;
         // client zoom tries to keep a 16/9 aspect ratio, mirror it here
         let height = width / (16 / 9);
         if (this._cullingPortrait) {
@@ -3083,7 +3128,7 @@ export class Player extends BaseGameObject {
             width = height;
             height = tmp;
         }
-        const rect = collider.createAabbExtents(player.pos, v2.create(width, height));
+        const rect = collider.createAabbExtents(cullPos, v2.create(width, height));
 
         const newVisibleObjects = game.grid.intersectColliderSet(rect);
         // client crashes if active player is not visible
@@ -3147,9 +3192,14 @@ export class Player extends BaseGameObject {
         updateMsg.deletedPlayerIds = playerBarn.deletedPlayers;
 
         if (playerBarn.playerStatusTicker > playerBarn.playerStatusRate) {
-            let statuses = player.getPlayerStatus();
+            // Build statuses relative to the receiver (this) when it's an admin
+            // spectator, so getPlayerStatus() returns every player + health/boost.
+            let statuses = this.advSpecActive
+                ? this.getPlayerStatus()
+                : player.getPlayerStatus();
             updateMsg.playerStatus = statuses;
             updateMsg.playerStatusDirty = true;
+            updateMsg.playerStatusExtended = this.advSpecActive;
         }
 
         if (player.groupStatusDirty && player.group) {
@@ -3297,6 +3347,24 @@ export class Player extends BaseGameObject {
 
         this.sendData(msgStream.getBuffer());
         this._firstUpdate = false;
+    }
+
+    handleSpectatorAdvanced(msg: net.SpectatorAdvancedMsg): void {
+        // Admins only (or any spectator when the dev debug editor is enabled):
+        // silently ignore everyone else so a tampered client can't gain extra
+        // vision in a real game.
+        if (!this.advSpecAllowed) return;
+
+        this.advSpecEnabled = msg.enabled;
+        this.advSpecFreecam = msg.freecam;
+        // Don't trust client coordinates: clamp the free-camera position to the map
+        // so the culling rect can never be fed NaN / out-of-bounds values.
+        const map = this.game.map;
+        this.advSpecPos = v2.create(
+            math.clamp(msg.pos.x, 0, map.width),
+            math.clamp(msg.pos.y, 0, map.height),
+        );
+        this.advSpecZoom = msg.zoom;
     }
 
     spectate(spectateMsg: net.SpectateMsg): void {
@@ -4681,6 +4749,28 @@ export class Player extends BaseGameObject {
     }
 
     getPlayerStatus() {
+        // Admin spectators in advanced mode see every player (incl. health/boost)
+        // regardless of game mode, powering the minimap / ESP / enemy labels.
+        if (this.advSpecActive) {
+            // Include every player so the index lines up with the client's full
+            // playerIds list. The spectator itself is sent with hasData:false so
+            // the client skips it (no stray indicator at its spawn position).
+            return this.game.playerBarn.players.map((p) => {
+                const real = p !== this;
+                return {
+                    playerId: p.__id,
+                    hasData: real,
+                    pos: p.pos,
+                    visible: real,
+                    dead: p.dead,
+                    downed: p.downed,
+                    role: p.role,
+                    health: p.health,
+                    boost: p.boost,
+                };
+            });
+        }
+
         const players: Player[] = this.game.modeManager.getPlayerStatusPlayers(this)!;
         return players.map((p) => {
             const visible = p.teamId === this.teamId || p.timeUntilHidden > 0;

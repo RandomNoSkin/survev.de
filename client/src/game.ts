@@ -21,7 +21,7 @@ import { device } from "./device";
 import { EmoteBarn } from "./emote";
 import { Gas } from "./gas";
 import { helpers } from "./helpers";
-import { type InputHandler, Key } from "./input";
+import { type InputHandler, Key, MouseWheel } from "./input";
 import type { InputBinds, InputBindUi } from "./inputBinds";
 import type { SoundHandle } from "./lib/createJS";
 import { Map } from "./map";
@@ -44,6 +44,7 @@ import type { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import type { Localization } from "./ui/localization";
 import { Touch } from "./ui/touch";
+import { AdvancedSpectator } from "./ui/advancedSpectator";
 import { UiManager } from "./ui/ui";
 import { UiManager2 } from "./ui/ui2";
 import { name } from "ejs";
@@ -121,6 +122,9 @@ export class Game {
     debugHUD!: DebugHUD;
     chatUi: ChatUi;
     m_isAdmin = false;
+    /** Server says this client may use advanced spectator (admin, or non-prod server). */
+    m_advancedSpectatorAllowed = false;
+    m_advSpec!: AdvancedSpectator;
 
     seq!: number;
     seqInFlight!: boolean;
@@ -346,6 +350,7 @@ export class Game {
         );
         this.m_shotBarn = new ShotBarn();
         this.debugHUD = new DebugHUD(this.m_config);
+        this.m_advSpec = new AdvancedSpectator();
 
         // this.particleBarn,
         // this.audioManager,
@@ -385,6 +390,7 @@ export class Game {
             this.m_renderer.layers[3],
             this.m_debugDisplay,
             this.m_gas.gasRenderer.display,
+            this.m_advSpec.container,
             this.m_touch.container,
             this.m_emoteBarn.container,
             this.m_uiManager.container,
@@ -507,6 +513,8 @@ export class Game {
         if (this.m_playing) {
             this.m_playingTicker += dt;
         }
+        this.m_playerBarn.advSpecShowEnemies =
+            this.m_advSpec.enabled && this.m_advSpec.enemiesOnMap && this.m_spectating;
         this.m_playerBarn.m_update(
             dt,
             this.m_activeId,
@@ -523,9 +531,59 @@ export class Game {
         );
         this.updateAmbience();
 
-        this.m_camera.m_pos = v2.copy(this.m_activePlayer.m_visualPos);
+        // Advanced spectator (admins, or any spectator outside production): free
+        // camera + custom zoom. Falls back to the normal follow-camera whenever
+        // the toggles are off.
+        const advSpec = this.m_advSpec;
+        const advActive = advSpec.enabled && this.m_spectating;
+        this.m_camera.m_advSpecTransparent = advActive && advSpec.transparentSurfaces;
+        // Manual layer override so the spectator can look into bunkers / underground
+        // even with no player down there. Runs before the renderer's m_update below.
+        // In follow mode on the surface (layer 0) we leave the layer alone so it
+        // keeps auto-following the spectated player; freecam or an explicit
+        // "Underground" toggle takes manual control.
+        if (advActive && (advSpec.freecam || advSpec.layer === 1)) {
+            const underground = advSpec.layer === 1;
+            this.m_renderer.setActiveLayer(advSpec.layer);
+            this.m_renderer.setUnderground(underground);
+            this.m_audioManager.activeLayer = advSpec.layer;
+            this.m_audioManager.underground = underground;
+        }
+        if (advActive && advSpec.freecam) {
+            if (!advSpec.freecamInitialized) {
+                advSpec.freecamPos = v2.copy(this.m_activePlayer.m_visualPos);
+                advSpec.freecamInitialized = true;
+            }
+            let mx = 0;
+            let my = 0;
+            if (this.m_input.keyDown(Key.A)) mx -= 1;
+            if (this.m_input.keyDown(Key.D)) mx += 1;
+            if (this.m_input.keyDown(Key.W)) my += 1;
+            if (this.m_input.keyDown(Key.S)) my -= 1;
+            if (mx !== 0 || my !== 0) {
+                const len = Math.sqrt(mx * mx + my * my);
+                const panSpeed = advSpec.zoomLevel * 2;
+                advSpec.freecamPos = v2.add(
+                    advSpec.freecamPos,
+                    v2.create((mx / len) * panSpeed * dt, (my / len) * panSpeed * dt),
+                );
+                advSpec.freecamPos.x = math.clamp(advSpec.freecamPos.x, 0, this.m_map.width);
+                advSpec.freecamPos.y = math.clamp(advSpec.freecamPos.y, 0, this.m_map.height);
+            }
+            this.m_camera.m_pos = v2.copy(advSpec.freecamPos);
+        } else {
+            advSpec.freecamInitialized = false;
+            this.m_camera.m_pos = v2.copy(this.m_activePlayer.m_visualPos);
+        }
         this.m_camera.m_applyShake();
-        const zoom = this.m_activePlayer.m_getZoom();
+
+        if (advActive && advSpec.zoom) {
+            const wheel = this.m_input.mouseWheel();
+            if (wheel === MouseWheel.Up) advSpec.adjustZoom(-6);
+            else if (wheel === MouseWheel.Down) advSpec.adjustZoom(6);
+        }
+        const zoom =
+            advActive && advSpec.zoom ? advSpec.zoomLevel : this.m_activePlayer.m_getZoom();
 
         const minDim = math.min(
             this.m_camera.m_screenWidth,
@@ -546,6 +604,27 @@ export class Game {
             this.m_camera.m_zoom,
             this.m_camera.m_targetZoom,
         );
+        // Tell the server about the advanced spectator camera so it can stream
+        // the right area (throttled). Send a final "disabled" msg on toggle-off.
+        if (advSpec.enabled) {
+            advSpec.sendTimer -= dt;
+            if (!advSpec.wasEnabled || advSpec.sendTimer <= 0) {
+                advSpec.sendTimer = 0.1;
+                advSpec.wasEnabled = true;
+                const advMsg = new net.SpectatorAdvancedMsg();
+                advMsg.enabled = true;
+                advMsg.freecam = advActive && advSpec.freecam;
+                advMsg.pos = v2.copy(this.m_camera.m_pos);
+                advMsg.zoom = zoom;
+                this.m_sendMessage(net.MsgType.SpectatorAdvanced, advMsg, 32);
+            }
+        } else if (advSpec.wasEnabled) {
+            advSpec.wasEnabled = false;
+            const advMsg = new net.SpectatorAdvancedMsg();
+            advMsg.enabled = false;
+            this.m_sendMessage(net.MsgType.SpectatorAdvanced, advMsg, 32);
+        }
+
         this.m_audioManager.cameraPos = v2.copy(this.m_camera.m_pos);
         if (this.m_input.keyPressed(Key.Escape)) {
             if (false) {
@@ -1164,6 +1243,12 @@ export class Game {
             this.m_planeBarn,
         );
         this.m_emoteBarn.m_render(this.m_camera);
+        this.m_advSpec.m_render(
+            this.m_camera,
+            this.m_playerBarn,
+            this.m_activeId,
+            this.m_localId,
+        );
         if (IS_DEV) {
             this.m_debugDisplay.clear();
             if (debug.enabled) {
@@ -1252,6 +1337,7 @@ export class Game {
                 teamId,
                 msg.playerStatus,
                 this.m_map.factionMode,
+                msg.playerStatusExtended,
             );
         }
 
@@ -1408,6 +1494,10 @@ export class Game {
                 this.teamMode = msg.teamMode;
                 this.m_localId = msg.playerId;
                 this.m_isAdmin = msg.isAdmin;
+                this.m_advancedSpectatorAllowed = msg.advancedSpectator;
+                // Refresh the button now that the gate flag is known (the spectate
+                // UI itself stays hidden until spectating actually starts).
+                this.m_uiManager.updateAdvancedSpectatorUi();
                 this.m_validateAlpha = true;
                 this.m_emoteBarn.updateEmoteWheel(msg.emotes);
                 if (!msg.started) {
