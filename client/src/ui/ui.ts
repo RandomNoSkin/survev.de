@@ -185,6 +185,17 @@ export class UiManager {
     specNextButton = $("#btn-spectate-next-player");
     specPrevButton = $("#btn-spectate-prev-player");
 
+    // Advanced spectator (admin only)
+    specAdvancedButton = $("#btn-spectate-advanced");
+    specAdvancedOptions = $("#ui-spectate-advanced-options");
+    advFreecamButton = $("#btn-adv-freecam");
+    advZoomButton = $("#btn-adv-zoom");
+    advLayerButton = $("#btn-adv-layer");
+    advTransparentButton = $("#btn-adv-transparent");
+    advEnemiesMapButton = $("#btn-adv-enemies-map");
+    advEspButton = $("#btn-adv-esp");
+    advLabelsButton = $("#btn-adv-labels");
+
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
     interactionTouched = false;
@@ -419,6 +430,49 @@ export class UiManager {
         });
         this.specPrevButton.on("click", () => {
             this.specPrev = true;
+        });
+
+        // Advanced spectator toggles. Namespaced + off() first because the buttons
+        // live in static HTML but UiManager is recreated each game, so a plain
+        // .on() would stack handlers (and double-toggle the booleans).
+        this.specAdvancedButton.off("click.advspec").on("click.advspec", () => {
+            this.game.m_advSpec.enabled = !this.game.m_advSpec.enabled;
+            this.updateAdvancedSpectatorUi();
+            this.updateSpectateText();
+        });
+        const advToggle = (btn: JQuery, flip: () => void) => {
+            btn.off("click.advspec").on("click.advspec", () => {
+                flip();
+                this.updateAdvancedSpectatorUi();
+            });
+        };
+        advToggle(this.advFreecamButton, () => {
+            const adv = this.game.m_advSpec;
+            adv.freecam = !adv.freecam;
+            // ESP lines run from the screen center, which has no player in freecam,
+            // so turn them off when entering freecam.
+            if (adv.freecam) adv.espLines = false;
+            this.updateSpectateText();
+        });
+        advToggle(this.advZoomButton, () => {
+            this.game.m_advSpec.zoom = !this.game.m_advSpec.zoom;
+        });
+        advToggle(this.advLayerButton, () => {
+            // Toggle the viewed render layer (0 = surface, 1 = underground).
+            this.game.m_advSpec.layer = this.game.m_advSpec.layer === 1 ? 0 : 1;
+        });
+        advToggle(this.advTransparentButton, () => {
+            this.game.m_advSpec.transparentSurfaces =
+                !this.game.m_advSpec.transparentSurfaces;
+        });
+        advToggle(this.advEnemiesMapButton, () => {
+            this.game.m_advSpec.enemiesOnMap = !this.game.m_advSpec.enemiesOnMap;
+        });
+        advToggle(this.advEspButton, () => {
+            this.game.m_advSpec.espLines = !this.game.m_advSpec.espLines;
+        });
+        advToggle(this.advLabelsButton, () => {
+            this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
         });
 
         // Touch specific buttons
@@ -1078,6 +1132,14 @@ export class UiManager {
                 : playerBarn.getTeamColor(playerInfo.teamId);
             if (map.factionMode && customMapIcon) {
                 tint = playerBarn.getTeamColor(playerInfo.teamId);
+            }
+            // Advanced spectator "Enemies on Map": force enemies red so they stand
+            // out against teammates (matches the ESP / enemy-label colour).
+            if (
+                playerBarn.advSpecShowEnemies &&
+                playerInfo.teamId != activePlayerInfo.teamId
+            ) {
+                tint = 0xff4d4d;
             }
             const dotScale = device.uiLayout == device.UiLayout.Sm ? 0.15 : 0.2;
             let scale = dotScale;
@@ -2097,12 +2159,23 @@ export class UiManager {
             const name = playerBarn.getPlayerName(targetId, localId, false);
             this.spectatedPlayerId = targetId;
             this.spectatedPlayerName = helpers.htmlEscape(name);
-            this.spectatedPlayerText
-                .find("#spectate-player")
-                .html(this.spectatedPlayerName);
+            this.updateSpectateText();
             this.actionSeq = -1;
             this.m_pieTimer.stop();
         }
+    }
+
+    // Shows "Freecam" at the top while advanced-spectator freecam is active,
+    // otherwise the spectated player's name.
+    updateSpectateText() {
+        const adv = this.game.m_advSpec;
+        const freecam = adv.enabled && adv.freecam && this.spectating;
+        this.spectatedPlayerText
+            .find(".spectate-desc")
+            .css("display", freecam ? "none" : "");
+        this.spectatedPlayerText
+            .find("#spectate-player")
+            .html(freecam ? "Freecam" : this.spectatedPlayerName);
     }
 
     setSpectating(spectating: boolean, teamMode?: TeamMode) {
@@ -2115,11 +2188,41 @@ export class UiManager {
                 this.specPrevButton.css("display", hideSpec ? "none" : "block");
                 this.specNextButton.css("display", hideSpec ? "none" : "block");
                 this.hideStats();
+                this.updateAdvancedSpectatorUi();
             } else {
                 this.spectateMode.css("display", "none");
                 $(".ui-zoom").addClass("ui-zoom-hover");
+                this.specAdvancedButton.css("display", "none");
+                this.specAdvancedOptions.css("display", "none");
             }
         }
+    }
+
+    // Reflects the advanced spectator state onto the buttons. The master button
+    // is shown when the server allows advanced spectator (admins, or any spectator
+    // on a non-prod server, so the feature can be tested before prod); the
+    // sub-toggles only appear once the mode is enabled.
+    updateAdvancedSpectatorUi() {
+        const advSpec = this.game.m_advSpec;
+        // Server-authoritative: m_advancedSpectatorAllowed already encodes "is a
+        // spectator" + "admin or non-prod" (see Player.advSpecAllowed).
+        const available = this.game.m_advancedSpectatorAllowed;
+
+        this.specAdvancedButton.css("display", available ? "block" : "none");
+        if (!available) {
+            this.specAdvancedOptions.css("display", "none");
+            return;
+        }
+
+        this.specAdvancedButton.toggleClass("active", advSpec.enabled);
+        this.specAdvancedOptions.css("display", advSpec.enabled ? "inline-block" : "none");
+        this.advFreecamButton.toggleClass("active", advSpec.freecam);
+        this.advZoomButton.toggleClass("active", advSpec.zoom);
+        this.advLayerButton.toggleClass("active", advSpec.layer === 1);
+        this.advTransparentButton.toggleClass("active", advSpec.transparentSurfaces);
+        this.advEnemiesMapButton.toggleClass("active", advSpec.enemiesOnMap);
+        this.advEspButton.toggleClass("active", advSpec.espLines);
+        this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {

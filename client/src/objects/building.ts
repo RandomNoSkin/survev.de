@@ -572,7 +572,12 @@ export class Building implements AbstractObject {
         // Position sprites for rendering
         for (let F = 0; F < this.imgs.length; F++) {
             const img = this.imgs[F];
-            const alpha = img.isCeiling ? this.ceiling.fadeAlpha : 1;
+            let alpha = img.isCeiling ? this.ceiling.fadeAlpha : 1;
+            // Advanced spectator "transparent surfaces": keep ceilings faint so
+            // interiors stay visible everywhere.
+            if (img.isCeiling && camera.m_advSpecTransparent) {
+                alpha = Math.min(alpha, 0.2);
+            }
             this.positionSprite(img.sprite, alpha, camera);
 
             if (img.removeOnDamaged && this.ceilingDamaged) {

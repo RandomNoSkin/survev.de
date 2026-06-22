@@ -1716,6 +1716,21 @@ img {
   width: 192px;
 }
 
+#ui-spectate-advanced-options {
+  display: inline-block;
+  padding: 8px 8px 0px 8px;
+  text-align: center;
+  width: 192px;
+  margin-top: 4px;
+  vertical-align: top;
+}
+
+#ui-spectate-options a.active {
+  background: #6fcf6f;
+  border-bottom: 2px solid #4a9a4a;
+  box-shadow: inset 0 -2px #4a9a4a;
+}
+
 #ui-spectate-options a {
   position: relative;
   color: white;

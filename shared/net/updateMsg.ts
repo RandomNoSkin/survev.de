@@ -108,11 +108,21 @@ function deserializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
     s.readAlignToNextByte();
 }
 
-function serializePlayerStatus(s: BitStream, players: PlayerStatus[]) {
+// `extended` carries health/boost for every player. Only sent to admin
+// spectators in advanced spectator mode; self-describing so the client knows
+// whether to read the extra fields. Normal play pays a single extra bit.
+function serializePlayerStatus(s: BitStream, players: PlayerStatus[], extended: boolean) {
+    s.writeBoolean(extended);
+
     s.writeArray(players, 8, (info) => {
         s.writeBoolean(info.hasData);
 
         if (info.hasData) {
+            // In extended mode entries are mapped by id (not array index), so the
+            // client stays in sync regardless of ordering / length differences.
+            if (extended) {
+                s.writeUint16(info.playerId ?? 0);
+            }
             s.writeMapPos(info.pos, 11);
             s.writeBoolean(info.visible);
             s.writeBoolean(info.dead);
@@ -122,19 +132,32 @@ function serializePlayerStatus(s: BitStream, players: PlayerStatus[]) {
             if (info.role !== "") {
                 s.writeGameType(info.role);
             }
+
+            if (extended) {
+                s.writeFloat(info.health ?? 0, 0, 100, 8);
+                s.writeFloat(info.boost ?? 0, 0, 100, 8);
+            }
         }
     });
 
     s.writeAlignToNextByte();
 }
 
-function deserializePlayerStatus(s: BitStream): PlayerStatus[] {
+function deserializePlayerStatus(s: BitStream): {
+    players: PlayerStatus[];
+    extended: boolean;
+} {
+    const extended = s.readBoolean();
+
     const players = s.readArray(8, () => {
         const p = {
             hasData: s.readBoolean(),
         } as PlayerStatus;
 
         if (p.hasData) {
+            if (extended) {
+                p.playerId = s.readUint16();
+            }
             p.pos = s.readMapPos(11);
             p.visible = s.readBoolean();
             p.dead = s.readBoolean();
@@ -143,13 +166,18 @@ function deserializePlayerStatus(s: BitStream): PlayerStatus[] {
             if (s.readBoolean()) {
                 p.role = s.readGameType();
             }
+
+            if (extended) {
+                p.health = s.readFloat(0, 100, 8);
+                p.boost = s.readFloat(0, 100, 8);
+            }
         }
         return p;
     });
 
     s.readAlignToNextByte();
 
-    return players;
+    return { players, extended };
 }
 
 function serializeGroupStatus(s: BitStream, players: GroupStatus[]) {
@@ -283,6 +311,8 @@ export class UpdateMsg implements AbstractMsg {
 
     playerStatus: PlayerStatus[] = [];
     playerStatusDirty = false;
+    /** When true, playerStatus also carries health/boost (admin spectator). */
+    playerStatusExtended = false;
 
     groupStatus: GroupStatus[] = [];
     groupStatusDirty = false;
@@ -361,7 +391,7 @@ export class UpdateMsg implements AbstractMsg {
         }
 
         if (this.playerStatusDirty) {
-            serializePlayerStatus(s, this.playerStatus);
+            serializePlayerStatus(s, this.playerStatus, this.playerStatusExtended);
             flags |= UpdateExtFlags.PlayerStatus;
         }
 
@@ -580,7 +610,9 @@ export class UpdateMsg implements AbstractMsg {
         }
 
         if ((flags & UpdateExtFlags.PlayerStatus) != 0) {
-            this.playerStatus = deserializePlayerStatus(s);
+            const status = deserializePlayerStatus(s);
+            this.playerStatus = status.players;
+            this.playerStatusExtended = status.extended;
             this.playerStatusDirty = true;
         }
 
@@ -858,6 +890,7 @@ export interface PlayerStatus {
     posTarget?: Vec2;
     posDelta?: number;
     health?: number;
+    boost?: number;
     posInterp?: number;
     visible: boolean;
     dead: boolean;

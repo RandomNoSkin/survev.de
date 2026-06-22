@@ -454,6 +454,7 @@ export class Game {
             | net.RoleSelectMsg
             | net.EditMsg
             | net.KillFeedMsg
+            | net.SpectatorAdvancedMsg
             | undefined = undefined;
 
         switch (type) {
@@ -516,6 +517,10 @@ export class Game {
                 break;
             case net.MsgType.Spectate:
                 msg = new net.SpectateMsg();
+                msg.deserialize(stream);
+                break;
+            case net.MsgType.SpectatorAdvanced:
+                msg = new net.SpectatorAdvancedMsg();
                 msg.deserialize(stream);
                 break;
             case net.MsgType.PerkModeRoleSelect:
@@ -614,6 +619,10 @@ export class Game {
                 }
                 case net.MsgType.Spectate: {
                     player.spectate(msg as net.SpectateMsg);
+                    break;
+                }
+                case net.MsgType.SpectatorAdvanced: {
+                    player.handleSpectatorAdvanced(msg as net.SpectatorAdvancedMsg);
                     break;
                 }
                 case net.MsgType.PerkModeRoleSelect: {
