@@ -5,7 +5,7 @@ import { GameConfig, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig
 import * as net from "../../shared/net/net";
 import { ObjectType } from "../../shared/net/objectSerializeFns";
 import { math } from "../../shared/utils/math";
-import { v2, Vec2 } from "../../shared/utils/v2";
+import { type Vec2, v2 } from "../../shared/utils/v2";
 import type { Ambiance } from "./ambiance";
 import type { AudioManager } from "./audioManager";
 import { Camera } from "./camera";
@@ -15,8 +15,11 @@ import { debugLines } from "./debug/debugLines";
 
 /* STRIP_FROM_PROD_CLIENT:START */
 import { Editor } from "./debug/editor";
+
 /* STRIP_FROM_PROD_CLIENT:END */
 
+import { name } from "ejs";
+import { GunDefs } from "../../shared/defs/gameObjects/gunDefs";
 import { device } from "./device";
 import { EmoteBarn } from "./emote";
 import { Gas } from "./gas";
@@ -42,14 +45,12 @@ import { SmokeBarn } from "./objects/smoke";
 import { Renderer } from "./renderer";
 import type { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
+import { AdvancedSpectator } from "./ui/advancedSpectator";
+import { ChatUi } from "./ui/chat";
 import type { Localization } from "./ui/localization";
 import { Touch } from "./ui/touch";
-import { AdvancedSpectator } from "./ui/advancedSpectator";
 import { UiManager } from "./ui/ui";
 import { UiManager2 } from "./ui/ui2";
-import { name } from "ejs";
-import { ChatUi } from "./ui/chat";
-import { GunDefs } from "../../shared/defs/gameObjects/gunDefs";
 
 export interface Ctx {
     audioManager: AudioManager;
@@ -125,6 +126,9 @@ export class Game {
     /** Server says this client may use advanced spectator (admin, or non-prod server). */
     m_advancedSpectatorAllowed = false;
     m_advSpec!: AdvancedSpectator;
+
+    /** True when this Game is playing back a recorded replay (no socket, no input sent). */
+    m_replayMode = false;
 
     seq!: number;
     seqInFlight!: boolean;
@@ -202,18 +206,7 @@ export class Game {
                     this.m_sendMessage(net.MsgType.Join, joinMessage, 8192);
                 };
                 this.m_ws.onmessage = (e) => {
-                    const msgStream = new net.MsgStream(e.data);
-                    while (true) {
-                        const type = msgStream.deserializeMsgType();
-                        if (type == net.MsgType.None) {
-                            break;
-                        }
-                        this.m_onMsg(type, msgStream.getStream());
-                        msgStream.stream.readAlignToNextByte();
-                    }
-                    this.debugHUD?.netInGraph.addEntry(
-                        msgStream.stream.buffer.byteLength,
-                    );
+                    this.m_handleIncomingBuffer(e.data);
                 };
                 this.m_ws.onclose = () => {
                     const displayingStats = this.m_uiManager?.displayingStats;
@@ -235,6 +228,24 @@ export class Game {
                 onConnectFail();
             }
         }
+    }
+
+    /**
+     * Decodes one received frame (an `ArrayBuffer`/`Uint8Array` of one or more
+     * framed messages) and dispatches each message. Shared by the live websocket
+     * and the replay player, so both go through the exact same decode path.
+     */
+    m_handleIncomingBuffer(data: ArrayBuffer | Uint8Array) {
+        const msgStream = new net.MsgStream(data);
+        while (true) {
+            const type = msgStream.deserializeMsgType();
+            if (type == net.MsgType.None) {
+                break;
+            }
+            this.m_onMsg(type, msgStream.getStream());
+            msgStream.stream.readAlignToNextByte();
+        }
+        this.debugHUD?.netInGraph.addEntry(msgStream.stream.buffer.byteLength);
     }
 
     tryJoinGameAsSpectator(
@@ -567,8 +578,16 @@ export class Game {
                     advSpec.freecamPos,
                     v2.create((mx / len) * panSpeed * dt, (my / len) * panSpeed * dt),
                 );
-                advSpec.freecamPos.x = math.clamp(advSpec.freecamPos.x, 0, this.m_map.width);
-                advSpec.freecamPos.y = math.clamp(advSpec.freecamPos.y, 0, this.m_map.height);
+                advSpec.freecamPos.x = math.clamp(
+                    advSpec.freecamPos.x,
+                    0,
+                    this.m_map.width,
+                );
+                advSpec.freecamPos.y = math.clamp(
+                    advSpec.freecamPos.y,
+                    0,
+                    this.m_map.height,
+                );
             }
             this.m_camera.m_pos = v2.copy(advSpec.freecamPos);
         } else {
@@ -579,11 +598,16 @@ export class Game {
 
         if (advActive && advSpec.zoom) {
             const wheel = this.m_input.mouseWheel();
-            if (wheel === MouseWheel.Up) advSpec.adjustZoom(-6);
-            else if (wheel === MouseWheel.Down) advSpec.adjustZoom(6);
+            if (wheel === MouseWheel.Up || wheel === MouseWheel.Down) {
+                advSpec.adjustZoom(wheel === MouseWheel.Up ? -6 : 6);
+                // Persist the custom zoom so it's restored next time (see UiManager.saveAdvSpec).
+                this.m_config.set("advancedSpectatorSettings", advSpec.getSettings());
+            }
         }
         const zoom =
-            advActive && advSpec.zoom ? advSpec.zoomLevel : this.m_activePlayer.m_getZoom();
+            advActive && advSpec.zoom
+                ? advSpec.zoomLevel
+                : this.m_activePlayer.m_getZoom();
 
         const minDim = math.min(
             this.m_camera.m_screenWidth,
@@ -630,9 +654,9 @@ export class Game {
             if (false) {
             } else {
                 const style = window.getComputedStyle(this.chatUi.chatInput[0]);
-                if(style.display !== "none"){
+                if (style.display !== "none") {
                     this.chatUi.leaveChat();
-                }else{
+                } else {
                     this.m_uiManager.toggleEscMenu();
                 }
             }
@@ -657,9 +681,7 @@ export class Game {
         }
 
         // Open Chat
-        if(
-            this.m_inputBinds.isBindPressed(Input.JoinChat)
-        ){
+        if (this.m_inputBinds.isBindPressed(Input.JoinChat)) {
             this.chatUi.joinChat();
         }
         // Update facing direction
@@ -688,7 +710,7 @@ export class Game {
         inputMsg.seq = this.seq;
         if (!this.m_spectating) {
             if (device.touch) {
-                if(this.m_pendingAutoSwitchSlot){
+                if (this.m_pendingAutoSwitchSlot) {
                     inputMsg.addInput(Input.EquipOtherGun);
                     this.m_pendingAutoSwitchSlot = false;
                 }
@@ -698,16 +720,21 @@ export class Game {
                     this.m_camera,
                 );
                 let aimDir = v2.copy(touchAimMovement.aimMovement.toAimDir);
-                
+
                 const activePlayer = this.m_activePlayer;
                 const curWeapIdx = activePlayer.m_localData.m_curWeapIdx;
                 const curWeapon = activePlayer.m_localData.m_weapons[curWeapIdx];
                 const weaponDef = GameObjectDefs[curWeapon?.type];
 
-                if(touchAimMovement.touched && this.m_touch.shotDetected && weaponDef?.type === "gun" && weaponDef.aimAssist === true && this.m_config.get("touchAimAssist")){
+                if (
+                    touchAimMovement.touched &&
+                    this.m_touch.shotDetected &&
+                    weaponDef?.type === "gun" &&
+                    weaponDef.aimAssist === true &&
+                    this.m_config.get("touchAimAssist")
+                ) {
                     aimDir = this.getMobileAimAssistDir(aimDir);
                 }
-
 
                 this.m_touch.turnDirTicker -= dt;
                 if (this.m_touch.moveDetected && !touchAimMovement.touched) {
@@ -780,7 +807,6 @@ export class Game {
                 this.m_inputBinds.isBindPressed(Input.Fire) || this.m_touch.shotDetected;
             inputMsg.shootHold =
                 this.m_inputBinds.isBindDown(Input.Fire) || this.m_touch.shotDetected;
-
 
             inputMsg.portrait =
                 this.m_camera.m_screenWidth < this.m_camera.m_screenHeight;
@@ -932,11 +958,7 @@ export class Game {
             if (this.m_uiManager.roleArenaSelected) {
                 const roleSelectMessage = new net.RoleSelectMsg();
                 roleSelectMessage.role = this.m_uiManager.roleArenaSelected;
-                this.m_sendMessage(
-                    net.MsgType.RoleSelect,
-                    roleSelectMessage,
-                    128,
-                );
+                this.m_sendMessage(net.MsgType.RoleSelect, roleSelectMessage, 128);
                 this.m_config.set("arenaModeRole", roleSelectMessage.role);
             }
         }
@@ -950,10 +972,7 @@ export class Game {
         const specForce =
             this.m_input.keyPressed(Key.Right) || this.m_input.keyPressed(Key.Left);
 
-        if (
-            specBegin ||
-            (this.m_spectating && (specNext || specPrev))
-        ) {
+        if (specBegin || (this.m_spectating && (specNext || specPrev))) {
             //this.m_spectateCooldown = 1;
 
             const specMsg = new net.SpectateMsg();
@@ -1364,7 +1383,10 @@ export class Game {
             const obj = msg.partObjects[i];
             this.m_objectCreator.m_updateObjPart(obj.__id, obj, ctx);
         }
-        this.m_spectating = this.m_activeId != this.m_localId;
+        // In replay mode the recorded player IS the active+local player, but there is
+        // no live local input — render them server-authoritatively like a spectated
+        // player so aim/movement come from the recorded netData instead of a mouse.
+        this.m_spectating = this.m_replayMode || this.m_activeId != this.m_localId;
         this.m_activePlayer = this.m_playerBarn.getPlayerById(this.m_activeId)!;
         const oldWeapIdx = this.m_activePlayer?.m_localData?.m_curWeapIdx;
         const oldWeapon = this.m_activePlayer?.m_localData?.m_weapons?.[oldWeapIdx];
@@ -1495,7 +1517,10 @@ export class Game {
                 this.teamMode = msg.teamMode;
                 this.m_localId = msg.playerId;
                 this.m_isAdmin = msg.isAdmin;
-                this.m_advancedSpectatorAllowed = msg.advancedSpectator;
+                // In replay mode the advanced spectator (freecam / zoom / ESP) is always
+                // available — it runs purely client-side on the recorded objects.
+                this.m_advancedSpectatorAllowed =
+                    msg.advancedSpectator || this.m_replayMode;
                 // Refresh the button now that the gate flag is known (the spectate
                 // UI itself stays hidden until spectating actually starts).
                 this.m_uiManager.updateAdvancedSpectatorUi();
@@ -1538,7 +1563,7 @@ export class Game {
                 this.m_bulletBarn.onMapLoad(this.m_map);
                 this.m_particleBarn.onMapLoad(this.m_map);
                 this.m_uiManager.onMapLoad(this.m_map, this.m_camera);
-                if (this.m_map.perkMode) {
+                if (this.m_map.perkMode && !this.m_replayMode) {
                     const role = this.m_config.get("perkModeRole")!;
                     this.m_uiManager.setRoleMenuOptions(
                         role,
@@ -1556,10 +1581,10 @@ export class Game {
                 break;
             }
             case net.MsgType.ArenaRoles: {
-                const msg = new net.ArenaRolesMsg;
-                    msg.deserialize(stream);
-                if(this.m_activeId !== msg.activePlayer) return;
-                if(this.m_map.arenaMode){
+                const msg = new net.ArenaRolesMsg();
+                msg.deserialize(stream);
+                if (this.m_activeId !== msg.activePlayer) return;
+                if (this.m_map.arenaMode && !this.m_replayMode) {
                     const role = this.m_config.get("arenaModeRole")!;
                     this.m_uiManager.setArenaRoleMenuOptions(
                         role,
@@ -1691,19 +1716,19 @@ export class Game {
                 msg.deserialize(stream);
                 const playerName = msg.name;
                 const group1 = msg.group1;
-                const group2 = msg.group2
-                if(group1.length <=0){
+                const group2 = msg.group2;
+                if (group1.length <= 0) {
                     const text = this.m_ui2Manager.getJoinedText(playerName);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
-                }else{
+                } else {
                     const group1Text = this.m_ui2Manager.getEnemieText(group1);
                     const group2Text = this.m_ui2Manager.getEnemieText(group2);
                     this.m_ui2Manager.addKillFeedMessage(group1Text, "#ff00f2");
                     this.m_ui2Manager.addKillFeedMessage("VERSUS", "#1100ff");
                     this.m_ui2Manager.addKillFeedMessage(group2Text, "#ff00f2");
                 }
-                
-                break
+
+                break;
             }
             case net.MsgType.RoleAnnouncement: {
                 const msg = new net.RoleAnnouncementMsg();
@@ -1730,7 +1755,8 @@ export class Game {
                             // The intent here is to not play the role-specific assignment sounds in perkMode unless you're the player selecting a role.
                             msg.role == "kill_leader" ||
                             !this.m_map.perkMode ||
-                            this.m_localId == msg.playerId || !this.m_map.arenaMode
+                            this.m_localId == msg.playerId ||
+                            !this.m_map.arenaMode
                         ) {
                             this.m_audioManager.playSound(roleDef.sound.assign, {
                                 channel: "ui",
@@ -1904,38 +1930,42 @@ export class Game {
             case net.MsgType.KillFeed: {
                 const msg = new net.KillFeedMsg();
                 msg.deserialize(stream);
-                if(msg.type === net.KillFeedMsgType.Ping){
+                if (msg.type === net.KillFeedMsgType.Ping) {
                     const item = msg.string;
                     const player = msg.player;
 
                     const txt = this.m_ui2Manager.getItemPingText(player, item);
                     this.m_ui2Manager.addKillFeedMessage(txt, "#B4A3FC");
-                } else if(msg.type === net.KillFeedMsgType.ChatMsg){
+                } else if (msg.type === net.KillFeedMsgType.ChatMsg) {
                     const text = msg.string;
                     const player = msg.player;
                     let color = "#ffe600";
-                    switch(msg.chatType){
-                        case(1):{
-                            color = "#00f7ff"
+                    switch (msg.chatType) {
+                        case 1: {
+                            color = "#00f7ff";
                             break;
                         }
                     }
 
-                    const txt = this.m_ui2Manager.getChatMessage(player, text, msg.chatType);
+                    const txt = this.m_ui2Manager.getChatMessage(
+                        player,
+                        text,
+                        msg.chatType,
+                    );
                     this.m_ui2Manager.addChatMessage(txt, color, "#000000");
-                } else if(msg.type === net.KillFeedMsgType.AdminMsg){
+                } else if (msg.type === net.KillFeedMsgType.AdminMsg) {
                     const text = msg.string;
                     const player = msg.player;
                     const txt = this.m_ui2Manager.getAdminChatMessage(player, text);
 
                     this.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
-                }else if(msg.type === net.KillFeedMsgType.CmdMsg){
+                } else if (msg.type === net.KillFeedMsgType.CmdMsg) {
                     const cmd = msg.cmd;
                     const admin = msg.player;
                     const text = msg.string;
                     const args = msg.args;
                     this.chatUi.handleAdminCmds(cmd, admin, text, args);
-                }else if(msg.type === net.KillFeedMsgType.BannedMsg){
+                } else if (msg.type === net.KillFeedMsgType.BannedMsg) {
                     const text = msg.string;
                     const admin = msg.player;
                     const expires = msg.cmd;
@@ -1947,21 +1977,22 @@ export class Game {
             case net.MsgType.Assist: {
                 const msg = new net.AssistMsg();
                 msg.deserialize(stream);
-                if(msg.assisterId == this.m_activeId) {
+                if (msg.assisterId == this.m_activeId) {
                     const targetInfo = this.m_playerBarn.getPlayerInfo(msg.targetId);
                     // Add to killfeed
                     this.m_ui2Manager.addKillFeedMessage(
                         `Assist on ${targetInfo.name} (${msg.damageAmount} dmg)`,
-                        '#00bfff'
+                        "#00bfff",
                     );
                     // Show assist notification box at bottom
                     const playerInfo = this.m_playerBarn.getPlayerInfo(this.m_activeId);
-                    
+
                     let assistCount = msg.assists;
-                    let assistCountText = assistCount === 1 ? '1 Assist' : `${assistCount} Assists`;
+                    let assistCountText =
+                        assistCount === 1 ? "1 Assist" : `${assistCount} Assists`;
                     this.m_ui2Manager.displayAssistMessage(
                         `Assist on ${targetInfo.name} (${msg.damageAmount} dmg)`,
-                        assistCountText
+                        assistCountText,
                     );
                 }
                 break;
@@ -1991,82 +2022,78 @@ export class Game {
 
     //aim assist helper for mobile
     private getMobileAimAssistDir(currentAimDir: Vec2): Vec2 {
-    const active = this.m_activePlayer;
-    const activeInfo = this.m_playerBarn.getPlayerInfo(this.m_activeId);
-    const players = this.m_playerBarn.playerPool.m_getPool();
+        const active = this.m_activePlayer;
+        const activeInfo = this.m_playerBarn.getPlayerInfo(this.m_activeId);
+        const players = this.m_playerBarn.playerPool.m_getPool();
 
-    const maxDist = 120;
-    const maxAngleDeg = 30;
-    const strength = 0.7;
+        const maxDist = 120;
+        const maxAngleDeg = 30;
+        const strength = 0.7;
 
-    const bulletSpeed = 120;
-    const predictionStrength = 0.55;
-    const recent = this.pings.slice(-5);
+        const bulletSpeed = 120;
+        const predictionStrength = 0.55;
+        const recent = this.pings.slice(-5);
 
-    const pingMs =
-        recent.reduce((a, b) => a + b, 0) /
-        Math.max(recent.length, 1);
-    const latencyComp = Math.min((pingMs / 1000) * 0.5, 0.15);
+        const pingMs = recent.reduce((a, b) => a + b, 0) / Math.max(recent.length, 1);
+        const latencyComp = Math.min((pingMs / 1000) * 0.5, 0.15);
 
-    let bestDir: Vec2 | null = null;
-    let bestScore = Infinity;
+        let bestDir: Vec2 | null = null;
+        let bestScore = Infinity;
 
-    for (const p of players) {
-        if (!p.active || p.__id === this.m_activeId) continue;
-        if (p.m_netData.m_dead || p.m_netData.m_downed) continue;
-        if (p.layer !== active.layer) continue;
-        if (!this.isWorldPosOnScreen(p.m_pos)) continue;
+        for (const p of players) {
+            if (!p.active || p.__id === this.m_activeId) continue;
+            if (p.m_netData.m_dead || p.m_netData.m_downed) continue;
+            if (p.layer !== active.layer) continue;
+            if (!this.isWorldPosOnScreen(p.m_pos)) continue;
 
-        const info = this.m_playerBarn.getPlayerInfo(p.__id);
-        if (info?.teamId === activeInfo?.teamId) continue;
+            const info = this.m_playerBarn.getPlayerInfo(p.__id);
+            if (info?.teamId === activeInfo?.teamId) continue;
 
-        const toTargetNow = v2.sub(p.m_pos, active.m_pos);
-        const dist = v2.length(toTargetNow);
-        if (dist <= 0.01 || dist > maxDist) continue;
+            const toTargetNow = v2.sub(p.m_pos, active.m_pos);
+            const dist = v2.length(toTargetNow);
+            if (dist <= 0.01 || dist > maxDist) continue;
 
-        
+            const travelTime = dist / bulletSpeed + latencyComp;
 
-        const travelTime = dist / bulletSpeed + latencyComp;
+            const vel = p.m_netData.m_dir ?? v2.create(0, 0);
 
-        const vel = p.m_netData.m_dir ?? v2.create(0, 0);
+            const predictedPos = v2.add(
+                p.m_pos,
+                v2.mul(vel, travelTime * predictionStrength),
+            );
 
-        const predictedPos = v2.add(
-            p.m_pos,
-            v2.mul(vel, travelTime * predictionStrength),
-        );
+            if (this.isPositionInSmoke(predictedPos)) continue;
+            if (
+                this.hasObstacleLineOfSightBlock(active.m_pos, predictedPos, active.layer)
+            )
+                continue;
 
-        if (this.isPositionInSmoke(predictedPos)) continue;
-        if (this.hasObstacleLineOfSightBlock(active.m_pos, predictedPos, active.layer)) continue;
+            const toTarget = v2.sub(predictedPos, active.m_pos);
+            const targetDist = v2.length(toTarget);
+            if (targetDist <= 0.01) continue;
 
-        const toTarget = v2.sub(predictedPos, active.m_pos);
-        const targetDist = v2.length(toTarget);
-        if (targetDist <= 0.01) continue;
+            const targetDir = v2.div(toTarget, targetDist);
 
-        const targetDir = v2.div(toTarget, targetDist);
+            const dot = math.clamp(v2.dot(currentAimDir, targetDir), -1, 1);
+            const angleDeg = math.rad2deg(Math.acos(dot));
 
-        const dot = math.clamp(v2.dot(currentAimDir, targetDir), -1, 1);
-        const angleDeg = math.rad2deg(Math.acos(dot));
+            if (angleDeg > maxAngleDeg) continue;
 
-        if (angleDeg > maxAngleDeg) continue;
+            const score = angleDeg + dist * 0.05;
 
-        const score = angleDeg + dist * 0.05;
-
-        if (score < bestScore) {
-            bestScore = score;
-            bestDir = targetDir;
+            if (score < bestScore) {
+                bestScore = score;
+                bestDir = targetDir;
+            }
         }
+
+        if (!bestDir) return currentAimDir;
+
+        return v2.normalizeSafe(
+            v2.add(v2.mul(currentAimDir, 1 - strength), v2.mul(bestDir, strength)),
+            currentAimDir,
+        );
     }
-
-    if (!bestDir) return currentAimDir;
-
-    return v2.normalizeSafe(
-        v2.add(
-            v2.mul(currentAimDir, 1 - strength),
-            v2.mul(bestDir, strength),
-        ),
-        currentAimDir,
-    );
-}
 
     private isWorldPosOnScreen(pos: Vec2): boolean {
         const screenPos = this.m_camera.m_pointToScreen(pos);
@@ -2080,100 +2107,110 @@ export class Game {
     }
 
     private isPositionInSmoke(pos: Vec2): boolean {
-    const smokes = this.m_smokeBarn.m_smokePool.m_getPool();
+        const smokes = this.m_smokeBarn.m_smokePool.m_getPool();
 
-    for (const smoke of smokes) {
-        if (!smoke.active) continue;
+        for (const smoke of smokes) {
+            if (!smoke.active) continue;
 
-        const smokePos = smoke.m_pos ?? smoke.m_pos;
-        const smokeRad = smoke.m_rad ?? 14;
+            const smokePos = smoke.m_pos ?? smoke.m_pos;
+            const smokeRad = smoke.m_rad ?? 14;
 
-        if (!smokePos) continue;
+            if (!smokePos) continue;
 
-        if (v2.length(v2.sub(pos, smokePos)) <= smokeRad) {
-            return true;
+            if (v2.length(v2.sub(pos, smokePos)) <= smokeRad) {
+                return true;
+            }
         }
+
+        return false;
     }
 
-    return false;
-}
+    private hasObstacleLineOfSightBlock(from: Vec2, to: Vec2, layer: number): boolean {
+        const obstacles = this.m_map.m_obstaclePool.m_getPool();
 
-private hasObstacleLineOfSightBlock(from: Vec2, to: Vec2, layer: number): boolean {
-    const obstacles = this.m_map.m_obstaclePool.m_getPool();
+        for (const obj of obstacles) {
+            if (!obj.active) continue;
+            if (obj.dead || obj.healthT <= 0) continue;
+            if (obj.layer !== layer) continue;
+            if (!obj.collider) continue;
 
-    for (const obj of obstacles) {
-        if (!obj.active) continue;
-        if (obj.dead || obj.healthT <=0) continue;
-        if (obj.layer !== layer) continue;
-        if (!obj.collider) continue;
-
-        if (this.lineIntersectsCollider(from, to, obj.collider, obj.pos)) {
-            return true;
+            if (this.lineIntersectsCollider(from, to, obj.collider, obj.pos)) {
+                return true;
+            }
         }
+
+        return false;
     }
 
-    return false;
-}
+    private lineIntersectsCollider(
+        from: Vec2,
+        to: Vec2,
+        collider: any,
+        objPos: Vec2,
+    ): boolean {
+        const center = collider.pos ? v2.add(objPos, collider.pos) : objPos;
 
-private lineIntersectsCollider(from: Vec2, to: Vec2, collider: any, objPos: Vec2): boolean {
-    const center = collider.pos ? v2.add(objPos, collider.pos) : objPos;
+        if (collider.rad !== undefined) {
+            return this.lineIntersectsCircle(from, to, center, collider.rad);
+        }
 
-    if (collider.rad !== undefined) {
-        return this.lineIntersectsCircle(from, to, center, collider.rad);
+        if (collider.min && collider.max) {
+            const min = v2.add(center, collider.min);
+            const max = v2.add(center, collider.max);
+            return this.lineIntersectsAabb(from, to, min, max);
+        }
+
+        return false;
     }
 
-    if (collider.min && collider.max) {
-        const min = v2.add(center, collider.min);
-        const max = v2.add(center, collider.max);
-        return this.lineIntersectsAabb(from, to, min, max);
+    private lineIntersectsCircle(
+        from: Vec2,
+        to: Vec2,
+        center: Vec2,
+        radius: number,
+    ): boolean {
+        const d = v2.sub(to, from);
+        const f = v2.sub(from, center);
+
+        const a = v2.dot(d, d);
+        const b = 2 * v2.dot(f, d);
+        const c = v2.dot(f, f) - radius * radius;
+
+        const disc = b * b - 4 * a * c;
+        if (disc < 0) return false;
+
+        const sqrtDisc = Math.sqrt(disc);
+        const t1 = (-b - sqrtDisc) / (2 * a);
+        const t2 = (-b + sqrtDisc) / (2 * a);
+
+        return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
     }
 
-    return false;
-}
+    private lineIntersectsAabb(from: Vec2, to: Vec2, min: Vec2, max: Vec2): boolean {
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
 
-private lineIntersectsCircle(from: Vec2, to: Vec2, center: Vec2, radius: number): boolean {
-    const d = v2.sub(to, from);
-    const f = v2.sub(from, center);
+        let tMin = 0;
+        let tMax = 1;
 
-    const a = v2.dot(d, d);
-    const b = 2 * v2.dot(f, d);
-    const c = v2.dot(f, f) - radius * radius;
+        if (Math.abs(dx) < 0.00001) {
+            if (from.x < min.x || from.x > max.x) return false;
+        } else {
+            const tx1 = (min.x - from.x) / dx;
+            const tx2 = (max.x - from.x) / dx;
+            tMin = Math.max(tMin, Math.min(tx1, tx2));
+            tMax = Math.min(tMax, Math.max(tx1, tx2));
+        }
 
-    const disc = b * b - 4 * a * c;
-    if (disc < 0) return false;
+        if (Math.abs(dy) < 0.00001) {
+            if (from.y < min.y || from.y > max.y) return false;
+        } else {
+            const ty1 = (min.y - from.y) / dy;
+            const ty2 = (max.y - from.y) / dy;
+            tMin = Math.max(tMin, Math.min(ty1, ty2));
+            tMax = Math.min(tMax, Math.max(ty1, ty2));
+        }
 
-    const sqrtDisc = Math.sqrt(disc);
-    const t1 = (-b - sqrtDisc) / (2 * a);
-    const t2 = (-b + sqrtDisc) / (2 * a);
-
-    return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
-}
-
-private lineIntersectsAabb(from: Vec2, to: Vec2, min: Vec2, max: Vec2): boolean {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-
-    let tMin = 0;
-    let tMax = 1;
-
-    if (Math.abs(dx) < 0.00001) {
-        if (from.x < min.x || from.x > max.x) return false;
-    } else {
-        const tx1 = (min.x - from.x) / dx;
-        const tx2 = (max.x - from.x) / dx;
-        tMin = Math.max(tMin, Math.min(tx1, tx2));
-        tMax = Math.min(tMax, Math.max(tx1, tx2));
+        return tMax >= tMin;
     }
-
-    if (Math.abs(dy) < 0.00001) {
-        if (from.y < min.y || from.y > max.y) return false;
-    } else {
-        const ty1 = (min.y - from.y) / dy;
-        const ty2 = (max.y - from.y) / dy;
-        tMin = Math.max(tMin, Math.min(ty1, ty2));
-        tMax = Math.min(tMax, Math.max(ty1, ty2));
-    }
-
-    return tMax >= tMin;
-}
 }

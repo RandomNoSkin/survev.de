@@ -4,6 +4,7 @@ import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby"
 import loadout from "../../shared/utils/loadout";
 import { util } from "../../shared/utils/util";
 import { v2 } from "../../shared/utils/v2";
+import type { AdvSpecSettings } from "./ui/advancedSpectator";
 import type { Locale } from "./ui/localization";
 
 export const debugToolsConfig = {
@@ -109,6 +110,18 @@ const defaultConfig = {
     lastNewsTimestamp: 0,
     perkModeRole: "",
     arenaModeRole: "",
+    /** Last-used advanced spectator toggles, re-applied whenever advanced spectator is activated. */
+    advancedSpectatorSettings: {
+        freecam: false,
+        transparentSurfaces: false,
+        enemiesOnMap: false,
+        zoom: false,
+        espLines: false,
+        enemyLabels: false,
+        nadeEsp: false,
+        layer: 0,
+        zoomLevel: 48,
+    } as AdvSpecSettings,
     loadout: loadout.defaultLoadout(),
     /** Per-category instance id of the item last selected in the loadout menu, so the
      *  exact owned copy stays selected across reloads (the loadout itself only stores

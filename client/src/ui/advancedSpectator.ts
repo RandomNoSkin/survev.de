@@ -31,6 +31,33 @@ interface EnemyLabel {
     statsText: PIXI.Text;
 }
 
+/** User-facing advanced spectator toggles persisted across games/sessions (in the client config). */
+export interface AdvSpecSettings {
+    freecam: boolean;
+    transparentSurfaces: boolean;
+    enemiesOnMap: boolean;
+    zoom: boolean;
+    espLines: boolean;
+    enemyLabels: boolean;
+    nadeEsp: boolean;
+    layer: number;
+    zoomLevel: number;
+}
+
+export function defaultAdvSpecSettings(): AdvSpecSettings {
+    return {
+        freecam: false,
+        transparentSurfaces: false,
+        enemiesOnMap: false,
+        zoom: false,
+        espLines: false,
+        enemyLabels: false,
+        nadeEsp: false,
+        layer: 0,
+        zoomLevel: DEFAULT_ZOOM,
+    };
+}
+
 function createLabelText(tint: number) {
     const text = new PIXI.Text("", {
         fontFamily: "Arial",
@@ -93,6 +120,37 @@ export class AdvancedSpectator {
 
     adjustZoom(delta: number) {
         this.zoomLevel = math.clamp(this.zoomLevel + delta, MIN_ZOOM, MAX_ZOOM);
+    }
+
+    /** Snapshot of the persisted toggle settings (excludes session/positional state). */
+    getSettings(): AdvSpecSettings {
+        return {
+            freecam: this.freecam,
+            transparentSurfaces: this.transparentSurfaces,
+            enemiesOnMap: this.enemiesOnMap,
+            zoom: this.zoom,
+            espLines: this.espLines,
+            enemyLabels: this.enemyLabels,
+            nadeEsp: this.nadeEsp,
+            layer: this.layer,
+            zoomLevel: this.zoomLevel,
+        };
+    }
+
+    /** Applies persisted settings (e.g. when advanced spectator is (re)activated). */
+    applySettings(s?: Partial<AdvSpecSettings> | null): void {
+        if (!s) return;
+        if (typeof s.freecam === "boolean") this.freecam = s.freecam;
+        if (typeof s.transparentSurfaces === "boolean")
+            this.transparentSurfaces = s.transparentSurfaces;
+        if (typeof s.enemiesOnMap === "boolean") this.enemiesOnMap = s.enemiesOnMap;
+        if (typeof s.zoom === "boolean") this.zoom = s.zoom;
+        if (typeof s.espLines === "boolean") this.espLines = s.espLines;
+        if (typeof s.enemyLabels === "boolean") this.enemyLabels = s.enemyLabels;
+        if (typeof s.nadeEsp === "boolean") this.nadeEsp = s.nadeEsp;
+        if (typeof s.layer === "number") this.layer = s.layer;
+        if (typeof s.zoomLevel === "number")
+            this.zoomLevel = math.clamp(s.zoomLevel, MIN_ZOOM, MAX_ZOOM);
     }
 
     private getLabel(index: number): EnemyLabel {
