@@ -1,9 +1,14 @@
 import * as PIXI from "pixi.js-legacy";
+import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { ExplosionDefs } from "../../../shared/defs/gameObjects/explosionsDefs";
+import type { ThrowableDef } from "../../../shared/defs/gameObjects/throwableDefs";
+import { GameConfig } from "../../../shared/gameConfig";
 import { math } from "../../../shared/utils/math";
 import { type Vec2, v2 } from "../../../shared/utils/v2";
 import type { Camera } from "../camera";
 import { device } from "../device";
 import type { PlayerBarn } from "../objects/player";
+import type { ProjectileBarn } from "../objects/projectile";
 
 // Colour used for ESP lines / enemy name labels. Enemies are always shown red
 // regardless of game mode so they read clearly against the world.
@@ -11,6 +16,8 @@ const ENEMY_COLOR = 0xff4d4d;
 // Name colour for the spectated player's own label (shown only in freecam, where
 // the camera has left them). Green so it reads as "not an enemy".
 const SPECTATED_COLOR = 0x66ff7a;
+// Colour for grenade fuse timers + explosion-radius rings.
+const NADE_COLOR = 0xffcc33;
 
 // Default / clamp range for the requested culling-zoom radius (sent to the
 // server). Kept in sync with the server-side clamp in player.ts.
@@ -58,6 +65,8 @@ export class AdvancedSpectator {
     zoom = false;
     espLines = false;
     enemyLabels = false;
+    // Show fuse timers + explosion-radius rings on thrown grenades.
+    nadeEsp = false;
 
     /** Render layer the spectator is viewing (0 = surface, 1 = underground). */
     layer = 0;
@@ -75,6 +84,7 @@ export class AdvancedSpectator {
     container = new PIXI.Container();
     private espGfx = new PIXI.Graphics();
     private labelPool: EnemyLabel[] = [];
+    private nadeTextPool: PIXI.Text[] = [];
 
     constructor() {
         this.container.interactiveChildren = false;
@@ -103,13 +113,33 @@ export class AdvancedSpectator {
         return label;
     }
 
-    m_render(camera: Camera, playerBarn: PlayerBarn, activeId: number, localId: number) {
+    private getNadeText(index: number): PIXI.Text {
+        let text = this.nadeTextPool[index];
+        if (!text) {
+            // White fill so the per-render NADE_COLOR tint shows.
+            text = createLabelText(0xffffff);
+            this.container.addChild(text);
+            this.nadeTextPool[index] = text;
+        }
+        return text;
+    }
+
+    m_render(
+        camera: Camera,
+        playerBarn: PlayerBarn,
+        projectileBarn: ProjectileBarn,
+        activeId: number,
+        localId: number,
+    ) {
         this.espGfx.clear();
         for (const label of this.labelPool) {
             label.container.visible = false;
         }
+        for (const text of this.nadeTextPool) {
+            text.visible = false;
+        }
 
-        if (!this.enabled || (!this.espLines && !this.enemyLabels)) {
+        if (!this.enabled || (!this.espLines && !this.enemyLabels && !this.nadeEsp)) {
             this.container.visible = false;
             return;
         }
@@ -128,11 +158,15 @@ export class AdvancedSpectator {
                 continue;
             }
             const info = playerBarn.getPlayerInfo(p.__id);
-            // teammates share a teamId; everyone else is an enemy
+            // teammates share a teamId with the spectated player; everyone else
+            // is an enemy. We label both, so the spectator also sees the info of
+            // the watched player's squad (not just enemies).
             const isEnemy = info.teamId !== activeTeamId;
-            // In freecam the camera leaves the spectated player, so label them too.
-            const isSpectated = p.__id === activeId && this.freecam;
-            if (!isEnemy && !isSpectated) {
+            // Don't double-label the followed player in normal mode — the HUD
+            // already shows them. In freecam the camera has left them, so we do
+            // want their label.
+            const isFollowed = p.__id === activeId && !this.freecam;
+            if (isFollowed) {
                 continue;
             }
 
@@ -156,6 +190,89 @@ export class AdvancedSpectator {
                 label.nameText.text = info.name;
                 label.nameText.tint = isEnemy ? ENEMY_COLOR : SPECTATED_COLOR;
                 label.statsText.text = `HP ${hp}  AD ${boost}`;
+            }
+        }
+
+        if (this.nadeEsp) {
+            const projectiles = projectileBarn.projectilePool.m_getPool();
+            let nadeIdx = 0;
+            for (let i = 0; i < projectiles.length; i++) {
+                const p = projectiles[i];
+                if (!p.active) continue;
+                const def = GameObjectDefs[p.type] as ThrowableDef | undefined;
+                // Only timed grenades: skip impact/mine/very-long-fuse throwables
+                // (snowball, potato, proximity mines, ...).
+                if (
+                    !def ||
+                    def.type !== "throwable" ||
+                    def.explodeOnImpact ||
+                    def.proximityMine ||
+                    def.fuseTime > 16
+                ) {
+                    continue;
+                }
+
+                const screenPos = camera.m_pointToScreen(p.pos);
+
+                // Explosion radius rings (inner = full damage, outer = falloff edge).
+                const explosion = ExplosionDefs[def.explosionType];
+                if (explosion) {
+                    this.espGfx.lineStyle(1.5, NADE_COLOR, 0.5);
+                    this.espGfx.drawCircle(
+                        screenPos.x,
+                        screenPos.y,
+                        camera.m_scaleToScreen(explosion.rad.max),
+                    );
+                    this.espGfx.lineStyle(1, NADE_COLOR, 0.85);
+                    this.espGfx.drawCircle(
+                        screenPos.x,
+                        screenPos.y,
+                        camera.m_scaleToScreen(explosion.rad.min),
+                    );
+                }
+
+                const text = this.getNadeText(nadeIdx++);
+                text.visible = true;
+                text.position.set(screenPos.x, screenPos.y);
+                text.text = p.fuseTimer.toFixed(1);
+                text.tint = NADE_COLOR;
+            }
+
+            // Cooking grenades aren't projectiles yet — they're held in the
+            // player's hand. Show the remaining fuse over any player playing the
+            // Cook animation with a cookable timed grenade equipped. The cook
+            // ticker (anim.ticker) mirrors how long the pin has been pulled.
+            for (let i = 0; i < players.length; i++) {
+                const p = players[i];
+                if (
+                    !p.active ||
+                    p.__id === localId ||
+                    p.m_netData.m_dead ||
+                    p.currentAnim() !== GameConfig.Anim.Cook
+                ) {
+                    continue;
+                }
+                const def = GameObjectDefs[p.m_netData.m_activeWeapon] as
+                    | ThrowableDef
+                    | undefined;
+                if (
+                    !def ||
+                    def.type !== "throwable" ||
+                    !def.cookable ||
+                    def.explodeOnImpact ||
+                    def.proximityMine ||
+                    def.fuseTime > 16
+                ) {
+                    continue;
+                }
+
+                const remaining = Math.max(0, def.fuseTime - p.anim.ticker);
+                const screenPos = camera.m_pointToScreen(p.m_visualPos);
+                const text = this.getNadeText(nadeIdx++);
+                text.visible = true;
+                text.position.set(screenPos.x, screenPos.y);
+                text.text = remaining.toFixed(1);
+                text.tint = NADE_COLOR;
             }
         }
     }

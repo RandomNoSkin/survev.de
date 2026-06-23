@@ -188,6 +188,9 @@ export class UiManager {
     // Advanced spectator (admin only)
     specAdvancedButton = $("#btn-spectate-advanced");
     specAdvancedOptions = $("#ui-spectate-advanced-options");
+    specAdvancedList = $("#ui-spectate-advanced-list");
+    advCollapseButton = $("#btn-adv-collapse");
+    advCollapsed = false;
     advFreecamButton = $("#btn-adv-freecam");
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");
@@ -195,6 +198,7 @@ export class UiManager {
     advEnemiesMapButton = $("#btn-adv-enemies-map");
     advEspButton = $("#btn-adv-esp");
     advLabelsButton = $("#btn-adv-labels");
+    advNadesButton = $("#btn-adv-nades");
 
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
@@ -473,6 +477,14 @@ export class UiManager {
         });
         advToggle(this.advLabelsButton, () => {
             this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
+        });
+        advToggle(this.advNadesButton, () => {
+            this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        });
+        // Collapse only hides the option list; the enabled features keep running.
+        this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
+            this.advCollapsed = !this.advCollapsed;
+            this.updateAdvancedSpectatorUi();
         });
 
         // Touch specific buttons
@@ -2184,7 +2196,12 @@ export class UiManager {
             if (this.spectating) {
                 this.spectateMode.css("display", "block");
                 $(".ui-zoom").removeClass("ui-zoom-hover");
-                const hideSpec = teamMode == TeamMode.Solo;
+                // Advanced spectators (admins / dev) may cycle through every
+                // player, so keep the next/prev buttons available even in solo
+                // (also works while freecam is active — the weapon HUD follows
+                // whichever player is selected).
+                const hideSpec =
+                    teamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
                 this.specPrevButton.css("display", hideSpec ? "none" : "block");
                 this.specNextButton.css("display", hideSpec ? "none" : "block");
                 this.hideStats();
@@ -2216,6 +2233,13 @@ export class UiManager {
 
         this.specAdvancedButton.toggleClass("active", advSpec.enabled);
         this.specAdvancedOptions.css("display", advSpec.enabled ? "inline-block" : "none");
+        // The collapse header is shown when the mode is enabled; it toggles the
+        // visibility of the option list without disabling any active feature.
+        this.specAdvancedList.css(
+            "display",
+            advSpec.enabled && !this.advCollapsed ? "block" : "none",
+        );
+        this.advCollapseButton.html(this.advCollapsed ? "▸ Options" : "▾ Options");
         this.advFreecamButton.toggleClass("active", advSpec.freecam);
         this.advZoomButton.toggleClass("active", advSpec.zoom);
         this.advLayerButton.toggleClass("active", advSpec.layer === 1);
@@ -2223,6 +2247,7 @@ export class UiManager {
         this.advEnemiesMapButton.toggleClass("active", advSpec.enemiesOnMap);
         this.advEspButton.toggleClass("active", advSpec.espLines);
         this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
+        this.advNadesButton.toggleClass("active", advSpec.nadeEsp);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {

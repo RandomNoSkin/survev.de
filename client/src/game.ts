@@ -1246,6 +1246,7 @@ export class Game {
         this.m_advSpec.m_render(
             this.m_camera,
             this.m_playerBarn,
+            this.m_projectileBarn,
             this.m_activeId,
             this.m_localId,
         );
