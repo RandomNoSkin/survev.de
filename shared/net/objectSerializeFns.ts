@@ -169,6 +169,9 @@ export interface ObjectsFullData {
     [ObjectType.Projectile]: {
         type: string;
         layer: number;
+        // Remaining fuse time (seconds) at the moment this full update is sent.
+        // Used by the admin advanced-spectator overlay to show a grenade timer.
+        fuseTime: number;
     };
     [ObjectType.Smoke]: {
         layer: number;
@@ -583,6 +586,10 @@ export const ObjectSerializeFns: {
         serializeFull: (s, data) => {
             s.writeGameType(data.type);
             s.writeBits(data.layer, 2);
+            // Clamp to 0..16s (8 bits ~= 0.06s resolution). Non-grenade
+            // throwables (snowball/potato with fuseTime 9999, mines with 300)
+            // saturate at 16 — harmless, the overlay never shows their timer.
+            s.writeFloat(Math.max(0, Math.min(16, data.fuseTime)), 0, 16, 8);
         },
         /* STRIP_FROM_PROD_CLIENT:END */
 
@@ -595,6 +602,7 @@ export const ObjectSerializeFns: {
         deserializeFull: (s, data) => {
             data.type = s.readGameType();
             data.layer = s.readBits(2);
+            data.fuseTime = s.readFloat(0, 16, 8);
         },
     },
     [ObjectType.Smoke]: {
