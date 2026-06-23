@@ -395,6 +395,42 @@ export interface ConfigType {
     };
 
     /**
+     * Game recording / replay configuration.
+     *
+     * When enabled, the game server records the exact server -> client byte stream
+     * per (real) player to gzipped `.svrep.gz` files on the game host's local disk.
+     * They are browsable + replayable from the moderation dashboard "Replays" tab.
+     *
+     * IMPORTANT (small/OOM-prone boxes): recording streams straight to disk and never
+     * buffers a whole match in RAM. The caps below bound disk/CPU/RAM — keep them
+     * conservative. Set `enabled: false` to disable recording entirely (zero overhead).
+     */
+    recording: {
+        /** Master on/off switch. */
+        enabled: boolean;
+        /** Record bot POVs too. Off by default — bots produce huge, useless recordings. */
+        recordBots: boolean;
+        /**
+         * Directory recordings are written to (per game host). Relative paths are
+         * resolved against the server working directory.
+         */
+        dir: string;
+        /** Stop a single player's recording once it exceeds this size (MB). */
+        maxGameMb: number;
+        /** Max simultaneously-recording player tracks per game process. */
+        maxConcurrentTracks: number;
+        /**
+         * If a track's gzip write stream backs up beyond this many buffered bytes
+         * (disk can't keep up), that track is stopped instead of buffering in RAM.
+         */
+        writeBackpressureBytes: number;
+        /** Retention: total recordings dir size cap (GB). Oldest games deleted first. */
+        maxTotalGb: number;
+        /** Retention: delete recordings older than this many days. */
+        maxAgeDays: number;
+    };
+
+    /**
      * Overrides default items players spawn with, mostly for development.
      * Account loadouts and mode spawn items (eg from cobalt) can still override this!
      */

@@ -25,12 +25,13 @@ import {
 import { server } from "./apiServer";
 import { deleteExpiredSessions, validateSessionToken } from "./auth";
 import { rateLimitMiddleware, validateParams } from "./auth/middleware";
-import type { SessionTableSelect, UsersTableSelect } from "./db/schema";
-import { reconcileAllPasses } from "./db/passReconcile";
-import { backfillPassItemGrants } from "./db/passGrants";
 import { expireOldListings } from "./db/market";
-import { cleanupOldLogs, isBanned } from "./routes/private/ModerationRouter";
+import { backfillPassItemGrants } from "./db/passGrants";
+import { reconcileAllPasses } from "./db/passReconcile";
+import type { SessionTableSelect, UsersTableSelect } from "./db/schema";
+import { verifyReplayToken } from "./replayToken";
 import { ModerationDashboardRouter } from "./routes/ModerationDashboardRouter";
+import { cleanupOldLogs, isBanned } from "./routes/private/ModerationRouter";
 import { PrivateRouter } from "./routes/private/private";
 import { StatsRouter } from "./routes/stats/StatsRouter";
 import { AuthRouter } from "./routes/user/AuthRouter";
@@ -88,6 +89,57 @@ app.get("/api/site_info", (c) => {
     return c.json<SiteInfoRes>(server.getSiteInfo(), 200);
 });
 
+/**
+ * Lists the available player POVs for the game a replay token was minted for, so the
+ * client can let the viewer switch between them (arrow keys / buttons).
+ */
+app.get("/api/replay/povs", async (c) => {
+    const data = verifyReplayToken(c.req.query("token") ?? "");
+    if (!data) {
+        return c.json({ error: "invalid_or_expired_token" }, 403);
+    }
+    const recordings = await server.listReplays(data.region);
+    const rec = recordings.find((r: any) => r.gameId === data.gameId);
+    if (!rec) {
+        return c.json({ error: "not_found" }, 404);
+    }
+    return c.json({
+        gameId: rec.gameId,
+        mapName: rec.mapName,
+        teamMode: rec.teamMode,
+        players: (rec.players ?? []).map((p: any) => ({
+            playerId: p.playerId,
+            playerName: p.playerName,
+        })),
+    });
+});
+
+/**
+ * Public, token-gated replay file download (used by the game client in replay mode).
+ * The token is minted by the admin-only dashboard, so this needs no session cookie —
+ * which lets the client fetch it cross-origin. The token is game-scoped; the specific
+ * POV is chosen via `playerId`. Returns the raw `.svrep.gz` bytes; the client gunzips
+ * them with `DecompressionStream`.
+ */
+app.get("/api/replay", async (c) => {
+    const data = verifyReplayToken(c.req.query("token") ?? "");
+    if (!data) {
+        return c.json({ error: "invalid_or_expired_token" }, 403);
+    }
+    const playerId = Number(c.req.query("playerId"));
+    if (!Number.isFinite(playerId)) {
+        return c.json({ error: "invalid_player" }, 400);
+    }
+    const file = await server.streamReplayFile(data.region, data.gameId, playerId);
+    if (!file) {
+        return c.json({ error: "not_found" }, 404);
+    }
+    return c.body(file, 200, {
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "private, max-age=3600",
+    });
+});
+
 // not using the middleware here to not add extra indentation... smh
 const findGameRateLimit = new HTTPRateLimit(5, 3000);
 
@@ -131,7 +183,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
         }
     }
 
-    if (!user && await isBehindProxy(ip, 3)) {
+    if (!user && (await isBehindProxy(ip, 3))) {
         return c.json<FindGameResponse>({ error: "behind_proxy" });
     }
 
@@ -199,37 +251,36 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
 
 const zRegionOnly = z.object({ region: z.string() });
 const zFindSpectator = z.object({
-  region: z.string(),
-  version: z.number().optional(),
-  zones: z.array(z.string()).optional(),
-  gameModeIdx: z.number().optional(),
-  appsid: z.string().optional(),
-  gameId: z.string().optional(),
+    region: z.string(),
+    version: z.number().optional(),
+    zones: z.array(z.string()).optional(),
+    gameModeIdx: z.number().optional(),
+    appsid: z.string().optional(),
+    gameId: z.string().optional(),
 });
 const zFindGameById = z.object({
-  region: z.string(),
-  gameId: z.string(),
-  version: z.number().optional(),
+    region: z.string(),
+    gameId: z.string(),
+    version: z.number().optional(),
 });
 
 // /api/game_infos
 app.post("/api/game_infos", validateParams(zRegionOnly), async (c) => {
-  const body = c.req.valid("json");
-  const data = await server.collectGameInfos(body.region);
-  return c.json(data);
+    const body = c.req.valid("json");
+    const data = await server.collectGameInfos(body.region);
+    return c.json(data);
 });
 
 // /api/find_spectator_game
 app.post("/api/find_spectator_game", validateParams(zFindSpectator), async (c) => {
-  const body = c.req.valid("json");
-  const data = await server.findSpectatorGame(body);
-  return c.json(data);
+    const body = c.req.valid("json");
+    const data = await server.findSpectatorGame(body);
+    return c.json(data);
 });
 
 // /api/find_game_by_id
 app.post("/api/find_game_by_id", validateParams(zFindGameById), async (c) => {
-
-  const ip = getHonoIp(c, Config.apiServer.proxyIPHeader);
+    const ip = getHonoIp(c, Config.apiServer.proxyIPHeader);
 
     if (!ip) {
         return c.json<FindGameResponse>({ error: "invalid_ip" }, 500);
@@ -268,17 +319,16 @@ app.post("/api/find_game_by_id", validateParams(zFindGameById), async (c) => {
         }
     }
 
-    if (!user && await isBehindProxy(ip, 3)) {
+    if (!user && (await isBehindProxy(ip, 3))) {
         return c.json<FindGameResponse>({ error: "behind_proxy" });
     }
 
     const body = c.req.valid("json");
     const admin = user?.admin ?? false;
 
-  const data = await server.findGameById(body.region, body.gameId, admin);
-  return c.json(data);
+    const data = await server.findGameById(body.region, body.gameId, admin);
+    return c.json(data);
 });
-
 
 app.post(
     "/api/report_error",
@@ -324,13 +374,16 @@ setInterval(() => {
 
 // Take back marketplace listings older than their 24h TTL, freeing the item to be
 // re-listed. Reads are already cutoff-guarded, so this just keeps the DB state truthful.
-setInterval(() => {
-    expireOldListings()
-        .then((n) => {
-            if (n > 0) server.logger.info(`Expired ${n} stale market listings`);
-        })
-        .catch((err) => server.logger.error("Failed to expire market listings", err));
-}, 10 * 60 * 1000);
+setInterval(
+    () => {
+        expireOldListings()
+            .then((n) => {
+                if (n > 0) server.logger.info(`Expired ${n} stale market listings`);
+            })
+            .catch((err) => server.logger.error("Failed to expire market listings", err));
+    },
+    10 * 60 * 1000,
+);
 
 // One-time backfill of pass item grants for existing accounts (no-op after the
 // first run). Must finish before requests are served so the new grant logic doesn't

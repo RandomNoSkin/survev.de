@@ -97,30 +97,74 @@ class Region {
     // in class Region
     /** @param admin When true, includes private lobby matches with "Public Spectating" disabled (for the moderation dashboard). */
     async collectGameInfos(admin = false): Promise<any> {
-    const data = await this.fetch<any>("api/game_infos", { region: this.id, admin });
-    return data ?? { error: "game_infos_failed" };
+        const data = await this.fetch<any>("api/game_infos", { region: this.id, admin });
+        return data ?? { error: "game_infos_failed" };
     }
 
     async findSpectatorGame(body: any): Promise<any> {
-    const data = await this.fetch<any>("api/find_spectator_game", body);
-    return data ?? { error: "find_spectator_game_failed" };
+        const data = await this.fetch<any>("api/find_spectator_game", body);
+        return data ?? { error: "find_spectator_game_failed" };
     }
 
     /** Fetches live player list for a game from the game server (for the moderation dashboard). */
     async getDashboardGamePlayers(gameId: string): Promise<any[]> {
-        const data = await this.fetch<{ players: any[] }>("api/dashboard/game_players", { gameId });
+        const data = await this.fetch<{ players: any[] }>("api/dashboard/game_players", {
+            gameId,
+        });
         return data?.players ?? [];
     }
 
     /** Fetches the recent kill feed buffer for a game from the game server (for the moderation dashboard). */
     async getDashboardGameFeed(gameId: string): Promise<any[]> {
-        const data = await this.fetch<{ entries: any[] }>("api/dashboard/game_feed", { gameId });
+        const data = await this.fetch<{ entries: any[] }>("api/dashboard/game_feed", {
+            gameId,
+        });
         return data?.entries ?? [];
+    }
+
+    /** Lists replay recordings stored on this region's game server (from each game's meta.json). */
+    async listReplays(): Promise<any[]> {
+        const data = await this.fetch<{ recordings: any[] }>("api/dashboard/replays", {});
+        return data?.recordings ?? [];
+    }
+
+    /** Fetches one per-player replay file (raw gzip bytes) from this region's game server. */
+    async streamReplayFile(
+        gameId: string,
+        playerId: number,
+    ): Promise<ArrayBuffer | null> {
+        const url = `http${this.data.https ? "s" : ""}://${this.data.address}/api/dashboard/replay_file`;
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    "survev-api-key": Config.secrets.SURVEV_API_KEY,
+                },
+                body: JSON.stringify({ gameId, playerId }),
+                signal: AbortSignal.timeout(REGION_FETCH_TIMEOUT_MS),
+            });
+            if (!res.ok) return null;
+            // A JSON content-type here means an error payload (e.g. not_found), not the file.
+            if ((res.headers.get("content-type") ?? "").includes("application/json")) {
+                return null;
+            }
+            return await res.arrayBuffer();
+        } catch (err) {
+            defaultLogger.error(
+                `Error fetching replay file from region ${this.id}:`,
+                err,
+            );
+            return null;
+        }
     }
 
     /** Sends an admin command to a running game on this region's game server. */
     async sendDashboardGameCmd(gameId: string, cmd: object): Promise<boolean> {
-        const data = await this.fetch<{ ok: boolean }>("api/dashboard/game_cmd", { gameId, cmd });
+        const data = await this.fetch<{ ok: boolean }>("api/dashboard/game_cmd", {
+            gameId,
+            cmd,
+        });
         return data?.ok ?? false;
     }
 
@@ -130,16 +174,21 @@ class Region {
         await this.fetch("api/dashboard/set_server_verified", { state });
     }
 
-    async findGameById(gameId: string, admin: boolean,): Promise<any> {
-    const data = await this.fetch<any>("api/find_game_by_id", { region: this.id, gameId, admin });
-    return data ?? { error: "find_game_by_id_failed" };
+    async findGameById(gameId: string, admin: boolean): Promise<any> {
+        const data = await this.fetch<any>("api/find_game_by_id", {
+            region: this.id,
+            gameId,
+            admin,
+        });
+        return data ?? { error: "find_game_by_id_failed" };
     }
 
     async getModes(): Promise<any[]> {
-    const data = await this.fetch<{ data: any[] }>("api/get_modes", { region: this.id });
-    return data?.data ?? [];
-}
-
+        const data = await this.fetch<{ data: any[] }>("api/get_modes", {
+            region: this.id,
+        });
+        return data?.data ?? [];
+    }
 }
 
 interface RegionData {
@@ -173,9 +222,10 @@ export class ApiServer {
     }
 
     getSiteInfo(region?: string): SiteInfoRes {
-        const selectedRegion = region && this.modesByRegion[region]?.length
-        ? region
-        : Object.keys(this.modesByRegion)[0];
+        const selectedRegion =
+            region && this.modesByRegion[region]?.length
+                ? region
+                : Object.keys(this.modesByRegion)[0];
         const data: SiteInfoRes = {
             modes: this.modesByRegion[selectedRegion] ?? [],
             modesByRegion: this.modesByRegion,
@@ -222,20 +272,20 @@ export class ApiServer {
     }
 
     async collectGameInfos(region: string) {
-    const r = this.regions[region];
-    if (!r) return { error: "Invalid Region" };
+        const r = this.regions[region];
+        if (!r) return { error: "Invalid Region" };
         return await r.collectGameInfos();
     }
 
     async findSpectatorGame(body: any) {
-    const r = this.regions[body.region];
-    if (!r) return { error: "Invalid Region" };
+        const r = this.regions[body.region];
+        if (!r) return { error: "Invalid Region" };
         return await r.findSpectatorGame(body);
     }
 
     async findGameById(region: string, gameId: string, admin: boolean) {
-    const r = this.regions[region];
-    if (!r) return { error: "Invalid Region" };
+        const r = this.regions[region];
+        if (!r) return { error: "Invalid Region" };
         return await r.findGameById(gameId, admin);
     }
 
@@ -250,13 +300,31 @@ export class ApiServer {
     }
 
     /** Sends an admin command to a running game in the given region. */
-    async sendDashboardGameCmd(region: string, gameId: string, cmd: object): Promise<boolean> {
+    async sendDashboardGameCmd(
+        region: string,
+        gameId: string,
+        cmd: object,
+    ): Promise<boolean> {
         return (await this.regions[region]?.sendDashboardGameCmd(gameId, cmd)) ?? false;
     }
 
     /** Sets verified-only mode on all games (running + future) in the given region. */
     async setServerVerified(region: string, state: boolean): Promise<void> {
         await this.regions[region]?.setServerVerified(state);
+    }
+
+    /** Lists replay recordings stored on a region's game server. */
+    async listReplays(region: string): Promise<any[]> {
+        return (await this.regions[region]?.listReplays()) ?? [];
+    }
+
+    /** Fetches a per-player replay file (raw gzip bytes) from a region's game server. */
+    async streamReplayFile(
+        region: string,
+        gameId: string,
+        playerId: number,
+    ): Promise<ArrayBuffer | null> {
+        return (await this.regions[region]?.streamReplayFile(gameId, playerId)) ?? null;
     }
 
     async refreshRegionModes() {
@@ -271,7 +339,6 @@ export class ApiServer {
             }
         }
     }
-
 }
 
 export const server = new ApiServer();

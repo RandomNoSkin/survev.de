@@ -5,15 +5,16 @@ import path from "node:path";
 import { Cron } from "croner";
 import { randomUUID } from "crypto";
 import { version } from "../../package.json";
-import { TeamMode, GameConfig } from "../../shared/gameConfig";
 import { MapDefs } from "../../shared/defs/mapDefs";
+import { GameConfig, TeamMode } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { Config } from "./config";
 import { SingleThreadGameManager } from "./game/gameManager";
 import { GameProcessManager } from "./game/gameProcessManager";
+import { listRecordings, readRecordingFile } from "./game/recording/gameRecorder";
+import { errorLogger, gameLogger } from "./utils/betterLogger";
 import { GIT_VERSION } from "./utils/gitRevision";
 import { ServerLogger } from "./utils/logger";
-import { errorLogger, gameLogger } from "./utils/betterLogger";
 import {
     apiPrivateRouter,
     cors,
@@ -42,9 +43,7 @@ process.on("uncaughtException", async (err) => {
     // Log the full stack (not just the Error object) so file logs actually
     // pinpoint the crash source instead of an opaque "[object Error]".
     const details =
-        err instanceof Error
-            ? err.stack ?? err.message
-            : JSON.stringify(err);
+        err instanceof Error ? (err.stack ?? err.message) : JSON.stringify(err);
 
     gameLogger.error(`Uncaught Exception: ${details}`);
     errorLogger.error(`Uncaught Exception: ${details}`);
@@ -60,7 +59,9 @@ process.on("uncaughtException", async (err) => {
 // keep serving instead.
 process.on("unhandledRejection", (reason) => {
     const details =
-        reason instanceof Error ? (reason.stack ?? reason.message) : JSON.stringify(reason);
+        reason instanceof Error
+            ? (reason.stack ?? reason.message)
+            : JSON.stringify(reason);
 
     gameLogger.error(`Unhandled Rejection: ${details}`);
     errorLogger.error(`Unhandled Rejection: ${details}`);
@@ -180,7 +181,9 @@ class GameServer {
         }
 
         if (!isValidTeamMode(data.teamMode)) {
-            this.logger.warn(`/api/find_private_game: Invalid teamMode: ${data.teamMode}`);
+            this.logger.warn(
+                `/api/find_private_game: Invalid teamMode: ${data.teamMode}`,
+            );
             return {
                 error: "invalid_team_mode",
             };
@@ -281,14 +284,12 @@ class GameServer {
             }
         }
     }
-    async updateApiModes(){
+    async updateApiModes() {
         try {
-            const apiRes = await apiPrivateRouter.update_modes.$post({
-
-            });
-                if (apiRes.ok) {
-                    return true;
-                }
+            const apiRes = await apiPrivateRouter.update_modes.$post({});
+            if (apiRes.ok) {
+                return true;
+            }
         } catch (err) {
             this.logger.error(`Failed to update API modes: `, err);
         }
@@ -505,38 +506,33 @@ app.post("/api/find_game_by_id", async (res, req) => {
                 const admin = body.admin;
 
                 const playerData = [
-                {
-                    token,
-                    ip,
-                    admin,
-                },
+                    {
+                        token,
+                        ip,
+                        admin,
+                    },
                 ];
 
-                const game = await server.manager.findGameById(
-                gameId,
-                playerData,
-                false,
-                );
+                const game = await server.manager.findGameById(gameId, playerData, false);
 
                 if (!game) {
-                returnJson(res, { err: "Invalid gameId" });
-                return;
+                    returnJson(res, { err: "Invalid gameId" });
+                    return;
                 }
                 if (res.aborted) return;
 
                 returnJson(res, {
-                res: [
-                    {
-                    zone: "",
-                    data: token,
-                    gameId,
-                    useHttps: server.region.https,
-                    hosts: [server.region.address],
-                    addrs: [server.region.address],
-                    },
-                ],
+                    res: [
+                        {
+                            zone: "",
+                            data: token,
+                            gameId,
+                            useHttps: server.region.https,
+                            hosts: [server.region.address],
+                            addrs: [server.region.address],
+                        },
+                    ],
                 });
-
             } catch (error) {
                 server.logger.warn("API find_game_by_id error: ", error);
             }
@@ -591,7 +587,10 @@ app.post("/api/game_infos", async (res, req) => {
 
                 const isAdmin = body?.admin === true;
                 const data = (Array.isArray(games) ? games : [])
-                    .filter((g: any) => isAdmin || !g.isPrivate || g.publicSpectating !== false)
+                    .filter(
+                        (g: any) =>
+                            isAdmin || !g.isPrivate || g.publicSpectating !== false,
+                    )
                     .map((g: any) => ({
                         id: g.id,
                         teamMode: g.teamMode,
@@ -600,9 +599,10 @@ app.post("/api/game_infos", async (res, req) => {
                         runtime: g.startedTime,
                         stopped: g.stopped ?? false,
                         verifiedOnly: g.verifiedOnly ?? false,
-                    })).filter((g: any) => g.id);
+                    }))
+                    .filter((g: any) => g.id);
 
-                    if(res.aborted) return;
+                if (res.aborted) return;
                 returnJson(res, { data });
             } catch (error) {
                 server.logger.warn("API game_infos error: ", error);
@@ -614,7 +614,6 @@ app.post("/api/game_infos", async (res, req) => {
         },
     );
 });
-
 
 app.options("/api/find_spectator_game", (res) => {
     cors(res);
@@ -684,9 +683,15 @@ app.post("/api/find_spectator_game", (res, req) => {
                 }
 
                 // Otherwise, pick any running game (simple heuristic)
-                const games = (server.manager as any).getGames?.() ?? (server.manager as any).games ?? [];
-                const pick = (Array.isArray(games) ? games : []).find((g: any) => !g.stopped && (g.playerCount ?? g.players?.length ?? 0) > 0)
-                    ?? (Array.isArray(games) ? games : [])[0];
+                const games =
+                    (server.manager as any).getGames?.() ??
+                    (server.manager as any).games ??
+                    [];
+                const pick =
+                    (Array.isArray(games) ? games : []).find(
+                        (g: any) =>
+                            !g.stopped && (g.playerCount ?? g.players?.length ?? 0) > 0,
+                    ) ?? (Array.isArray(games) ? games : [])[0];
 
                 if (!pick?.id) {
                     returnJson(res, { err: "No Spectatable game" });
@@ -724,85 +729,187 @@ app.post("/api/find_spectator_game", (res, req) => {
 
 /** Returns the live player list for a specific game. */
 app.post("/api/dashboard/game_players", (res, req) => {
-    res.onAborted(() => { res.aborted = true; });
+    res.onAborted(() => {
+        res.aborted = true;
+    });
 
     if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
         forbidden(res);
         return;
     }
 
-    readPostedJSON(res, async (body: any) => {
-        if (res.aborted) return;
-        const { gameId } = body ?? {};
-        if (typeof gameId !== "string") { returnJson(res, { error: "missing gameId" }); return; }
-        const players = await server.manager.getGamePlayers(gameId);
-        if (res.aborted) return;
-        returnJson(res, { players });
-    }, () => {
-        if (!res.aborted) returnJson(res, { error: "body error" });
-    });
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const { gameId } = body ?? {};
+            if (typeof gameId !== "string") {
+                returnJson(res, { error: "missing gameId" });
+                return;
+            }
+            const players = await server.manager.getGamePlayers(gameId);
+            if (res.aborted) return;
+            returnJson(res, { players });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
 });
 
 /** Returns the recent kill feed buffer for a specific running game. */
 app.post("/api/dashboard/game_feed", (res, req) => {
-    res.onAborted(() => { res.aborted = true; });
+    res.onAborted(() => {
+        res.aborted = true;
+    });
 
     if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
         forbidden(res);
         return;
     }
 
-    readPostedJSON(res, async (body: any) => {
-        if (res.aborted) return;
-        const { gameId } = body ?? {};
-        if (typeof gameId !== "string") { returnJson(res, { error: "missing gameId" }); return; }
-        const entries = await server.manager.getGameFeed(gameId);
-        if (res.aborted) return;
-        returnJson(res, { entries });
-    }, () => {
-        if (!res.aborted) returnJson(res, { error: "body error" });
-    });
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const { gameId } = body ?? {};
+            if (typeof gameId !== "string") {
+                returnJson(res, { error: "missing gameId" });
+                return;
+            }
+            const entries = await server.manager.getGameFeed(gameId);
+            if (res.aborted) return;
+            returnJson(res, { entries });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
 });
 
 /** Executes an admin command on a specific running game. */
 app.post("/api/dashboard/game_cmd", (res, req) => {
-    res.onAborted(() => { res.aborted = true; });
+    res.onAborted(() => {
+        res.aborted = true;
+    });
 
     if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
         forbidden(res);
         return;
     }
 
-    readPostedJSON(res, (body: any) => {
-        if (res.aborted) return;
-        const { gameId, cmd } = body ?? {};
-        if (typeof gameId !== "string" || typeof cmd?.action !== "string") {
-            returnJson(res, { error: "invalid body" });
-            return;
-        }
-        server.manager.sendAdminCmd(gameId, cmd);
-        returnJson(res, { ok: true });
-    }, () => {
-        if (!res.aborted) returnJson(res, { error: "body error" });
-    });
+    readPostedJSON(
+        res,
+        (body: any) => {
+            if (res.aborted) return;
+            const { gameId, cmd } = body ?? {};
+            if (typeof gameId !== "string" || typeof cmd?.action !== "string") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            server.manager.sendAdminCmd(gameId, cmd);
+            returnJson(res, { ok: true });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
 });
 
 /** Sets verified-only mode on all running games and all future games on this server. */
 app.post("/api/dashboard/set_server_verified", (res, req) => {
-    res.onAborted(() => { res.aborted = true; });
+    res.onAborted(() => {
+        res.aborted = true;
+    });
 
     if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
         forbidden(res);
         return;
     }
 
-    readPostedJSON(res, (body: any) => {
-        if (res.aborted) return;
-        server.manager.setServerVerified(!!body?.state);
-        returnJson(res, { ok: true });
-    }, () => {
-        if (!res.aborted) returnJson(res, { error: "body error" });
+    readPostedJSON(
+        res,
+        (body: any) => {
+            if (res.aborted) return;
+            server.manager.setServerVerified(!!body?.state);
+            returnJson(res, { ok: true });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Lists all on-disk replay recordings on this game host (read from each game's meta.json). */
+app.post("/api/dashboard/replays", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
     });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async () => {
+            if (res.aborted) return;
+            const recordings = await listRecordings();
+            if (res.aborted) return;
+            returnJson(res, { recordings });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Streams a single per-player replay file (raw gzip bytes) from disk. */
+app.post("/api/dashboard/replay_file", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const { gameId, playerId } = body ?? {};
+            if (typeof gameId !== "string" || typeof playerId !== "number") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const file = await readRecordingFile(gameId, playerId);
+            if (res.aborted) return;
+            if (!file) {
+                returnJson(res, { error: "not_found" });
+                return;
+            }
+            // Copy into a standalone Uint8Array (pooled node Buffers can't be handed to uWS).
+            const out = new Uint8Array(file.byteLength);
+            out.set(file);
+            if ((res as any).responded) return;
+            (res as any).responded = true;
+            try {
+                res.cork(() => {
+                    if (res.aborted) return;
+                    res.writeHeader("Content-Type", "application/octet-stream").end(out);
+                });
+            } catch (err) {
+                res.aborted = true;
+                server.logger.warn("replay_file write error:", err);
+            }
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
 });
 
 // ---------------------------------------------------------------
@@ -940,7 +1047,6 @@ app.ws<GameSocketData>("/play", {
 app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
     idleTimeout: 30,
     maxPayloadLength: 1024,
-    
 
     async upgrade(res, req, context): Promise<void> {
         res.onAborted((): void => {

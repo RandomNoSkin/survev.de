@@ -1,7 +1,5 @@
-import { Config } from "../../config";
 import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
-import { GameConfig } from "../../../../shared/gameConfig";
 import {
     _allowedCrosshairs,
     _allowedEmotes,
@@ -9,6 +7,8 @@ import {
     _allowedMeleeSkins,
     _allowedOutfits,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
+import { GameConfig } from "../../../../shared/gameConfig";
+import { Config } from "../../config";
 
 /** Per-pass XP curve (xp[i] = xp needed for level i+1) + cap, for client-side level derivation. */
 const PASS_XP: Record<string, number[]> = Object.fromEntries(
@@ -231,6 +231,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="servers">Live Servers</button>
   <button class="tab-btn"        data-tab="accounts">Accounts</button>
   <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
+  <button class="tab-btn"        data-tab="replays">Replays</button>
 </div>
 
 <div id="main">
@@ -309,6 +310,15 @@ export const dashboardHtml = `<!DOCTYPE html>
       <button class="btn btn-gray" id="chatlog-clear-btn">Clear</button>
     </div>
     <div id="chatlog-container"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- ════════════════ TAB: REPLAYS ════════════════ -->
+  <div id="tab-replays" class="tab-pane">
+    <div class="toolbar">
+      <input type="text" id="replays-search" placeholder="Search by game id, map or player name…" style="max-width:420px">
+      <button class="btn btn-gray" id="replays-refresh-btn">↻ Refresh</button>
+    </div>
+    <div id="replays-container"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB 4: ACCOUNTS ════════════════ -->
@@ -660,6 +670,9 @@ function switchTab(name) {
     closeSSE();
     // Skip when focusChatMessage drove the switch — it loads a focused view itself.
     if (!chatlogFocusing) loadGlobalChatLog(document.getElementById('chatlog-search').value.trim());
+  } else if (name === 'replays') {
+    closeSSE();
+    loadReplays();
   } else {
     closeSSE();
   }
@@ -680,6 +693,94 @@ function switchSub(name) {
   });
 }
 document.querySelectorAll('.sub-tab-btn').forEach(b => b.addEventListener('click', () => switchSub(b.dataset.sub)));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – REPLAYS (per-player POV recordings, browse + open in the game client)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TEAM_MODE_LABEL = { 1: 'Solo', 2: 'Duo', 4: 'Squad' };
+let replaysData = [];   // [{ regionId, recordings: [...] }]
+
+async function loadReplays() {
+  const container = document.getElementById('replays-container');
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await get('/api/replays');
+    replaysData = data.regions ?? [];
+    renderReplays();
+  } catch (e) {
+    container.innerHTML = '<div class="empty">Failed to load replays.</div>';
+  }
+}
+
+function renderReplays() {
+  const container = document.getElementById('replays-container');
+  const q = document.getElementById('replays-search').value.trim().toLowerCase();
+
+  // Flatten region → games, newest first, filtered by the search box.
+  const games = [];
+  for (const region of replaysData) {
+    for (const rec of (region.recordings ?? [])) {
+      const hay = (rec.gameId + ' ' + rec.mapName + ' ' +
+        (rec.players ?? []).map(p => p.playerName).join(' ')).toLowerCase();
+      if (q && !hay.includes(q)) continue;
+      games.push({ regionId: region.regionId, rec });
+    }
+  }
+  games.sort((a, b) => b.rec.startTs - a.rec.startTs);
+
+  if (!games.length) {
+    container.innerHTML = '<div class="empty">No recordings found.</div>';
+    return;
+  }
+
+  container.innerHTML = games.map(({ regionId, rec }) => {
+    const mode = TEAM_MODE_LABEL[rec.teamMode] || ('Mode ' + rec.teamMode);
+    const dur = Math.round((rec.durationMs || 0) / 1000);
+    const durStr = dur >= 60 ? (Math.floor(dur / 60) + 'm ' + (dur % 60) + 's') : (dur + 's');
+    const fmtAlive = (s) => s == null ? '—' : (s >= 60 ? (Math.floor(s / 60) + 'm ' + (s % 60) + 's') : (s + 's'));
+    const rows = (rec.players ?? []).map(p => \`
+      <tr>
+        <td>\${esc(p.playerName)}</td>
+        <td>\${p.kills ?? '—'}</td>
+        <td>\${p.damageDealt ?? '—'}</td>
+        <td>\${p.damageTaken ?? '—'}</td>
+        <td>\${fmtAlive(p.timeAlive)}</td>
+        <td style="color:var(--text-dim)">\${(p.bytes / 1024 / 1024).toFixed(1)} MB</td>
+        <td><button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId})">▶ Watch</button></td>
+      </tr>\`).join('');
+    return \`
+      <div class="chat-game-group">
+        <div class="chat-game-header">
+          <span class="gid">\${esc(rec.gameId)}</span>
+          <span>\${esc(regionId)}</span>
+          <span>\${esc(rec.mapName)} · \${mode}</span>
+          <span>\${durStr}</span>
+          <span style="margin-left:auto">\${fmtDate(rec.startTs)}</span>
+        </div>
+        <table class="data-table" style="margin:0">
+          <thead><tr><th>Player POV</th><th>Kills</th><th>Dmg dealt</th><th>Dmg taken</th><th>Alive</th><th>Size</th><th>Action</th></tr></thead>
+          <tbody>\${rows || '<tr><td colspan="7" class="empty">No POVs.</td></tr>'}</tbody>
+        </table>
+      </div>\`;
+  }).join('');
+}
+
+/** Mints a game-scoped replay token and opens the client in replay mode (with an initial POV). */
+async function watchReplay(region, gameId, playerId) {
+  try {
+    const params = new URLSearchParams({ region, gameId });
+    const { token } = await get('/api/replays/token?' + params.toString());
+    if (!token) { toast('Failed to get replay token', true); return; }
+    const url = CLIENT_URL + '/?replay=' + encodeURIComponent(token) + '&pov=' + playerId;
+    window.open(url, '_blank');
+  } catch (e) {
+    toast('Failed to open replay: ' + e.message, true);
+  }
+}
+
+document.getElementById('replays-refresh-btn').addEventListener('click', loadReplays);
+document.getElementById('replays-search').addEventListener('input', renderReplays);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 – BAN MANAGEMENT (receives live "bans" events via SSE)

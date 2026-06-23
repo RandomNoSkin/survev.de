@@ -27,26 +27,26 @@
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
  */
 
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
+import {
+    and,
+    asc,
+    desc,
+    eq,
+    gt,
+    gte,
+    ilike,
+    inArray,
+    isNull,
+    lte,
+    notInArray,
+    or,
+    sql,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
-import { streamSSE, type SSEStreamingApi } from "hono/streaming";
-import { util } from "../../../../shared/utils/util";
-import { validateSessionToken } from "../auth";
-import { validateParams } from "../auth/middleware";
-import { db } from "../db";
-import { reconcileAllPasses, getPassLevelAndXp } from "../db/passReconcile";
-import { awardGoldenFries } from "../db/goldenFries";
-import { grantPassItems, revokePassItemsAbove } from "../db/passGrants";
-import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
-import { banCommentsTable, banHistoryTable, bannedIpsTable, chatBannedIpsTable, chatLogsTable, ipLogsTable, itemsTable, matchDataTable, usersTable, userXpTable } from "../db/schema";
-import { server } from "../apiServer";
-import { logModerationAction } from "../../utils/serverHelpers";
-import type { Context } from "..";
+import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { dashboardHtml } from "./moderationDashboard.html";
-import { GameConfig } from "../../../../shared/gameConfig";
-import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
+import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
     _allowedCrosshairs,
     _allowedEmotes,
@@ -55,6 +55,32 @@ import {
     _allowedOutfits,
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
+import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
+import { GameConfig } from "../../../../shared/gameConfig";
+import { util } from "../../../../shared/utils/util";
+import { logModerationAction } from "../../utils/serverHelpers";
+import type { Context } from "..";
+import { server } from "../apiServer";
+import { validateSessionToken } from "../auth";
+import { validateParams } from "../auth/middleware";
+import { db } from "../db";
+import { awardGoldenFries } from "../db/goldenFries";
+import { grantPassItems, revokePassItemsAbove } from "../db/passGrants";
+import { getPassLevelAndXp, reconcileAllPasses } from "../db/passReconcile";
+import {
+    banCommentsTable,
+    banHistoryTable,
+    bannedIpsTable,
+    chatBannedIpsTable,
+    chatLogsTable,
+    ipLogsTable,
+    itemsTable,
+    matchDataTable,
+    usersTable,
+    userXpTable,
+} from "../db/schema";
+import { signReplayToken } from "../replayToken";
+import { dashboardHtml } from "./moderationDashboard.html";
 
 /** Every cosmetic an admin may grant, by category, for the account-detail "Give" UI. */
 const COSMETIC_CATALOG = {
@@ -129,9 +155,18 @@ async function fetchAllBans() {
         db.query.bannedIpsTable.findMany({ orderBy: [desc(bannedIpsTable.createdAt)] }),
         db.query.usersTable.findMany({
             where: eq(usersTable.banned, true),
-            columns: { id: true, slug: true, username: true, banReason: true, bannedBy: true, userCreated: true },
+            columns: {
+                id: true,
+                slug: true,
+                username: true,
+                banReason: true,
+                bannedBy: true,
+                userCreated: true,
+            },
         }),
-        db.query.chatBannedIpsTable.findMany({ orderBy: [desc(chatBannedIpsTable.createdAt)] }),
+        db.query.chatBannedIpsTable.findMany({
+            orderBy: [desc(chatBannedIpsTable.createdAt)],
+        }),
     ]);
     return { ipBans, accountBans, chatBans };
 }
@@ -149,7 +184,11 @@ async function recordBan(entry: {
 }
 
 /** Closes all still-active history entries for a target (sets unban time + actor). */
-async function recordUnban(banType: "ip" | "account" | "chat", banTarget: string, unbannedBy: string) {
+async function recordUnban(
+    banType: "ip" | "account" | "chat",
+    banTarget: string,
+    unbannedBy: string,
+) {
     await db
         .update(banHistoryTable)
         .set({ unbannedAt: new Date(), unbannedBy })
@@ -171,7 +210,11 @@ async function broadcastBans() {
     const bans = await fetchAllBans();
     const data = JSON.stringify(bans);
     for (const stream of activeSseStreams) {
-        try { await stream.writeSSE({ event: "bans", data }); } catch { /* client gone */ }
+        try {
+            await stream.writeSSE({ event: "bans", data });
+        } catch {
+            /* client gone */
+        }
     }
 }
 
@@ -215,12 +258,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Creates an IP ban. Also bans any account linked to this IP. Broadcasts to all admins. */
     .post(
         "/api/ban/ip",
-        validateParams(z.object({
-            ip: z.string(),
-            reason: z.string().default(""),
-            duration: z.number().default(7),
-            permanent: z.boolean().default(false),
-        })),
+        validateParams(
+            z.object({
+                ip: z.string(),
+                reason: z.string().default(""),
+                duration: z.number().default(7),
+                permanent: z.boolean().default(false),
+            }),
+        ),
         async (c) => {
             const admin = c.get("user")!;
             const { ip, reason, duration, permanent } = c.req.valid("json");
@@ -228,7 +273,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             await db
                 .insert(bannedIpsTable)
-                .values({ encodedIp: ip, reason, expiresIn, permanent, bannedBy: admin.slug })
+                .values({
+                    encodedIp: ip,
+                    reason,
+                    expiresIn,
+                    permanent,
+                    bannedBy: admin.slug,
+                })
                 .onConflictDoUpdate({
                     target: bannedIpsTable.encodedIp,
                     set: { reason, expiresIn, permanent, bannedBy: admin.slug },
@@ -240,7 +291,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .from(ipLogsTable)
                 .where(eq(ipLogsTable.encodedIp, ip));
 
-            const userIds = linked.map((r) => r.userId).filter((id): id is string => !!id);
+            const userIds = linked
+                .map((r) => r.userId)
+                .filter((id): id is string => !!id);
             if (userIds.length) {
                 await db
                     .update(usersTable)
@@ -248,7 +301,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     .where(inArray(usersTable.id, userIds));
             }
 
-            await recordBan({ banType: "ip", banTarget: ip, reason, bannedBy: admin.slug, expiresAt: expiresIn, permanent });
+            await recordBan({
+                banType: "ip",
+                banTarget: ip,
+                reason,
+                bannedBy: admin.slug,
+                expiresAt: expiresIn,
+                permanent,
+            });
 
             void logModerationAction("🔨 IP banned", [
                 { name: "IP hash", value: ip },
@@ -265,10 +325,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Creates an account ban. Broadcasts updated bans. */
     .post(
         "/api/ban/account",
-        validateParams(z.object({
-            slug: z.string(),
-            reason: z.string().default(""),
-        })),
+        validateParams(
+            z.object({
+                slug: z.string(),
+                reason: z.string().default(""),
+            }),
+        ),
         async (c) => {
             const admin = c.get("user")!;
             const { slug, reason } = c.req.valid("json");
@@ -278,7 +340,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .set({ banned: true, banReason: reason, bannedBy: admin.slug })
                 .where(eq(usersTable.slug, slug));
 
-            await recordBan({ banType: "account", banTarget: slug, reason, bannedBy: admin.slug, expiresAt: null, permanent: false });
+            await recordBan({
+                banType: "account",
+                banTarget: slug,
+                reason,
+                bannedBy: admin.slug,
+                expiresAt: null,
+                permanent: false,
+            });
 
             void logModerationAction("🔨 Account banned", [
                 { name: "Account", value: slug },
@@ -294,12 +363,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Creates a chat ban. Broadcasts updated bans. */
     .post(
         "/api/ban/chat",
-        validateParams(z.object({
-            ip: z.string(),
-            reason: z.string().default(""),
-            duration: z.number().default(7),
-            permanent: z.boolean().default(false),
-        })),
+        validateParams(
+            z.object({
+                ip: z.string(),
+                reason: z.string().default(""),
+                duration: z.number().default(7),
+                permanent: z.boolean().default(false),
+            }),
+        ),
         async (c) => {
             const admin = c.get("user")!;
             const { ip, reason, duration, permanent } = c.req.valid("json");
@@ -307,13 +378,26 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             await db
                 .insert(chatBannedIpsTable)
-                .values({ encodedIp: ip, reason, expiresIn, permanent, bannedBy: admin.slug })
+                .values({
+                    encodedIp: ip,
+                    reason,
+                    expiresIn,
+                    permanent,
+                    bannedBy: admin.slug,
+                })
                 .onConflictDoUpdate({
                     target: chatBannedIpsTable.encodedIp,
                     set: { reason, expiresIn, permanent, bannedBy: admin.slug },
                 });
 
-            await recordBan({ banType: "chat", banTarget: ip, reason, bannedBy: admin.slug, expiresAt: expiresIn, permanent });
+            await recordBan({
+                banType: "chat",
+                banTarget: ip,
+                reason,
+                bannedBy: admin.slug,
+                expiresAt: expiresIn,
+                permanent,
+            });
 
             void logModerationAction("🔇 Chat banned", [
                 { name: "IP hash", value: ip },
@@ -328,40 +412,40 @@ export const ModerationDashboardRouter = new Hono<Context>()
     )
 
     /** Removes an IP ban. Also unbans any account that was linked to this IP. Broadcasts updated bans. */
-    .post(
-        "/api/unban/ip",
-        validateParams(z.object({ ip: z.string() })),
-        async (c) => {
-            const admin = c.get("user")!;
-            const { ip } = c.req.valid("json");
+    .post("/api/unban/ip", validateParams(z.object({ ip: z.string() })), async (c) => {
+        const admin = c.get("user")!;
+        const { ip } = c.req.valid("json");
 
-            await db.delete(bannedIpsTable).where(eq(bannedIpsTable.encodedIp, ip));
+        await db.delete(bannedIpsTable).where(eq(bannedIpsTable.encodedIp, ip));
 
-            // Unban any accounts that were linked to this IP
-            const linked = await db
-                .selectDistinct({ userId: ipLogsTable.userId })
-                .from(ipLogsTable)
-                .where(eq(ipLogsTable.encodedIp, ip));
+        // Unban any accounts that were linked to this IP
+        const linked = await db
+            .selectDistinct({ userId: ipLogsTable.userId })
+            .from(ipLogsTable)
+            .where(eq(ipLogsTable.encodedIp, ip));
 
-            const userIds = linked.map((r) => r.userId).filter((id): id is string => !!id);
-            if (userIds.length) {
-                await db
-                    .update(usersTable)
-                    .set({ banned: false, banReason: "", bannedBy: "" })
-                    .where(inArray(usersTable.id, userIds));
-            }
+        const userIds = linked.map((r) => r.userId).filter((id): id is string => !!id);
+        if (userIds.length) {
+            await db
+                .update(usersTable)
+                .set({ banned: false, banReason: "", bannedBy: "" })
+                .where(inArray(usersTable.id, userIds));
+        }
 
-            await recordUnban("ip", ip, admin.slug);
+        await recordUnban("ip", ip, admin.slug);
 
-            void logModerationAction("♻️ IP unbanned", [
+        void logModerationAction(
+            "♻️ IP unbanned",
+            [
                 { name: "IP hash", value: ip },
                 { name: "By admin", value: adminTag(admin) },
-            ], 0x1a7a1a);
+            ],
+            0x1a7a1a,
+        );
 
-            broadcastBans();
-            return c.json({ ok: true });
-        },
-    )
+        broadcastBans();
+        return c.json({ ok: true });
+    })
 
     /** Removes an account ban. Broadcasts updated bans. */
     .post(
@@ -375,32 +459,36 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .set({ banned: false, banReason: "", bannedBy: "" })
                 .where(eq(usersTable.slug, slug));
             await recordUnban("account", slug, admin.slug);
-            void logModerationAction("♻️ Account unbanned", [
-                { name: "Account", value: slug },
-                { name: "By admin", value: adminTag(admin) },
-            ], 0x1a7a1a);
+            void logModerationAction(
+                "♻️ Account unbanned",
+                [
+                    { name: "Account", value: slug },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x1a7a1a,
+            );
             broadcastBans();
             return c.json({ ok: true });
         },
     )
 
     /** Removes a chat ban. Broadcasts updated bans. */
-    .post(
-        "/api/unban/chat",
-        validateParams(z.object({ ip: z.string() })),
-        async (c) => {
-            const admin = c.get("user")!;
-            const { ip } = c.req.valid("json");
-            await db.delete(chatBannedIpsTable).where(eq(chatBannedIpsTable.encodedIp, ip));
-            await recordUnban("chat", ip, admin.slug);
-            void logModerationAction("♻️ Chat unbanned", [
+    .post("/api/unban/chat", validateParams(z.object({ ip: z.string() })), async (c) => {
+        const admin = c.get("user")!;
+        const { ip } = c.req.valid("json");
+        await db.delete(chatBannedIpsTable).where(eq(chatBannedIpsTable.encodedIp, ip));
+        await recordUnban("chat", ip, admin.slug);
+        void logModerationAction(
+            "♻️ Chat unbanned",
+            [
                 { name: "IP hash", value: ip },
                 { name: "By admin", value: adminTag(admin) },
-            ], 0x1a7a1a);
-            broadcastBans();
-            return c.json({ ok: true });
-        },
-    )
+            ],
+            0x1a7a1a,
+        );
+        broadcastBans();
+        return c.json({ ok: true });
+    })
 
     // ─────────────────────────────────────────────────────────────────────────
     // IP / PLAYER LOOKUP
@@ -482,7 +570,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         // Collect ISP and deduplicate recent names from ip_logs
         const seenNames = new Set<string>();
-        const accounts: (typeof rows[number] & { source: "recent" | "historical" })[] = [];
+        const accounts: ((typeof rows)[number] & { source: "recent" | "historical" })[] =
+            [];
         let isp = "";
 
         for (const row of rows) {
@@ -497,7 +586,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
         // with no time limit, since match_data is never deleted.
         // Note: no ORDER BY with SELECT DISTINCT (Postgres requires ORDER BY cols to be in SELECT list)
         const historical = await db
-            .selectDistinct({ username: matchDataTable.username, userId: matchDataTable.userId })
+            .selectDistinct({
+                username: matchDataTable.username,
+                userId: matchDataTable.userId,
+            })
             .from(matchDataTable)
             .where(eq(matchDataTable.encodedIp, hash))
             .limit(500);
@@ -519,7 +611,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
         }
 
-        return c.json({ hash, isp, banned: !!banRecord, banRecord, accounts, banHistory });
+        return c.json({
+            hash,
+            isp,
+            banned: !!banRecord,
+            banRecord,
+            accounts,
+            banHistory,
+        });
     })
 
     /**
@@ -529,23 +628,24 @@ export const ModerationDashboardRouter = new Hono<Context>()
      */
     .get("/api/chat/:query", async (c) => {
         const query = c.req.param("query");
-        const by    = c.req.query("by") ?? "name";
+        const by = c.req.query("by") ?? "name";
 
         const rows = await db
             .select({
-                id:        chatLogsTable.id,
+                id: chatLogsTable.id,
                 createdAt: chatLogsTable.createdAt,
-                gameId:    chatLogsTable.gameId,
-                username:  chatLogsTable.username,
-                channel:   chatLogsTable.channel,
-                message:   chatLogsTable.message,
+                gameId: chatLogsTable.gameId,
+                username: chatLogsTable.username,
+                channel: chatLogsTable.channel,
+                message: chatLogsTable.message,
                 encodedIp: chatLogsTable.encodedIp,
-                slug:      usersTable.slug,
+                slug: usersTable.slug,
             })
             .from(chatLogsTable)
-            .where(by === "ip"
-                ? eq(chatLogsTable.encodedIp, query)
-                : eq(chatLogsTable.username, query),
+            .where(
+                by === "ip"
+                    ? eq(chatLogsTable.encodedIp, query)
+                    : eq(chatLogsTable.username, query),
             )
             .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
             .orderBy(desc(chatLogsTable.createdAt))
@@ -565,26 +665,30 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const limit = Math.min(Math.max(Number(c.req.query("limit")) || 500, 1), 1000);
         const channelParam = c.req.query("channel");
         const channel =
-            channelParam !== undefined && channelParam !== "" && Number.isFinite(Number(channelParam))
+            channelParam !== undefined &&
+            channelParam !== "" &&
+            Number.isFinite(Number(channelParam))
                 ? Number(channelParam)
                 : undefined;
 
         const rows = await db
             .select({
-                id:        chatLogsTable.id,
+                id: chatLogsTable.id,
                 createdAt: chatLogsTable.createdAt,
-                gameId:    chatLogsTable.gameId,
-                username:  chatLogsTable.username,
-                channel:   chatLogsTable.channel,
-                message:   chatLogsTable.message,
+                gameId: chatLogsTable.gameId,
+                username: chatLogsTable.username,
+                channel: chatLogsTable.channel,
+                message: chatLogsTable.message,
                 encodedIp: chatLogsTable.encodedIp,
-                slug:      usersTable.slug,
+                slug: usersTable.slug,
             })
             .from(chatLogsTable)
             .where(
                 and(
                     search ? ilike(chatLogsTable.message, `%${search}%`) : undefined,
-                    channel !== undefined ? eq(chatLogsTable.channel, channel) : undefined,
+                    channel !== undefined
+                        ? eq(chatLogsTable.channel, channel)
+                        : undefined,
                 ),
             )
             .leftJoin(usersTable, eq(chatLogsTable.userId, usersTable.id))
@@ -603,14 +707,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         const rows = await db
             .select({
-                id:        chatLogsTable.id,
+                id: chatLogsTable.id,
                 createdAt: chatLogsTable.createdAt,
-                gameId:    chatLogsTable.gameId,
-                username:  chatLogsTable.username,
-                channel:   chatLogsTable.channel,
-                message:   chatLogsTable.message,
+                gameId: chatLogsTable.gameId,
+                username: chatLogsTable.username,
+                channel: chatLogsTable.channel,
+                message: chatLogsTable.message,
                 encodedIp: chatLogsTable.encodedIp,
-                slug:      usersTable.slug,
+                slug: usersTable.slug,
             })
             .from(chatLogsTable)
             .where(eq(chatLogsTable.gameId, gameId))
@@ -642,18 +746,32 @@ export const ModerationDashboardRouter = new Hono<Context>()
             .limit(200);
 
         const seenIps = new Set<string>();
-        const ips: { ip: string; isp: string; region: string; lastSeen: Date; slug: string | null }[] = [];
+        const ips: {
+            ip: string;
+            isp: string;
+            region: string;
+            lastSeen: Date;
+            slug: string | null;
+        }[] = [];
         for (const row of rows) {
             if (!seenIps.has(row.encodedIp)) {
                 seenIps.add(row.encodedIp);
-                ips.push({ ip: row.encodedIp, isp: row.isp, region: row.region, lastSeen: row.createdAt, slug: row.slug });
+                ips.push({
+                    ip: row.encodedIp,
+                    isp: row.isp,
+                    region: row.region,
+                    lastSeen: row.createdAt,
+                    slug: row.slug,
+                });
             }
         }
 
         // Aggregate ban history across all of this player's targets: their IP hashes
         // (ip + chat bans) and any linked account slug(s) (account bans).
         const hashes = [...seenIps];
-        const slugs = [...new Set(ips.map((i) => i.slug).filter((s): s is string => !!s))];
+        const slugs = [
+            ...new Set(ips.map((i) => i.slug).filter((s): s is string => !!s)),
+        ];
         const banHistory =
             hashes.length || slugs.length
                 ? await db
@@ -689,12 +807,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Returns the comment thread for a ban, oldest first. */
     .get("/api/ban-comments/:type/:target", async (c) => {
         const banType = c.req.param("type");
-        const target  = c.req.param("target");
+        const target = c.req.param("target");
 
         const comments = await db
             .select()
             .from(banCommentsTable)
-            .where(and(eq(banCommentsTable.banType, banType), eq(banCommentsTable.banTarget, target)))
+            .where(
+                and(
+                    eq(banCommentsTable.banType, banType),
+                    eq(banCommentsTable.banTarget, target),
+                ),
+            )
             .orderBy(asc(banCommentsTable.createdAt));
 
         return c.json({ comments });
@@ -703,11 +826,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Adds a comment to a ban's thread. */
     .post(
         "/api/ban-comments",
-        validateParams(z.object({
-            type: z.enum(["ip", "account", "chat"]),
-            target: z.string(),
-            comment: z.string().min(1),
-        })),
+        validateParams(
+            z.object({
+                type: z.enum(["ip", "account", "chat"]),
+                target: z.string(),
+                comment: z.string().min(1),
+            }),
+        ),
         async (c) => {
             const admin = c.get("user")!;
             const { type, target, comment } = c.req.valid("json");
@@ -741,7 +866,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
      */
     .get("/api/events", async (c) => {
         const regionId = c.req.query("region") ?? "";
-        const gameId   = c.req.query("gameId")  ?? "";
+        const gameId = c.req.query("gameId") ?? "";
 
         return streamSSE(c, async (stream) => {
             activeSseStreams.add(stream);
@@ -750,11 +875,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const push = async (event: string, data: unknown) => {
                 try {
                     await stream.writeSSE({ event, data: JSON.stringify(data) });
-                } catch { /* client disconnected */ }
+                } catch {
+                    /* client disconnected */
+                }
             };
 
             // Send initial snapshots immediately
-            await push("bans",    await fetchAllBans());
+            await push("bans", await fetchAllBans());
             await push("servers", await fetchServers());
             if (gameId) {
                 const players = await server.getDashboardGamePlayers(regionId, gameId);
@@ -769,7 +896,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             // Periodic player list updates for the watched game (every 3 s)
             const playerTimer = gameId
                 ? setInterval(async () => {
-                      const players = await server.getDashboardGamePlayers(regionId, gameId);
+                      const players = await server.getDashboardGamePlayers(
+                          regionId,
+                          gameId,
+                      );
                       await push("players", { players });
                   }, 3_000)
                 : null;
@@ -778,7 +908,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
             let lastFeedAt = new Date();
             const feedTimer = gameId
                 ? setInterval(async () => {
-                      const entries = await db.select({
+                      const entries = await db
+                          .select({
                               id: chatLogsTable.id,
                               createdAt: chatLogsTable.createdAt,
                               username: chatLogsTable.username,
@@ -786,7 +917,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
                               message: chatLogsTable.message,
                           })
                           .from(chatLogsTable)
-                          .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, lastFeedAt)))
+                          .where(
+                              and(
+                                  eq(chatLogsTable.gameId, gameId),
+                                  gt(chatLogsTable.createdAt, lastFeedAt),
+                              ),
+                          )
                           .orderBy(asc(chatLogsTable.createdAt))
                           .limit(50);
                       lastFeedAt = new Date();
@@ -796,7 +932,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             // Keep the stream open until the client disconnects
             await new Promise<void>((resolve) => {
-                c.req.raw.signal.addEventListener("abort", () => resolve(), { once: true });
+                c.req.raw.signal.addEventListener("abort", () => resolve(), {
+                    once: true,
+                });
             });
 
             // Cleanup on disconnect
@@ -819,11 +957,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Sends an announcement to every running game across all regions. */
     .post(
         "/api/servers/announce",
-        validateParams(z.object({
-            text: z.string(),
-            color: z.string().optional(),
-            sender: z.string().optional(),
-        })),
+        validateParams(
+            z.object({
+                text: z.string(),
+                color: z.string().optional(),
+                sender: z.string().optional(),
+            }),
+        ),
         async (c) => {
             const { text, color, sender } = c.req.valid("json");
             const cmd = { action: "announce", text, color, sender };
@@ -835,7 +975,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     await Promise.all(
                         games
                             .filter((g: any) => !g.stopped)
-                            .map((g: any) => server.sendDashboardGameCmd(regionId, g.id, cmd)),
+                            .map((g: any) =>
+                                server.sendDashboardGameCmd(regionId, g.id, cmd),
+                            ),
                     );
                 }),
             );
@@ -851,9 +993,38 @@ export const ModerationDashboardRouter = new Hono<Context>()
      */
     .get("/api/game/:region/:id/spectate-token", async (c) => {
         const regionId = c.req.param("region");
-        const gameId   = c.req.param("id");
+        const gameId = c.req.param("id");
         const data = await server.findGameById(regionId, gameId, true /* admin */);
         return c.json(data);
+    })
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // REPLAYS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Lists all recorded games across every region (newest first), for the Replays tab. */
+    .get("/api/replays", async (c) => {
+        const regions = await Promise.all(
+            Object.entries(server.regions).map(async ([regionId, region]) => {
+                const recordings = await region.listReplays().catch(() => []);
+                return { regionId, recordings };
+            }),
+        );
+        return c.json({ regions });
+    })
+
+    /**
+     * Mints a short-lived replay token so the dashboard can open the game client at
+     * `CLIENT_URL/?replay=<token>` (same idea as the spectate token above).
+     */
+    .get("/api/replays/token", (c) => {
+        const region = c.req.query("region") ?? "";
+        const gameId = c.req.query("gameId") ?? "";
+        if (!region || !gameId) {
+            return c.json({ error: "invalid_params" }, 400);
+        }
+        // Game-scoped token: lets the viewer switch between every POV of this game.
+        return c.json({ token: signReplayToken({ region, gameId }) });
     })
 
     /**
@@ -862,8 +1033,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
      */
     .get("/api/game/:region/:id/players", async (c) => {
         const regionId = c.req.param("region");
-        const gameId   = c.req.param("id");
-        const players  = await server.getDashboardGamePlayers(regionId, gameId);
+        const gameId = c.req.param("id");
+        const players = await server.getDashboardGamePlayers(regionId, gameId);
         return c.json({ players });
     })
 
@@ -873,27 +1044,32 @@ export const ModerationDashboardRouter = new Hono<Context>()
      */
     .post(
         "/api/game/:region/:id/cmd",
-        validateParams(z.object({
-            action: z.string(),
-            target: z.string().optional(),
-            text: z.string().optional(),
-            color: z.string().optional(),
-            sender: z.string().optional(),
-        })),
+        validateParams(
+            z.object({
+                action: z.string(),
+                target: z.string().optional(),
+                text: z.string().optional(),
+                color: z.string().optional(),
+                sender: z.string().optional(),
+            }),
+        ),
         async (c) => {
             const regionId = c.req.param("region");
-            const gameId   = c.req.param("id");
-            const cmd      = c.req.valid("json");
+            const gameId = c.req.param("id");
+            const cmd = c.req.valid("json");
             // Log admin chat messages to the DB so they appear in the feed
             if (cmd.action === "chat" && cmd.text) {
-                await db.insert(chatLogsTable).values({
-                    gameId,
-                    username: cmd.sender ?? "ADMIN",
-                    userId: "",
-                    encodedIp: "admin",
-                    channel: 0,
-                    message: cmd.text,
-                }).onConflictDoNothing();
+                await db
+                    .insert(chatLogsTable)
+                    .values({
+                        gameId,
+                        username: cmd.sender ?? "ADMIN",
+                        userId: "",
+                        encodedIp: "admin",
+                        channel: 0,
+                        message: cmd.text,
+                    })
+                    .onConflictDoNothing();
             }
             await server.sendDashboardGameCmd(regionId, gameId, cmd);
             return c.json({ ok: true });
@@ -903,7 +1079,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Returns chat logs for a specific game since a given timestamp (for the feed). */
     .get("/api/game/:region/:id/chat", async (c) => {
         const gameId = c.req.param("id");
-        const since  = c.req.query("since");
+        const since = c.req.query("since");
         const sinceDate = since ? new Date(since) : new Date(0);
         const messages = await db
             .select({
@@ -914,7 +1090,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 message: chatLogsTable.message,
             })
             .from(chatLogsTable)
-            .where(and(eq(chatLogsTable.gameId, gameId), gt(chatLogsTable.createdAt, sinceDate)))
+            .where(
+                and(
+                    eq(chatLogsTable.gameId, gameId),
+                    gt(chatLogsTable.createdAt, sinceDate),
+                ),
+            )
             .orderBy(asc(chatLogsTable.createdAt))
             .limit(100);
         return c.json({ messages });
@@ -933,25 +1114,29 @@ export const ModerationDashboardRouter = new Hono<Context>()
     /** Returns all registered accounts with per-pass levels, creation date, and last IP. */
     .get("/api/accounts", async (c) => {
         // 1. All users
-        const users = await db.select({
-            id: usersTable.id,
-            username: usersTable.username,
-            slug: usersTable.slug,
-            banned: usersTable.banned,
-            admin: usersTable.admin,
-            userCreated: usersTable.userCreated,
-            goldenFries: usersTable.goldenFries,
-            authId: usersTable.authId,
-            linkedDiscord: usersTable.linkedDiscord,
-            linkedGoogle: usersTable.linkedGoogle,
-        }).from(usersTable);
+        const users = await db
+            .select({
+                id: usersTable.id,
+                username: usersTable.username,
+                slug: usersTable.slug,
+                banned: usersTable.banned,
+                admin: usersTable.admin,
+                userCreated: usersTable.userCreated,
+                goldenFries: usersTable.goldenFries,
+                authId: usersTable.authId,
+                linkedDiscord: usersTable.linkedDiscord,
+                linkedGoogle: usersTable.linkedGoogle,
+            })
+            .from(usersTable);
 
         // 2. All userXp rows → Map<userId, Map<passType, {level, xp}>>
         const allXp = await db.select().from(userXpTable);
         const xpByUser = new Map<string, Map<string, { level: number; xp: number }>>();
         for (const row of allXp) {
             if (!xpByUser.has(row.userId)) xpByUser.set(row.userId, new Map());
-            xpByUser.get(row.userId)!.set(row.passType, { level: row.level, xp: Number(row.xp) });
+            xpByUser
+                .get(row.userId)!
+                .set(row.passType, { level: row.level, xp: Number(row.xp) });
         }
 
         // 3. Most recent encoded IP per user (DISTINCT ON — PostgreSQL only)
@@ -969,9 +1154,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ...u,
             discordId: u.linkedDiscord ? u.authId : null,
             lastIp: ipByUser.get(u.id) ?? null,
-            passes: Object.fromEntries(
-                (xpByUser.get(u.id) ?? new Map()).entries(),
-            ),
+            passes: Object.fromEntries((xpByUser.get(u.id) ?? new Map()).entries()),
         }));
 
         return c.json({ accounts, passTypes });
@@ -1001,12 +1184,16 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 amount,
                 `admin_grant:${admin.slug}`,
             );
-            void logModerationAction("🍟 Golden Fries", [
-                { name: "Account", value: slug },
-                { name: "Amount", value: (amount > 0 ? "+" : "") + amount },
-                { name: "Balance", value: String(balance) },
-                { name: "By admin", value: adminTag(admin) },
-            ], 0xe0a23c);
+            void logModerationAction(
+                "🍟 Golden Fries",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Amount", value: (amount > 0 ? "+" : "") + amount },
+                    { name: "Balance", value: String(balance) },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xe0a23c,
+            );
             return c.json({ ok: true, balance });
         },
     )
@@ -1039,7 +1226,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const [xpRows, items, matches] = await Promise.all([
             db.select().from(userXpTable).where(eq(userXpTable.userId, user.id)),
             db
-                .select({ id: itemsTable.id, type: itemsTable.type, source: itemsTable.source })
+                .select({
+                    id: itemsTable.id,
+                    type: itemsTable.type,
+                    source: itemsTable.source,
+                })
                 .from(itemsTable)
                 .where(eq(itemsTable.userId, user.id)),
             db
@@ -1144,13 +1335,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const granted = await grantPassItems(user.id, passType, level);
             const revoked = await revokePassItemsAbove(user.id, passType, level);
 
-            void logModerationAction("⭐ XP set", [
-                { name: "Account", value: slug },
-                { name: "Pass", value: passType },
-                { name: "Level / XP", value: `${level} / ${xp}` },
-                { name: "Items +/-", value: `+${granted} / -${revoked}` },
-                { name: "By admin", value: adminTag(admin) },
-            ], 0x3355ee);
+            void logModerationAction(
+                "⭐ XP set",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Pass", value: passType },
+                    { name: "Level / XP", value: `${level} / ${xp}` },
+                    { name: "Items +/-", value: `+${granted} / -${revoked}` },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x3355ee,
+            );
 
             return c.json({ ok: true, level, granted, revoked });
         },
@@ -1186,14 +1381,23 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 if (!missing.length) return c.json({ ok: true, given: 0 });
                 const now = Date.now();
                 await db.insert(itemsTable).values(
-                    missing.map((type) => ({ userId: user.id, type, source, timeAcquired: now })),
+                    missing.map((type) => ({
+                        userId: user.id,
+                        type,
+                        source,
+                        timeAcquired: now,
+                    })),
                 );
-                void logModerationAction("🎁 Items given", [
-                    { name: "Account", value: slug },
-                    { name: "Item", value: `ALL (${missing.length})` },
-                    { name: "Source", value: source },
-                    { name: "By admin", value: adminTag(admin) },
-                ], 0x1a7a1a);
+                void logModerationAction(
+                    "🎁 Items given",
+                    [
+                        { name: "Account", value: slug },
+                        { name: "Item", value: `ALL (${missing.length})` },
+                        { name: "Source", value: source },
+                        { name: "By admin", value: adminTag(admin) },
+                    ],
+                    0x1a7a1a,
+                );
                 return c.json({ ok: true, given: missing.length });
             }
 
@@ -1207,15 +1411,22 @@ export const ModerationDashboardRouter = new Hono<Context>()
             });
             if (existing) return c.json({ ok: true, given: 0, message: "already owned" });
 
-            await db
-                .insert(itemsTable)
-                .values({ userId: user.id, type: item, source, timeAcquired: Date.now() });
-            void logModerationAction("🎁 Item given", [
-                { name: "Account", value: slug },
-                { name: "Item", value: item },
-                { name: "Source", value: source },
-                { name: "By admin", value: adminTag(admin) },
-            ], 0x1a7a1a);
+            await db.insert(itemsTable).values({
+                userId: user.id,
+                type: item,
+                source,
+                timeAcquired: Date.now(),
+            });
+            void logModerationAction(
+                "🎁 Item given",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Item", value: item },
+                    { name: "Source", value: source },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x1a7a1a,
+            );
             return c.json({ ok: true, given: 1 });
         },
     )
@@ -1242,11 +1453,15 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .where(and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)))
                 .returning({ type: itemsTable.type });
             if (res.length) {
-                void logModerationAction("➖ Item removed", [
-                    { name: "Account", value: slug },
-                    { name: "Item", value: item },
-                    { name: "By admin", value: adminTag(admin) },
-                ], 0xaa4400);
+                void logModerationAction(
+                    "➖ Item removed",
+                    [
+                        { name: "Account", value: slug },
+                        { name: "Item", value: item },
+                        { name: "By admin", value: adminTag(admin) },
+                    ],
+                    0xaa4400,
+                );
             }
             return c.json({ ok: true, removed: res.length });
         },
@@ -1279,12 +1494,16 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 )
                 .returning({ type: itemsTable.type });
             if (res.length) {
-                void logModerationAction("➖ Items removed (source)", [
-                    { name: "Account", value: slug },
-                    { name: "Source", value: source },
-                    { name: "Removed", value: String(res.length) },
-                    { name: "By admin", value: adminTag(admin) },
-                ], 0xaa4400);
+                void logModerationAction(
+                    "➖ Items removed (source)",
+                    [
+                        { name: "Account", value: slug },
+                        { name: "Source", value: source },
+                        { name: "Removed", value: String(res.length) },
+                        { name: "By admin", value: adminTag(admin) },
+                    ],
+                    0xaa4400,
+                );
             }
             return c.json({ ok: true, removed: res.length });
         },

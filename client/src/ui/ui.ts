@@ -4,6 +4,7 @@ import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { PingDefs } from "../../../shared/defs/gameObjects/pingDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import type { MapDef } from "../../../shared/defs/mapDefs";
+import { TeamColor } from "../../../shared/defs/maps/factionDefs";
 import { Action, GameConfig, GasMode, TeamMode } from "../../../shared/gameConfig";
 import type { PlayerStatsMsg } from "../../../shared/net/playerStatsMsg";
 import type { MapIndicator, PlayerStatus } from "../../../shared/net/updateMsg";
@@ -30,7 +31,6 @@ import type { Localization } from "./localization";
 import { PieTimer } from "./pieTimer";
 import type { Touch } from "./touch";
 import type { UiManager2 } from "./ui2";
-import { TeamColor } from "../../../shared/defs/maps/factionDefs";
 
 function humanizeTime(time: number) {
     const hours = Math.floor(time / 3600);
@@ -416,8 +416,16 @@ export class UiManager {
             e.stopPropagation();
         });
         $("#btn-game-quit").on("click", () => {
-            if (this.displayingStats && !this.statsDownloaded && this.game.m_config.get("autoDownloadStats")) {
-                if (!confirm("The game is still ongoing – leave anyway? Stats will be incomplete.")) {
+            if (
+                this.displayingStats &&
+                !this.statsDownloaded &&
+                this.game.m_config.get("autoDownloadStats")
+            ) {
+                if (
+                    !confirm(
+                        "The game is still ongoing – leave anyway? Stats will be incomplete.",
+                    )
+                ) {
                     return;
                 }
             }
@@ -440,13 +448,22 @@ export class UiManager {
         // live in static HTML but UiManager is recreated each game, so a plain
         // .on() would stack handlers (and double-toggle the booleans).
         this.specAdvancedButton.off("click.advspec").on("click.advspec", () => {
-            this.game.m_advSpec.enabled = !this.game.m_advSpec.enabled;
+            const adv = this.game.m_advSpec;
+            adv.enabled = !adv.enabled;
+            // Restore the viewer's last-used settings whenever advanced spectator is
+            // (re)activated; capture them again when it's turned off.
+            if (adv.enabled) {
+                adv.applySettings(this.game.m_config.get("advancedSpectatorSettings"));
+            } else {
+                this.saveAdvSpec();
+            }
             this.updateAdvancedSpectatorUi();
             this.updateSpectateText();
         });
         const advToggle = (btn: JQuery, flip: () => void) => {
             btn.off("click.advspec").on("click.advspec", () => {
                 flip();
+                this.saveAdvSpec();
                 this.updateAdvancedSpectatorUi();
             });
         };
@@ -1531,8 +1548,7 @@ export class UiManager {
         map: Map,
         ui2: UiManager2,
     ) {
-
-        if(spectator && !gameOver) {
+        if (spectator && !gameOver) {
             console.log("Player is spectating");
             this.beginSpectating();
             return;
@@ -1540,11 +1556,16 @@ export class UiManager {
 
         this.statsDownloaded = false;
         const doDownload = () => {
-            const headers = "Name,Rank,Kills,Damage Dealt,Damage Taken,Time Alive,Elo Gained\n";
-            const statsData = headers + playerStats.map(stats => {
-                const playerInfo = playerBarn.getPlayerInfo(stats.playerId);
-                return `${playerInfo.name},${stats.rank},${stats.kills},${stats.damageDealt},${stats.damageTaken},${humanizeTime(stats.timeAlive)}`;
-            }).join("\n");
+            const headers =
+                "Name,Rank,Kills,Damage Dealt,Damage Taken,Time Alive,Elo Gained\n";
+            const statsData =
+                headers +
+                playerStats
+                    .map((stats) => {
+                        const playerInfo = playerBarn.getPlayerInfo(stats.playerId);
+                        return `${playerInfo.name},${stats.rank},${stats.kills},${stats.damageDealt},${stats.damageTaken},${humanizeTime(stats.timeAlive)}`;
+                    })
+                    .join("\n");
             const now = new Date();
             const fileName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}_stats.csv`;
             const blob = new Blob([statsData], { type: "text/csv;charset=utf-8" });
@@ -1561,7 +1582,7 @@ export class UiManager {
         // If we're spectating a team that's not our own, and the game isn't over yet,
         // don't display the stats screen again.
 
-        if (!betterStats){
+        if (!betterStats) {
             if (!spectating || teamId == localTeamId || gameOver) {
                 console.log("Not showing better stats screen");
                 this.toggleEscMenu(true);
@@ -1578,7 +1599,11 @@ export class UiManager {
                 this.statsInfoBox = $("<div/>", { id: "ui-stats-info-box" });
                 this.statsOptions1 = $("<div/>", { id: "ui-stats-options1" });
 
-                this.statsContentsContainer.append(this.statsHeader, this.statsInfoBox, this.statsOptions1);
+                this.statsContentsContainer.append(
+                    this.statsHeader,
+                    this.statsInfoBox,
+                    this.statsOptions1,
+                );
 
                 this.statsContentsContainer.css({
                     top: "",
@@ -1593,13 +1618,14 @@ export class UiManager {
                 this.setBannerAd(statsDelay, ui2);
 
                 const isLocalTeamWinner =
-                    localTeamId == winningTeamId || (spectating && winningTeamId == teamId);
+                    localTeamId == winningTeamId ||
+                    (spectating && winningTeamId == teamId);
                 const spectatingAnotherTeam = spectating && localTeamId != teamId;
                 const S = isLocalTeamWinner
                     ? this.getTitleVictoryText(
-                        spectatingAnotherTeam,
-                        map.getMapDef().gameMode,
-                    )
+                          spectatingAnotherTeam,
+                          map.getMapDef().gameMode,
+                      )
                     : this.getTitleDefeatText(teamMode, spectatingAnotherTeam);
                 let teamKills = 0;
                 for (let i = 0; i < playerStats.length; i++) {
@@ -1639,7 +1665,8 @@ export class UiManager {
                                 html: t,
                             }),
                         );
-                const M = device.uiLayout != device.UiLayout.Sm || device.tablet ? 250 : 125;
+                const M =
+                    device.uiLayout != device.UiLayout.Sm || device.tablet ? 250 : 125;
                 let P = 0;
                 P -= ((playerStats.length - 1) * M) / 2;
                 P -= (playerStats.length - 1) * 10;
@@ -1660,7 +1687,9 @@ export class UiManager {
                             html: helpers.htmlEscape(playerInfo.name),
                         }),
                     );
-                    B.append(T(this.localization.translate("game-kills"), `${stats.kills}`))
+                    B.append(
+                        T(this.localization.translate("game-kills"), `${stats.kills}`),
+                    )
                         .append(
                             T(
                                 this.localization.translate("game-damage-dealt"),
@@ -1711,8 +1740,16 @@ export class UiManager {
                     html: this.localization.translate("game-play-new-game"),
                 });
                 restartButton.on("click", () => {
-                    if (!gameOver && !this.statsDownloaded && this.game.m_config.get("autoDownloadStats")) {
-                        if (!confirm("The game is still ongoing – leave anyway? Stats will be incomplete.")) {
+                    if (
+                        !gameOver &&
+                        !this.statsDownloaded &&
+                        this.game.m_config.get("autoDownloadStats")
+                    ) {
+                        if (
+                            !confirm(
+                                "The game is still ongoing – leave anyway? Stats will be incomplete.",
+                            )
+                        ) {
                             return;
                         }
                     }
@@ -1778,7 +1815,8 @@ export class UiManager {
                 this.statsOptions1.children().each((idx, elem) => {
                     const e = $(elem);
                     e.hide();
-                    const delay = statsDelay + baseDelay + (elemIdx + idx) * elemDelay + 500;
+                    const delay =
+                        statsDelay + baseDelay + (elemIdx + idx) * elemDelay + 500;
                     e.delay(delay).fadeIn(elemFadeTime);
                     elemIdx++;
                 });
@@ -1801,40 +1839,44 @@ export class UiManager {
                     1000,
                 );
             }
-        }else{
-            if (!spectating && betterStats || teamId == localTeamId && betterStats || gameOver && betterStats) {
+        } else {
+            if (
+                (!spectating && betterStats) ||
+                (teamId == localTeamId && betterStats) ||
+                (gameOver && betterStats)
+            ) {
                 console.log("Showing better stats");
                 this.toggleEscMenu(true);
                 this.displayingStats = true;
                 this.m_pieTimer.stop();
                 this.displayMapLarge(true);
-                
+
                 this.clearStatsElems();
-                
+
                 this.setSpectating(false, teamMode);
                 this.removeAds();
                 this.statsMain.css("display", "block");
                 this.statsLogo.css("display", "block");
-        
+
                 this.statsContentsContainer.css({ top: "" });
-        
+
                 const victory = localTeamId == winningTeamId;
                 const statsDelay = victory ? 1750 : 2500;
-        
+
                 this.setBannerAd(statsDelay, ui2);
-        
+
                 const title = $("<div/>", {
                     class: "ui-stats-title",
-                    text: "Battle Result"
+                    text: "Battle Result",
                 });
-        
+
                 const tableContainer = $("<div/>", {
                     class: "ui-stats-table-container",
-                    css: { opacity: 0 }
+                    css: { opacity: 0 },
                 });
-        
+
                 const tableHeader = $("<div/>", {
-                    class: "ui-stats-row header"
+                    class: "ui-stats-row header",
                 }).append([
                     $("<div/>", { class: "ui-stats-col rank", text: "RANK" }),
                     $("<div/>", { class: "ui-stats-col player-tittle", text: "PLAYER" }),
@@ -1844,19 +1886,19 @@ export class UiManager {
                     $("<div/>", { class: "ui-stats-col", text: "DAMAGE TAKEN" }),
                     $("<div/>", { class: "ui-stats-col", text: "TIME" }),
                 ]);
-        
+
                 const sortedPlayerStats = playerStats.sort((a, b) => {
                     if (a.rank === 0) return -1;
                     if (b.rank === 0) return 1;
                     return a.rank - b.rank;
                 });
-        
+
                 const tableRowsContainer = $("<div/>", {
-                    class: "ui-stats-table-rows"
+                    class: "ui-stats-table-rows",
                 });
 
                 let a = 0;
-        
+
                 for (const stats of sortedPlayerStats) {
                     const playerInfo = playerBarn.getPlayerInfo(stats.playerId);
                     const timeAlive = humanizeTime(stats.timeAlive);
@@ -1864,18 +1906,17 @@ export class UiManager {
                     if (stats.rank === 0) {
                         a++;
                     }
-                    
-        
+
                     const playerRow = $("<div/>", {
-                        class: "ui-stats-row"
+                        class: "ui-stats-row",
                     }).append([
                         $("<div/>", {
                             class: "ui-stats-col rank",
-                            text: stats.rank === 0 ? "#?" : "#" + stats.rank
+                            text: stats.rank === 0 ? "#?" : "#" + stats.rank,
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            text: helpers.htmlEscape(playerInfo.name)
+                            text: helpers.htmlEscape(playerInfo.name),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -1886,13 +1927,13 @@ export class UiManager {
                     if (stats.playerId == this.game.m_localId) {
                         playerRow.addClass("active-player");
                     }
-        
+
                     tableRowsContainer.append(playerRow);
                 }
-        
+
                 tableContainer.append(tableHeader);
                 tableContainer.append(tableRowsContainer);
-        
+
                 const statsOptions = $("<div/>", {
                     id: "ui-stats-options",
                 });
@@ -1902,14 +1943,22 @@ export class UiManager {
                     html: this.localization.translate("game-play-new-game"),
                 });
                 restartButton.on("click", () => {
-                    if (!gameOver && !this.statsDownloaded && this.game.m_config.get("autoDownloadStats")) {
-                        if (!confirm("The game is still ongoing – leave anyway? Stats will be incomplete.")) {
+                    if (
+                        !gameOver &&
+                        !this.statsDownloaded &&
+                        this.game.m_config.get("autoDownloadStats")
+                    ) {
+                        if (
+                            !confirm(
+                                "The game is still ongoing – leave anyway? Stats will be incomplete.",
+                            )
+                        ) {
                             return;
                         }
                     }
                     this.quitGame();
                 });
-        
+
                 /*if (!gameOver && !this.waitingForPlayers && a >= 2) {
                     const spectateButton = $("<a/>", {
                         class: "btn-green btn-darken menu-option ui-stats-spectate",
@@ -1959,41 +2008,39 @@ export class UiManager {
                 }*/
 
                 const spectateButton = $("<a/>", {
-                        class: "btn-green btn-darken menu-option ui-stats-spectate",
-                        html: this.localization.translate("game-spectate"),
-                    });
-                    spectateButton.on("click", this.beginSpectating.bind(this));
-                    statsOptions.append(spectateButton);
+                    class: "btn-green btn-darken menu-option ui-stats-spectate",
+                    html: this.localization.translate("game-spectate"),
+                });
+                spectateButton.on("click", this.beginSpectating.bind(this));
+                statsOptions.append(spectateButton);
 
-
-                    // Add download button
+                // Add download button
                 const downloadButton = $("<a/>", {
                     class: "btn-green btn-darken menu-option ui-stats-download",
                     text: "Download Stats",
                 });
-                
-                
+
                 downloadButton.on("click", () => doDownload());
                 statsOptions.append(downloadButton);
 
                 if (gameOver && this.game.m_config.get("autoDownloadStats")) {
                     doDownload();
                 }
-        
+
                 statsOptions.append(restartButton);
                 tableContainer.append(statsOptions);
-        
+
                 tableContainer.prepend(title);
-        
+
                 this.statsContentsContainer.append(tableContainer);
-        
+
                 let elemIdx = 0;
                 const elemFadeTime = 200;
                 const elemDelay = 150 / Math.max(1, playerStats.length);
                 const baseDelay = 450 / Math.max(1, playerStats.length);
-        
-                tableContainer.delay(statsDelay).animate({ opacity: 1 }, 1000); 
-        
+
+                tableContainer.delay(statsDelay).animate({ opacity: 1 }, 1000);
+
                 tableContainer.children().each((idx, elem) => {
                     const e = $(elem);
                     e.css("opacity", 0);
@@ -2006,23 +2053,17 @@ export class UiManager {
                                     .delay(idx * elemDelay)
                                     .animate({ opacity: 1 }, elemFadeTime);
                             });
-                        }
+                        },
                     );
                 });
-        
+
                 this.statsElem.stop(true, true);
                 this.statsElem.css("display", "block");
-                this.statsElem.delay(statsDelay).animate(
-                    { opacity: 1 },
-                    1000
-                );
-        
+                this.statsElem.delay(statsDelay).animate({ opacity: 1 }, 1000);
+
                 this.statsContents.stop(true, true);
                 this.statsContents.css("display", "block");
-                this.statsContents.delay(statsDelay).animate(
-                    { opacity: 1 },
-                    1000
-                );
+                this.statsContents.delay(statsDelay).animate({ opacity: 1 }, 1000);
             }
         }
     }
@@ -2058,8 +2099,6 @@ export class UiManager {
 
         this.statsMain.css("display", "none");
     }
-
-
 
     showTeamAd(playerStats: PlayerStatsMsg["playerStats"], _ui2Manager: unknown) {
         this.toggleEscMenu(true);
@@ -2215,6 +2254,14 @@ export class UiManager {
         }
     }
 
+    /** Persists the current advanced spectator toggles so they survive games/sessions. */
+    saveAdvSpec() {
+        this.game.m_config.set(
+            "advancedSpectatorSettings",
+            this.game.m_advSpec.getSettings(),
+        );
+    }
+
     // Reflects the advanced spectator state onto the buttons. The master button
     // is shown when the server allows advanced spectator (admins, or any spectator
     // on a non-prod server, so the feature can be tested before prod); the
@@ -2232,7 +2279,10 @@ export class UiManager {
         }
 
         this.specAdvancedButton.toggleClass("active", advSpec.enabled);
-        this.specAdvancedOptions.css("display", advSpec.enabled ? "inline-block" : "none");
+        this.specAdvancedOptions.css(
+            "display",
+            advSpec.enabled ? "inline-block" : "none",
+        );
         // The collapse header is shown when the mode is enabled; it toggles the
         // visibility of the option list without disabling any active feature.
         this.specAdvancedList.css(
@@ -2428,7 +2478,7 @@ export class UiManager {
     displayAnnouncement(message: string, color?: string, stayTime?: number) {
         const timeout = Number.isNaN(stayTime) ? 3000 : (stayTime ?? 3000);
         if (message) {
-            if(color){
+            if (color) {
                 this.announcement.css("color", color);
             }
             this.announcement.html(message);
@@ -2436,8 +2486,8 @@ export class UiManager {
                 setTimeout(() => {
                     this.announcement.fadeOut(800, () => {
                         setTimeout(() => {
-                            this.announcement.css("color", "yellow")
-                        })
+                            this.announcement.css("color", "yellow");
+                        });
                     });
                 }, timeout);
             });
@@ -3027,39 +3077,38 @@ export class UiManager {
             class: "ui-arena-role-body-right",
         });
         const roleGuns = roleDef.defaultItems?.weapons;
-        if(roleGuns)
-        for (let i = 0; i < 2; i++) {
-            const gun = roleGuns[i];
-            const perkElem = $("<div/>", {
-                class: "ui-arena-role-body-perk",
-            });
-            const perkElemImg = $("<div/>", {
-                class: "ui-arena-role-body-perk-image-wrapper",
-            }).append(
-                $("<div/>", {
-                    class: "ui-arena-role-body-perk-image-icon",
-                }),
-            );
-            const perkElemName = $("<div/>", {
-                class: "ui-arena-role-body-perk-name",
-            });
+        if (roleGuns)
+            for (let i = 0; i < 2; i++) {
+                const gun = roleGuns[i];
+                const perkElem = $("<div/>", {
+                    class: "ui-arena-role-body-perk",
+                });
+                const perkElemImg = $("<div/>", {
+                    class: "ui-arena-role-body-perk-image-wrapper",
+                }).append(
+                    $("<div/>", {
+                        class: "ui-arena-role-body-perk-image-icon",
+                    }),
+                );
+                const perkElemName = $("<div/>", {
+                    class: "ui-arena-role-body-perk-name",
+                });
 
-             const rawWeapon = typeof gun === "function" ? null : gun;
-            if (!rawWeapon) continue;
+                const rawWeapon = typeof gun === "function" ? null : gun;
+                if (!rawWeapon) continue;
 
-            const weaponType = rawWeapon.type;
+                const weaponType = rawWeapon.type;
 
+                const weaponImg = helpers.getSvgFromGameType(weaponType);
+                perkElemImg.find(".ui-arena-role-body-perk-image-icon").css({
+                    "background-image": `url('${weaponImg}')`,
+                });
 
-            const weaponImg = helpers.getSvgFromGameType(weaponType);
-            perkElemImg.find(".ui-arena-role-body-perk-image-icon").css({
-                "background-image": `url('${weaponImg}')`,
-            });
-
-            const perkName = this.localization.translate(`game-${weaponType}`);
-            perkElemName.html(perkName);
-            perkElem.append(perkElemImg).append(perkElemName);
-            roleBodyRight.append(perkElem);
-        }
+                const perkName = this.localization.translate(`game-${weaponType}`);
+                perkElemName.html(perkName);
+                perkElem.append(perkElemImg).append(perkElemName);
+                roleBodyRight.append(perkElem);
+            }
         $("#ui-arena-role-body").html("").append(roleBodyLeft).append(roleBodyRight);
         this.roleArenaDisplayed = role;
     }

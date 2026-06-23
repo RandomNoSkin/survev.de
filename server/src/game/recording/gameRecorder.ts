@@ -1,0 +1,393 @@
+import fs from "node:fs";
+import path from "node:path";
+import zlib from "node:zlib";
+import { GameConfig } from "../../../../shared/gameConfig";
+import {
+    encodeFrameHeader,
+    encodeReplayHeader,
+    type ReplayMeta,
+} from "../../../../shared/net/replay";
+import { Config } from "../../config";
+import type { Game } from "../game";
+import type { Player } from "../objects/player";
+
+const MB = 1024 * 1024;
+
+/** Absolute path to the recordings root, resolved against the server working dir. */
+export function recordingsRoot(): string {
+    return path.resolve(Config.recording.dir);
+}
+
+/** Strips a player name down to something safe to embed in a filename. */
+function safeFileName(name: string): string {
+    return (name || "player").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 24);
+}
+
+/** One per-player gzip recording stream within a game. */
+interface Track {
+    player: Player;
+    gzip: zlib.Gzip;
+    filePath: string;
+    fileName: string;
+    lastFrameAt: number;
+    rawBytes: number;
+    stopped: boolean;
+}
+
+/** Summary of a recorded player POV, mirrored into the game's `meta.json`. */
+interface RecordedPlayerMeta {
+    playerId: number;
+    playerName: string;
+    file: string;
+    bytes: number;
+    kills: number;
+    damageDealt: number;
+    damageTaken: number;
+    /** Seconds the player was alive when their recording stopped. */
+    timeAlive: number;
+}
+
+/**
+ * Records the exact server -> client byte stream per real player to gzipped
+ * `.svrep.gz` files on the local disk. One instance per `Game`.
+ *
+ * Memory-safety (small/OOM-prone boxes): everything streams straight to disk via a
+ * gzip transform — a whole match is never held in RAM. Bots/spectators are skipped,
+ * tracks are capped in size and count, and a track is dropped (rather than buffering
+ * unboundedly) if disk writes back up. See `Config.recording`.
+ */
+export class GameRecorder {
+    private readonly tracks = new Map<number, Track>();
+    private readonly recorded: RecordedPlayerMeta[] = [];
+    private readonly enabled = Config.recording.enabled;
+    private readonly startTs = Date.now();
+    private dir = "";
+    private dirReady = false;
+    private stoppedAll = false;
+
+    constructor(readonly game: Game) {}
+
+    /** Records one outgoing buffer for a player. Cheap no-op when recording is off/skipped. */
+    recordFrame(player: Player, buffer: Uint8Array): void {
+        if (!this.enabled || this.stoppedAll) return;
+        if (player.spectator) return; // observers, not match participants
+        if (player.bot && !Config.recording.recordBots) return;
+
+        let track = this.tracks.get(player.__id);
+        if (!track) {
+            if (this.tracks.size >= Config.recording.maxConcurrentTracks) return;
+            track = this.openTrack(player);
+            if (!track) return;
+        }
+        if (track.stopped) return;
+
+        // Backpressure guard: if the gzip/disk pipeline is buffering too much, drop
+        // this track rather than let the buffer grow into an OOM.
+        if (track.gzip.writableLength > Config.recording.writeBackpressureBytes) {
+            this.stopTrack(track, "backpressure");
+            return;
+        }
+        // Per-track size cap.
+        if (track.rawBytes >= Config.recording.maxGameMb * MB) {
+            this.stopTrack(track, "size cap");
+            return;
+        }
+
+        const now = Date.now();
+        const dt = now - track.lastFrameAt;
+        track.lastFrameAt = now;
+
+        // getBuffer() returns a view onto a reused ArrayBuffer — copy before it goes
+        // async into the gzip stream.
+        const copy = buffer.slice();
+        track.gzip.write(encodeFrameHeader(dt, copy.length));
+        track.gzip.write(copy);
+        track.rawBytes += copy.length + 8;
+    }
+
+    /** Stops recording a single player (called when they leave/disconnect). */
+    stop(player: Player): void {
+        const track = this.tracks.get(player.__id);
+        if (track) this.stopTrack(track, "player left");
+    }
+
+    /** Stops every track and writes the game's `meta.json`. Called on game end. */
+    stopAll(): void {
+        if (this.stoppedAll) return;
+        this.stoppedAll = true;
+        for (const track of this.tracks.values()) {
+            this.stopTrack(track, "game ended");
+        }
+        if (this.recorded.length) {
+            this.writeMeta();
+            void cleanupRetention();
+        }
+    }
+
+    private openTrack(player: Player): Track | undefined {
+        try {
+            if (!this.dirReady) {
+                const day = new Date(this.startTs).toISOString().slice(0, 10);
+                this.dir = path.join(recordingsRoot(), day, this.game.id);
+                fs.mkdirSync(this.dir, { recursive: true });
+                this.dirReady = true;
+            }
+
+            const fileName = `${player.__id}-${safeFileName(player.name)}.svrep.gz`;
+            const filePath = path.join(this.dir, fileName);
+            const gzip = zlib.createGzip();
+            const fileStream = fs.createWriteStream(filePath);
+            gzip.pipe(fileStream);
+
+            const onErr = (err: unknown) => {
+                this.game.logger.warn("Recording write error:", err);
+                const t = this.tracks.get(player.__id);
+                if (t) this.stopTrack(t, "write error");
+            };
+            gzip.on("error", onErr);
+            fileStream.on("error", onErr);
+
+            const meta: ReplayMeta = {
+                gameId: this.game.id,
+                playerId: player.__id,
+                playerName: player.name,
+                teamMode: this.game.teamMode,
+                mapName: this.game.mapName,
+                startTs: this.startTs,
+                protocolVersion: GameConfig.protocolVersion,
+            };
+            gzip.write(encodeReplayHeader(meta));
+
+            const track: Track = {
+                player,
+                gzip,
+                filePath,
+                fileName,
+                lastFrameAt: Date.now(),
+                rawBytes: 0,
+                stopped: false,
+            };
+            this.tracks.set(player.__id, track);
+            return track;
+        } catch (err) {
+            this.game.logger.warn("Failed to start recording track:", err);
+            return undefined;
+        }
+    }
+
+    private stopTrack(track: Track, reason: string): void {
+        if (track.stopped) return;
+        track.stopped = true;
+        try {
+            track.gzip.end();
+        } catch {
+            /* already closed */
+        }
+        if (track.rawBytes > 0) {
+            const p = track.player;
+            this.recorded.push({
+                playerId: p.__id,
+                playerName: p.name,
+                file: track.fileName,
+                bytes: track.rawBytes,
+                kills: p.kills,
+                damageDealt: Math.round(p.damageDealt),
+                damageTaken: Math.round(p.damageTaken),
+                timeAlive: Math.round(p.timeAlive),
+            });
+        } else {
+            // Nothing was written — remove the empty file.
+            fs.rm(track.filePath, () => {});
+        }
+        if (reason !== "game ended" && reason !== "player left") {
+            this.game.logger.warn(
+                `Recording track stopped (${reason}) for ${track.player.name}`,
+            );
+        }
+    }
+
+    private writeMeta(): void {
+        try {
+            const meta = {
+                gameId: this.game.id,
+                teamMode: this.game.teamMode,
+                mapName: this.game.mapName,
+                startTs: this.startTs,
+                durationMs: Date.now() - this.startTs,
+                protocolVersion: GameConfig.protocolVersion,
+                players: this.recorded,
+            };
+            fs.writeFileSync(path.join(this.dir, "meta.json"), JSON.stringify(meta));
+        } catch (err) {
+            this.game.logger.warn("Failed to write recording meta:", err);
+        }
+    }
+}
+
+// ─── Disk read side (used by the game-server HTTP layer) ────────────────────────
+
+export interface GameRecordingInfo {
+    gameId: string;
+    teamMode: number;
+    mapName: string;
+    startTs: number;
+    durationMs: number;
+    protocolVersion: number;
+    players: RecordedPlayerMeta[];
+}
+
+/** Lists all recorded games on this host (newest first), read from their `meta.json`. */
+export async function listRecordings(): Promise<GameRecordingInfo[]> {
+    const root = recordingsRoot();
+    const out: GameRecordingInfo[] = [];
+    let days: string[];
+    try {
+        days = await fs.promises.readdir(root);
+    } catch {
+        return out; // dir doesn't exist yet
+    }
+    for (const day of days) {
+        const dayDir = path.join(root, day);
+        let games: string[];
+        try {
+            games = await fs.promises.readdir(dayDir);
+        } catch {
+            continue;
+        }
+        for (const gameId of games) {
+            try {
+                const raw = await fs.promises.readFile(
+                    path.join(dayDir, gameId, "meta.json"),
+                    "utf8",
+                );
+                out.push(JSON.parse(raw) as GameRecordingInfo);
+            } catch {
+                /* incomplete/aborted game dir — skip */
+            }
+        }
+    }
+    out.sort((a, b) => b.startTs - a.startTs);
+    return out;
+}
+
+/** Reads a single per-player `.svrep.gz` file. Returns the gzip bytes, or null if not found. */
+export async function readRecordingFile(
+    gameId: string,
+    playerId: number,
+): Promise<Buffer | null> {
+    const root = recordingsRoot();
+    let days: string[];
+    try {
+        days = await fs.promises.readdir(root);
+    } catch {
+        return null;
+    }
+    for (const day of days) {
+        const gameDir = path.join(root, day, gameId);
+        let files: string[];
+        try {
+            files = await fs.promises.readdir(gameDir);
+        } catch {
+            continue;
+        }
+        const prefix = `${playerId}-`;
+        const match = files.find((f) => f.startsWith(prefix) && f.endsWith(".svrep.gz"));
+        if (match) {
+            try {
+                return await fs.promises.readFile(path.join(gameDir, match));
+            } catch {
+                return null;
+            }
+        }
+    }
+    return null;
+}
+
+// ─── Retention cleanup ──────────────────────────────────────────────────────────
+
+let lastCleanup = 0;
+
+/** Enforces age + total-size caps by deleting the oldest game dirs. Throttled. */
+async function cleanupRetention(): Promise<void> {
+    const now = Date.now();
+    if (now - lastCleanup < 60_000) return; // at most once a minute
+    lastCleanup = now;
+
+    const root = recordingsRoot();
+    const maxAgeMs = Config.recording.maxAgeDays * 24 * 60 * 60 * 1000;
+    const maxTotalBytes = Config.recording.maxTotalGb * 1024 * MB;
+
+    try {
+        const entries: { dir: string; mtime: number; size: number }[] = [];
+        const days = await fs.promises.readdir(root);
+        for (const day of days) {
+            const dayDir = path.join(root, day);
+            let games: string[];
+            try {
+                games = await fs.promises.readdir(dayDir);
+            } catch {
+                continue;
+            }
+            for (const gameId of games) {
+                const gameDir = path.join(dayDir, gameId);
+                const size = await dirSize(gameDir);
+                let mtime = 0;
+                try {
+                    mtime = (await fs.promises.stat(gameDir)).mtimeMs;
+                } catch {
+                    continue;
+                }
+                entries.push({ dir: gameDir, mtime, size });
+            }
+        }
+
+        // 1. Age cap.
+        for (const e of entries) {
+            if (now - e.mtime > maxAgeMs) {
+                await fs.promises.rm(e.dir, { recursive: true, force: true });
+                e.size = -1; // mark removed
+            }
+        }
+
+        // 2. Total-size cap — delete oldest until under budget.
+        const remaining = entries
+            .filter((e) => e.size >= 0)
+            .sort((a, b) => a.mtime - b.mtime);
+        let total = remaining.reduce((sum, e) => sum + e.size, 0);
+        for (const e of remaining) {
+            if (total <= maxTotalBytes) break;
+            await fs.promises.rm(e.dir, { recursive: true, force: true });
+            total -= e.size;
+        }
+
+        // Prune now-empty day dirs.
+        for (const day of await fs.promises.readdir(root)) {
+            const dayDir = path.join(root, day);
+            try {
+                if ((await fs.promises.readdir(dayDir)).length === 0) {
+                    await fs.promises.rmdir(dayDir);
+                }
+            } catch {
+                /* not empty / gone */
+            }
+        }
+    } catch {
+        /* root missing or transient FS error — ignore */
+    }
+}
+
+async function dirSize(dir: string): Promise<number> {
+    let total = 0;
+    try {
+        for (const file of await fs.promises.readdir(dir)) {
+            try {
+                total += (await fs.promises.stat(path.join(dir, file))).size;
+            } catch {
+                /* gone */
+            }
+        }
+    } catch {
+        /* gone */
+    }
+    return total;
+}
