@@ -140,6 +140,27 @@ app.get("/api/replay", async (c) => {
     });
 });
 
+/**
+ * Public, token-gated god-view track file (used by the client in replay mode to show
+ * all players in the advanced spectator regardless of POV). Game-scoped token, same as
+ * `/api/replay`. Returns the raw `_tracks.svtrk.gz` bytes, or 404 for older recordings
+ * that predate god-view tracks (the client then silently keeps the old behaviour).
+ */
+app.get("/api/replay/tracks", async (c) => {
+    const data = verifyReplayToken(c.req.query("token") ?? "");
+    if (!data) {
+        return c.json({ error: "invalid_or_expired_token" }, 403);
+    }
+    const file = await server.streamReplayTracks(data.region, data.gameId);
+    if (!file) {
+        return c.json({ error: "not_found" }, 404);
+    }
+    return c.body(file, 200, {
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "private, max-age=3600",
+    });
+});
+
 // not using the middleware here to not add extra indentation... smh
 const findGameRateLimit = new HTTPRateLimit(5, 3000);
 

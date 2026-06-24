@@ -1210,6 +1210,25 @@ export class UiManager {
             }
         }
 
+        // Replay god-view: add dots for players the watched POV could NOT see (so they
+        // have no playerStatus above). Gated by the advanced-spectator "Enemies on Map"
+        // toggle (advSpecShowEnemies), which is only set during replay/spectate.
+        const godView = this.game.m_replayGodView;
+        if (godView && playerBarn.advSpecShowEnemies) {
+            const dotScale = device.uiLayout == device.UiLayout.Sm ? 0.15 : 0.2;
+            for (const gp of godView.values()) {
+                if (gp.id === activePlayerInfo.playerId) continue;
+                if (playerBarn.playerStatus[gp.id]) continue; // already drawn above
+                const isEnemy = gp.teamId != activePlayerInfo.teamId;
+                let texture = "player-map-inner.img";
+                if (gp.dead) texture = "skull-outlined.img";
+                else if (gp.downed) texture = "player-map-downed.img";
+                const tint = isEnemy ? 0xff4d4d : playerBarn.getTeamColor(gp.teamId);
+                const scale = gp.dead || gp.downed ? dotScale * 1.25 : dotScale * 0.75;
+                addSprite(gp.pos, scale, 1, true, 65535 + gp.id * 2, texture, tint);
+            }
+        }
+
         // Hide any sprites that weren't used
         for (let i = this.playerMapSprites.length - 1; i >= spriteIdx; i--) {
             this.playerMapSprites[i].visible = false;

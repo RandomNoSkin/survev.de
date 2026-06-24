@@ -343,6 +343,9 @@ export class Game {
         this.planeBarn.update(dt);
         this.profiler.endSample();
 
+        // God-view replay sampling (throttled internally; server has full visibility).
+        this.recorder.sampleTracks();
+
         const tickTime = performance.now() - this.now;
 
         if (tickTime > 1000) {

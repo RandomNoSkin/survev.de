@@ -11,7 +11,11 @@ import * as net from "../../shared/net/net";
 import { Config } from "./config";
 import { SingleThreadGameManager } from "./game/gameManager";
 import { GameProcessManager } from "./game/gameProcessManager";
-import { listRecordings, readRecordingFile } from "./game/recording/gameRecorder";
+import {
+    listRecordings,
+    readRecordingFile,
+    readTracksFile,
+} from "./game/recording/gameRecorder";
 import { errorLogger, gameLogger } from "./utils/betterLogger";
 import { GIT_VERSION } from "./utils/gitRevision";
 import { ServerLogger } from "./utils/logger";
@@ -904,6 +908,53 @@ app.post("/api/dashboard/replay_file", (res, req) => {
             } catch (err) {
                 res.aborted = true;
                 server.logger.warn("replay_file write error:", err);
+            }
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Streams a game's god-view track side-file (raw gzip bytes) from disk. */
+app.post("/api/dashboard/replay_tracks", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const { gameId } = body ?? {};
+            if (typeof gameId !== "string") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const file = await readTracksFile(gameId);
+            if (res.aborted) return;
+            if (!file) {
+                returnJson(res, { error: "not_found" });
+                return;
+            }
+            // Copy into a standalone Uint8Array (pooled node Buffers can't be handed to uWS).
+            const out = new Uint8Array(file.byteLength);
+            out.set(file);
+            if ((res as any).responded) return;
+            (res as any).responded = true;
+            try {
+                res.cork(() => {
+                    if (res.aborted) return;
+                    res.writeHeader("Content-Type", "application/octet-stream").end(out);
+                });
+            } catch (err) {
+                res.aborted = true;
+                server.logger.warn("replay_tracks write error:", err);
             }
         },
         () => {

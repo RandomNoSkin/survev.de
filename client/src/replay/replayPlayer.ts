@@ -1,6 +1,7 @@
 import { GameConfig } from "../../../shared/gameConfig";
 import {
     parseReplay,
+    parseTracks,
     type ReplayFrame,
     type ReplayMeta,
 } from "../../../shared/net/replay";
@@ -8,6 +9,8 @@ import { v2 } from "../../../shared/utils/v2";
 import { api } from "../api";
 import type { Game } from "../game";
 import type { AdvancedSpectator } from "../ui/advancedSpectator";
+import { ReplayGodView } from "./godView";
+import { ReplayRecorder } from "./replayRecorder";
 import { ReplayUI } from "./replayUI";
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4];
@@ -65,6 +68,9 @@ export class ReplayPlayer {
 
     private ui: ReplayUI;
     private keyHandler: (e: KeyboardEvent) => void;
+    private recorder?: ReplayRecorder;
+    /** God-view tracks (all players' pos/health); undefined for older recordings. */
+    private godView?: ReplayGodView;
 
     constructor(
         private game: Game,
@@ -78,6 +84,7 @@ export class ReplayPlayer {
                 onSeekFraction: (f) => this.seekTo(f * this.duration),
                 onPrevPov: () => void this.switchPov(-1),
                 onNextPov: () => void this.switchPov(1),
+                onToggleRecord: () => this.toggleRecord(),
             },
             SPEEDS,
         );
@@ -107,6 +114,7 @@ export class ReplayPlayer {
 
         await this.loadPovFile(this.povs[this.povIndex].playerId);
         this.game.m_replayMode = true;
+        await this.loadTracks();
         this.idx = 0;
         this.elapsed = 0;
         this.updateTitle();
@@ -120,6 +128,25 @@ export class ReplayPlayer {
         const res = await fetch(api.resolveUrl(path));
         if (!res.ok) throw new Error(`Replay request failed (${res.status})`);
         return res.json();
+    }
+
+    /**
+     * Loads the optional god-view track file (all players' pos/health). Absent on
+     * older recordings → a 404 just leaves the god view off (existing behaviour).
+     */
+    private async loadTracks(): Promise<void> {
+        try {
+            const url = api.resolveUrl(
+                `/api/replay/tracks?token=${encodeURIComponent(this.token)}`,
+            );
+            const res = await fetch(url);
+            if (!res.ok) return; // 404 for recordings without tracks
+            this.godView = new ReplayGodView(
+                parseTracks(await gunzip(await res.arrayBuffer())),
+            );
+        } catch (err) {
+            console.warn("Replay god-view tracks unavailable:", err);
+        }
     }
 
     /** Fetches + decompresses + parses one POV's recording into the current-recording fields. */
@@ -158,6 +185,11 @@ export class ReplayPlayer {
                 this.elapsed = this.duration;
                 this.paused = true; // hold on the final frame
             }
+        }
+
+        if (this.godView) {
+            this.godView.update(this.currentAbsTime());
+            this.game.m_replayGodView = this.godView.current;
         }
 
         this.ui.update(this.elapsed, this.duration, this.paused, this.speed);
@@ -276,6 +308,47 @@ export class ReplayPlayer {
         this.game.m_uiManager?.updateAdvancedSpectatorUi();
     }
 
+    /** Starts/stops recording the game canvas to a downloadable video file. */
+    private toggleRecord(): void {
+        try {
+            if (this.recorder?.isRecording) {
+                this.recorder.stop();
+                this.ui.setRecording(false);
+                return;
+            }
+            if (!ReplayRecorder.isSupported()) {
+                alert("Video recording is not supported in this browser.");
+                return;
+            }
+            const canvas = document.querySelector<HTMLCanvasElement>("#cvs");
+            if (!canvas) {
+                console.error("Replay recording: game canvas (#cvs) not found.");
+                return;
+            }
+            this.recorder = new ReplayRecorder(canvas, this.recordFileName());
+            if (this.recorder.start()) {
+                this.ui.setRecording(true);
+            } else {
+                this.recorder = undefined;
+                this.ui.setRecording(false);
+                alert("Could not start video recording (no supported format).");
+            }
+        } catch (err) {
+            console.error("Replay recording toggle failed:", err);
+            this.ui.setRecording(false);
+        }
+    }
+
+    /** Builds a filesystem-safe video file name from the current recording's metadata. */
+    private recordFileName(): string {
+        const safe = (s: string) =>
+            (s || "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 40);
+        const name = safe(this.meta?.playerName ?? "");
+        const map = safe(this.meta?.mapName ?? "");
+        const id = (this.meta?.gameId ?? "").slice(0, 8);
+        return `replay-${name}-${map}-${id}`.replace(/-+$/g, "") || "replay";
+    }
+
     private updateTitle(): void {
         const name = this.meta?.playerName ?? "?";
         const map = this.meta?.mapName ?? "";
@@ -288,6 +361,9 @@ export class ReplayPlayer {
         this.destroyed = true;
         if (this.rafId) cancelAnimationFrame(this.rafId);
         window.removeEventListener("keydown", this.keyHandler);
+        this.game.m_replayGodView = null;
+        // Finalize any in-progress recording so the file is still saved.
+        this.recorder?.stop();
         this.ui.destroy();
     }
 }

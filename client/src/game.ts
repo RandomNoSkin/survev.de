@@ -43,6 +43,7 @@ import { ProjectileBarn } from "./objects/projectile";
 import { ShotBarn } from "./objects/shot";
 import { SmokeBarn } from "./objects/smoke";
 import { Renderer } from "./renderer";
+import type { GodViewSnapshot } from "./replay/godView";
 import type { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { AdvancedSpectator } from "./ui/advancedSpectator";
@@ -129,6 +130,12 @@ export class Game {
 
     /** True when this Game is playing back a recorded replay (no socket, no input sent). */
     m_replayMode = false;
+    /**
+     * God-view player snapshot during replay (all players' pos/health, regardless of
+     * POV culling). Fed by the replay player; consumed by the advanced spectator +
+     * minimap so labels/ESP/map dots can show every player. Null outside replay.
+     */
+    m_replayGodView: GodViewSnapshot | null = null;
 
     seq!: number;
     seqInFlight!: boolean;
@@ -1268,6 +1275,7 @@ export class Game {
             this.m_projectileBarn,
             this.m_activeId,
             this.m_localId,
+            this.m_replayGodView,
         );
         if (IS_DEV) {
             this.m_debugDisplay.clear();

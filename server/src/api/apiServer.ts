@@ -159,6 +159,34 @@ class Region {
         }
     }
 
+    /** Fetches a game's god-view track side-file (raw gzip bytes) from this region's game server. */
+    async streamReplayTracks(gameId: string): Promise<ArrayBuffer | null> {
+        const url = `http${this.data.https ? "s" : ""}://${this.data.address}/api/dashboard/replay_tracks`;
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "content-type": "application/json",
+                    "survev-api-key": Config.secrets.SURVEV_API_KEY,
+                },
+                body: JSON.stringify({ gameId }),
+                signal: AbortSignal.timeout(REGION_FETCH_TIMEOUT_MS),
+            });
+            if (!res.ok) return null;
+            // A JSON content-type here means an error payload (e.g. not_found), not the file.
+            if ((res.headers.get("content-type") ?? "").includes("application/json")) {
+                return null;
+            }
+            return await res.arrayBuffer();
+        } catch (err) {
+            defaultLogger.error(
+                `Error fetching replay tracks from region ${this.id}:`,
+                err,
+            );
+            return null;
+        }
+    }
+
     /** Sends an admin command to a running game on this region's game server. */
     async sendDashboardGameCmd(gameId: string, cmd: object): Promise<boolean> {
         const data = await this.fetch<{ ok: boolean }>("api/dashboard/game_cmd", {
@@ -325,6 +353,14 @@ export class ApiServer {
         playerId: number,
     ): Promise<ArrayBuffer | null> {
         return (await this.regions[region]?.streamReplayFile(gameId, playerId)) ?? null;
+    }
+
+    /** Fetches a game's god-view track side-file (raw gzip bytes) from a region's game server. */
+    async streamReplayTracks(
+        region: string,
+        gameId: string,
+    ): Promise<ArrayBuffer | null> {
+        return (await this.regions[region]?.streamReplayTracks(gameId)) ?? null;
     }
 
     async refreshRegionModes() {

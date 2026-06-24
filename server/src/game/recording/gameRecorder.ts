@@ -5,13 +5,22 @@ import { GameConfig } from "../../../../shared/gameConfig";
 import {
     encodeFrameHeader,
     encodeReplayHeader,
+    encodeTrackSample,
+    encodeTracksHeader,
     type ReplayMeta,
+    type TrackEntry,
+    type TracksMeta,
 } from "../../../../shared/net/replay";
 import { Config } from "../../config";
 import type { Game } from "../game";
 import type { Player } from "../objects/player";
 
 const MB = 1024 * 1024;
+
+/** Filename of the per-game god-view track side-file. */
+const TRACKS_FILE = "_tracks.svtrk.gz";
+/** How often the god-view samples every player's state (ms). */
+const TRACK_SAMPLE_INTERVAL_MS = 250;
 
 /** Absolute path to the recordings root, resolved against the server working dir. */
 export function recordingsRoot(): string {
@@ -64,6 +73,13 @@ export class GameRecorder {
     private dir = "";
     private dirReady = false;
     private stoppedAll = false;
+
+    // God-view track side-file (all players' pos/health, server-authoritative).
+    private tracksGzip?: zlib.Gzip;
+    private tracksFilePath = "";
+    private tracksBytes = 0;
+    private tracksStopped = false;
+    private lastSampleAt = 0;
 
     constructor(readonly game: Game) {}
 
@@ -118,20 +134,130 @@ export class GameRecorder {
         for (const track of this.tracks.values()) {
             this.stopTrack(track, "game ended");
         }
+        this.stopTracks("game ended");
         if (this.recorded.length) {
             this.writeMeta();
             void cleanupRetention();
         }
     }
 
+    /**
+     * Records one god-view sample (every player's pos/health) at a throttled rate.
+     * Cheap no-op when recording is off. Called from the game loop; the server has
+     * full visibility, so this captures players regardless of any POV's view culling.
+     */
+    sampleTracks(): void {
+        if (!this.enabled || this.stoppedAll || this.tracksStopped) return;
+        const now = Date.now();
+        if (now - this.lastSampleAt < TRACK_SAMPLE_INTERVAL_MS) return;
+        this.lastSampleAt = now;
+
+        if (!this.tracksGzip && !this.openTracks()) return;
+
+        const gzip = this.tracksGzip!;
+        if (gzip.writableLength > Config.recording.writeBackpressureBytes) {
+            this.stopTracks("backpressure");
+            return;
+        }
+        if (this.tracksBytes >= Config.recording.maxGameMb * MB) {
+            this.stopTracks("size cap");
+            return;
+        }
+
+        const entries: TrackEntry[] = [];
+        for (const player of this.game.playerBarn.players) {
+            if (player.spectator) continue;
+            if (player.bot && !Config.recording.recordBots) continue;
+            entries.push({
+                id: player.__id,
+                x: player.pos.x,
+                y: player.pos.y,
+                health: player.health,
+                boost: player.boost,
+                dead: player.dead,
+                downed: player.downed,
+            });
+        }
+        if (!entries.length) return;
+
+        const buf = encodeTrackSample(now - this.startTs, entries);
+        gzip.write(buf);
+        this.tracksBytes += buf.length;
+    }
+
+    private openTracks(): boolean {
+        try {
+            this.ensureDir();
+            const filePath = path.join(this.dir, TRACKS_FILE);
+            const gzip = zlib.createGzip();
+            const fileStream = fs.createWriteStream(filePath);
+            gzip.pipe(fileStream);
+
+            const onErr = (err: unknown) => {
+                this.game.logger.warn("Tracks write error:", err);
+                this.stopTracks("write error");
+            };
+            gzip.on("error", onErr);
+            fileStream.on("error", onErr);
+
+            const meta: TracksMeta = {
+                gameId: this.game.id,
+                startTs: this.startTs,
+                players: this.game.playerBarn.players
+                    .filter(
+                        (p) => !p.spectator && (!p.bot || Config.recording.recordBots),
+                    )
+                    .map((p) => ({
+                        id: p.__id,
+                        name: p.name,
+                        teamId: p.teamId,
+                        groupId: p.groupId,
+                    })),
+            };
+            gzip.write(encodeTracksHeader(meta));
+
+            this.tracksGzip = gzip;
+            this.tracksFilePath = filePath;
+            this.tracksBytes = 0;
+            return true;
+        } catch (err) {
+            this.game.logger.warn("Failed to start tracks recording:", err);
+            this.tracksStopped = true;
+            return false;
+        }
+    }
+
+    private stopTracks(reason: string): void {
+        if (this.tracksStopped) return;
+        this.tracksStopped = true;
+        if (this.tracksGzip) {
+            try {
+                this.tracksGzip.end();
+            } catch {
+                /* already closed */
+            }
+        }
+        // No samples were written — remove the header-only file.
+        if (this.tracksBytes <= 0 && this.tracksFilePath) {
+            fs.rm(this.tracksFilePath, () => {});
+        }
+        if (reason !== "game ended") {
+            this.game.logger.warn(`Tracks recording stopped (${reason})`);
+        }
+    }
+
+    /** Lazily creates the per-game recording directory (shared by tracks + POV files). */
+    private ensureDir(): void {
+        if (this.dirReady) return;
+        const day = new Date(this.startTs).toISOString().slice(0, 10);
+        this.dir = path.join(recordingsRoot(), day, this.game.id);
+        fs.mkdirSync(this.dir, { recursive: true });
+        this.dirReady = true;
+    }
+
     private openTrack(player: Player): Track | undefined {
         try {
-            if (!this.dirReady) {
-                const day = new Date(this.startTs).toISOString().slice(0, 10);
-                this.dir = path.join(recordingsRoot(), day, this.game.id);
-                fs.mkdirSync(this.dir, { recursive: true });
-                this.dirReady = true;
-            }
+            this.ensureDir();
 
             const fileName = `${player.__id}-${safeFileName(player.name)}.svrep.gz`;
             const filePath = path.join(this.dir, fileName);
@@ -216,6 +342,8 @@ export class GameRecorder {
                 durationMs: Date.now() - this.startTs,
                 protocolVersion: GameConfig.protocolVersion,
                 players: this.recorded,
+                // Whether a god-view track side-file (_tracks.svtrk.gz) was written.
+                tracks: this.tracksBytes > 0,
             };
             fs.writeFileSync(path.join(this.dir, "meta.json"), JSON.stringify(meta));
         } catch (err) {
@@ -234,6 +362,8 @@ export interface GameRecordingInfo {
     durationMs: number;
     protocolVersion: number;
     players: RecordedPlayerMeta[];
+    /** True if a god-view track side-file was recorded for this game. */
+    tracks?: boolean;
 }
 
 /** Lists all recorded games on this host (newest first), read from their `meta.json`. */
@@ -298,6 +428,26 @@ export async function readRecordingFile(
             } catch {
                 return null;
             }
+        }
+    }
+    return null;
+}
+
+/** Reads a game's god-view track side-file (`_tracks.svtrk.gz`). Null if not present. */
+export async function readTracksFile(gameId: string): Promise<Buffer | null> {
+    const root = recordingsRoot();
+    let days: string[];
+    try {
+        days = await fs.promises.readdir(root);
+    } catch {
+        return null;
+    }
+    for (const day of days) {
+        const file = path.join(root, day, gameId, TRACKS_FILE);
+        try {
+            return await fs.promises.readFile(file);
+        } catch {
+            /* not in this day dir — keep looking */
         }
     }
     return null;
