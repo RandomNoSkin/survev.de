@@ -316,6 +316,18 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div id="tab-replays" class="tab-pane">
     <div class="toolbar">
       <input type="text" id="replays-search" placeholder="Search by game id, map or player name…" style="max-width:420px">
+      <input type="datetime-local" id="replays-date" title="Show games around this time"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+      <select id="replays-window" title="Time window around the selected time"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="30">±30 min</option>
+        <option value="60">±1 h</option>
+        <option value="180" selected>±3 h</option>
+        <option value="360">±6 h</option>
+        <option value="720">±12 h</option>
+        <option value="day">Whole day</option>
+      </select>
+      <button class="btn btn-gray" id="replays-date-clear">✕ Date</button>
       <button class="btn btn-gray" id="replays-refresh-btn">↻ Refresh</button>
     </div>
     <div id="replays-container"><div class="loading">Loading…</div></div>
@@ -337,6 +349,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <th style="white-space:nowrap">Created</th>
         <th>Last IP</th>
         <th>Flags</th>
+        <th class="sortable" data-col="goldenFries" style="text-align:center;white-space:nowrap;">GP</th>
         <!-- pass-level columns injected by renderAccountsHeader() -->
       </tr></thead>
       <tbody id="accounts-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
@@ -528,6 +541,7 @@ let activeGameVerified = false; // verified-only state of the selected game
 let msgTargetName    = '';    // player being DM'd
 let bansData = { ipBans: [], accountBans: [], chatBans: [] };
 let serverData = { regions: [] };
+let activeServerRegion = null; // region whose games are shown in the Live Servers tab
 let currentPlayers = [];
 
 // Single SSE connection – reconnected when switching to server tab or selecting a game
@@ -717,20 +731,45 @@ function renderReplays() {
   const container = document.getElementById('replays-container');
   const q = document.getElementById('replays-search').value.trim().toLowerCase();
 
-  // Flatten region → games, newest first, filtered by the search box.
+  // Optional date/time window: keep recordings whose startTs falls near the entered time.
+  const dateVal = document.getElementById('replays-date').value;
+  const target = dateVal ? Date.parse(dateVal) : NaN;
+  let lo = -Infinity, hi = Infinity;
+  if (!isNaN(target)) {
+    const win = document.getElementById('replays-window').value;
+    if (win === 'day') {
+      const d = new Date(target);
+      lo = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      hi = lo + 24 * 60 * 60 * 1000;
+    } else {
+      const ms = Number(win) * 60 * 1000;
+      lo = target - ms;
+      hi = target + ms;
+    }
+  }
+
+  // Flatten region → games, filtered by the search box + (optional) time window.
   const games = [];
   for (const region of replaysData) {
     for (const rec of (region.recordings ?? [])) {
       const hay = (rec.gameId + ' ' + rec.mapName + ' ' +
         (rec.players ?? []).map(p => p.playerName).join(' ')).toLowerCase();
       if (q && !hay.includes(q)) continue;
+      if (rec.startTs < lo || rec.startTs > hi) continue;
       games.push({ regionId: region.regionId, rec });
     }
   }
-  games.sort((a, b) => b.rec.startTs - a.rec.startTs);
+  // With a time set, surface the games closest to it first; otherwise newest first.
+  if (!isNaN(target)) {
+    games.sort((a, b) => Math.abs(a.rec.startTs - target) - Math.abs(b.rec.startTs - target));
+  } else {
+    games.sort((a, b) => b.rec.startTs - a.rec.startTs);
+  }
 
   if (!games.length) {
-    container.innerHTML = '<div class="empty">No recordings found.</div>';
+    container.innerHTML = isNaN(target)
+      ? '<div class="empty">No recordings found.</div>'
+      : '<div class="empty">No recordings near that time.</div>';
     return;
   }
 
@@ -781,6 +820,12 @@ async function watchReplay(region, gameId, playerId) {
 
 document.getElementById('replays-refresh-btn').addEventListener('click', loadReplays);
 document.getElementById('replays-search').addEventListener('input', renderReplays);
+document.getElementById('replays-date').addEventListener('change', renderReplays);
+document.getElementById('replays-window').addEventListener('change', renderReplays);
+document.getElementById('replays-date-clear').addEventListener('click', () => {
+  document.getElementById('replays-date').value = '';
+  renderReplays();
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 – BAN MANAGEMENT (receives live "bans" events via SSE)
@@ -1327,35 +1372,60 @@ document.getElementById('lookup-input').addEventListener('keydown', e => {
 // TAB 3 – LIVE SERVERS (receives "servers" + "players" events via SSE)
 // ═══════════════════════════════════════════════════════════════════════════
 
+function selectServerRegion(regionId) {
+  activeServerRegion = regionId;
+  renderServers();
+}
+
 function renderServers() {
   const list = document.getElementById('server-list');
-  if (!serverData.regions?.length) { list.innerHTML = '<div class="empty">No regions found.</div>'; return; }
+  const regions = serverData.regions || [];
+  if (!regions.length) { list.innerHTML = '<div class="empty">No regions found.</div>'; return; }
 
-  list.innerHTML = serverData.regions.map(region => {
+  // Keep the selected region across the frequent SSE re-renders; fall back to the first.
+  if (!regions.some(r => r.regionId === activeServerRegion)) {
+    activeServerRegion = regions[0].regionId;
+  }
+
+  // ── Region tabs (each shows active game + player counts) ──
+  const tabsHtml = regions.map(region => {
     const games = (region.games || []).filter(g => !g.stopped);
-    const cardsHtml = games.length ? games.map((g) => {
-      const isSelected = activeGameId === g.id;
-      return \`<div class="game-card \${isSelected ? 'selected' : ''}" data-region="\${esc(region.regionId)}" data-id="\${esc(g.id)}" onclick="selectGame('\${esc(region.regionId)}','\${esc(g.id)}')">
-        <div class="gc-id">\${esc(g.id.slice(0,8))}…</div>
-        <div class="gc-mode">Mode \${esc(String(g.teamMode || '?'))}</div>
-        <div class="gc-count">\${g.playerCount ?? '?'} players</div>
-        <div style="margin-top:6px;">
-          <button class="btn btn-blue btn-sm" style="width:100%" onclick="event.stopPropagation();spectateGame('\${esc(region.regionId)}','\${esc(g.id)}')">👁 SPECTATE</button>
-        </div>
-        <div style="margin-top:4px;">
-          <button class="btn btn-red btn-sm" style="width:100%" onclick="event.stopPropagation();killGame('\${esc(region.regionId)}','\${esc(g.id)}')">✕ KILL</button>
-        </div>
-      </div>\`;
-    }).join('') : '<div class="empty">No running games.</div>';
+    const playerSum = games.reduce((n, g) => n + (g.playerCount || 0), 0);
+    const active = region.regionId === activeServerRegion;
+    return \`<button class="sub-tab-btn \${active ? 'active' : ''}" onclick="selectServerRegion('\${esc(region.regionId)}')">
+      <b>\${esc(region.regionId.toUpperCase())}</b>
+      <span style="color:var(--text-muted);font-weight:400;"> · \${games.length} games · \${playerSum} players</span>
+    </button>\`;
+  }).join('');
 
-    const verifyBtn = region.verifiedOnly
-      ? \`<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="setServerVerified('\${esc(region.regionId)}', false)">UNVERIFY SERVER</button>\`
-      : \`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="setServerVerified('\${esc(region.regionId)}', true)">VERIFY SERVER</button>\`;
-    return \`<div class="region-block">
+  // ── Games of the active region ──
+  const region = regions.find(r => r.regionId === activeServerRegion);
+  const games = (region.games || []).filter(g => !g.stopped);
+  const cardsHtml = games.length ? games.map((g) => {
+    const isSelected = activeGameId === g.id;
+    return \`<div class="game-card \${isSelected ? 'selected' : ''}" data-region="\${esc(region.regionId)}" data-id="\${esc(g.id)}" onclick="selectGame('\${esc(region.regionId)}','\${esc(g.id)}')">
+      <div class="gc-id">\${esc(g.id.slice(0,8))}…</div>
+      <div class="gc-mode">Mode \${esc(String(g.teamMode || '?'))}</div>
+      <div class="gc-count">\${g.playerCount ?? '?'} players</div>
+      <div style="margin-top:6px;">
+        <button class="btn btn-blue btn-sm" style="width:100%" onclick="event.stopPropagation();spectateGame('\${esc(region.regionId)}','\${esc(g.id)}')">👁 SPECTATE</button>
+      </div>
+      <div style="margin-top:4px;">
+        <button class="btn btn-red btn-sm" style="width:100%" onclick="event.stopPropagation();killGame('\${esc(region.regionId)}','\${esc(g.id)}')">✕ KILL</button>
+      </div>
+    </div>\`;
+  }).join('') : '<div class="empty">No running games.</div>';
+
+  const verifyBtn = region.verifiedOnly
+    ? \`<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="setServerVerified('\${esc(region.regionId)}', false)">UNVERIFY SERVER</button>\`
+    : \`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="setServerVerified('\${esc(region.regionId)}', true)">VERIFY SERVER</button>\`;
+
+  list.innerHTML = \`
+    <div class="sub-tabs" style="flex-wrap:wrap">\${tabsHtml}</div>
+    <div class="region-block" id="region-games">
       <div class="region-header" style="display:flex;align-items:center;">Region: \${esc(region.regionId)}\${verifyBtn}</div>
       <div class="game-cards">\${cardsHtml}</div>
     </div>\`;
-  }).join('');
 }
 
 /** Opens the game client in a new tab and auto-spectates the given game. */
@@ -1605,8 +1675,8 @@ let accountsSortDir = -1; // -1 = desc, 1 = asc
 
 function renderAccountsHeader() {
   const headerRow = document.getElementById('accounts-thead-row');
-  // Remove any previously injected pass columns (keep static cols: #, Username, Slug, Discord, Created, Last IP, Flags = 7)
-  while (headerRow.children.length > 7) headerRow.removeChild(headerRow.lastChild);
+  // Remove any previously injected pass columns (keep static cols: #, Username, Slug, Discord, Created, Last IP, Flags, GP = 8)
+  while (headerRow.children.length > 8) headerRow.removeChild(headerRow.lastChild);
   for (const pt of accountsPassTypes) {
     const shortName = pt.replace('pass_survivr', 'S');
     const th = document.createElement('th');
@@ -1624,7 +1694,7 @@ function renderAccountsHeader() {
 }
 
 async function loadAccounts() {
-  const colCount = 7 + accountsPassTypes.length;
+  const colCount = 8 + accountsPassTypes.length;
   document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="\${colCount}" class="loading">Loading…</td></tr>\`;
   try {
     const data = await get('/api/accounts');
@@ -1634,7 +1704,7 @@ async function loadAccounts() {
     renderAccounts();
   } catch (e) {
     console.error('loadAccounts error:', e);
-    document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="6" class="empty">Failed to load accounts: \${esc(String(e?.message ?? e))} | \${esc(e?.stack?.split('\\n')[1] ?? '')}</td></tr>\`;
+    document.getElementById('accounts-tbody').innerHTML = \`<tr><td colspan="\${colCount}" class="empty">Failed to load accounts: \${esc(String(e?.message ?? e))} | \${esc(e?.stack?.split('\\n')[1] ?? '')}</td></tr>\`;
   }
 }
 
@@ -1651,6 +1721,9 @@ function renderAccounts() {
       const pt = accountsSortCol.slice(5);
       av = Number(a.passes?.[pt]?.level ?? -1);
       bv = Number(b.passes?.[pt]?.level ?? -1);
+    } else if (accountsSortCol === 'goldenFries') {
+      av = Number(a.goldenFries ?? 0);
+      bv = Number(b.goldenFries ?? 0);
     } else if (accountsSortCol === 'userCreated') {
       av = a.userCreated ? new Date(a.userCreated).getTime() : -1;
       bv = b.userCreated ? new Date(b.userCreated).getTime() : -1;
@@ -1670,7 +1743,7 @@ function renderAccounts() {
     th.textContent = col === accountsSortCol ? base + (accountsSortDir === 1 ? ' ▲' : ' ▼') : base;
   });
 
-  const colCount = 7 + accountsPassTypes.length;
+  const colCount = 8 + accountsPassTypes.length;
   const tbody = document.getElementById('accounts-tbody');
   tbody.innerHTML = rows.length ? rows.map((a, i) => \`
     <tr style="cursor:pointer" onclick="onAccountRowClick(event,'\${esc(a.slug)}')" title="Open account detail">
@@ -1683,7 +1756,9 @@ function renderAccounts() {
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
-        <span style="color:#e0a23c;font-size:11px;white-space:nowrap;">🍟 \${a.goldenFries ?? 0}</span>
+      </td>
+      <td style="text-align:center;white-space:nowrap;">
+        <span style="color:#e0a23c;font-size:11px;">🍟 \${a.goldenFries ?? 0}</span>
         <button class="btn btn-gray btn-sm" style="padding:1px 6px;" onclick="event.stopPropagation();giveGoldenFries('\${esc(a.slug)}', \${a.goldenFries ?? 0})">+GP</button>
       </td>
       \${accountsPassTypes.map(pt => \`<td style="font-weight:600;text-align:center;">\${a.passes?.[pt]?.level ?? '–'}</td>\`).join('')}
@@ -1884,7 +1959,7 @@ document.getElementById('accounts-table').addEventListener('click', (e) => {
     accountsSortDir *= -1;
   } else {
     accountsSortCol = col;
-    accountsSortDir = (col.startsWith('pass_') || col === 'userCreated') ? -1 : 1;
+    accountsSortDir = (col.startsWith('pass_') || col === 'userCreated' || col === 'goldenFries') ? -1 : 1;
   }
   renderAccounts();
   renderAccountsHeader();

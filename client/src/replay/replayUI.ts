@@ -8,6 +8,7 @@ export interface ReplayUICallbacks {
     onSeekFraction(fraction: number): void;
     onPrevPov(): void;
     onNextPov(): void;
+    onToggleRecord(): void;
 }
 
 function fmtTime(ms: number): string {
@@ -22,6 +23,7 @@ export class ReplayUI {
     private nextPovBtn: HTMLButtonElement;
     private playBtn: HTMLButtonElement;
     private speedSelect: HTMLSelectElement;
+    private recBtn: HTMLButtonElement;
     private barFill: HTMLDivElement;
     private timeLabel: HTMLSpanElement;
     private titleLabel: HTMLSpanElement;
@@ -94,6 +96,13 @@ export class ReplayUI {
         this.speedSelect.onchange = () =>
             this.cb.onSetSpeed(Number(this.speedSelect.value));
 
+        // Record the game canvas to a downloadable video (toggles start/stop).
+        this.recBtn = document.createElement("button");
+        this.recBtn.style.cssText = btnCss;
+        this.recBtn.textContent = "⏺";
+        this.recBtn.title = "Record video";
+        this.recBtn.onclick = () => this.cb.onToggleRecord();
+
         const bar = document.createElement("div");
         bar.style.cssText =
             "position:relative;width:280px;height:8px;background:#1e1e3a;border-radius:4px;cursor:pointer;";
@@ -119,6 +128,7 @@ export class ReplayUI {
             this.titleLabel,
             this.playBtn,
             this.speedSelect,
+            this.recBtn,
             bar,
             this.timeLabel,
         );
@@ -128,6 +138,14 @@ export class ReplayUI {
 
     setTitle(text: string) {
         this.titleLabel.textContent = text;
+    }
+
+    /** Reflects recording state on the record button (label + red highlight). */
+    setRecording(active: boolean) {
+        this.recBtn.textContent = active ? "⏹" : "⏺";
+        this.recBtn.title = active ? "Stop recording" : "Record video";
+        this.recBtn.style.background = active ? "#7a1e1e" : "#14142a";
+        this.recBtn.style.borderColor = active ? "#b03030" : "#2a2a4a";
     }
 
     update(elapsedMs: number, durationMs: number, paused: boolean, speed: number) {

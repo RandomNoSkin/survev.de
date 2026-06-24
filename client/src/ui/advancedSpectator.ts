@@ -9,6 +9,7 @@ import type { Camera } from "../camera";
 import { device } from "../device";
 import type { PlayerBarn } from "../objects/player";
 import type { ProjectileBarn } from "../objects/projectile";
+import type { GodViewSnapshot } from "../replay/godView";
 
 // Colour used for ESP lines / enemy name labels. Enemies are always shown red
 // regardless of game mode so they read clearly against the world.
@@ -188,6 +189,7 @@ export class AdvancedSpectator {
         projectileBarn: ProjectileBarn,
         activeId: number,
         localId: number,
+        godView?: GodViewSnapshot | null,
     ) {
         this.espGfx.clear();
         for (const label of this.labelPool) {
@@ -248,6 +250,35 @@ export class AdvancedSpectator {
                 label.nameText.text = info.name;
                 label.nameText.tint = isEnemy ? ENEMY_COLOR : SPECTATED_COLOR;
                 label.statsText.text = `HP ${hp}  AD ${boost}`;
+            }
+        }
+
+        // Replay god-view: draw labels / ESP lines for players the watched POV could
+        // NOT see (they're absent from the local stream above). Same toggles apply.
+        if (godView) {
+            const localIds = new Set<number>();
+            for (let i = 0; i < players.length; i++) {
+                if (players[i].active) localIds.add(players[i].__id);
+            }
+            for (const gp of godView.values()) {
+                if (gp.dead || gp.id === localId || gp.id === activeId) continue;
+                if (localIds.has(gp.id)) continue; // already drawn from the live stream
+                const isEnemy = gp.teamId !== activeTeamId;
+                const screenPos = camera.m_pointToScreen(gp.pos);
+
+                if (this.espLines && isEnemy && !this.freecam) {
+                    this.espGfx.lineStyle(1.5, ENEMY_COLOR, 0.5);
+                    this.espGfx.moveTo(centerX, centerY);
+                    this.espGfx.lineTo(screenPos.x, screenPos.y);
+                }
+                if (this.enemyLabels) {
+                    const label = this.getLabel(labelIdx++);
+                    label.container.visible = true;
+                    label.container.position.set(screenPos.x, screenPos.y);
+                    label.nameText.text = gp.name;
+                    label.nameText.tint = isEnemy ? ENEMY_COLOR : SPECTATED_COLOR;
+                    label.statsText.text = `HP ${Math.round(gp.health)}  AD ${Math.round(gp.boost)}`;
+                }
             }
         }
 
