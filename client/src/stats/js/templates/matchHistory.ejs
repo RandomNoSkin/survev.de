@@ -95,8 +95,9 @@
                     </div>
                   <% } %>
                 </div>
-                <!-- Expand/Unexpand icon -->
-                <div class='offset-0 col-1 pl-0 pr-0'>
+                <!-- Game view + Expand/Unexpand icon -->
+                <div class='offset-0 col-1 pl-0 pr-0 match-link-actions'>
+                    <a class='gv-match-btn' href='/stats/?game=<%= env.games[i].summary.guid %>&region=<%= env.games[i].summary.region %>&player=<%= env.games[i].summary.slug %>' onclick='event.stopPropagation()' title='Detailed game view (movement + damage)'>Game View</a>
                     <div class='match-link-expand <%= env.games[i].expanded ? 'match-link-expand-up' : 'match-link-expand-down' %>'>
                     </div>
                 </div>

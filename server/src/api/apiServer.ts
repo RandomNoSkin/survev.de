@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import type { UpgradeWebSocket } from "hono/ws";
+import type { GameViewMeta } from "../../../shared/net/replay";
 import type { SiteInfoRes } from "../../../shared/types/api";
 import { Config } from "../config";
 import { PrivateLobbyMenu } from "../privateLobby";
@@ -24,6 +25,7 @@ const SLOW_REGION_FETCH_MS = 2000;
 class Region {
     data: (typeof Config)["regions"][string];
     playerCount = 0;
+    gameCount = 0;
     verifiedOnly = false;
 
     lastUpdateTime = Date.now();
@@ -187,6 +189,16 @@ class Region {
         }
     }
 
+    /** Fetches a game's combined game-view meta (JSON) from this region's game server. */
+    async streamReplayGameMeta(gameId: string): Promise<GameViewMeta | null> {
+        const data = await this.fetch<GameViewMeta | { error: string }>(
+            "api/dashboard/replay_meta",
+            { gameId },
+        );
+        if (!data || "error" in data) return null;
+        return data;
+    }
+
     /** Sends an admin command to a running game on this region's game server. */
     async sendDashboardGameCmd(gameId: string, cmd: object): Promise<boolean> {
         const data = await this.fetch<{ ok: boolean }>("api/dashboard/game_cmd", {
@@ -221,6 +233,7 @@ class Region {
 
 interface RegionData {
     playerCount: number;
+    gameCount: number;
 }
 
 export class ApiServer {
@@ -269,6 +282,7 @@ export class ApiServer {
         for (const region in this.regions) {
             data.pops[region] = {
                 playerCount: this.regions[region].playerCount,
+                gameCount: this.regions[region].gameCount,
                 l10n: Config.regions[region].l10n,
             };
         }
@@ -282,6 +296,7 @@ export class ApiServer {
             return;
         }
         region.playerCount = regionData.playerCount;
+        region.gameCount = regionData.gameCount;
         region.lastUpdateTime = Date.now();
     }
 
@@ -361,6 +376,14 @@ export class ApiServer {
         gameId: string,
     ): Promise<ArrayBuffer | null> {
         return (await this.regions[region]?.streamReplayTracks(gameId)) ?? null;
+    }
+
+    /** Fetches a game's combined game-view meta (JSON) from a region's game server. */
+    async streamReplayGameMeta(
+        region: string,
+        gameId: string,
+    ): Promise<GameViewMeta | null> {
+        return (await this.regions[region]?.streamReplayGameMeta(gameId)) ?? null;
     }
 
     async refreshRegionModes() {

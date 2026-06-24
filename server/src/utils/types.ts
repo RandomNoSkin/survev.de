@@ -20,6 +20,8 @@ export const zUpdateRegionBody = z.object({
     regionId: z.string(),
     data: z.object({
         playerCount: z.number(),
+        // Default keeps older game servers (that don't send it yet) valid during rollout.
+        gameCount: z.number().default(0),
     }),
 });
 export type UpdateRegionBody = z.infer<typeof zUpdateRegionBody>;
@@ -92,7 +94,7 @@ export const zFindGamePrivateBody = z.object({
             token: z.string(),
             userId: z.string().nullable(),
             ip: z.string(),
-            admin:z.boolean(),
+            admin: z.boolean(),
             loadout: loadoutSchema.optional(),
             customLoadout: zCustomLoadoutConfig.optional(),
         }),
@@ -152,11 +154,11 @@ export enum ProcessMsgType {
     SocketMsg,
     SocketClose,
     // Dashboard IPC messages
-    GetPlayerData,      // API server → game process: request live player list
+    GetPlayerData, // API server → game process: request live player list
     PlayerDataResponse, // game process → API server: live player list response
-    AdminCmd,           // API server → game process: execute an admin action
-    GetGameFeed,        // API server → game process: request recent kill feed
-    GameFeedResponse,   // game process → API server: recent kill feed response
+    AdminCmd, // API server → game process: execute an admin action
+    GetGameFeed, // API server → game process: request recent kill feed
+    GameFeedResponse, // game process → API server: recent kill feed response
 }
 
 export interface CreateGameMsg {
@@ -277,10 +279,16 @@ export type AdminCmdAction =
     | { action: "verify" }
     | { action: "unverify" }
     | { action: "stop" }
-    | { action: "kick";            target: string }
-    | { action: "announce";        text: string; color?: string; sender?: string }
-    | { action: "announce_player"; target: string; text: string; color?: string; sender?: string }
-    | { action: "chat";            text: string; sender?: string };
+    | { action: "kick"; target: string }
+    | { action: "announce"; text: string; color?: string; sender?: string }
+    | {
+          action: "announce_player";
+          target: string;
+          text: string;
+          color?: string;
+          sender?: string;
+      }
+    | { action: "chat"; text: string; sender?: string };
 
 export interface AdminCmdMsg {
     type: ProcessMsgType.AdminCmd;
@@ -303,11 +311,11 @@ export type ProcessMsg =
     | GetGameFeedMsg
     | GameFeedResponseMsg;
 
-    export interface GameInfo {
-    id: string,
-    teamMode: TeamMode,
-    playerCount: number,
-    playerNames: string[],
-    runtime: number,
-    stopped: boolean,
-    }
+export interface GameInfo {
+    id: string;
+    teamMode: TeamMode;
+    playerCount: number;
+    playerNames: string[];
+    runtime: number;
+    stopped: boolean;
+}

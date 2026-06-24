@@ -1,6 +1,6 @@
 import $ from "jquery";
 import { EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs";
-import { TeamModeToString } from "../../../../shared/defs/types/misc";
+import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
 import type { TeamMode } from "../../../../shared/gameConfig";
 import {
     ALL_MAPS,
@@ -40,6 +40,18 @@ export interface TeamModes {
     botStats: { name: string; val: string }[];
     midStats: { name: string; val: string }[];
 }
+
+// Leaderboard map filter is limited to the competitive / special modes only.
+const PLAYER_MAP_IDS: number[] = [
+    MapId.Comp,
+    MapId.CompSolo,
+    MapId.CompDuo,
+    MapId.Scrims,
+    MapId.TwoVsTwo,
+    MapId.FourVsFour,
+    MapId.Local,
+];
+const DEFAULT_MAP_ID = String(PLAYER_MAP_IDS[0]);
 
 function getPlayerCardData(
     userData: UserStatsResponse,
@@ -141,7 +153,9 @@ function getPlayerCardData(
         error: error,
         teamModes: teamModes,
         teamModeFilter: teamModeFilter,
-        gameModes: gameModes,
+        gameModes: helpers
+                            .getGameModes()
+                            .filter((m) => PLAYER_MAP_IDS.includes(m.mapId)),
     };
 }
 
@@ -213,14 +227,15 @@ export class PlayerView {
     el = $(
         templates.player({
             phoneDetected: device.mobile && !device.tablet,
-        }),
+            }),
     );
     constructor(readonly app: App) {}
     getUrlParams() {
         const params = new URLSearchParams(window.location.search);
         const slug = params.get("slug") || "";
         const interval = params.get("time") || "alltime";
-        const mapId = params.get("mapId") || ALL_MAPS;
+        let mapId = params.get("mapId") || ALL_MAPS;
+        if (!PLAYER_MAP_IDS.includes(Number(mapId))) mapId = ALL_MAPS;
         const gameId = params.get("gameId") || "";
 
         return {

@@ -13,6 +13,8 @@ import { SingleThreadGameManager } from "./game/gameManager";
 import { GameProcessManager } from "./game/gameProcessManager";
 import {
     listRecordings,
+    readDamageFile,
+    readMapFile,
     readRecordingFile,
     readTracksFile,
 } from "./game/recording/gameRecorder";
@@ -221,6 +223,7 @@ class GameServer {
                 json: {
                     data: {
                         playerCount: this.manager.getPlayerCount(),
+                        gameCount: this.manager.getGameCount(),
                     },
                     regionId: Config.gameServer.thisRegion,
                 },
@@ -956,6 +959,47 @@ app.post("/api/dashboard/replay_tracks", (res, req) => {
                 res.aborted = true;
                 server.logger.warn("replay_tracks write error:", err);
             }
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON. */
+app.post("/api/dashboard/replay_meta", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const { gameId } = body ?? {};
+            if (typeof gameId !== "string") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const [damage, map] = await Promise.all([
+                readDamageFile(gameId),
+                readMapFile(gameId),
+            ]);
+            if (res.aborted) return;
+            if (!damage && !map) {
+                returnJson(res, { error: "not_found" });
+                return;
+            }
+            returnJson(res, {
+                players: damage?.players ?? [],
+                events: damage?.events ?? [],
+                map: map ?? null,
+            } as Record<string, unknown>);
         },
         () => {
             if (!res.aborted) returnJson(res, { error: "body error" });
