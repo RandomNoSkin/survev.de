@@ -1,5 +1,6 @@
 import $ from "jquery";
 import { MinGames } from "../../../../shared/constants";
+import { MapId } from "../../../../shared/defs/types/misc";
 import type { LeaderboardRequest } from "../../../../shared/types/stats";
 import { api } from "../../api";
 import { device } from "../../device";
@@ -16,6 +17,18 @@ const templates = {
     leaderboard,
     leaderboardError,
 };
+
+// Leaderboard map filter is limited to the competitive / special modes only.
+const LEADERBOARD_MAP_IDS: number[] = [
+    MapId.Comp,
+    MapId.CompSolo,
+    MapId.CompDuo,
+    MapId.Scrims,
+    MapId.TwoVsTwo,
+    MapId.FourVsFour,
+    MapId.Local,
+];
+const DEFAULT_MAP_ID = String(LEADERBOARD_MAP_IDS[0]);
 
 //
 // MainView
@@ -36,7 +49,9 @@ export class MainView {
     el = $(
         templates.main({
             phoneDetected: device.mobile && !device.tablet,
-            gameModes: helpers.getGameModes(),
+            gameModes: helpers
+                .getGameModes()
+                .filter((m) => LEADERBOARD_MAP_IDS.includes(m.mapId)),
         }),
     );
 
@@ -62,7 +77,9 @@ export class MainView {
         const interval =
             helpers.getParameterByName<LeaderboardRequest["interval"]>("t") || "daily";
         const teamMode = helpers.getParameterByName("team") || "solo";
-        const mapId = helpers.getParameterByName("mapId") || "0";
+        let mapId = helpers.getParameterByName("mapId") || DEFAULT_MAP_ID;
+        // Fall back to the first allowed map if the URL points at a now-hidden one.
+        if (!LEADERBOARD_MAP_IDS.includes(Number(mapId))) mapId = DEFAULT_MAP_ID;
         // Change to most_damage_dealt if faction mode and most_kills selected
         if (type == "most_kills" && Number(mapId) == 3) {
             type = "most_damage_dealt";

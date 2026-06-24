@@ -73,3 +73,5 @@ todo.md
 server/logs/*
 server/*-audit.json
 server/logs
+*.gz
+server/recordings/*

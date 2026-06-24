@@ -391,6 +391,10 @@ export class GameProcessManager implements GameManager {
         }, 0);
     }
 
+    getGameCount(): number {
+        return this.processes.filter((p) => !p.stopped).length;
+    }
+
     /**
      * Returns a game process to host `config`, reusing an idle (stopped) process if one
      * is free. Returns `undefined` when a new process would have to be forked but the

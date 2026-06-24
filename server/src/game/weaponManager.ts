@@ -1,5 +1,5 @@
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
-import { GunDefs, type GunDef } from "../../../shared/defs/gameObjects/gunDefs";
+import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import { PerkProperties } from "../../../shared/defs/gameObjects/perkDefs";
 import {
@@ -124,7 +124,7 @@ export class WeaponManager {
             | GunDef
             | MeleeDef
             | ThrowableDef;
-/*  Code that prevents switching guns mid burst, commented out to allow the player more control over burst guns
+        /*  Code that prevents switching guns mid burst, commented out to allow the player more control over burst guns
         if (
             curWeaponDef?.type === "gun" &&
             curWeaponDef.fireMode === "burst" &&
@@ -197,7 +197,11 @@ export class WeaponManager {
             this.player.wearingPan = true;
         }
 
-        if (GameConfig.WeaponType[idx] === "gun" && this.weapons[idx].ammo <= 0 && this.player.actionType !== GameConfig.Action.UseItem) {
+        if (
+            GameConfig.WeaponType[idx] === "gun" &&
+            this.weapons[idx].ammo <= 0 &&
+            this.player.actionType !== GameConfig.Action.UseItem
+        ) {
             this.scheduledReload = true;
         }
 
@@ -402,8 +406,8 @@ export class WeaponManager {
                     }
                 }
                 break;
-                case "dual":
-                    if (player.shootStart) {
+            case "dual":
+                if (player.shootStart) {
                     if (weapon.cooldown < 0) {
                         this.fireWeapon(this.offHand);
                         this.fireWeapon(this.offHand);
@@ -412,7 +416,7 @@ export class WeaponManager {
                         this.bufferInput = true;
                     }
                 }
-                    break;
+                break;
         }
     }
 
@@ -470,7 +474,9 @@ export class WeaponManager {
     isInfinite(weaponDef: GunDef): boolean {
         return (
             !weaponDef.ignoreEndlessAmmo &&
-            (weaponDef.ammoInfinite || this.player.hasPerk("endless_ammo") || this.player.hasPerk("arena"))
+            (weaponDef.ammoInfinite ||
+                this.player.hasPerk("endless_ammo") ||
+                this.player.hasPerk("arena"))
         );
     }
 
@@ -532,12 +538,21 @@ export class WeaponManager {
 
         let weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
         //checking if we have ammo if not check if we have secondary ammo then switch gunDef (only backend)
-        if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) <=0 && weaponDef.secondAmmo && !this.isInfinite(weaponDef)){
+        if (
+            this.player.invManager.isValid(weaponDef.ammo) &&
+            this.player.invManager.get(weaponDef.ammo) <= 0 &&
+            weaponDef.secondAmmo &&
+            !this.isInfinite(weaponDef)
+        ) {
             const secondWeapon = weaponDef.secondAmmo;
             weaponDef = GameObjectDefs[weaponDef.secondAmmo] as GunDef;
-            if(this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.get(weaponDef.ammo) >0 && this.weapons[this.curWeapIdx].ammo == 0){
+            if (
+                this.player.invManager.isValid(weaponDef.ammo) &&
+                this.player.invManager.get(weaponDef.ammo) > 0 &&
+                this.weapons[this.curWeapIdx].ammo == 0
+            ) {
                 this.setWeapon(this.curWeapIdx, secondWeapon, 0);
-            }else {
+            } else {
                 return;
             }
         }
@@ -546,7 +561,8 @@ export class WeaponManager {
             this.player.actionType == GameConfig.Action.Revive ||
             this.player.actionType == GameConfig.Action.UseItem ||
             this.curWeapIdx == WeaponSlot.Melee ||
-            this.curWeapIdx == WeaponSlot.Throwable || this.player.actionType == GameConfig.Action.Modify
+            this.curWeapIdx == WeaponSlot.Throwable ||
+            this.player.actionType == GameConfig.Action.Modify
         ) {
             return;
         }
@@ -559,7 +575,7 @@ export class WeaponManager {
             if (this.player.invManager.isValid(weaponDef.ammo)) {
                 invAmmo = this.player.invManager.get(weaponDef.ammo);
                 if (invAmmo <= 0) return;
-            }  else {
+            } else {
                 // not a valid ammo type and not an infinite ammo gun (e.g bugle)
                 // so dont try to reload it
                 // since bugle reloads are managed in a timer elsewhere
@@ -667,7 +683,11 @@ export class WeaponManager {
         const isInfinite = this.isInfinite(weaponDef);
         // isValid check because some ammo types are not "valid" as in "they are in the player backpack"
         // eg potato and bugle ammo
-        if (!isInfinite && this.player.invManager.isValid(weaponDef.ammo) && this.player.invManager.has(weaponDef.ammo as InventoryItem)) {
+        if (
+            !isInfinite &&
+            this.player.invManager.isValid(weaponDef.ammo) &&
+            this.player.invManager.has(weaponDef.ammo as InventoryItem)
+        ) {
             amountToReload = this.player.invManager.take(weaponDef.ammo, amountToReload);
             if (amountToReload <= 0) return;
         }
@@ -737,7 +757,6 @@ export class WeaponManager {
         this.player.reloadAgain = false;
         this.player.weapsDirty = true;
         this.bursts.length = 0;
-
     }
 
     private _dropGun(weapIdx: number): void {
@@ -912,7 +931,8 @@ export class WeaponManager {
         if (
             weapon.ammo <= 0 &&
             (!itemDef.backpackFed ||
-                (!isInfinite && !this.player.invManager.has(itemDef.ammo as InventoryItem)))
+                (!isInfinite &&
+                    !this.player.invManager.has(itemDef.ammo as InventoryItem)))
         ) {
             return;
         }
@@ -937,13 +957,17 @@ export class WeaponManager {
 
         this.player.cancelAction();
 
-        if (itemDef.backpackFed){
+        if (itemDef.backpackFed) {
             // with infinite ammo, don't drain backpack ammo (and allow firing
             // even when there is none)
-            if (!isInfinite && this.player.invManager.isValid(itemDef.ammo) && this.player.invManager.has(itemDef.ammo as InventoryItem)) {
+            if (
+                !isInfinite &&
+                this.player.invManager.isValid(itemDef.ammo) &&
+                this.player.invManager.has(itemDef.ammo as InventoryItem)
+            ) {
                 this.player.invManager.take(itemDef.ammo, 1);
             }
-        }else {
+        } else {
             weapon.ammo--;
         }
         this.player.weapsDirty = true;
@@ -1052,7 +1076,12 @@ export class WeaponManager {
         const bulletCount = itemDef.bulletCount;
 
         let bulletType = itemDef.bulletType;
-        if (!itemDef.bulletTypeMix?.length && itemDef.bulletTypeExtra && itemDef.extraBulletTrigger && itemDef.extraBulletTrigger > 0) {
+        if (
+            !itemDef.bulletTypeMix?.length &&
+            itemDef.bulletTypeExtra &&
+            itemDef.extraBulletTrigger &&
+            itemDef.extraBulletTrigger > 0
+        ) {
             const weapon = this.weapons[this.curWeapIdx];
             weapon.shotCount = (weapon.shotCount + 1) % itemDef.extraBulletTrigger;
             if (weapon.shotCount === 0) {
@@ -1156,6 +1185,7 @@ export class WeaponManager {
             };
 
             this.player.game.bulletBarn.fireBullet(params);
+            this.player.shotsFired++; // accuracy tracking (each pellet counts)
 
             // Shoot a projectile if defined
             let projectile: Projectile | undefined;
@@ -1916,7 +1946,7 @@ export class WeaponManager {
 
         if (shouldPreserveAmmo) {
             const ammoTypesMatch = weaponAmmoType === newWeaponDef.ammo;
-            
+
             if (ammoTypesMatch) {
                 // Same ammo type: keep the ammo in the gun
                 ammoToSet = weaponAmmoCount;
@@ -1929,16 +1959,25 @@ export class WeaponManager {
                     );
                     let amountToDrop = res.remaining;
                     if (amountToDrop > 0) {
-                        this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
+                        this.player.dropLoot(
+                            weaponAmmoType as InventoryItem,
+                            amountToDrop,
+                            true,
+                        );
                     }
                 }
 
                 // Take from new ammo type inventory and load it
                 if (!this.isInfinite(newWeaponDef)) {
-                    const ammoAvailable = this.player.invManager.get(newWeaponDef.ammo as InventoryItem);
+                    const ammoAvailable = this.player.invManager.get(
+                        newWeaponDef.ammo as InventoryItem,
+                    );
                     ammoToSet = Math.min(weaponAmmoCount, ammoAvailable);
                     if (ammoToSet > 0) {
-                        this.player.invManager.take(newWeaponDef.ammo as InventoryItem, ammoToSet);
+                        this.player.invManager.take(
+                            newWeaponDef.ammo as InventoryItem,
+                            ammoToSet,
+                        );
                     }
                 }else {
                     ammoToSet = weaponAmmoCount;
@@ -1954,10 +1993,14 @@ export class WeaponManager {
                 );
                 amountToDrop = res.remaining;
                 if (amountToDrop > 0)
-                    this.player.dropLoot(weaponAmmoType as InventoryItem, amountToDrop, true);
+                    this.player.dropLoot(
+                        weaponAmmoType as InventoryItem,
+                        amountToDrop,
+                        true,
+                    );
             }
         }
-        
+
         this.setWeapon(this.curWeapIdx, newWeaponType, ammoToSet);
         if (ammoToSet <= 0) {
             this.tryReload();
@@ -1966,44 +2009,44 @@ export class WeaponManager {
 
     upgradeCurrentWeapon(): void {
         const pickupMsg = new net.PickupMsg();
-        
+
         const activeWeaponType = this.player.activeWeapon;
         const playerCurWeapIdx = this.player.weaponManager.curWeapIdx;
         if (!activeWeaponType) {
             pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
             this.player.msgsToSend.push({
-                    type: net.MsgType.Pickup,
-                    msg: pickupMsg,
-                });
+                type: net.MsgType.Pickup,
+                msg: pickupMsg,
+            });
             return;
         }
-        
+
         const weapon = GunDefs[activeWeaponType];
         if (!weapon) {
             pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
             this.player.msgsToSend.push({
-                    type: net.MsgType.Pickup,
-                    msg: pickupMsg,
-                });
+                type: net.MsgType.Pickup,
+                msg: pickupMsg,
+            });
             return;
         }
-        
+
         if (!weapon.upgraded) {
             pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
             this.player.msgsToSend.push({
-                    type: net.MsgType.Pickup,
-                    msg: pickupMsg,
-                });
+                type: net.MsgType.Pickup,
+                msg: pickupMsg,
+            });
             return;
         }
-        
+
         const upgradedWeaponDef = GunDefs[weapon.upgraded.gun];
         if (!upgradedWeaponDef) {
             pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
             this.player.msgsToSend.push({
-                    type: net.MsgType.Pickup,
-                    msg: pickupMsg,
-                });
+                type: net.MsgType.Pickup,
+                msg: pickupMsg,
+            });
             return;
         }
         const cost = weapon.upgraded.cost;
@@ -2011,22 +2054,23 @@ export class WeaponManager {
             pickupMsg.type = net.PickupMsgType.NotEnoughResources;
             pickupMsg.count = cost;
             this.player.msgsToSend.push({
-                    type: net.MsgType.Pickup,
-                    msg: pickupMsg,
-                });
+                type: net.MsgType.Pickup,
+                msg: pickupMsg,
+            });
             return;
         }
-        
-                    
-        
-        
+
         this.player.invManager.take("construction_item", cost);
-        this.player.weaponManager.setWeapon(playerCurWeapIdx, weapon.upgraded.gun, upgradedWeaponDef.maxClip);
-                    
+        this.player.weaponManager.setWeapon(
+            playerCurWeapIdx,
+            weapon.upgraded.gun,
+            upgradedWeaponDef.maxClip,
+        );
+
         pickupMsg.type = net.PickupMsgType.WeaponUpgraded;
         this.player.msgsToSend.push({
-                    type: net.MsgType.Pickup,
-                    msg: pickupMsg,
-                });
+            type: net.MsgType.Pickup,
+            msg: pickupMsg,
+        });
     }
 }

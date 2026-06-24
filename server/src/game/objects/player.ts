@@ -1839,6 +1839,10 @@ export class Player extends BaseGameObject {
     kills = 0;
     timeAlive = 0;
     assists = 0;
+    /** Bullets fired (each pellet); paired with `bulletHits` for replay/game-view accuracy. */
+    shotsFired = 0;
+    /** Gun-bullet damage instances dealt to other players. */
+    bulletHits = 0;
 
     msgsToSend: Array<{ type: number; msg: net.Msg }> = [];
 
@@ -3492,8 +3496,19 @@ export class Player extends BaseGameObject {
      * doesn't care about kill credit or anything, simply the last player to damage you (excludes yourself)
      */
     lastDamagedBy: Player | undefined;
-    damageHistory: { source: GameObject; name: string; amount: number; time: number }[] =
-        [];
+    damageHistory: {
+        source: GameObject;
+        /** Source player's object id (0 for non-player sources like gas), for replay/game-view. */
+        sourceId: number;
+        name: string;
+        amount: number;
+        /** Seconds since game start (used by kill attribution). */
+        time: number;
+        /** Wall-clock ms at the hit — lets the recorder align damage with the god-view timeline. */
+        realTime: number;
+        /** Weapon/item that caused the damage (`gameSourceType`), for the game-view. */
+        weapon: string;
+    }[] = [];
 
     damage(params: DamageParams) {
         if (this.debug.godMode) return;
@@ -3513,6 +3528,14 @@ export class Player extends BaseGameObject {
         if (playerSource && params.source !== this) {
             if (playerSource.teamId === this.teamId && !this.disconnected) {
                 return;
+            }
+        }
+
+        // Accuracy tracking: count a bullet hit on the shooter when a gun's bullet
+        // connects with another player (paired with shotsFired in weaponManager).
+        if (playerSource && params.source !== this) {
+            if (GameObjectDefs[params.gameSourceType ?? ""]?.type === "gun") {
+                playerSource.bulletHits++;
             }
         }
 
@@ -3586,7 +3609,7 @@ export class Player extends BaseGameObject {
         //add to damage history
         //if last dmg is from same source, add to that, otherwise push new entry
         const last = this.damageHistory[this.damageHistory.length - 1];
-        if (last && last.source === params.source) {
+        if (last && last.source === params.source && last.weapon === (params.gameSourceType ?? params.mapSourceType ?? "")) {
             last.amount += finalDamage;
         } else {
             const source = params.source;
@@ -3599,9 +3622,12 @@ export class Player extends BaseGameObject {
             if (source)
                 this.damageHistory.push({
                     source: source,
+                    sourceId: source instanceof Player ? source.__id : 0,
                     name: name,
                     amount: finalDamage,
                     time: this.game.startedTime,
+                    realTime: Date.now(),
+                    weapon: params.gameSourceType ?? params.mapSourceType ?? "",
                 });
         }
 

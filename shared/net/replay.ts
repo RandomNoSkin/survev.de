@@ -184,6 +184,81 @@ export interface TracksMeta {
     /** Unix ms when recording started — same time base as the per-player files. */
     startTs: number;
     players: { id: number; name: string; teamId: number; groupId: number }[];
+    /** Map dimensions (world units), for scaling movement paths in the game view. */
+    width?: number;
+    height?: number;
+}
+
+/** One aggregated damage event (mirrors a player's runtime `damageHistory` entry). */
+export interface GameDamageEvent {
+    /** Victim player id. */
+    victimId: number;
+    victimName: string;
+    /** Source player id, or 0 for non-player sources (gas, etc.). */
+    sourceId: number;
+    sourceName: string;
+    amount: number;
+    /** Ms since recording start — aligned with the god-view track timeline. */
+    t: number;
+    /** Weapon/item display name that caused the damage. */
+    weapon: string;
+}
+
+/** Final per-player stats captured at game end (for the game-view end-stats table). */
+export interface GamePlayerStats {
+    id: number;
+    name: string;
+    teamId: number;
+    groupId: number;
+    kills: number;
+    damageDealt: number;
+    damageTaken: number;
+    /** Seconds survived. */
+    timeAlive: number;
+    rank: number;
+    /** Bullets fired + bullet hits, for accuracy. */
+    shots: number;
+    hits: number;
+}
+
+/** Contents of the per-game `_damage.json.gz` side-file (roster + end-stats + damage log). */
+export interface GameDamageFile {
+    gameId: string;
+    players: GamePlayerStats[];
+    events: GameDamageEvent[];
+}
+
+/** A single minimap shape (world coords): circle (t=0) or axis-aligned rect (t=1), `c` = 0xRRGGBB. */
+export type GameMapShape =
+    | { t: 0; x: number; y: number; r: number; c: number }
+    | { t: 1; x: number; y: number; w: number; h: number; c: number };
+
+/**
+ * Top-down map snapshot for the game-view, mirroring the in-game minimap: biome colours,
+ * terrain outlines, rivers, and the per-object minimap shapes (from each def's `map`
+ * colour/scale) so it reads like the real minimap (no textures).
+ */
+export interface GameMapFile {
+    width: number;
+    height: number;
+    /** Biome colours (0xRRGGBB) from the map def. */
+    colors: { grass: number; water: number; beach: number; riverbank: number };
+    /** Island shore outline (water lies outside it). */
+    shore: [number, number][];
+    /** Grass outline (beach lies between shore and grass). */
+    grass: [number, number][];
+    rivers: { points: [number, number][]; width: number }[];
+    /** Per-object minimap shapes, pre-sorted by draw order (zIdx). */
+    shapes: GameMapShape[];
+    /** Named places (e.g. "Sweatbath") at world positions. */
+    places: { name: string; x: number; y: number }[];
+}
+
+/** Combined JSON the public `/api/game_view/meta` endpoint returns. */
+export interface GameViewMeta {
+    players: GamePlayerStats[];
+    events: GameDamageEvent[];
+    map: GameMapFile | null;
 }
 
 /** One player's state in a single god-view sample. */
