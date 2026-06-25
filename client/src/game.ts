@@ -136,6 +136,8 @@ export class Game {
      * minimap so labels/ESP/map dots can show every player. Null outside replay.
      */
     m_replayGodView: GodViewSnapshot | null = null;
+    /** True while a replay is paused — freezes player-status aging (keeps markers visible). */
+    m_replayPaused = false;
 
     seq!: number;
     seqInFlight!: boolean;
@@ -546,6 +548,7 @@ export class Game {
             this.m_emoteBarn.wheelKeyTriggered,
             this.m_uiManager.displayingStats,
             this.m_spectating,
+            this.m_replayPaused,
         );
         this.updateAmbience();
 

@@ -68,6 +68,15 @@ declare global {
             readonly https: boolean;
             readonly address: string;
             readonly l10n: string;
+            readonly group?: string;
+            readonly category?: string;
+        }
+    >;
+    const GAME_CATEGORIES: Record<
+        string,
+        {
+            readonly l10n?: string;
+            readonly order?: number;
         }
     >;
 

@@ -28,6 +28,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             port: 3000,
         },
         regions: {},
+        categories: {},
         proxies: {},
         modes: [
             { mapName: "local", teamMode: TeamMode.Solo, enabled: true },

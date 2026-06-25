@@ -27,6 +27,7 @@ import { ReplayPlayer } from "./replay/replayPlayer";
 import { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { SiteInfo } from "./siteInfo";
+import { setMenuAdsActive } from "./ui/adsterra";
 import { ChatUi } from "./ui/chat";
 import { LoadoutMenu } from "./ui/loadoutMenu";
 import { Localization } from "./ui/localization";
@@ -228,6 +229,7 @@ export class Application {
             this.localization.populateLanguageSelect();
             this.startPingTest();
             this.siteInfo.load();
+            this.initRegionSelection();
             this.localization.localizeIndex();
 
             if (this.config.get("rulesAcceptedVersion") !== GameConfig.protocolVersion) {
@@ -266,8 +268,15 @@ export class Application {
             });
 
             this.serverSelect.on("change", () => {
-                const t = this.serverSelect.find(":selected").val();
-                this.config.set("region", t as string);
+                const group = this.serverSelect.find(":selected").val() as string;
+                this.config.set("regionGroup", group);
+                this.resolveRegionSelection();
+            });
+            // Category tabs are rebuilt dynamically by SiteInfo, so delegate the click.
+            $("#category-tabs").on("click", ".btn-cat-tab", (e) => {
+                const category = $(e.currentTarget).data("category") as string;
+                this.config.set("playlist", category);
+                this.resolveRegionSelection();
             });
             this.nameInput.on("blur", (_t) => {
                 this.setConfigFromDOM();
@@ -599,6 +608,50 @@ export class Application {
         this.pingTest.start(regions);
     }
 
+    /**
+     * Resolves the current `regionGroup` + `playlist` selection into the concrete
+     * `config.region` key (the value the whole find_game / ping pipeline runs on),
+     * fixing up the playlist if it isn't available in the selected group.
+     */
+    resolveRegionSelection() {
+        const group = this.config.get("regionGroup")!;
+        const cats = this.siteInfo.getCategoriesForGroup(group);
+        let playlist = this.config.get("playlist")!;
+        if (!cats.some((c) => c.category === playlist)) {
+            playlist = cats[0]?.category ?? "default";
+            this.config.set("playlist", playlist);
+        }
+        this.config.set("region", this.siteInfo.resolveRegion(group, playlist));
+    }
+
+    /** Picks a valid group/playlist from persisted config on startup, then resolves it. */
+    initRegionSelection() {
+        const groups = this.siteInfo.getGroups();
+        if (!groups.length) return;
+
+        let group = this.config.get("regionGroup")!;
+        if (!groups.some((g) => g.group === group)) {
+            // Derive from the persisted region key, else fall back to the first group.
+            group = this.siteInfo.regionMeta(this.config.get("region")!).group;
+            if (!groups.some((g) => g.group === group)) group = groups[0].group;
+            this.config.set("regionGroup", group);
+        }
+
+        const cats = this.siteInfo.getCategoriesForGroup(group);
+        if (!cats.some((c) => c.category === this.config.get("playlist"))) {
+            this.config.set("playlist", cats[0]?.category ?? "default");
+        }
+
+        // Only lock in a concrete region for returning users. First-time users keep
+        // regionSelected=false so the existing ping-based "best region" auto-select runs;
+        // we just render the menu with a sensible default in the meantime.
+        if (this.config.get("regionSelected")) {
+            this.resolveRegionSelection();
+        } else {
+            this.siteInfo.renderRegionSelection();
+        }
+    }
+
     setAppActive(active: boolean) {
         this.active = active;
         this.quickPlayPendingModeIdx = -1;
@@ -716,8 +769,11 @@ export class Application {
     setConfigFromDOM() {
         const playerName = helpers.sanitizeNameInput(this.nameInput.val() as string);
         this.config.set("playerName", playerName);
-        const region = this.serverSelect.find(":selected").val();
-        this.config.set("region", region as string);
+        const group = this.serverSelect.find(":selected").val() as string;
+        if (group) {
+            this.config.set("regionGroup", group);
+            this.resolveRegionSelection();
+        }
     }
 
     setDOMFromConfig() {
@@ -732,11 +788,13 @@ export class Application {
         this.nameInput.val(this.config.get("playerName")!);
         this.serverSelect.find("option").each((_i, ele) => {
             const spellSyncLang = SDK.isSpellSync && window.spellSync.language;
-            const configRegion = this.config.get("region");
+            // The main dropdown holds geographic groups; match against regionGroup.
+            const configGroup = this.config.get("regionGroup");
             ele.selected = spellSyncLang
                 ? ele.value === spellSyncLang
-                : ele.value === configRegion;
+                : ele.value === configGroup;
         });
+        this.siteInfo.renderRegionSelection();
         this.languageSelect.val(this.localization.getLocale());
     }
 
@@ -768,6 +826,14 @@ export class Application {
 
         if (key == "region") {
             this.config.set("regionSelected", true);
+            // Keep the geo dropdown + category tabs in sync when the region is changed
+            // from outside the main menu (ping auto-select, team menu, ?region= param).
+            // These only touch regionGroup/playlist, so they don't re-trigger a region set.
+            const meta = this.siteInfo.regionMeta(this.config.get("region")!);
+            if (this.siteInfo.getGroups().some((g) => g.group === meta.group)) {
+                this.config.set("regionGroup", meta.group);
+                if (meta.category !== "default") this.config.set("playlist", meta.category);
+            }
             this.startPingTest();
             this.siteInfo.updatePageFromInfo();
         }
@@ -782,6 +848,8 @@ export class Application {
     }
 
     refreshUi() {
+        // Load the menu-only ad script while on the menu; tear it down during a match.
+        setMenuAdsActive(this.active);
         this.startMenuWrapper.css("display", this.active ? "flex" : "none");
         this.gameAreaWrapper.css({
             display: this.active ? "none" : "block",
@@ -1251,7 +1319,10 @@ export class Application {
                 const region = this.pingTest.getRegion();
 
                 if (region) {
-                    this.config.set("region", region);
+                    // Pick the best-ping geographic group but keep the player's playlist,
+                    // so auto-select lands on e.g. "eu" + normal rather than "eu-scrims".
+                    this.config.set("regionGroup", this.siteInfo.regionMeta(region).group);
+                    this.resolveRegionSelection();
                     this.setDOMFromConfig();
                 }
             }

@@ -108,6 +108,55 @@ export interface ConfigType {
              * Example: "index-south-america" will translate to "South America" in english.
              */
             l10n: string;
+            /**
+             * Geographic group this region belongs to (e.g. "eu", "asia").
+             *
+             * The client server selector shows one entry *per group* (deduplicated by
+             * this value, labelled with the group's `l10n`). The concrete region is then
+             * picked via the category tabs below. Regions sharing a `group` should also
+             * share the same `l10n`.
+             *
+             * Defaults to the region key when unset (so the region becomes its own group).
+             */
+            group?: string;
+            /**
+             * Playlist / category this region runs (e.g. "normal", "arena", "scrims").
+             *
+             * Within a group, each `category` becomes a tab in the client. Selecting
+             * (group, category) resolves back to the matching region key. The display
+             * order and labels come from the top-level `categories` object.
+             *
+             * Defaults to "default" when unset (a single-category group hides its tabs).
+             */
+            category?: string;
+        }
+    >;
+
+    /**
+     * Labels and ordering for the playlist categories referenced by `regions[].category`.
+     *
+     * Purely cosmetic + ordering — the categories that actually appear are derived from
+     * the regions themselves. A category not listed here falls back to its title-cased id
+     * for the label and to first-appearance order.
+     *
+     * Example:
+     * ```hjson
+     * {
+     *     categories: {
+     *         normal: { l10n: "index-play", order: 0 }
+     *         arena:  { l10n: "index-arena", order: 1 }
+     *         scrims: { l10n: "index-scrims", order: 2 }
+     *     }
+     * }
+     * ```
+     */
+    categories: Record<
+        string,
+        {
+            /** Translation key for the tab label. Falls back to the title-cased id. */
+            l10n?: string;
+            /** Sort order of the tab (ascending). Falls back to first-appearance order. */
+            order?: number;
         }
     >;
 

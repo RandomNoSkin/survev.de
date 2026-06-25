@@ -2581,6 +2581,7 @@ export class PlayerBarn {
         preventInput: boolean,
         displayingStats: boolean,
         isSpectating?: boolean,
+        replayPaused = false,
     ) {
         // Update players
         const players = this.playerPool.m_getPool();
@@ -2627,7 +2628,10 @@ export class PlayerBarn {
 
         const statusUpdateRate = getPlayerStatusUpdateRate(map.factionMode);
         const keys = Object.keys(this.playerStatus);
-        for (let i = 0; i < keys.length; i++) {
+        // While a replay is paused no new frames arrive, so freeze status aging here.
+        // Otherwise timeSinceUpdate keeps growing and the stale-update fade below drives
+        // alive teammates' minimapAlpha to 0, making their map markers disappear.
+        for (let i = 0; !replayPaused && i < keys.length; i++) {
             const status = this.playerStatus[keys[i] as unknown as number];
             const playerId = status.playerId!;
             const playerInfo = this.getPlayerInfo(playerId);

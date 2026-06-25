@@ -205,7 +205,12 @@ export class AdvancedSpectator {
         }
         this.container.visible = true;
 
-        const activeTeamId = playerBarn.getPlayerInfo(activeId).teamId;
+        // Team of the spectated player. Prefer the god-view (server-authoritative and
+        // always present for every player in a replay) so teammates/enemies are
+        // classified correctly even if the POV's recorded playerInfo for the active
+        // player is missing/stale; fall back to playerInfo for live spectate.
+        const activeTeamId =
+            godView?.get(activeId)?.teamId ?? playerBarn.getPlayerInfo(activeId).teamId;
         const centerX = camera.m_screenWidth * 0.5;
         const centerY = camera.m_screenHeight * 0.5;
 
@@ -218,10 +223,14 @@ export class AdvancedSpectator {
                 continue;
             }
             const info = playerBarn.getPlayerInfo(p.__id);
+            // Prefer god-view data (server-authoritative team + health + boost for every
+            // player) over the POV's local status stream, which in replay carries no
+            // enemy status at all and no boost for teammates → otherwise HP/AD read 0.
+            const gv = godView?.get(p.__id);
             // teammates share a teamId with the spectated player; everyone else
             // is an enemy. We label both, so the spectator also sees the info of
             // the watched player's squad (not just enemies).
-            const isEnemy = info.teamId !== activeTeamId;
+            const isEnemy = (gv?.teamId ?? info.teamId) !== activeTeamId;
             // Don't double-label the followed player in normal mode — the HUD
             // already shows them. In freecam the camera has left them, so we do
             // want their label.
@@ -242,8 +251,8 @@ export class AdvancedSpectator {
 
             if (this.enemyLabels) {
                 const status = playerBarn.getPlayerStatus(p.__id);
-                const hp = Math.round(status?.health ?? 0);
-                const boost = Math.round(status?.boost ?? 0);
+                const hp = Math.round(gv?.health ?? status?.health ?? 0);
+                const boost = Math.round(gv?.boost ?? status?.boost ?? 0);
                 const label = this.getLabel(labelIdx++);
                 label.container.visible = true;
                 label.container.position.set(screenPos.x, screenPos.y);

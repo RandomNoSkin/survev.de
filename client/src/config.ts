@@ -98,6 +98,10 @@ const defaultConfig = {
     profile: null as { slug: string } | null,
     playerName: "",
     region: "na",
+    /** Selected geographic region group (e.g. "eu", "asia"); resolves to `region`. */
+    regionGroup: "" as string,
+    /** Selected playlist category (e.g. "normal", "arena", "scrims"); resolves to `region`. */
+    playlist: "" as string,
     gameModeIdx: 2,
     /** Private lobby settings the leader last configured, re-applied (minus `advancedSettings`) the next time they create a lobby. */
     privateLobbySettings: {} as SavedPrivateLobbySettings,

@@ -392,6 +392,19 @@ a:active {
   }
 }
 
+/* Adsterra native banner: bottom-center of the start menu, above the footer links.
+   Block layout (not flex) so the empty container keeps full width before the ad
+   loads -- the native script measures container width and won't render at 0px. */
+#adsterra-native-banner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 70px;
+  margin: 0 auto;
+  text-align: center;
+  pointer-events: auto;
+}
+
 #social-share-block {
   margin-right: 30px;
   margin-top: 10px;
