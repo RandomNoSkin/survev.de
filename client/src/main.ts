@@ -849,7 +849,7 @@ export class Application {
 
     refreshUi() {
         // Load the menu-only ad script while on the menu; tear it down during a match.
-        setMenuAdsActive(this.active);
+        //setMenuAdsActive(this.active);
         this.startMenuWrapper.css("display", this.active ? "flex" : "none");
         this.gameAreaWrapper.css({
             display: this.active ? "none" : "block",

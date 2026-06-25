@@ -404,7 +404,7 @@ a:active {
   left: var(--side-pad);
   top: 50%;
   transform: translateY(-50%);
-  width: 300px;
+  width: 200px;
   text-align: center;
   pointer-events: auto;
 }
