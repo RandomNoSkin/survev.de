@@ -281,12 +281,17 @@ export class Gas {
                 util.randomPointInCircle(this.radOld - this.radNew),
             );
 
-            /*const rad = this.radNew * 0.1; // ensure at least 75% of the safe zone will be inside map bounds
+            // Keep the safe-zone center on the map. The first circle's radius
+            // (0.85 * mapSize) is larger than the map, so the random walk above can push
+            // posNew off the edge into negative coords — which crashes serialization
+            // (writeMapPos asserts a [0, MaxPosition] range). Clamp the center inside the
+            // map (leaving a small radNew*0.1 margin) so the zone is always reachable.
+            const margin = this.radNew * 0.1;
             this.posNew = math.v2Clamp(
                 this.posNew,
-                v2.create(rad, rad),
-                v2.create(this.game.map.width - rad, this.game.map.height - rad),
-            );*/
+                v2.create(margin, margin),
+                v2.create(this.game.map.width - margin, this.game.map.height - margin),
+            );
 
             this.currentPos = this.posOld;
             this.currentRad = this.radOld;

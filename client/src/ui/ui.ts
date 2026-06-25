@@ -190,7 +190,8 @@ export class UiManager {
     specAdvancedOptions = $("#ui-spectate-advanced-options");
     specAdvancedList = $("#ui-spectate-advanced-list");
     advCollapseButton = $("#btn-adv-collapse");
-    advCollapsed = false;
+    // Start collapsed: the option list is hidden until the spectator expands it.
+    advCollapsed = true;
     advFreecamButton = $("#btn-adv-freecam");
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");

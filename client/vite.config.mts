@@ -115,6 +115,7 @@ export default defineConfig(({ mode }) => {
         },
         define: {
             GAME_REGIONS: Config.regions,
+            GAME_CATEGORIES: Config.categories,
             GIT_VERSION: JSON.stringify(GIT_VERSION),
             PING_TEST_URLS: Object.entries(Config.regions).map(([key, data]) => {
                 return {

@@ -90,12 +90,21 @@ export class ReplayPlayer {
         );
 
         this.keyHandler = (e: KeyboardEvent) => {
+            // Don't hijack keys while typing in a form control (e.g. the speed dropdown).
+            const tag = (e.target as HTMLElement | null)?.tagName;
+            if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
             if (e.key === "ArrowLeft") {
                 e.preventDefault();
                 void this.switchPov(-1);
             } else if (e.key === "ArrowRight") {
                 e.preventDefault();
                 void this.switchPov(1);
+            } else if (e.key === " " || e.code === "Space") {
+                // Space toggles pause. preventDefault stops the page scrolling and also
+                // suppresses the synthetic click if a control happens to be focused
+                // (which would otherwise double-toggle).
+                e.preventDefault();
+                if (!e.repeat) this.togglePause();
             }
         };
     }
@@ -191,6 +200,10 @@ export class ReplayPlayer {
             this.godView.update(this.currentAbsTime());
             this.game.m_replayGodView = this.godView.current;
         }
+
+        // Expose pause state so the game can freeze player-status aging — otherwise the
+        // stale-update fade would make teammate minimap markers vanish while paused.
+        this.game.m_replayPaused = this.paused;
 
         this.ui.update(this.elapsed, this.duration, this.paused, this.speed);
         this.rafId = requestAnimationFrame(this.loop);
@@ -362,6 +375,7 @@ export class ReplayPlayer {
         if (this.rafId) cancelAnimationFrame(this.rafId);
         window.removeEventListener("keydown", this.keyHandler);
         this.game.m_replayGodView = null;
+        this.game.m_replayPaused = false;
         // Finalize any in-progress recording so the file is still saved.
         this.recorder?.stop();
         this.ui.destroy();
