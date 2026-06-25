@@ -514,8 +514,14 @@ a:active {
 }
 
 #start-menu {
-  max-height: 412px;
-  padding: 20px;
+  /* The parent (#start-row-top) is a flex row with a fixed 360px height and the
+     default align-items: stretch, which forces this panel to 360px regardless of
+     content -- so the buttons overflow and the dark background stops short of the
+     Spectate button. align-self: flex-start opts out of the stretch so the panel
+     grows to fit ALL buttons; max-height: none removes the other cap. */
+  align-self: flex-start;
+  max-height: none;
+  padding: 20px 20px 28px;
   width: 300px;
   /* Slightly more solid panel so the buttons read clearly against the map. */
   background-color: rgba(0, 0, 0, 0.65);
