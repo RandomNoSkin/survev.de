@@ -1209,6 +1209,7 @@ a:active {
   background: #50afab;
   border-bottom: 2px solid #387c79;
   box-shadow: inset 0 -2px #387c79;
+  margin-bottom: 0px;
 }
 
 #btn-start-spectate{
