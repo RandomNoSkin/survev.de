@@ -116,6 +116,63 @@ export class SiteInfo {
         }
     }
 
+    /**
+     * Renders a geo-group dropdown selection + category tab row (the same split the
+     * main menu uses) for a menu whose authoritative selection is a concrete region
+     * — the team and private-lobby menus. Unlike {@link renderRegionSelection}, the
+     * shown group/category is derived from `selectedRegion` rather than from config.
+     *
+     * `enabled` is false for non-leaders, who can see but not change the selection.
+     */
+    renderRegionGroupTabs(
+        selectEl: JQuery<HTMLElement>,
+        tabsEl: JQuery<HTMLElement>,
+        selectedRegion: string,
+        enabled: boolean,
+    ) {
+        const { group, category } = this.regionMeta(selectedRegion);
+
+        selectEl.find("option").each((_i, ele) => {
+            (ele as HTMLOptionElement).selected =
+                (ele as HTMLOptionElement).value === group;
+        });
+
+        tabsEl.empty();
+        const cats = this.getCategoriesForGroup(group);
+        if (cats.length <= 1) {
+            // Single (or no) category for this group — nothing to choose, hide the row.
+            tabsEl.css("display", "none");
+            return;
+        }
+        tabsEl.css("display", "flex");
+        for (const { category: cat } of cats) {
+            const isSelected = cat === category;
+            tabsEl.append(
+                `<a class="btn-hollow menu-option btn-cat-tab${
+                    isSelected ? " btn-hollow-selected" : ""
+                }${enabled ? "" : " btn-disabled btn-opaque"}" data-category="${cat}">${this.categoryLabel(
+                    cat,
+                )}</a>`,
+            );
+        }
+    }
+
+    /** Updates a grouped region <select>'s option labels with summed per-group player counts. */
+    updateGroupCounts(optgroup: JQuery<HTMLElement>) {
+        const pops = this.info.pops;
+        if (!pops) return;
+        const players = this.localization.translate("index-players");
+        const groupCounts: Record<string, number> = {};
+        for (const region in pops) {
+            const group = this.regionMeta(region).group;
+            groupCounts[group] = (groupCounts[group] ?? 0) + pops[region].playerCount;
+        }
+        for (const group in groupCounts) {
+            const sel = optgroup.children(`option[value="${group}"]`);
+            sel.text(`${sel.data("label")} [${groupCounts[group]} ${players}]`);
+        }
+    }
+
     load() {
         const locale = this.localization.getLocale();
         const siteInfoUrl = api.resolveUrl(`/api/site_info?language=${locale}`);
@@ -125,29 +182,32 @@ export class SiteInfo {
         const spectatorSelector = $("#spectate-server-opts");
         const privateLobbySelector = $("#private-lobby-server-opts");
 
-        // Main menu: one entry per geographic group (eu/asia/...), deduplicated.
-        // The concrete region (eu-arena, ...) is then resolved via the category tabs.
+        // Main / team / private-lobby menus: one entry per geographic group
+        // (eu/asia/...), deduplicated. The concrete region (eu-arena, ...) is then
+        // resolved via the category tabs rendered alongside each dropdown.
         mainSelector.empty();
+        teamSelector.empty();
+        privateLobbySelector.empty();
         for (const { group, l10n } of this.getGroups()) {
             const name = this.localization.translate(l10n);
-            mainSelector.append(
-                `<option value='${group}' data-l10n='${l10n}' data-label='${name}'>${name}</option>`,
-            );
+            const opt = `<option value='${group}' data-l10n='${l10n}' data-label='${name}'>${name}</option>`;
+            mainSelector.append(opt);
+            teamSelector.append(opt);
+            privateLobbySelector.append(opt);
         }
 
-        // Team / spectate / private-lobby menus keep the flat per-region list. Since
-        // regions in the same group share an l10n ("Europe"), suffix the category so the
-        // entries stay distinct (e.g. "Europe Arena", "Europe Scrims").
+        // Spectate menu keeps the flat per-region list. Since regions in the same group
+        // share an l10n ("Europe"), suffix the category so the entries stay distinct
+        // (e.g. "Europe Arena", "Europe Scrims").
         for (const region in GAME_REGIONS) {
             const data = GAME_REGIONS[region];
             const base = this.localization.translate(data.l10n);
             const category = this.regionMeta(region).category;
             const name =
                 category !== "default" ? `${base} ${this.categoryLabel(category)}` : base;
-            const elm = `<option value='${region}' data-l10n='${data.l10n}' data-label='${name}'>${name}</option>`;
-            teamSelector.append(elm);
-            spectatorSelector.append(elm);
-            privateLobbySelector.append(elm);
+            spectatorSelector.append(
+                `<option value='${region}' data-l10n='${data.l10n}' data-label='${name}'>${name}</option>`,
+            );
         }
 
         $.ajax(siteInfoUrl).done((data: SiteInfoRes) => {
@@ -170,13 +230,14 @@ export class SiteInfo {
         console.log("Available modes for region", this.config.get("region"), modes);
         for (let i = 0; i < modes.length; i++) {
             const mode = modes[i];
-            const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main).desc;
+            const mapDef = (MapDefs[mode.mapName as keyof typeof MapDefs] || MapDefs.main)
+                .desc;
 
             const l10nKey = mapDef.buttonText
-            ? null
-            : `index-play-${TeamModeToString[mode.teamMode]}`;
+                ? null
+                : `index-play-${TeamModeToString[mode.teamMode]}`;
             const buttonText = mapDef.buttonText
-                ? mapDef.buttonText +"-"+ TeamModeToString[mode.teamMode]
+                ? mapDef.buttonText + "-" + TeamModeToString[mode.teamMode]
                 : TeamModeToString[mode.teamMode];
 
             availableModes.push({
@@ -249,22 +310,15 @@ export class SiteInfo {
             $("#btn-join-team, #btn-create-team").toggle(supportsTeam);
 
             const supportsPrivateLobby = selectedModes.some((s) => s.enabled);
-            $("#btn-join-private-lobby, #btn-create-private-lobby").toggle(supportsPrivateLobby);
+            $("#btn-join-private-lobby, #btn-create-private-lobby").toggle(
+                supportsPrivateLobby,
+            );
 
-            // Region pops — the geo dropdown is grouped, so sum player counts per group.
-            const pops = this.info.pops;
-            if (pops) {
-                const players = this.localization.translate("index-players");
-                const groupCounts: Record<string, number> = {};
-                for (const region in pops) {
-                    const group = this.regionMeta(region).group;
-                    groupCounts[group] = (groupCounts[group] ?? 0) + pops[region].playerCount;
-                }
-                for (const group in groupCounts) {
-                    const sel = $("#server-opts").children(`option[value="${group}"]`);
-                    sel.text(`${sel.data("label")} [${groupCounts[group]} ${players}]`);
-                }
-            }
+            // Region pops — the geo dropdowns are grouped, so sum player counts per
+            // group. Same dropdown shape is shared by the team / private-lobby menus.
+            this.updateGroupCounts($("#server-opts"));
+            this.updateGroupCounts($("#team-server-opts"));
+            this.updateGroupCounts($("#private-lobby-server-opts"));
             let hasTwitchStreamers = false;
             const featuredStreamersElem = $("#featured-streamers");
             const streamerList = $(".streamer-list");
