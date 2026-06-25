@@ -177,7 +177,8 @@ a:active {
   height: 300px;
   margin: auto;
   margin-top: 20px;
-  margin-bottom: 65px;
+  /* Tighter gap so the menu sits closer under the logo (tune this value). */
+  margin-bottom: 24px;
   position: relative;
   /* In case of logo change, update this value to width divided by 2 ceiled  */
   width: 500px;
@@ -259,6 +260,8 @@ a:active {
   position: relative;
   display: flex;
   justify-content: center;
+  /* Pull the whole menu row up into the logo's lower whitespace (tune this value). */
+  margin-top: -30px;
 }
 
 .menu-column {
@@ -392,15 +395,16 @@ a:active {
   }
 }
 
-/* Adsterra native banner: bottom-center of the start menu, above the footer links.
-   Block layout (not flex) so the empty container keeps full width before the ad
-   loads -- the native script measures container width and won't render at 0px. */
+/* Adsterra native banner: compact block docked to the LEFT edge, vertically
+   centered -- the same dedicated spot as the home_vrec slot, so it never covers
+   the centered play menu. The native script fills the container width, so the
+   fixed width is what keeps the tiles small. Tune `width` to taste. */
 #adsterra-native-banner {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 70px;
-  margin: 0 auto;
+  left: var(--side-pad);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 300px;
   text-align: center;
   pointer-events: auto;
 }
@@ -513,6 +517,8 @@ a:active {
   max-height: 412px;
   padding: 20px;
   width: 300px;
+  /* Slightly more solid panel so the buttons read clearly against the map. */
+  background-color: rgba(0, 0, 0, 0.65);
 }
 
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {

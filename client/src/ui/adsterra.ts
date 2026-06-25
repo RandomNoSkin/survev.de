@@ -1,6 +1,7 @@
-// Adsterra "Social Bar / Pop-under" unit, scoped to the start menu so it never
-// fires during an active match. The script is injected while the menu is visible
-// and removed (along with the DOM it appends to <body>) once a game starts.
+// Adsterra Popunder, scoped to the start menu so it never fires during an active
+// match. The script is injected while the menu is visible and removed (along with
+// any DOM it appends to <body>) once a game starts. Adsterra throttles how often it
+// actually pops via the zone's Frequency Cap (set in the Adsterra dashboard).
 const SOCIAL_BAR_SRC =
     "https://pl29894911.effectivecpmnetwork.com/32/e0/d0/32e0d0acba9fbe0f455cc4ae24272eab.js";
 
