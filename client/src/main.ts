@@ -27,7 +27,6 @@ import { ReplayPlayer } from "./replay/replayPlayer";
 import { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { SiteInfo } from "./siteInfo";
-import { setMenuAdsActive } from "./ui/adsterra";
 import { ChatUi } from "./ui/chat";
 import { LoadoutMenu } from "./ui/loadoutMenu";
 import { Localization } from "./ui/localization";
@@ -848,8 +847,6 @@ export class Application {
     }
 
     refreshUi() {
-        // Load the menu-only ad script while on the menu; tear it down during a match.
-        //setMenuAdsActive(this.active);
         this.startMenuWrapper.css("display", this.active ? "flex" : "none");
         this.gameAreaWrapper.css({
             display: this.active ? "none" : "block",
