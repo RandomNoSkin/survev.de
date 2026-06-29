@@ -19,7 +19,7 @@ import { Editor } from "./debug/editor";
 /* STRIP_FROM_PROD_CLIENT:END */
 
 import { name } from "ejs";
-import { GunDefs } from "../../shared/defs/gameObjects/gunDefs";
+import { type GunDef, GunDefs } from "../../shared/defs/gameObjects/gunDefs";
 import { device } from "./device";
 import { EmoteBarn } from "./emote";
 import { Gas } from "./gas";
@@ -2009,6 +2009,16 @@ export class Game {
                         assistCountText,
                     );
                 }
+                break;
+            }
+            case net.MsgType.PickupExtra: {
+                const msg = new net.PickupExtraMsg();
+                msg.deserialize(stream);
+                const modifiedWeaponName = (GameObjectDefs[msg.modifiedWeapon] as GunDef).name;
+                this.m_ui2Manager.displayPickupExtraMessage(
+                    `${modifiedWeaponName}`,
+                    msg.modifiedWeapon
+                );
                 break;
             }
         }

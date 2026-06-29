@@ -358,6 +358,7 @@ export enum MsgType {
     KillFeed,
     Assist,
     SpectatorAdvanced,
+    PickupExtra,
 }
 
 export enum PickupMsgType {
@@ -397,6 +398,7 @@ export { JoinedMsg } from "./joinedMsg";
 export { JoinMsg } from "./joinMsg";
 export { KillMsg } from "./killMsg";
 export { AssistMsg } from "./assistMsg";
+export { PickupExtraMsg } from "./pickupExtraMsg";
 export { MapMsg } from "./mapMsg";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg";
 export { RoleSelectMsg } from "./roleSelectMsg";

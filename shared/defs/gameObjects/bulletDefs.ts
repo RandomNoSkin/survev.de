@@ -453,7 +453,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 0.5,
         onHit: "explosion_usas",
         noDistAdj: true,
-        projType: "mirv_mini",
+        projType: "mirv_mini_saiga",
         projCount: 3,
         projSpread: 1.4,
     },

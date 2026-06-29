@@ -423,7 +423,7 @@ export class EmoteBarn {
                 vA: v2.create(-1, 0),
                 vC: v2.create(-1, 1),
                 ping: "",
-                emote: "emote_ammo",
+                emote: "emote_adren",
                 ammoEmote: true,
             },
         };
@@ -977,7 +977,7 @@ export class EmoteBarn {
                                 } as Record<string, string>;
 
                                 const oldEmote = s.emote;
-                                s.emote = AmmoTypeToEmote[ammoType] || "emote_ammo";
+                                s.emote = AmmoTypeToEmote[ammoType] || "emote_adren";
                                 s.texture = EmotesDefs[s.emote].texture;
 
                                 if (oldEmote != s.emote) {
@@ -1138,7 +1138,7 @@ export class EmoteBarn {
                                 } as Record<string, string>;
 
                                 const oldEmote = s.emote;
-                                s.emote = AmmoTypeToEmote[ammoType] || "emote_ammo";
+                                s.emote = AmmoTypeToEmote[ammoType] || "emote_adren";
                                 s.texture = EmotesDefs[s.emote].texture;
 
                                 if (oldEmote != s.emote) {

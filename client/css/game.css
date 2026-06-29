@@ -1446,7 +1446,7 @@ img {
 .ui-emote-top-left .ui-emote-image {
   margin-left: -80px;
   margin-top: -30px;
-  background-image: url(/img/loot/loot-ammo-box.svg);
+  background-image: url(/img/loot/loot-medical-pill.svg);
 }
 
 .ui-emote-bottom-left .ui-emote {
@@ -2691,7 +2691,31 @@ img {
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
 }
 
+#ui-pickupExtra {
+  text-align: left;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border-radius: 5px;
+  padding: 8px;
+  opacity: 0;
+}
 
+#ui-pickupExtra-header {
+  font-size: 26px;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  padding: 1px;
+  padding-top: 2px;
+}
+
+#ui-pickupExtra-text {
+    color: #ffffffe5;
+    font-size: 22px;
+    padding: 3px;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+    white-space: pre-line;
+  }
 
 .notify-message {
   color: white;
@@ -3988,7 +4012,7 @@ span.ui-stats-header-value {
   .ui-emote-top-left .ui-emote-image {
     margin-left: -80px;
     margin-top: -30px;
-    background-image: url(/img/loot/loot-ammo-box.svg);
+    background-image: url(/img/loot/loot-medical-pill.svg);
   }
 
   .ui-emote-bottom-left .ui-emote {
@@ -4951,6 +4975,32 @@ span.ui-stats-header-value {
     font-size: 18px;
     margin-bottom: -3px;
     text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+  }
+
+  #ui-pickupExtra {
+    text-align: left;
+    background: rgba(0, 0, 0, 0.4);
+    color: #fff;
+    border-radius: 5px;
+    padding: 8px;
+    opacity: 0;
+  }
+
+  #ui-pickupExtra-header {
+    font-size: 26px;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 3px;
+    padding: 1px;
+    padding-top: 2px;
+  }
+
+  #ui-pickupExtra-text {
+      color: #ffffffe5;
+      font-size: 22px;
+      padding: 3px;
+      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+      white-space: pre-line;
   }
 
   /**

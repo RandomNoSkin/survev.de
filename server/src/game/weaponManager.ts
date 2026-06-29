@@ -2072,5 +2072,15 @@ export class WeaponManager {
             type: net.MsgType.Pickup,
             msg: pickupMsg,
         });
+        
+        const pickupExtraMsg = new net.PickupExtraMsg();
+
+        const modifiedWeapon = weapon.upgraded.gun
+        // const modifiedWeapon = (GameObjectDefs[weapon.upgraded.gun] as GunDef).name; //sends the name immediately for header
+        pickupExtraMsg.modifiedWeapon = modifiedWeapon;
+        this.player.msgsToSend.push({
+            type: net.MsgType.PickupExtra,
+            msg: pickupExtraMsg,
+        });
     }
 }
