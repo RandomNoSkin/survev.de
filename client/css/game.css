@@ -1446,7 +1446,7 @@ img {
 .ui-emote-top-left .ui-emote-image {
   margin-left: -80px;
   margin-top: -30px;
-  background-image: url(/img/loot/loot-ammo-box.svg);
+  background-image: url(/img/loot/loot-medical-pill.svg);
 }
 
 .ui-emote-bottom-left .ui-emote {
@@ -4012,7 +4012,7 @@ span.ui-stats-header-value {
   .ui-emote-top-left .ui-emote-image {
     margin-left: -80px;
     margin-top: -30px;
-    background-image: url(/img/loot/loot-ammo-box.svg);
+    background-image: url(/img/loot/loot-medical-pill.svg);
   }
 
   .ui-emote-bottom-left .ui-emote {

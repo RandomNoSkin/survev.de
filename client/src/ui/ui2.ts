@@ -1502,7 +1502,7 @@ export class UiManager2 {
         p.text = `${this.localization.translate(`index-pickup-extra-${description}`)}`;
         // ${this.localization.translate(`game-${perk}`)}
         p.ticker = 0;
-        p.duration = 6;
+        p.duration = 10;
     }
 
     displayKillMessage(text: string, count: string) {
