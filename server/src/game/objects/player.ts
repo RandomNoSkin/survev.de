@@ -1011,6 +1011,12 @@ export class Player extends BaseGameObject {
 
     outfit = "outfitBase";
 
+    /** The cosmetic outfit the player brought from their loadout. Never dropped. */
+    outfitFromLoadout = "";
+
+    /** Client setting: only pick up Ghillie suits (set from the join message). */
+    onlyGhilliePickup = true;
+
     setOutfit(outfit: string) {
         if (this.outfit === outfit) return;
         this.outfit = outfit;
@@ -1815,6 +1821,7 @@ export class Player extends BaseGameObject {
     loadout = {
         heal: "heal_basic",
         boost: "boost_basic",
+        death_effect: "death_basic",
         emotes: [...GameConfig.defaultEmoteLoadout],
     };
 
@@ -1911,6 +1918,7 @@ export class Player extends BaseGameObject {
         this.isAdmin = admin;
 
         this.isMobile = joinMsg.isMobile;
+        this.onlyGhilliePickup = joinMsg.onlyGhilliePickup;
 
         this.weapons = this.weaponManager.weapons;
 
@@ -3609,7 +3617,11 @@ export class Player extends BaseGameObject {
         //add to damage history
         //if last dmg is from same source, add to that, otherwise push new entry
         const last = this.damageHistory[this.damageHistory.length - 1];
-        if (last && last.source === params.source && last.weapon === (params.gameSourceType ?? params.mapSourceType ?? "")) {
+        if (
+            last &&
+            last.source === params.source &&
+            last.weapon === (params.gameSourceType ?? params.mapSourceType ?? "")
+        ) {
             last.amount += finalDamage;
         } else {
             const source = params.source;
@@ -4189,7 +4201,8 @@ export class Player extends BaseGameObject {
                 this.game.lootBarn.addLoot(type, this.pos, this.layer, 1);
             }
 
-            if (this.outfit) {
+            // The loadout skin is never dropped, not even on death.
+            if (this.outfit && this.outfit !== this.outfitFromLoadout) {
                 const def = GameObjectDefs[this.outfit] as OutfitDef;
                 if (!def.noDropOnDeath && !def.noDrop) {
                     this.game.lootBarn.addLoot(this.outfit, this.pos, this.layer, 1);
@@ -5149,6 +5162,17 @@ export class Player extends BaseGameObject {
                 }
                 break;
             case "outfit":
+                // Setting: only Ghillie suits are picked up in-game, so the player keeps
+                // the cosmetic skin from their loadout.
+                if (
+                    this.onlyGhilliePickup &&
+                    !(GameObjectDefs[obj.type] as OutfitDef).ghillie
+                ) {
+                    amountLeft = 1;
+                    pickupMsg.type = net.PickupMsgType.BetterItemEquipped;
+                    break;
+                }
+
                 if (this.role) {
                     const roleDef = GameObjectDefs[this.role] as RoleDef;
                     if (roleDef.defaultItems?.noDropOutfit) {
@@ -5165,7 +5189,8 @@ export class Player extends BaseGameObject {
                 }
 
                 amountLeft = 1;
-                lootToAdd = this.outfit;
+                // Never turn the loadout skin into loot; it just gets replaced.
+                lootToAdd = this.outfit === this.outfitFromLoadout ? "" : this.outfit;
                 pickupMsg.type = net.PickupMsgType.Success;
                 this.setOutfit(obj.type);
                 break;
@@ -5566,6 +5591,8 @@ export class Player extends BaseGameObject {
             loadout.outfit !== "outfitBase"
         ) {
             this.setOutfit(loadout.outfit);
+            // Remember the loadout skin so it is never dropped (on pickup-swap or death).
+            this.outfitFromLoadout = loadout.outfit;
             trackCosmetic(loadout.outfit);
         }
 
@@ -5581,6 +5608,10 @@ export class Player extends BaseGameObject {
         if (isItemInLoadout(loadout.boost, "boost_effect")) {
             this.loadout.boost = loadout.boost;
             trackCosmetic(loadout.boost);
+        }
+        if (isItemInLoadout(loadout.death_effect, "death_effect")) {
+            this.loadout.death_effect = loadout.death_effect;
+            trackCosmetic(loadout.death_effect);
         }
 
         const emotes = loadout.emotes;

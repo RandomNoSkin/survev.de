@@ -298,6 +298,7 @@ class Bot {
             outfit: outfits[util.randomInt(0, outfits.length - 1)],
             heal: "heal_basic",
             boost: "boost_basic",
+            death_effect: "death_basic",
             emotes: this.emotes,
         };
 

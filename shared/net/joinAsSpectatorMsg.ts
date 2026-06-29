@@ -8,11 +8,13 @@ export class JoinAsSpectatorMsg implements AbstractMsg {
     useTouch = false;
     isMobile = false;
     bot = false;
+    onlyGhilliePickup = true;
     loadout = {
         outfit: "",
         melee: "",
         heal: "",
         boost: "",
+        death_effect: "",
         emotes: [] as string[],
     };
 
@@ -24,11 +26,13 @@ export class JoinAsSpectatorMsg implements AbstractMsg {
         this.useTouch = s.readBoolean();
         this.isMobile = s.readBoolean();
         this.bot = s.readBoolean();
+        this.onlyGhilliePickup = s.readBoolean();
 
         this.loadout.outfit = s.readGameType();
         this.loadout.melee = s.readGameType();
         this.loadout.heal = s.readGameType();
         this.loadout.boost = s.readGameType();
+        this.loadout.death_effect = s.readGameType();
         this.loadout.emotes = [];
         const count = s.readUint8();
 
@@ -47,11 +51,13 @@ export class JoinAsSpectatorMsg implements AbstractMsg {
         s.writeBoolean(this.useTouch);
         s.writeBoolean(this.isMobile);
         s.writeBoolean(this.bot);
+        s.writeBoolean(this.onlyGhilliePickup);
 
         s.writeGameType(this.loadout.outfit);
         s.writeGameType(this.loadout.melee);
         s.writeGameType(this.loadout.heal);
         s.writeGameType(this.loadout.boost);
+        s.writeGameType(this.loadout.death_effect);
 
         s.writeUint8(this.loadout.emotes.length);
         for (const emote of this.loadout.emotes) {

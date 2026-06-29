@@ -1,5 +1,6 @@
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs, type LootDef } from "../../../shared/defs/gameObjectDefs";
+import type { DeathEffectDef } from "../../../shared/defs/gameObjects/deathEffectDefs";
 import type {
     BackpackDef,
     BoostDef,
@@ -7,7 +8,7 @@ import type {
     HealDef,
     HelmetDef,
 } from "./../../../shared/defs/gameObjects/gearDefs";
-import { GunDefs, type GunDef } from "../../../shared/defs/gameObjects/gunDefs";
+import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import type { OutfitDef } from "../../../shared/defs/gameObjects/outfitDefs";
 import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
@@ -191,6 +192,9 @@ export class Player implements AbstractObject {
     active!: boolean;
 
     bodySprite = createSprite();
+    frontSprite = createSprite();
+    deathEffectSprite = new PIXI.AnimatedSprite([PIXI.Texture.EMPTY]);
+    deathEffectContainer = new PIXI.Container();
     chestSprite = createSprite();
     flakSprite = createSprite();
     steelskinSprite = createSprite();
@@ -412,6 +416,7 @@ export class Player implements AbstractObject {
         this.bodyContainer.addChild(this.footRContainer);
         this.bodyContainer.addChild(this.backpackSprite);
         this.bodyContainer.addChild(this.bodySprite);
+        this.bodyContainer.addChild(this.frontSprite);
         this.bodyContainer.addChild(this.chestSprite);
         this.bodyContainer.addChild(this.flakSprite);
         this.bodyContainer.addChild(this.steelskinSprite);
@@ -639,7 +644,7 @@ export class Player implements AbstractObject {
                         loadedThrowable: data.weapons[i].loadedThrowable,
                     };
                     this.m_localData.m_weapons.push(w);
-                }else {
+                } else {
                     const w = {
                         type: data.weapons[i].type,
                         ammo: data.weapons[i].ammo,
@@ -744,7 +749,10 @@ export class Player implements AbstractObject {
     }
 
     canInteract(map: Map) {
-        return !this.m_netData.m_dead && (!map.perkMode || this.m_netData.m_role || !map.arenaMode);
+        return (
+            !this.m_netData.m_dead &&
+            (!map.perkMode || this.m_netData.m_role || !map.arenaMode)
+        );
     }
 
     m_updatePerks(
@@ -1239,7 +1247,6 @@ export class Player implements AbstractObject {
                 !preventInput &&
                 !itemDef.ammoInfinite
             ) {
-
                 const ammoLeft = this.m_localData.m_inventory[itemDef.ammo] || 0;
                 const currentClip = curWeap.ammo;
                 if (ammoLeft == 0 && currentClip == 0) {
@@ -1815,6 +1822,28 @@ export class Player implements AbstractObject {
         } else {
             this.visorSprite.visible = false;
         }
+
+        // Skin accessory (front sprite). Placed last so the hand containers have
+        // their final child indices (guns/melee/downed reorder them above).
+        if (outfitImg.frontSprite && !outfitDef.ghillie) {
+            this.frontSprite.texture = PIXI.Texture.from(outfitImg.frontSprite);
+            this.frontSprite.scale.set(0.27, 0.27);
+            const fp = outfitImg.frontSpritePos ?? { x: 0, y: 0 };
+            this.frontSprite.position.set(fp.x, fp.y);
+            this.frontSprite.tint = 0xffffff;
+            this.frontSprite.visible = true;
+
+            const handL = this.bodyContainer.getChildIndex(this.handLContainer);
+            const handR = this.bodyContainer.getChildIndex(this.handRContainer);
+            const target = outfitImg.aboveHand
+                ? math.max(handL, handR) + 1
+                : math.min(handL, handR) - 1;
+            const clamped = math.clamp(target, 0, this.bodyContainer.children.length - 1);
+            this.bodyContainer.setChildIndex(this.frontSprite, clamped);
+        } else {
+            this.frontSprite.visible = false;
+        }
+
         this.bodyContainer.scale.set(bodyScale, bodyScale);
     }
 
@@ -2962,9 +2991,12 @@ export class PlayerBarn {
         killerId: number,
         audioManager: AudioManager,
         particleBarn: ParticleBarn,
+        renderer: Renderer,
     ) {
         const target = this.getPlayerById(targetId);
         const killer = this.getPlayerById(killerId);
+        const targetInfo = this.getPlayerInfo(targetId);
+
         if (target && killer?.m_hasPerk("turkey_shoot")) {
             audioManager.playGroup("cluck", {
                 soundPos: target.m_pos,
@@ -2986,6 +3018,72 @@ export class PlayerBarn {
                     target.m_pos,
                     vel,
                 );
+            }
+        } else if (target && killer?.m_hasPerk("cupid")) {
+            const numParticles = Math.floor(util.random(30, 35));
+            for (let i = 0; i < numParticles; i++) {
+                const vel = v2.mul(v2.randomUnit(), util.random(5, 15));
+                particleBarn.addParticle("cupidDeath", target.layer, target.m_pos, vel);
+            }
+        } else if (target) {
+            // Death effect from the dying player's loadout
+            const deathEffectType = targetInfo?.loadout?.death_effect || "death_basic";
+            const deathEffectDef = GameObjectDefs[deathEffectType] as
+                | DeathEffectDef
+                | undefined;
+
+            if (
+                deathEffectDef &&
+                deathEffectDef.isParticle === false &&
+                deathEffectDef.sprites &&
+                deathEffectDef.sprites.length > 0
+            ) {
+                // Animated sprite effect (blood explosion, toon blast, black hole)
+                const textures = deathEffectDef.sprites.map((s) => PIXI.Texture.from(s));
+                const sprite = target.deathEffectSprite;
+                sprite.textures = textures;
+                sprite.anchor.set(0.5, 0.5);
+                const scale = deathEffectDef.animationScale ?? 1.0;
+                sprite.scale.set(scale, scale);
+                sprite.animationSpeed = deathEffectDef.animationSpeed ?? 0.15;
+                sprite.loop = false;
+                sprite.position.set(0, 0);
+                sprite.visible = true;
+
+                target.deathEffectContainer.position.set(
+                    target.container.position.x,
+                    target.container.position.y,
+                );
+                target.deathEffectContainer.addChild(sprite);
+                renderer.addPIXIObj(
+                    target.deathEffectContainer,
+                    target.renderLayer,
+                    target.renderZOrd,
+                    target.renderZIdx,
+                );
+
+                sprite.gotoAndPlay(0);
+                sprite.onComplete = () => {
+                    sprite.visible = false;
+                };
+            } else {
+                // Particle based effect
+                if (deathEffectDef?.particleCount === 0) {
+                    return;
+                }
+                const particleType = deathEffectDef?.particle ?? "deathSplash";
+                const minParticles = deathEffectDef?.minParticles ?? 30;
+                const maxParticles = deathEffectDef?.maxParticles ?? 35;
+                const numParticles = Math.floor(util.random(minParticles, maxParticles));
+                for (let i = 0; i < numParticles; i++) {
+                    const vel = v2.mul(v2.randomUnit(), util.random(5, 15));
+                    particleBarn.addParticle(
+                        particleType,
+                        target.layer,
+                        target.m_pos,
+                        vel,
+                    );
+                }
             }
         }
     }

@@ -7646,7 +7646,7 @@ input [type="image"]:focus {
   position: fixed;
   top: 50%;
   transform: translateY(-50%);
-  width: 578px;
+  width: 678px;
 }
 
 .modal-content-right {
@@ -7657,7 +7657,8 @@ input [type="image"]:focus {
   display: none;
   pointer-events: initial;
   position: fixed;
-  right: 0;
+  /* Pushed right to clear the widened #modal-content-left (578px -> 678px). */
+  right: -100px;
   width: 330px;
 }
 
@@ -8932,6 +8933,8 @@ input [type="image"]:focus {
 
   #modal-customize-wrapper > .modal-content-right {
     width: 100%;
+    /* Reset the desktop offset; portrait layout is full-width and stacked. */
+    right: 0;
   }
 
   #modal-content-right-emote {

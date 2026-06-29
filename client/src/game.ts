@@ -211,6 +211,8 @@ export class Game {
                     joinMessage.useTouch = device.touch;
                     joinMessage.isMobile = device.mobile || window.mobile!;
                     joinMessage.bot = false;
+                    joinMessage.onlyGhilliePickup =
+                        this.m_config.get("onlyGhilliePickup") ?? true;
                     joinMessage.loadout = this.m_config.get("loadout")!;
                     this.m_sendMessage(net.MsgType.Join, joinMessage, 8192);
                 };
@@ -1708,6 +1710,7 @@ export class Game {
                         msg.killerId,
                         this.m_audioManager,
                         this.m_particleBarn,
+                        this.m_renderer,
                     );
                 }
 

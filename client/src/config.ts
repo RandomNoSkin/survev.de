@@ -90,6 +90,8 @@ const defaultConfig = {
     screenShake: true,
     anonPlayerNames: false,
     autoDownloadStats: false,
+    /** When on, the player only picks up Ghillie suits in-game (keeps their loadout skin). */
+    onlyGhilliePickup: true,
     touchMoveStyle: "anywhere" as "locked" | "anywhere",
     touchAimStyle: "anywhere" as "locked" | "anywhere",
     touchAimLine: true,
