@@ -4,6 +4,7 @@ import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
 import { GameConfig, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { ObjectType } from "../../shared/net/objectSerializeFns";
+import { loadout as loadoutHelper } from "../../shared/utils/loadout";
 import { math } from "../../shared/utils/math";
 import { type Vec2, v2 } from "../../shared/utils/v2";
 import type { Ambiance } from "./ambiance";
@@ -213,7 +214,11 @@ export class Game {
                     joinMessage.bot = false;
                     joinMessage.onlyGhilliePickup =
                         this.m_config.get("onlyGhilliePickup") ?? true;
-                    joinMessage.loadout = this.m_config.get("loadout")!;
+                    // Validate so a stale/incomplete stored loadout can never break the
+                    // join by serializing an undefined game type.
+                    joinMessage.loadout = loadoutHelper.validate(
+                        this.m_config.get("loadout")!,
+                    );
                     this.m_sendMessage(net.MsgType.Join, joinMessage, 8192);
                 };
                 this.m_ws.onmessage = (e) => {
@@ -294,7 +299,9 @@ export class Game {
                     joinMessage.useTouch = device.touch;
                     joinMessage.isMobile = device.mobile || window.mobile!;
                     joinMessage.bot = false;
-                    joinMessage.loadout = this.m_config.get("loadout")!;
+                    joinMessage.loadout = loadoutHelper.validate(
+                        this.m_config.get("loadout")!,
+                    );
 
                     this.m_sendMessage(net.MsgType.JoinAsSpectator, joinMessage, 8192);
                 };
