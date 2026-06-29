@@ -135,6 +135,14 @@ class UiState {
         opacity: 0,
     };
 
+    pickupExtraMessage = {
+        header: "",
+        text: "",
+        ticker: 0,
+        duration: 0,
+        opacity: 0,
+    };
+
     killMessage = {
         text: "",
         count: "",
@@ -261,6 +269,11 @@ export class UiManager2 {
             desc: domElemById("ui-perk-message-acquired"),
         },
         pickupMessage: domElemById("ui-pickup-message"),
+        pickupExtraMessage: {
+            div: domElemById("ui-pickupExtra"),
+            header: domElemById("ui-pickupExtra-header"),
+            text: domElemById("ui-pickupExtra-text"),
+        },
         killMessage: {
             div: domElemById("ui-kills"),
             text: domElemById("ui-kill-text"),
@@ -673,6 +686,13 @@ export class UiManager2 {
             math.smoothstep(x, 0, 0.2) *
             (1 - math.smoothstep(x, z, z + 0.2)) *
             (1 - state.rareLootMessage.opacity);
+
+        // Extra info Message on certain weapon pickups
+        state.pickupExtraMessage.ticker += dt;
+        const E = state.pickupExtraMessage.ticker;
+        const F = state.pickupExtraMessage.duration;
+        state.pickupExtraMessage.opacity =
+            (1 - math.smoothstep(E, F - 0.2, F)) * (1 - state.rareLootMessage.opacity);    
 
         // Kill message
         state.killMessage.ticker += dt;
@@ -1096,6 +1116,15 @@ export class UiManager2 {
             dom.pickupMessage.style.opacity = String(state.pickupMessage.opacity);
         }
 
+        // Extra pickup message
+        if (patch.pickupExtraMessage.header || patch.pickupExtraMessage.text) {
+            dom.pickupExtraMessage.header.innerHTML = state.pickupExtraMessage.header;
+            dom.pickupExtraMessage.text.innerHTML = state.pickupExtraMessage.text;
+        }
+        if (patch.pickupExtraMessage.opacity) {
+            dom.pickupExtraMessage.div.style.opacity = String(state.pickupExtraMessage.opacity);
+        }
+
         // Kill message
         if (patch.killMessage.text || patch.killMessage.count) {
             dom.killMessage.text.innerHTML = state.killMessage.text;
@@ -1465,6 +1494,15 @@ export class UiManager2 {
         }
         p.ticker = 0;
         p.duration = 3;
+    }
+    // Used to give extra info on a guns abilities
+    displayPickupExtraMessage(gun: string, description: string) {
+        const p = this.newState.pickupExtraMessage;
+        p.header = gun;
+        p.text = `${this.localization.translate(`index-pickup-extra-${description}`)}`;
+        // ${this.localization.translate(`game-${perk}`)}
+        p.ticker = 0;
+        p.duration = 6;
     }
 
     displayKillMessage(text: string, count: string) {
