@@ -3,12 +3,18 @@ import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import {
     getItemCategory,
     getItemPrice,
+    getItemRarity,
     getMarketPriceBounds,
     getMarketTotal,
     MARKET_LISTING_TTL_MS,
     type ShopCategory,
 } from "../../../shared/defs/shopConfig";
-import type { MarketListing, MarketListResponse, MyListing } from "../../../shared/types/user";
+import type {
+    MarketListing,
+    MarketListResponse,
+    MyListing,
+} from "../../../shared/types/user";
+import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { Account } from "../account";
 import { helpers } from "../helpers";
 import type { Localization } from "./localization";
@@ -265,15 +271,15 @@ export class MarketUi {
         this.loading = true;
 
         const empty =
-            this.tab === "private"
-                ? "No private offers for you"
-                : "No listings";
+            this.tab === "private" ? "No private offers for you" : "No listings";
         const done = (err: unknown, res?: MarketListResponse) => {
             this.loading = false;
             if (replace) this.body.empty();
             if (err || !res || !res.success) {
                 if (replace) {
-                    this.body.html('<div class="shop-status">Failed to load market</div>');
+                    this.body.html(
+                        '<div class="shop-status">Failed to load market</div>',
+                    );
                 }
                 return;
             }
@@ -350,8 +356,7 @@ export class MarketUi {
 
     /** Item image tile (rarity-bordered), shared by browse/mine/sell cards. */
     private renderItemImage(type: string): JQuery<HTMLElement> {
-        const def = GameObjectDefs[type] as { rarity?: number } | undefined;
-        const rarity = def?.rarity ?? 1;
+        const rarity = getItemRarity(type);
         const el = $(
             `<div class="shop-item-img market-item-img" style="border-color:${
                 RARITY_COLORS[rarity] ?? "#c5c5c5"
@@ -371,11 +376,17 @@ export class MarketUi {
 
     /** Rarity index, colour and localized name for a cosmetic type. */
     private rarityInfo(type: string): { color: string; name: string } {
-        const rarity = (GameObjectDefs[type] as { rarity?: number } | undefined)?.rarity ?? 1;
+        const rarity = getItemRarity(type);
         const key = RARITY_NAMES[rarity] ?? "common";
+        const label = this.localization.translate(`loadout-${key}`) || key;
+        const owners = cosmeticStats.hasData()
+            ? ` · ${cosmeticStats.getCount(type)} (${formatOwnerPercent(
+                  cosmeticStats.getPercent(type),
+              )})`
+            : "";
         return {
             color: RARITY_COLORS[rarity] ?? "#c5c5c5",
-            name: this.localization.translate(`loadout-${key}`) || key,
+            name: label + owners,
         };
     }
 
@@ -478,7 +489,9 @@ export class MarketUi {
         );
 
         const mine = listing.sellerSlug === (this.account.profile.slug ?? "");
-        const btn = $('<div class="shop-buy-btn market-buy-btn menu-option btn-darken"></div>');
+        const btn = $(
+            '<div class="shop-buy-btn market-buy-btn menu-option btn-darken"></div>',
+        );
         if (mine) {
             btn.addClass("shop-buy-disabled").text("Yours");
         } else if (this.balance() < listing.total) {
@@ -525,7 +538,9 @@ export class MarketUi {
         this.account.buyListing(listing.listingId, (err, res) => {
             this.busy = false;
             if (err || !res || !res.success) {
-                btn.text(res?.error === "insufficient_funds" ? "Too poor" : "Unavailable");
+                btn.text(
+                    res?.error === "insufficient_funds" ? "Too poor" : "Unavailable",
+                );
                 setTimeout(() => this.reload(), 900);
                 return;
             }
@@ -565,7 +580,10 @@ export class MarketUi {
         const input = $("#market-sell-price");
         $("#market-sell-error").text("");
         if (bounds) {
-            const suggested = Math.min(Math.max(getItemPrice(type), bounds.min), bounds.max);
+            const suggested = Math.min(
+                Math.max(getItemPrice(type), bounds.min),
+                bounds.max,
+            );
             input
                 .attr("min", bounds.min)
                 .attr("max", bounds.max)
@@ -599,16 +617,19 @@ export class MarketUi {
         if (!bounds) return;
         const price = parseInt(String($("#market-sell-price").val()), 10);
         if (!Number.isFinite(price) || price < bounds.min || price > bounds.max) {
-            $("#market-sell-error").text(`Price must be ${bounds.min}–${bounds.max} fries.`);
+            $("#market-sell-error").text(
+                `Price must be ${bounds.min}–${bounds.max} fries.`,
+            );
             return;
         }
-        const buyerSlug =
-            String($("#market-sell-buyer").val() ?? "").trim() || undefined;
+        const buyerSlug = String($("#market-sell-buyer").val() ?? "").trim() || undefined;
         this.busy = true;
         $("#market-sell-confirm").addClass("shop-buy-disabled").text("…");
         this.account.listItem(this.sellItemId, price, buyerSlug, (err, res) => {
             this.busy = false;
-            $("#market-sell-confirm").removeClass("shop-buy-disabled").text("List for sale");
+            $("#market-sell-confirm")
+                .removeClass("shop-buy-disabled")
+                .text("List for sale");
             if (err || !res || !res.success) {
                 $("#market-sell-error").text(
                     this.listErrorText(res?.error, res?.retryAfter),

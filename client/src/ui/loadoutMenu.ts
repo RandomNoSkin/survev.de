@@ -5,10 +5,12 @@ import { EmoteCategory, type EmoteDef } from "../../../shared/defs/gameObjects/e
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import type { UnlockDef } from "../../../shared/defs/gameObjects/unlockDefs";
 import {
+    getItemRarity,
     getMarketPriceBounds,
     MARKET_LISTING_TTL_MS,
 } from "../../../shared/defs/shopConfig";
 import { EmoteSlot, Rarity } from "../../../shared/gameConfig";
+import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { ItemStatus } from "../../../shared/utils/loadout";
 import { type Crosshair, type Loadout, loadout } from "../../../shared/utils/loadout";
 import { util } from "../../../shared/utils/util";
@@ -34,12 +36,19 @@ function emoteSlotToDomElem(e: Exclude<EmoteSlot, EmoteSlot.Count>) {
     return $(`#${domId}`);
 }
 
+/** " · 42 (3.1%)" owner-count suffix appended next to a rarity label (empty if no data). */
+function ownerCountSuffix(type: string): string {
+    if (!cosmeticStats.hasData()) return "";
+    const count = cosmeticStats.getCount(type);
+    return ` · ${count} (${formatOwnerPercent(cosmeticStats.getPercent(type))})`;
+}
+
 function itemSort(sortFn: (a: Item, b: Item) => void) {
     return function (a: Item, b: Item) {
         // Always put stock items at the front of the list;
         // if not stock, sort by the given sort routine
-        const rarityA = (GameObjectDefs[a.type] as EmoteDef).rarity || Rarity.Stock;
-        const rarityB = (GameObjectDefs[b.type] as EmoteDef).rarity || Rarity.Stock;
+        const rarityA = getItemRarity(a.type);
+        const rarityB = getItemRarity(b.type);
         if (rarityA == Rarity.Stock && rarityB == Rarity.Stock) {
             return sortAlphabetical(a, b);
         }
@@ -73,8 +82,8 @@ function sortAlphabetical(a: Item, b: Item) {
 }
 
 function sortRarity(a: Item, b: Item) {
-    const rarityA = (GameObjectDefs[a.type] as EmoteDef).rarity || Rarity.Stock;
-    const rarityB = (GameObjectDefs[b.type] as EmoteDef).rarity || Rarity.Stock;
+    const rarityA = getItemRarity(a.type);
+    const rarityB = getItemRarity(b.type);
     if (rarityA == rarityB) {
         return sortAlphabetical(a, b);
     }
@@ -192,6 +201,11 @@ export class LoadoutMenu {
             loadoutType: "boost",
             gameType: "boost_effect",
             categoryImage: "img/gui/loadout-boost.svg",
+        },
+        {
+            loadoutType: "death_effect",
+            gameType: "death_effect",
+            categoryImage: "img/gui/loadout-kill-icon.svg",
         },
     ];
 
@@ -587,7 +601,7 @@ export class LoadoutMenu {
             const objDef = GameObjectDefs[currentNewItem.type] as EmoteDef;
             const itemInfo = {
                 type: currentNewItem.type,
-                rarity: objDef.rarity || Rarity.Stock,
+                rarity: getItemRarity(currentNewItem.type),
                 displayName:
                     this.localization.translate(`game-${currentNewItem.type}`) ||
                     objDef.name!,
@@ -849,7 +863,9 @@ export class LoadoutMenu {
         const localizedRarity = this.localization.translate(
             `loadout-${rarityNames[this.selectedItem.rarity!]}`,
         );
-        this.modalCustomizeItemRarity.html(localizedRarity);
+        this.modalCustomizeItemRarity.html(
+            localizedRarity + ownerCountSuffix(this.selectedItem.type),
+        );
         this.modalCustomizeItemRarity.css({
             color: Rarities[this.selectedItem.rarity!],
         });
@@ -899,7 +915,10 @@ export class LoadoutMenu {
      *  item detail/info panel. */
     toggleDetailMode() {
         this.detailMode = !this.detailMode;
-        $("#modal-customize-info-toggle").toggleClass("info-toggle-active", this.detailMode);
+        $("#modal-customize-info-toggle").toggleClass(
+            "info-toggle-active",
+            this.detailMode,
+        );
         this.refreshRightPanels();
     }
 
@@ -910,7 +929,10 @@ export class LoadoutMenu {
         const showCrosshair = !this.detailMode && lt === "crosshair";
         $("#modal-content-right-emote").css("display", showEmote ? "block" : "none");
         $("#customize-emote-parent").css("display", showEmote ? "block" : "none");
-        $("#modal-content-right-crosshair").css("display", showCrosshair ? "block" : "none");
+        $("#modal-content-right-crosshair").css(
+            "display",
+            showCrosshair ? "block" : "none",
+        );
         $("#customize-crosshair-parent").css("display", showCrosshair ? "block" : "none");
         this.updateDetailPanel();
     }
@@ -937,10 +959,20 @@ export class LoadoutMenu {
         $("#detail-item-name").html(item.displayName || "");
 
         const rarityNames = ["stock", "common", "uncommon", "rare", "epic", "mythic"];
-        const rarityColors = ["#c5c5c5", "#c5c5c5", "#12ff00", "#00deff", "#f600ff", "#d96100"];
+        const rarityColors = [
+            "#c5c5c5",
+            "#c5c5c5",
+            "#12ff00",
+            "#00deff",
+            "#f600ff",
+            "#d96100",
+        ];
         const r = item.rarity ?? 0;
         $("#detail-item-rarity")
-            .html(this.localization.translate(`loadout-${rarityNames[r]}`) || "")
+            .html(
+                (this.localization.translate(`loadout-${rarityNames[r]}`) || "") +
+                    ownerCountSuffix(item.type),
+            )
             .css("color", rarityColors[r] ?? "#c5c5c5");
 
         // Localize the source if a translation exists, else show the raw label.
@@ -962,12 +994,14 @@ export class LoadoutMenu {
         // Lifetime match stats this instance earned while equipped.
         const statsEl = $("#detail-item-stats");
         if (owned) {
-            statsEl.css("display", "").html(
-                `<div class="detail-stat"><span class="detail-stat-val">${item.games ?? 0}</span><span class="detail-stat-lbl">Games</span></div>` +
-                    `<div class="detail-stat"><span class="detail-stat-val">${item.wins ?? 0}</span><span class="detail-stat-lbl">Wins</span></div>` +
-                    `<div class="detail-stat"><span class="detail-stat-val">${item.kills ?? 0}</span><span class="detail-stat-lbl">Kills</span></div>` +
-                    `<div class="detail-stat"><span class="detail-stat-val">${item.damage ?? 0}</span><span class="detail-stat-lbl">Damage</span></div>`,
-            );
+            statsEl
+                .css("display", "")
+                .html(
+                    `<div class="detail-stat"><span class="detail-stat-val">${item.games ?? 0}</span><span class="detail-stat-lbl">Games</span></div>` +
+                        `<div class="detail-stat"><span class="detail-stat-val">${item.wins ?? 0}</span><span class="detail-stat-lbl">Wins</span></div>` +
+                        `<div class="detail-stat"><span class="detail-stat-val">${item.kills ?? 0}</span><span class="detail-stat-lbl">Kills</span></div>` +
+                        `<div class="detail-stat"><span class="detail-stat-val">${item.damage ?? 0}</span><span class="detail-stat-lbl">Damage</span></div>`,
+                );
         } else {
             statsEl.css("display", "none").empty();
         }
@@ -1063,7 +1097,7 @@ export class LoadoutMenu {
             const itemInfo: EquippedItem = {
                 loadoutType: "emote",
                 type,
-                rarity: emoteDef.rarity || Rarity.Stock,
+                rarity: getItemRarity(type),
                 displayName:
                     this.localization.translate(`game-${type}`) || emoteDef.name!,
                 displayLore:
@@ -1191,7 +1225,7 @@ export class LoadoutMenu {
                 damage: item.damage,
                 loadoutType: category.loadoutType,
                 type: item.type,
-                rarity: objDef.rarity || Rarity.Stock,
+                rarity: getItemRarity(item.type),
                 displayName:
                     this.localization.translate(`game-${item.type}`) || objDef.name,
                 displayLore:

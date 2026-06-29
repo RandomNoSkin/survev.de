@@ -1,12 +1,14 @@
+import { Rarity } from "../gameConfig";
+import { cosmeticStats } from "../utils/cosmeticStats";
 import { GameObjectDefs } from "./gameObjectDefs";
 import {
     _allowedCrosshairs,
+    _allowedDeathEffects,
     _allowedEmotes,
     _allowedHealEffects,
     _allowedMeleeSkins,
     _allowedOutfits,
 } from "./gameObjects/unlockDefs";
-import { Rarity } from "../gameConfig";
 
 /**
  * The curated allow-lists from unlockDefs. ONLY these item types may ever be
@@ -17,6 +19,7 @@ const ALLOWED_ITEMS = new Set<string>([
     ..._allowedMeleeSkins,
     ..._allowedOutfits,
     ..._allowedEmotes,
+    ..._allowedDeathEffects,
     ..._allowedCrosshairs,
 ]);
 
@@ -117,8 +120,14 @@ export function getItemCategory(type: string): ShopCategory | null {
     }
 }
 
-/** Returns an item's rarity (defaults to Common when a def has no explicit rarity). */
+/**
+ * Returns an item's rarity. Prefers the dynamic ownership-based rarity (so prices and
+ * shop weights follow how rare an item actually is); falls back to the static def rarity,
+ * then Common. See {@link cosmeticStats}.
+ */
 export function getItemRarity(type: string): number {
+    const stat = cosmeticStats.get(type);
+    if (stat) return stat.rarity;
     const def = GameObjectDefs[type] as { rarity?: number } | undefined;
     return def?.rarity ?? Rarity.Common;
 }

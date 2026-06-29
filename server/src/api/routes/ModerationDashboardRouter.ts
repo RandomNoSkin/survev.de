@@ -53,6 +53,7 @@ import {
     _allowedHealEffects,
     _allowedMeleeSkins,
     _allowedOutfits,
+    _allowedDeathEffects,
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
@@ -88,6 +89,7 @@ const COSMETIC_CATALOG = {
     melee: _allowedMeleeSkins,
     heal: _allowedHealEffects,
     emote: _allowedEmotes,
+    deathEffect: _allowedDeathEffects,
     crosshair: _allowedCrosshairs,
 };
 const ALLOWED_COSMETICS = [...new Set(Object.values(COSMETIC_CATALOG).flat())];

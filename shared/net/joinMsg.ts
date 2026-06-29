@@ -8,11 +8,14 @@ export class JoinMsg implements AbstractMsg {
     useTouch = false;
     isMobile = false;
     bot = false;
+    /** Client setting: only pick up Ghillie suits in-game (keeps the loadout skin). */
+    onlyGhilliePickup = true;
     loadout = {
         outfit: "",
         melee: "",
         heal: "",
         boost: "",
+        death_effect: "",
         emotes: [] as string[],
     };
 
@@ -27,11 +30,13 @@ export class JoinMsg implements AbstractMsg {
         s.writeBoolean(this.useTouch);
         s.writeBoolean(this.isMobile);
         s.writeBoolean(this.bot);
+        s.writeBoolean(this.onlyGhilliePickup);
 
         s.writeGameType(this.loadout.outfit);
         s.writeGameType(this.loadout.melee);
         s.writeGameType(this.loadout.heal);
         s.writeGameType(this.loadout.boost);
+        s.writeGameType(this.loadout.death_effect);
 
         s.writeArray(this.loadout.emotes, 8, (emote) => {
             s.writeGameType(emote);
@@ -47,11 +52,13 @@ export class JoinMsg implements AbstractMsg {
         this.useTouch = s.readBoolean();
         this.isMobile = s.readBoolean();
         this.bot = s.readBoolean();
+        this.onlyGhilliePickup = s.readBoolean();
 
         this.loadout.outfit = s.readGameType();
         this.loadout.melee = s.readGameType();
         this.loadout.heal = s.readGameType();
         this.loadout.boost = s.readGameType();
+        this.loadout.death_effect = s.readGameType();
 
         this.loadout.emotes = s.readArray(8, () => {
             return s.readGameType();
