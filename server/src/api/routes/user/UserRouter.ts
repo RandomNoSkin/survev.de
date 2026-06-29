@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, _allowedDeathEffects, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import {
     type AckSalesResponse,
     type BuyListingResponse,

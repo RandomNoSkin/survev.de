@@ -37,7 +37,7 @@ import {
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { getActiveChatBan, hashIp, isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
-import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, _allowedDeathEffects, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
 import { level } from "winston";
 
@@ -235,6 +235,7 @@ export const PrivateRouter = new Hono<Context>()
                     ..._allowedMeleeSkins,
                     ..._allowedOutfits,
                     ..._allowedEmotes,
+                    ..._allowedDeathEffects,
                     ..._allowedCrosshairs,
                 ]),
             ];

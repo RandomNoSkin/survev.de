@@ -6,6 +6,7 @@ import {
     _allowedHealEffects,
     _allowedMeleeSkins,
     _allowedOutfits,
+    _allowedDeathEffects,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { GameConfig } from "../../../../shared/gameConfig";
 import { Config } from "../../config";
@@ -22,6 +23,7 @@ const COSMETIC_CATALOG = {
     melee: _allowedMeleeSkins,
     heal: _allowedHealEffects,
     emote: _allowedEmotes,
+    deathEffect: _allowedDeathEffects,
     crosshair: _allowedCrosshairs,
 };
 

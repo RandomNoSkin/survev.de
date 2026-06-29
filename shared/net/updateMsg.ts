@@ -205,6 +205,7 @@ export interface PlayerInfo {
     loadout: {
         heal: string;
         boost: string;
+        death_effect: string;
     };
 }
 
@@ -216,6 +217,7 @@ function serializePlayerInfo(s: BitStream, data: PlayerInfo) {
 
     s.writeGameType(data.loadout.heal);
     s.writeGameType(data.loadout.boost);
+    s.writeGameType(data.loadout.death_effect);
 
     s.writeAlignToNextByte();
 }
@@ -228,6 +230,7 @@ function deserializePlayerInfo(s: BitStream, data: PlayerInfo) {
     data.loadout = {} as PlayerInfo["loadout"];
     data.loadout.heal = s.readGameType();
     data.loadout.boost = s.readGameType();
+    data.loadout.death_effect = s.readGameType();
     s.readAlignToNextByte();
 }
 

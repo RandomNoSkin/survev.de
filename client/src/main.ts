@@ -14,6 +14,7 @@ import { Ambiance } from "./ambiance";
 import { api } from "./api";
 import { AudioManager } from "./audioManager";
 import { ConfigManager, type ConfigType } from "./config";
+import { startCosmeticStats } from "./cosmeticStatsClient";
 import { device } from "./device";
 import { errorLogManager } from "./errorLogs";
 import { Game } from "./game";
@@ -228,6 +229,7 @@ export class Application {
             this.localization.populateLanguageSelect();
             this.startPingTest();
             this.siteInfo.load();
+            startCosmeticStats();
             this.initRegionSelection();
             this.localization.localizeIndex();
 
@@ -831,7 +833,8 @@ export class Application {
             const meta = this.siteInfo.regionMeta(this.config.get("region")!);
             if (this.siteInfo.getGroups().some((g) => g.group === meta.group)) {
                 this.config.set("regionGroup", meta.group);
-                if (meta.category !== "default") this.config.set("playlist", meta.category);
+                if (meta.category !== "default")
+                    this.config.set("playlist", meta.category);
             }
             this.startPingTest();
             this.siteInfo.updatePageFromInfo();
@@ -1318,7 +1321,10 @@ export class Application {
                 if (region) {
                     // Pick the best-ping geographic group but keep the player's playlist,
                     // so auto-select lands on e.g. "eu" + normal rather than "eu-scrims".
-                    this.config.set("regionGroup", this.siteInfo.regionMeta(region).group);
+                    this.config.set(
+                        "regionGroup",
+                        this.siteInfo.regionMeta(region).group,
+                    );
                     this.resolveRegionSelection();
                     this.setDOMFromConfig();
                 }

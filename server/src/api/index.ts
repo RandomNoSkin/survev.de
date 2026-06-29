@@ -25,6 +25,11 @@ import {
 import { server } from "./apiServer";
 import { deleteExpiredSessions, validateSessionToken } from "./auth";
 import { rateLimitMiddleware, validateParams } from "./auth/middleware";
+import {
+    computeCosmeticStats,
+    getCachedCosmeticStats,
+    warmCosmeticStats,
+} from "./cosmeticStats";
 import { expireOldListings } from "./db/market";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
@@ -87,6 +92,12 @@ server.init(app, upgradeWebSocket);
 
 app.get("/api/site_info", (c) => {
     return c.json<SiteInfoRes>(server.getSiteInfo(), 200);
+});
+
+// Ownership-based cosmetic rarity + owner counts. Served from a cached snapshot that is
+// recomputed at boot and once a day by the midnight cron below.
+app.get("/api/cosmetic_stats", (c) => {
+    return c.json(getCachedCosmeticStats(), 200);
 });
 
 /**
@@ -421,6 +432,9 @@ const honoServer = serve({
 });
 injectWebSocket(honoServer);
 
+// Warm the ownership-based cosmetic rarity cache once at boot (then on-demand per request).
+warmCosmeticStats();
+
 // run clean up scripts every midnight
 new Cron("0 0 * * *", async () => {
     try {
@@ -441,6 +455,14 @@ new Cron("0 0 * * *", async () => {
         );
     } catch (err) {
         server.logger.error("Failed to run daily pass reconcile", err);
+    }
+
+    // Recompute ownership-based cosmetic rarity + owner counts for the new day.
+    try {
+        await computeCosmeticStats();
+        server.logger.info("Recomputed cosmetic ownership stats");
+    } catch (err) {
+        server.logger.error("Failed to recompute cosmetic stats", err);
     }
 });
 

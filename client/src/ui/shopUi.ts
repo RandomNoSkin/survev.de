@@ -1,6 +1,8 @@
 import $ from "jquery";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { getItemRarity } from "../../../shared/defs/shopConfig";
 import type { ShopOffer } from "../../../shared/types/user";
+import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { Account } from "../account";
 import { helpers } from "../helpers";
 import type { Localization } from "./localization";
@@ -143,9 +145,13 @@ export class ShopUi {
         if (offer.purchased) {
             btn.addClass("shop-buy-disabled").text("Owned");
         } else if (balance < offer.price) {
-            btn.addClass("shop-buy-disabled").html(`<div class="shop-fries-icon"></div><div class="shop-offer-price">${offer.price}</div>`);
+            btn.addClass("shop-buy-disabled").html(
+                `<div class="shop-fries-icon"></div><div class="shop-offer-price">${offer.price}</div>`,
+            );
         } else {
-            btn.html(`<div class="shop-fries-icon"></div><div class="shop-offer-price">${offer.price}</div>`).on("click", () => this.buy(offer.slot, btn));
+            btn.html(
+                `<div class="shop-fries-icon"></div><div class="shop-offer-price">${offer.price}</div>`,
+            ).on("click", () => this.buy(offer.slot, btn));
         }
         footer.append(btn);
         card.append(footer);
@@ -153,16 +159,24 @@ export class ShopUi {
     }
 
     private renderItem(type: string): JQuery<HTMLElement> {
-        const def = GameObjectDefs[type] as { rarity?: number; name?: string } | undefined;
-        const rarity = def?.rarity ?? 1;
+        const def = GameObjectDefs[type] as
+            | { rarity?: number; name?: string }
+            | undefined;
+        const rarity = getItemRarity(type);
         const svg = helpers.getSvgFromGameType(type);
         const transform = helpers.getCssTransformFromGameType(type);
         const name = this.localization.translate(`game-${type}`) || def?.name || type;
+        const ownersHtml = cosmeticStats.hasData()
+            ? `<div class="shop-item-owners" style="font-size:11px;color:#c5c5c5;">${cosmeticStats.getCount(
+                  type,
+              )} (${formatOwnerPercent(cosmeticStats.getPercent(type))})</div>`
+            : "";
 
         const el = $(
             `<div class="shop-item" style="border-color:${RARITY_COLORS[rarity] ?? "#c5c5c5"}">` +
                 '<div class="shop-item-img"></div>' +
                 `<div class="shop-item-name">${helpers.htmlEscape(name)}</div>` +
+                ownersHtml +
                 "</div>",
         );
         el.find(".shop-item-img").css({
