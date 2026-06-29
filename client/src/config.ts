@@ -4,6 +4,7 @@ import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby"
 import loadout from "../../shared/utils/loadout";
 import { util } from "../../shared/utils/util";
 import { v2 } from "../../shared/utils/v2";
+import type { AdvSpecSettings } from "./ui/advancedSpectator";
 import type { Locale } from "./ui/localization";
 
 export const debugToolsConfig = {
@@ -89,6 +90,8 @@ const defaultConfig = {
     screenShake: true,
     anonPlayerNames: false,
     autoDownloadStats: false,
+    /** When on, the player only picks up Ghillie suits in-game (keeps their loadout skin). */
+    onlyGhilliePickup: true,
     touchMoveStyle: "anywhere" as "locked" | "anywhere",
     touchAimStyle: "anywhere" as "locked" | "anywhere",
     touchAimLine: true,
@@ -97,6 +100,10 @@ const defaultConfig = {
     profile: null as { slug: string } | null,
     playerName: "",
     region: "na",
+    /** Selected geographic region group (e.g. "eu", "asia"); resolves to `region`. */
+    regionGroup: "" as string,
+    /** Selected playlist category (e.g. "normal", "arena", "scrims"); resolves to `region`. */
+    playlist: "" as string,
     gameModeIdx: 2,
     /** Private lobby settings the leader last configured, re-applied (minus `advancedSettings`) the next time they create a lobby. */
     privateLobbySettings: {} as SavedPrivateLobbySettings,
@@ -109,6 +116,18 @@ const defaultConfig = {
     lastNewsTimestamp: 0,
     perkModeRole: "",
     arenaModeRole: "",
+    /** Last-used advanced spectator toggles, re-applied whenever advanced spectator is activated. */
+    advancedSpectatorSettings: {
+        freecam: false,
+        transparentSurfaces: false,
+        enemiesOnMap: false,
+        zoom: false,
+        espLines: false,
+        enemyLabels: false,
+        nadeEsp: false,
+        layer: 0,
+        zoomLevel: 48,
+    } as AdvSpecSettings,
     loadout: loadout.defaultLoadout(),
     /** Per-category instance id of the item last selected in the loadout menu, so the
      *  exact owned copy stays selected across reloads (the loadout itself only stores

@@ -64,6 +64,16 @@ export interface ThrowableDef {
     fuseVariance?: number;
     numSplit?: number;
     splitType?: string;
+    // when set, the projectile behaves like a proximity mine:
+    // after landing it arms (armTime), trips when an enemy enters triggerRad,
+    // then explodes after triggerDelay (handled in
+    // server/src/game/objects/projectile.ts). The client blinks the mine while
+    // it sits on the ground, faster once it has been tripped.
+    proximityMine?: {
+        armTime: number;
+        triggerRad: number;
+        triggerDelay: number;
+    };
 }
 
 export interface Cook {
@@ -139,12 +149,142 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
             deploy: "frag_deploy_01",
         },
     },
+    impact: {
+        name: "Impact Grenade",
+        type: "throwable",
+        quality: 0,
+        explosionType: "explosion_impact",
+        inventoryOrder: 2,
+        cookable: false,
+        explodeOnImpact: true,
+        playerCollision: true,
+        fuseTime: 4, // safety fallback if it somehow never hits anything
+        aimDistance: 0,
+        rad: 1,
+        throwPhysics: {
+            playerVelMult: 0.6,
+            velZ: 5,
+            speed: 20,
+            spinVel: 10 * Math.PI,
+            spinDrag: 1,
+        },
+        speed: { equip: 0, attack: 0 },
+        lootImg: {
+            sprite: "loot-throwable-impact.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.2,
+        },
+        worldImg: {
+            sprite: "proj-impact-nopin-nolever-01.img",
+            scale: 0.12,
+            tint: 0xffffff,
+        },
+        handImg: {
+            equip: {
+                right: {
+                    sprite: "proj-impact-pin-01.img",
+                    pos: { x: 4.2, y: 4.2 },
+                    scale: 0.14,
+                },
+                left: { sprite: "none" },
+            },
+            cook: {
+                right: {
+                    sprite: "proj-impact-nopin-01.img",
+                    pos: { x: 4.2, y: 4.2 },
+                    scale: 0.14,
+                },
+                left: {
+                    sprite: "proj-frag-pin-part.img",
+                    pos: { x: 4.2, y: 4.2 },
+                    scale: 0.14,
+                },
+            },
+            throwing: {
+                right: { sprite: "none" },
+                left: { sprite: "none" },
+            },
+        },
+        useThrowParticles: true,
+        sound: {
+            pullPin: "frag_pin_01",
+            throwing: "frag_throw_01",
+            pickup: "frag_pickup_01",
+            deploy: "frag_deploy_01",
+        },
+    },
+    mine: {
+        name: "Proximity Mine",
+        type: "throwable",
+        quality: 0,
+        explosionType: "explosion_mine",
+        inventoryOrder: 5,
+        cookable: false,
+        explodeOnImpact: false,
+        playerCollision: false,
+        proximityMine: { armTime: 3, triggerRad: 6, triggerDelay: 0.7 },
+        fuseTime: 300, // self-destruct upper bound so stale mines get cleaned up
+        aimDistance: 0,
+        rad: 1,
+        throwPhysics: {
+            playerVelMult: 0,
+            velZ: 4,
+            speed: 14, // low speed: mines are placed near the thrower
+            spinVel: 4 * Math.PI,
+            spinDrag: 1,
+            randomizeSpinDir: true,
+        },
+        speed: { equip: 0, attack: 0 },
+        lootImg: {
+            sprite: "loot-throwable-mine.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.2,
+        },
+        worldImg: {
+            sprite: "proj-mine-01.img",
+            scale: 0.12,
+            tint: 0xffffff,
+        },
+        handImg: {
+            equip: {
+                right: {
+                    sprite: "proj-mine-01.img",
+                    pos: { x: 3, y: 4.2 },
+                    scale: 0.14,
+                },
+                left: { sprite: "none" },
+            },
+            cook: {
+                right: {
+                    sprite: "proj-mine-01.img",
+                    pos: { x: 3, y: 4.2 },
+                    scale: 0.14,
+                },
+                left: { sprite: "none" },
+            },
+            throwing: {
+                right: { sprite: "none" },
+                left: { sprite: "none" },
+            },
+        },
+        useThrowParticles: false,
+        sound: {
+            pullPin: "frag_pin_01",
+            throwing: "frag_throw_01",
+            pickup: "frag_pickup_01",
+            deploy: "frag_deploy_01",
+        },
+    },
     mirv: {
         name: "MIRV Grenade",
         type: "throwable",
         quality: 1,
         explosionType: "explosion_mirv",
-        inventoryOrder: 2,
+        inventoryOrder: 3,
         cookable: true,
         explodeOnImpact: false,
         playerCollision: false,
@@ -338,7 +478,7 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
         type: "throwable",
         quality: 0,
         explosionType: "explosion_smoke",
-        inventoryOrder: 3,
+        inventoryOrder: 4,
         cookable: false,
         explodeOnImpact: false,
         playerCollision: false,

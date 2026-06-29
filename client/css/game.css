@@ -1446,7 +1446,7 @@ img {
 .ui-emote-top-left .ui-emote-image {
   margin-left: -80px;
   margin-top: -30px;
-  background-image: url(/img/loot/loot-ammo-box.svg);
+  background-image: url(/img/loot/loot-medical-pill.svg);
 }
 
 .ui-emote-bottom-left .ui-emote {
@@ -1714,6 +1714,21 @@ img {
   padding: 8px 8px 0px 8px;
   text-align: center;
   width: 192px;
+}
+
+#ui-spectate-advanced-options {
+  display: inline-block;
+  padding: 8px 8px 0px 8px;
+  text-align: center;
+  width: 192px;
+  margin-top: 4px;
+  vertical-align: top;
+}
+
+#ui-spectate-options a.active {
+  background: #6fcf6f;
+  border-bottom: 2px solid #4a9a4a;
+  box-shadow: inset 0 -2px #4a9a4a;
 }
 
 #ui-spectate-options a {
@@ -2415,6 +2430,45 @@ img {
   top: 18px;
 }
 
+/* Zweites Magazin (M416 [+] Granaten-Launcher), links neben dem aktiven Clip.
+   Per JS via display ein-/ausgeblendet. */
+#ui-bullet-counter #ui-second-clip {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  font-size: 24px;
+  font-weight: bold;
+  line-height: 32px;
+  width: 50px;
+  height: 32px;
+  right: 82%;
+  position: absolute;
+  text-align: center;
+  top: 18px;
+  display: none;
+}
+
+/* geladene Granate als Icon im zweiten Magazin (absolut mittig im Kästchen) */
+#ui-bullet-counter #ui-second-clip .ui-second-clip-img {
+  height: 26px;
+  width: auto;
+  max-width: 46px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* geladene Granate als Icon im großen Hauptfeld (absolut mittig im Kästchen) */
+#ui-bullet-counter #ui-current-clip .ui-current-clip-img {
+  height: 42px;
+  width: auto;
+  max-width: 92px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
 #ui-boost-counter {
   display: inline-flex;
   width: 412px;
@@ -2637,7 +2691,31 @@ img {
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
 }
 
+#ui-pickupExtra {
+  text-align: left;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  border-radius: 5px;
+  padding: 8px;
+  opacity: 0;
+}
 
+#ui-pickupExtra-header {
+  font-size: 26px;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  padding: 1px;
+  padding-top: 2px;
+}
+
+#ui-pickupExtra-text {
+    color: #ffffffe5;
+    font-size: 22px;
+    padding: 3px;
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+    white-space: pre-line;
+  }
 
 .notify-message {
   color: white;
@@ -3934,7 +4012,7 @@ span.ui-stats-header-value {
   .ui-emote-top-left .ui-emote-image {
     margin-left: -80px;
     margin-top: -30px;
-    background-image: url(/img/loot/loot-ammo-box.svg);
+    background-image: url(/img/loot/loot-medical-pill.svg);
   }
 
   .ui-emote-bottom-left .ui-emote {
@@ -4897,6 +4975,32 @@ span.ui-stats-header-value {
     font-size: 18px;
     margin-bottom: -3px;
     text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+  }
+
+  #ui-pickupExtra {
+    text-align: left;
+    background: rgba(0, 0, 0, 0.4);
+    color: #fff;
+    border-radius: 5px;
+    padding: 8px;
+    opacity: 0;
+  }
+
+  #ui-pickupExtra-header {
+    font-size: 26px;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 3px;
+    padding: 1px;
+    padding-top: 2px;
+  }
+
+  #ui-pickupExtra-text {
+      color: #ffffffe5;
+      font-size: 22px;
+      padding: 3px;
+      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+      white-space: pre-line;
   }
 
   /**

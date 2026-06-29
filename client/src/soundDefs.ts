@@ -383,6 +383,10 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             path: "audio/guns/mp220_reload_01.mp3",
             volume: 1,
         },
+        mp220_modified_reload_01: {
+            path: "audio/guns/mp220_modified_reload_01.mp3",
+            volume: 1,
+        },
         mp220_deploy_01: {
             path: "audio/guns/mp220_deploy_01.mp3",
             volume: 1,

@@ -1547,6 +1547,241 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return 0xffffff;
         },
     },
+    deathSplash: {
+        image: ["part-splat-01.img", "part-splat-02.img", "part-splat-03.img"],
+        life: new Range(0.8, 1.2),
+        drag: new Range(2, 5),
+        rotVel: new Range(0, Math.PI * 2),
+        scale: {
+            start: new Range(0.08, 0.15),
+            end: new Range(0.2, 0.35),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.7, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.5, 0.8)));
+        },
+    },
+    bloodExplosion: {
+        image: ["part-splat-01.img", "part-splat-02.img", "part-splat-03.img"],
+        life: new Range(1.0, 1.5),
+        drag: new Range(1, 3),
+        rotVel: new Range(Math.PI, Math.PI * 3),
+        scale: {
+            start: new Range(0.12, 0.2),
+            end: new Range(0.3, 0.5),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.6, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.4, 0.7)));
+        },
+    },
+    confettiDeath: {
+        image: [
+            "confetti-death-01.img",
+            "confetti-death-02.img",
+            "confetti-death-03.img",
+            "confetti-death-04.img",
+            "confetti-death-05.img",
+            "confetti-death-06.img",
+            "confetti-death-07.img",
+            "confetti-death-08.img",
+            "confetti-death-09.img",
+            "confetti-death-10.img",
+            "confetti-death-11.img",
+            "confetti-death-12.img",
+            "confetti-death-13.img",
+            "confetti-death-14.img",
+            "confetti-death-15.img",
+            "confetti-death-16.img",
+            "confetti-death-17.img",
+            "confetti-death-18.img",
+            "confetti-death-19.img",
+            "confetti-death-20.img",
+            "confetti-death-21.img",
+            "confetti-death-22.img",
+            "confetti-death-23.img",
+            "confetti-death-24.img",
+            "confetti-death-25.img",
+            "confetti-death-26.img",
+            "confetti-death-27.img",
+            "confetti-death-28.img",
+            "confetti-death-29.img",
+            "confetti-death-30.img",
+        ],
+        life: new Range(1.5, 2),
+        drag: new Range(3, 3),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.3, 0.3),
+            end: new Range(0.2, 0.2),
+            lerp: new Range(0, 0.7),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(1.45, 1.95),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    sparklyDeath: {
+        image: ["sparkly-death-1.img", "sparkly-death-2.img"],
+        life: new Range(0.75, 1.75),
+        drag: new Range(5.0, 9.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.12, 0.2),
+            end: new Range(0.15, 0.25),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    potatoBlastDeath: {
+        image: ["potato-blast-death.img"],
+        life: new Range(0.75, 1.5),
+        drag: new Range(5.0, 15.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.07, 0.15),
+            end: new Range(0.07, 0.15),
+            lerp: new Range(0, 0.7),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    toonBlastDeath: {
+        image: [
+            "part-frag-burst-01.img",
+            "part-frag-burst-02.img",
+            "part-frag-burst-03.img",
+        ],
+        life: new Range(0.6, 1.0),
+        drag: new Range(3, 6),
+        rotVel: new Range(Math.PI * 2, Math.PI * 4),
+        scale: {
+            start: new Range(0.1, 0.18),
+            end: new Range(0.15, 0.25),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.85, 1),
+        },
+        color: function () {
+            const colors = [0xff6b35, 0xffcc00, 0xff3366];
+            return colors[Math.floor(util.random(0, colors.length))];
+        },
+    },
+    cupidDeath: {
+        image: ["part-cupid-01.img", "part-cupid-02.img", "part-cupid-03.img"],
+        life: new Range(1.0, 1.5),
+        drag: new Range(1.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.15, 0.25),
+            end: new Range(0.12, 0.2),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    blackHoleDeath: {
+        image: ["part-black-hole-01.img"],
+        life: new Range(1.2, 1.8),
+        drag: new Range(0.5, 2.0),
+        rotVel: new Range(Math.PI * 2, Math.PI * 4),
+        scale: {
+            start: new Range(0.1, 0.2),
+            end: new Range(0.3, 0.5),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.8, 1),
+        },
+        color: function () {
+            return 0x330066;
+        },
+    },
+    magicSparkDeath: {
+        image: [
+            "part-magic-spark-01.img",
+            "part-magic-spark-02.img",
+            "part-magic-spark-03.img",
+            "part-magic-spark-04.img",
+        ],
+        life: new Range(1.0, 1.5),
+        drag: new Range(5.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.15, 0.25),
+            end: new Range(0.12, 0.2),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    billionaireDeath: {
+        image: [
+            "billionaire-death-1.img",
+            "billionaire-death-2.img",
+            "billionaire-death-3.img",
+        ],
+        life: new Range(1.0, 1.5),
+        drag: new Range(4.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.15, 0.25),
+            end: new Range(0.1, 0.175),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
     whiteChip: {
         image: ["part-spark-02.img"],
         life: 0.5,

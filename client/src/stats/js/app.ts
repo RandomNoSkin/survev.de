@@ -3,8 +3,10 @@ import $ from "jquery";
 import "bootstrap";
 import slugify from "slugify";
 import { ConfigManager } from "../../config";
+import { GameView } from "./gameView";
 import { MainView } from "./mainView";
 import { PlayerView } from "./playerView";
+import { ServerStatsView } from "./serverStatsView";
 import language from "./templates/langauge.ejs";
 
 import "bootstrap/dist/css/bootstrap.css";
@@ -19,7 +21,7 @@ const templates = {
 
 type AcceptedLocales = "en" | "es";
 
-type Routes = "player" | "main";
+type Routes = "player" | "main" | "server" | "game";
 
 //
 // Ads
@@ -41,14 +43,18 @@ export class App {
     el = $("#content");
     mainView: MainView;
     playerView: PlayerView;
+    serverStatsView: ServerStatsView;
+    gameView: GameView;
     config: ConfigManager;
     localization: Localization;
-    view!: MainView | PlayerView;
+    view!: MainView | PlayerView | ServerStatsView | GameView;
     adManager: Ads;
 
     constructor() {
         this.mainView = new MainView(this);
         this.playerView = new PlayerView(this);
+        this.serverStatsView = new ServerStatsView(this);
+        this.gameView = new GameView(this);
 
         $("#search-players").on("submit", (e) => {
             e.preventDefault();
@@ -85,7 +91,11 @@ export class App {
         this.adManager = new Ads();
 
         window.addEventListener("load", () => {
-            if (helpers.getParameterByName("slug")) {
+            if (helpers.getParameterByName("game")) {
+                this.setView("game");
+            } else if (helpers.getParameterByName("view") === "server") {
+                this.setView("server");
+            } else if (helpers.getParameterByName("slug")) {
                 this.setView("player");
             } else {
                 this.setView("main");
@@ -114,6 +124,10 @@ export class App {
             }
             */
             this.view = this.playerView;
+        } else if (name == "server") {
+            this.view = this.serverStatsView;
+        } else if (name == "game") {
+            this.view = this.gameView;
         } else {
             /*
             elAdsPlayerTop.css("display", "none");

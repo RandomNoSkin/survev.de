@@ -170,7 +170,9 @@ export class SmokeBarn {
                 p.sprite.scale.set(screenScale, screenScale);
                 p.sprite.rotation = p.rot;
                 p.sprite.tint = p.tint;
-                p.sprite.alpha = alpha;
+                // Advanced spectator: when surfaces are made transparent, fade
+                // smokes too so they don't block the spectator's view.
+                p.sprite.alpha = camera.m_advSpecTransparent ? alpha * 0.2 : alpha;
                 p.sprite.visible = p.active;
             }
         }

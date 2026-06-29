@@ -48,6 +48,7 @@ export class TeamMenu {
     );
 
     serverSelect = $("#team-server-select");
+    categoryTabs = $("#team-category-tabs");
     queueMode1 = $("#btn-team-queue-mode-1");
     queueMode2 = $("#btn-team-queue-mode-2");
     fillAuto = $("#btn-team-fill-auto");
@@ -93,11 +94,18 @@ export class TeamMenu {
         public privateLobbyRedirectCb: (lobbyCode: string, importGroupId: string) => void,
     ) {
         // Listen for ui modifications
+        // The server dropdown holds geographic groups (eu/asia/...); the playlist
+        // within the group is chosen via the category tabs. Both resolve to a
+        // concrete region, which is the value actually synced to the room.
         this.serverSelect.on("change", () => {
-            const e = this.serverSelect.find(":selected").val() as string;
-            this.pingTest.start([e]);
-            this.connect(false, this.roomData.roomUrl);
-            this.setRoomProperty("region", e);
+            const group = this.serverSelect.find(":selected").val() as string;
+            this.applyRegion(this.regionForGroup(group));
+        });
+        this.categoryTabs.on("click", ".btn-cat-tab", (e) => {
+            if (!this.isLeader) return;
+            const category = $(e.currentTarget).data("category") as string;
+            const group = this.siteInfo.regionMeta(this.roomData.region).group;
+            this.applyRegion(this.siteInfo.resolveRegion(group, category));
         });
         this.queueMode1.on("click", () => {
             this.setRoomProperty("gameModeIdx", 1);
@@ -339,7 +347,10 @@ export class TeamMenu {
             case "privateLobbyRedirect": {
                 const redirectData = data as TeamPrivateLobbyRedirectMsg["data"];
                 this.joiningGame = true;
-                this.privateLobbyRedirectCb(redirectData.lobbyCode, redirectData.importGroupId);
+                this.privateLobbyRedirectCb(
+                    redirectData.lobbyCode,
+                    redirectData.importGroupId,
+                );
                 break;
             }
             case "keepAlive":
@@ -371,6 +382,23 @@ export class TeamMenu {
             this.roomData[prop] = val;
             this.sendMessage("setRoomProps", this.roomData);
         }
+    }
+
+    /** Resolves a selected group to a concrete region, keeping the current playlist when the group offers it. */
+    regionForGroup(group: string): string {
+        const cats = this.siteInfo.getCategoriesForGroup(group);
+        let category = this.siteInfo.regionMeta(this.roomData.region).category;
+        if (!cats.some((c) => c.category === category)) {
+            category = cats[0]?.category ?? "default";
+        }
+        return this.siteInfo.resolveRegion(group, category);
+    }
+
+    /** Applies a newly selected region: ping it and sync it to the room (leader only). */
+    applyRegion(region: string) {
+        this.pingTest.start([region]);
+        this.connect(false, this.roomData.roomUrl);
+        this.setRoomProperty("region", region);
     }
 
     tryStartGame() {
@@ -457,20 +485,14 @@ export class TeamMenu {
         }
 
         if (this.joined) {
-            // Regions
-            const regionPops = this.siteInfo.info.pops || {};
-            const regions = Object.keys(regionPops);
-            for (let i = 0; i < regions.length; i++) {
-                const region = regions[i];
-                const count = regionPops[region].playerCount;
-                const players = this.localization.translate("index-players");
-                const sel = $("#team-server-opts").children(`option[value="${region}"]`);
-                sel.html(`${sel.attr("data-label")} [${count} ${players}]`);
-            }
-
-            this.serverSelect.find("option").each((_idx, ele) => {
-                ele.selected = ele.value == this.roomData.region;
-            });
+            // Region: geo-group dropdown + category tabs (mirrors the main menu)
+            this.siteInfo.updateGroupCounts($("#team-server-opts"));
+            this.siteInfo.renderRegionGroupTabs(
+                this.serverSelect,
+                this.categoryTabs,
+                this.roomData.region,
+                this.isLeader,
+            );
 
             // Modes btns
             setButtonState(

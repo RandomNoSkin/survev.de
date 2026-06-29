@@ -23,6 +23,9 @@ export abstract class GameManager {
 
     abstract getPlayerCount(): number;
 
+    /** Number of currently-running games (for live server stats). */
+    abstract getGameCount(): number;
+
     abstract getById(id: string): GameData | undefined;
 
     abstract findGame(body: FindGamePrivateBody): Promise<string>;
@@ -30,7 +33,11 @@ export abstract class GameManager {
     /** Spins up a fresh isolated game from a private lobby and registers each team's players as its own join group. */
     abstract createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string>;
 
-    abstract findGameById(gameId: string, playerData: any[], autoFill: boolean): Promise<string>;
+    abstract findGameById(
+        gameId: string,
+        playerData: any[],
+        autoFill: boolean,
+    ): Promise<string>;
     abstract getGames(): Promise<GameData[]>;
 
     /** Returns true if this IP recently used a join token with a linked account (skip proxy check). */
@@ -40,7 +47,9 @@ export abstract class GameManager {
     abstract getGamePlayers(gameId: string): Promise<DashboardPlayer[]>;
 
     /** Returns the recent kill-feed buffer for a running game (for the moderation dashboard). */
-    abstract getGameFeed(gameId: string): Promise<import("../utils/types").KillFeedEntry[]>;
+    abstract getGameFeed(
+        gameId: string,
+    ): Promise<import("../utils/types").KillFeedEntry[]>;
 
     /** Sends an admin command to a running game (fire-and-forget). */
     abstract sendAdminCmd(gameId: string, cmd: AdminCmdAction): void;
@@ -129,12 +138,17 @@ export class SingleThreadGameManager implements GameManager {
 
     private reportGameCrash(game: Game, context: string, err: unknown): void {
         const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
-        gameLogger.error(`[SingleThread] game.${context} crashed (game ${game.id}): ${details}`);
+        gameLogger.error(
+            `[SingleThread] game.${context} crashed (game ${game.id}): ${details}`,
+        );
         void logErrorToWebhook("server", `[SingleThread] game.${context} crashed`, err);
         try {
             game.stop();
         } catch (stopErr) {
-            gameLogger.error(`[SingleThread] stop() also failed (game ${game.id}):`, stopErr);
+            gameLogger.error(
+                `[SingleThread] stop() also failed (game ${game.id}):`,
+                stopErr,
+            );
             // Force-mark so the broken game is removed on the next update() tick even
             // if stop() itself threw.
             game.stopped = true;
@@ -148,6 +162,11 @@ export class SingleThreadGameManager implements GameManager {
                 (b ? b.playerBarn.livingPlayers.filter((p) => !p.disconnected).length : 0)
             );
         }, 0);
+    }
+
+    getGameCount(): number {
+        // Stopped games are spliced out of `games`, so this is the active count.
+        return this.games.length;
     }
 
     async newGame(config: ServerGameConfig): Promise<Game> {
@@ -176,6 +195,11 @@ export class SingleThreadGameManager implements GameManager {
         game.verifiedOnly = this.serverVerifiedOnly;
         this.games.push(game);
         this.gamesById.set(id, game);
+        // Diagnostic: log every game creation so duplicate/abandoned games are traceable.
+        gameLogger.info(
+            `[SingleThread] newGame #${id.slice(0, 4)} created ` +
+                `[private=${!!config.isPrivate}, mode=${config.teamMode}, map=${config.mapName}, totalGames=${this.games.length}]`,
+        );
         return game;
     }
 
@@ -231,7 +255,11 @@ export class SingleThreadGameManager implements GameManager {
         return game.id;
     }
 
-    async findGameById(gameId: string, playerData: any[], autoFill: false): Promise<string> {
+    async findGameById(
+        gameId: string,
+        playerData: any[],
+        autoFill: false,
+    ): Promise<string> {
         let game = this.gamesById.get(gameId);
 
         if (!game || game.aliveCount < 0) {

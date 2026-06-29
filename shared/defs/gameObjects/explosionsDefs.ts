@@ -29,6 +29,28 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
         explosionEffectType: "frag",
         decalType: "decal_frag_explosion",
     },
+    explosion_impact: {
+        type: "explosion",
+        damage: 75,
+        // hits obstacles hard but the shrapnel (shrapnel_mirv_mini, 6 dmg each
+        // instead of frag's 20) does much less to players
+        obstacleDamage: 4,
+        rad: { min: 4, max: 9 },
+        shrapnelCount: 12,
+        shrapnelType: "shrapnel_impact",
+        explosionEffectType: "frag",
+        decalType: "decal_frag_explosion",
+    },
+    explosion_mine: {
+        type: "explosion",
+        damage: 30,
+        obstacleDamage: 4,
+        rad: { min: 10, max: 12 },
+        shrapnelCount: 0,
+        shrapnelType: "shrapnel_impact",
+        explosionEffectType: "frag",
+        decalType: "decal_frag_explosion",
+    },
     explosion_smoke: {
         type: "explosion",
         damage: 0,

@@ -1,8 +1,10 @@
 import { CrosshairDefs } from "./crosshairDefs";
+import { DeathEffectDefs } from "./deathEffectDefs";
 import { HealEffectDefs } from "./healEffectDefs";
 
 export const _allowedHealEffects = Object.keys(HealEffectDefs);
 export const _allowedCrosshairs = Object.keys(CrosshairDefs);
+export const _allowedDeathEffects = Object.keys(DeathEffectDefs);
 export const _allowedMeleeSkins = [
     "fists",
     "knuckles_rusted",
@@ -100,6 +102,50 @@ export const _allowedOutfits = [
     "outfitDiamondred",
     "outfitPanorama",
     "outfitNordCode",
+    // resurviv skin accessories
+    "outfitSnowman",
+    "outfitChewieCheese",
+    "outfitFireball",
+    "outfitWolf",
+    "outfitPanda",
+    "outfitGreenTeaRex",
+    "outfitDragonTails",
+    "outfitVillageNinja",
+    "outfitChromesis",
+    "outfitDiamondRsrv",
+    "outfitMultiTusking",
+    "outfitMaxAttack",
+    "outfitLustrousPaladin",
+    "outfitAstronaut",
+    "outfitDiamondy",
+    "outfitMecha",
+    "outfitILavaYou",
+    "outfitIgris",
+    "outfitKingGalaxy",
+    "outfitJuleVerny",
+    "outfitGhoulFire",
+    "outfitAhoy",
+    "outfitBuckTeeth",
+    "outfitPoinsetee",
+    "outfitSnowyClaus",
+    "outfitCamoDeer",
+    "outfitDisasteroid",
+    "outfitIdDie4U",
+    "outfitMwow",
+    "outfitNeckNapkin",
+    "outfitTheySeeMeRolling",
+    "outfitGoodFeather",
+    "outfitNachoHat",
+    "outfitSuppaPoncho",
+    "outfitRanchDressing",
+    "outfitSirLoin",
+    "outfitMoosli",
+    "outfitTopOnePercent",
+    "outfitTopTwoPercent",
+    "outfitTopThreePercent",
+    "outfitBee",
+    "outfitVitaminD",
+    "outfitReTag",
 ];
 export const _allowedEmotes = [
     "emote_thumbsup",
@@ -435,6 +481,9 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_flagbosnia",
             "emote_logocloud",
             "emote_logotwins",
+            "death_none",
+            "death_basic"
+
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,

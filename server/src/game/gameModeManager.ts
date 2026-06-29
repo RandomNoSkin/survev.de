@@ -137,9 +137,10 @@ export class GameModeManager {
                 const winner = this.game.playerBarn.livingPlayers[0];
                 winner.rank = 1;
                 winner.addGameOverMsg(winner.teamId);
-                for(const p of this.game.playerBarn.players.filter(p => p !== winner)){
+                for(const p of this.game.playerBarn.players.filter(p => p !== winner && !p.spectator)){
                     p.addGameOverMsg();
                 }
+                this.sendSpectatorsGameOver(winner.teamId);
                 return true;
             }
             case GameMode.Team: {
@@ -150,9 +151,10 @@ export class GameModeManager {
                 for (const player of winner.getAlivePlayers()) {
                     player.addGameOverMsg(winner.id);
                 }
-                for(const p of this.game.playerBarn.players.filter(p => !winner.getAlivePlayers().includes(p))){
+                for(const p of this.game.playerBarn.players.filter(p => !winner.getAlivePlayers().includes(p) && !p.spectator)){
                     p.addGameOverMsg();
                 }
+                this.sendSpectatorsGameOver(winner.id);
                 return true;
             }
             case GameMode.Faction: {
@@ -161,8 +163,22 @@ export class GameModeManager {
                     player.rank = 1;
                     player.addGameOverMsg(winner.id);
                 }
+                this.sendSpectatorsGameOver(winner.id);
                 return true;
             }
+        }
+    }
+
+    /**
+     * Sends the winning game-over message (with full final stats) to every
+     * spectator. Without this a spectator only receives a `gameOver=false`
+     * message (it isn't on the winning team), which makes the client try to keep
+     * spectating and then disconnect to the menu when the game stops — instead of
+     * showing the end-of-match stats screen.
+     */
+    private sendSpectatorsGameOver(winningId: number): void {
+        for (const spec of this.game.playerBarn.players.filter((p) => p.spectator)) {
+            spec.addGameOverMsg(winningId);
         }
     }
 

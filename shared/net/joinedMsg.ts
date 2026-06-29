@@ -7,6 +7,8 @@ export class JoinedMsg implements AbstractMsg {
     started = false;
     emotes: string[] = [];
     isAdmin = false;
+    /** Whether this client may use advanced spectator (admin, or any non-prod server). */
+    advancedSpectator = false;
 
     serialize(s: BitStream) {
         /* STRIP_FROM_PROD_CLIENT:START */
@@ -14,6 +16,7 @@ export class JoinedMsg implements AbstractMsg {
         s.writeUint16(this.playerId);
         s.writeBoolean(this.started);
         s.writeBoolean(this.isAdmin);
+        s.writeBoolean(this.advancedSpectator);
 
         s.writeArray(this.emotes, 8, (emote) => {
             s.writeGameType(emote);
@@ -26,6 +29,7 @@ export class JoinedMsg implements AbstractMsg {
         this.playerId = s.readUint16();
         this.started = s.readBoolean();
         this.isAdmin = s.readBoolean();
+        this.advancedSpectator = s.readBoolean();
 
         this.emotes = s.readArray(8, () => {
             return s.readGameType();

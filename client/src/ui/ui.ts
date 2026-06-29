@@ -4,6 +4,7 @@ import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { PingDefs } from "../../../shared/defs/gameObjects/pingDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import type { MapDef } from "../../../shared/defs/mapDefs";
+import { TeamColor } from "../../../shared/defs/maps/factionDefs";
 import { Action, GameConfig, GasMode, TeamMode } from "../../../shared/gameConfig";
 import type { PlayerStatsMsg } from "../../../shared/net/playerStatsMsg";
 import type { MapIndicator, PlayerStatus } from "../../../shared/net/updateMsg";
@@ -30,7 +31,6 @@ import type { Localization } from "./localization";
 import { PieTimer } from "./pieTimer";
 import type { Touch } from "./touch";
 import type { UiManager2 } from "./ui2";
-import { TeamColor } from "../../../shared/defs/maps/factionDefs";
 
 function humanizeTime(time: number) {
     const hours = Math.floor(time / 3600);
@@ -184,6 +184,22 @@ export class UiManager {
     specPrev = false;
     specNextButton = $("#btn-spectate-next-player");
     specPrevButton = $("#btn-spectate-prev-player");
+
+    // Advanced spectator (admin only)
+    specAdvancedButton = $("#btn-spectate-advanced");
+    specAdvancedOptions = $("#ui-spectate-advanced-options");
+    specAdvancedList = $("#ui-spectate-advanced-list");
+    advCollapseButton = $("#btn-adv-collapse");
+    // Start collapsed: the option list is hidden until the spectator expands it.
+    advCollapsed = true;
+    advFreecamButton = $("#btn-adv-freecam");
+    advZoomButton = $("#btn-adv-zoom");
+    advLayerButton = $("#btn-adv-layer");
+    advTransparentButton = $("#btn-adv-transparent");
+    advEnemiesMapButton = $("#btn-adv-enemies-map");
+    advEspButton = $("#btn-adv-esp");
+    advLabelsButton = $("#btn-adv-labels");
+    advNadesButton = $("#btn-adv-nades");
 
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
@@ -401,8 +417,16 @@ export class UiManager {
             e.stopPropagation();
         });
         $("#btn-game-quit").on("click", () => {
-            if (this.displayingStats && !this.statsDownloaded && this.game.m_config.get("autoDownloadStats")) {
-                if (!confirm("The game is still ongoing – leave anyway? Stats will be incomplete.")) {
+            if (
+                this.displayingStats &&
+                !this.statsDownloaded &&
+                this.game.m_config.get("autoDownloadStats")
+            ) {
+                if (
+                    !confirm(
+                        "The game is still ongoing – leave anyway? Stats will be incomplete.",
+                    )
+                ) {
                     return;
                 }
             }
@@ -419,6 +443,66 @@ export class UiManager {
         });
         this.specPrevButton.on("click", () => {
             this.specPrev = true;
+        });
+
+        // Advanced spectator toggles. Namespaced + off() first because the buttons
+        // live in static HTML but UiManager is recreated each game, so a plain
+        // .on() would stack handlers (and double-toggle the booleans).
+        this.specAdvancedButton.off("click.advspec").on("click.advspec", () => {
+            const adv = this.game.m_advSpec;
+            adv.enabled = !adv.enabled;
+            // Restore the viewer's last-used settings whenever advanced spectator is
+            // (re)activated; capture them again when it's turned off.
+            if (adv.enabled) {
+                adv.applySettings(this.game.m_config.get("advancedSpectatorSettings"));
+            } else {
+                this.saveAdvSpec();
+            }
+            this.updateAdvancedSpectatorUi();
+            this.updateSpectateText();
+        });
+        const advToggle = (btn: JQuery, flip: () => void) => {
+            btn.off("click.advspec").on("click.advspec", () => {
+                flip();
+                this.saveAdvSpec();
+                this.updateAdvancedSpectatorUi();
+            });
+        };
+        advToggle(this.advFreecamButton, () => {
+            const adv = this.game.m_advSpec;
+            adv.freecam = !adv.freecam;
+            // ESP lines run from the screen center, which has no player in freecam,
+            // so turn them off when entering freecam.
+            if (adv.freecam) adv.espLines = false;
+            this.updateSpectateText();
+        });
+        advToggle(this.advZoomButton, () => {
+            this.game.m_advSpec.zoom = !this.game.m_advSpec.zoom;
+        });
+        advToggle(this.advLayerButton, () => {
+            // Toggle the viewed render layer (0 = surface, 1 = underground).
+            this.game.m_advSpec.layer = this.game.m_advSpec.layer === 1 ? 0 : 1;
+        });
+        advToggle(this.advTransparentButton, () => {
+            this.game.m_advSpec.transparentSurfaces =
+                !this.game.m_advSpec.transparentSurfaces;
+        });
+        advToggle(this.advEnemiesMapButton, () => {
+            this.game.m_advSpec.enemiesOnMap = !this.game.m_advSpec.enemiesOnMap;
+        });
+        advToggle(this.advEspButton, () => {
+            this.game.m_advSpec.espLines = !this.game.m_advSpec.espLines;
+        });
+        advToggle(this.advLabelsButton, () => {
+            this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
+        });
+        advToggle(this.advNadesButton, () => {
+            this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        });
+        // Collapse only hides the option list; the enabled features keep running.
+        this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
+            this.advCollapsed = !this.advCollapsed;
+            this.updateAdvancedSpectatorUi();
         });
 
         // Touch specific buttons
@@ -1079,6 +1163,14 @@ export class UiManager {
             if (map.factionMode && customMapIcon) {
                 tint = playerBarn.getTeamColor(playerInfo.teamId);
             }
+            // Advanced spectator "Enemies on Map": force enemies red so they stand
+            // out against teammates (matches the ESP / enemy-label colour).
+            if (
+                playerBarn.advSpecShowEnemies &&
+                playerInfo.teamId != activePlayerInfo.teamId
+            ) {
+                tint = 0xff4d4d;
+            }
             const dotScale = device.uiLayout == device.UiLayout.Sm ? 0.15 : 0.2;
             let scale = dotScale;
 
@@ -1116,6 +1208,25 @@ export class UiManager {
                     "player-map-outer.img",
                     0xffffff,
                 );
+            }
+        }
+
+        // Replay god-view: add dots for players the watched POV could NOT see (so they
+        // have no playerStatus above). Gated by the advanced-spectator "Enemies on Map"
+        // toggle (advSpecShowEnemies), which is only set during replay/spectate.
+        const godView = this.game.m_replayGodView;
+        if (godView && playerBarn.advSpecShowEnemies) {
+            const dotScale = device.uiLayout == device.UiLayout.Sm ? 0.15 : 0.2;
+            for (const gp of godView.values()) {
+                if (gp.id === activePlayerInfo.playerId) continue;
+                if (playerBarn.playerStatus[gp.id]) continue; // already drawn above
+                const isEnemy = gp.teamId != activePlayerInfo.teamId;
+                let texture = "player-map-inner.img";
+                if (gp.dead) texture = "skull-outlined.img";
+                else if (gp.downed) texture = "player-map-downed.img";
+                const tint = isEnemy ? 0xff4d4d : playerBarn.getTeamColor(gp.teamId);
+                const scale = gp.dead || gp.downed ? dotScale * 1.25 : dotScale * 0.75;
+                addSprite(gp.pos, scale, 1, true, 65535 + gp.id * 2, texture, tint);
             }
         }
 
@@ -1457,8 +1568,7 @@ export class UiManager {
         map: Map,
         ui2: UiManager2,
     ) {
-
-        if(spectator && !gameOver) {
+        if (spectator && !gameOver) {
             console.log("Player is spectating");
             this.beginSpectating();
             return;
@@ -1466,11 +1576,16 @@ export class UiManager {
 
         this.statsDownloaded = false;
         const doDownload = () => {
-            const headers = "Name,Rank,Kills,Damage Dealt,Damage Taken,Time Alive,Elo Gained\n";
-            const statsData = headers + playerStats.map(stats => {
-                const playerInfo = playerBarn.getPlayerInfo(stats.playerId);
-                return `${playerInfo.name},${stats.rank},${stats.kills},${stats.damageDealt},${stats.damageTaken},${humanizeTime(stats.timeAlive)}`;
-            }).join("\n");
+            const headers =
+                "Name,Rank,Kills,Damage Dealt,Damage Taken,Time Alive,Elo Gained\n";
+            const statsData =
+                headers +
+                playerStats
+                    .map((stats) => {
+                        const playerInfo = playerBarn.getPlayerInfo(stats.playerId);
+                        return `${playerInfo.name},${stats.rank},${stats.kills},${stats.damageDealt},${stats.damageTaken},${humanizeTime(stats.timeAlive)}`;
+                    })
+                    .join("\n");
             const now = new Date();
             const fileName = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}_stats.csv`;
             const blob = new Blob([statsData], { type: "text/csv;charset=utf-8" });
@@ -1487,7 +1602,7 @@ export class UiManager {
         // If we're spectating a team that's not our own, and the game isn't over yet,
         // don't display the stats screen again.
 
-        if (!betterStats){
+        if (!betterStats) {
             if (!spectating || teamId == localTeamId || gameOver) {
                 console.log("Not showing better stats screen");
                 this.toggleEscMenu(true);
@@ -1504,7 +1619,11 @@ export class UiManager {
                 this.statsInfoBox = $("<div/>", { id: "ui-stats-info-box" });
                 this.statsOptions1 = $("<div/>", { id: "ui-stats-options1" });
 
-                this.statsContentsContainer.append(this.statsHeader, this.statsInfoBox, this.statsOptions1);
+                this.statsContentsContainer.append(
+                    this.statsHeader,
+                    this.statsInfoBox,
+                    this.statsOptions1,
+                );
 
                 this.statsContentsContainer.css({
                     top: "",
@@ -1519,13 +1638,14 @@ export class UiManager {
                 this.setBannerAd(statsDelay, ui2);
 
                 const isLocalTeamWinner =
-                    localTeamId == winningTeamId || (spectating && winningTeamId == teamId);
+                    localTeamId == winningTeamId ||
+                    (spectating && winningTeamId == teamId);
                 const spectatingAnotherTeam = spectating && localTeamId != teamId;
                 const S = isLocalTeamWinner
                     ? this.getTitleVictoryText(
-                        spectatingAnotherTeam,
-                        map.getMapDef().gameMode,
-                    )
+                          spectatingAnotherTeam,
+                          map.getMapDef().gameMode,
+                      )
                     : this.getTitleDefeatText(teamMode, spectatingAnotherTeam);
                 let teamKills = 0;
                 for (let i = 0; i < playerStats.length; i++) {
@@ -1565,7 +1685,8 @@ export class UiManager {
                                 html: t,
                             }),
                         );
-                const M = device.uiLayout != device.UiLayout.Sm || device.tablet ? 250 : 125;
+                const M =
+                    device.uiLayout != device.UiLayout.Sm || device.tablet ? 250 : 125;
                 let P = 0;
                 P -= ((playerStats.length - 1) * M) / 2;
                 P -= (playerStats.length - 1) * 10;
@@ -1586,7 +1707,9 @@ export class UiManager {
                             html: helpers.htmlEscape(playerInfo.name),
                         }),
                     );
-                    B.append(T(this.localization.translate("game-kills"), `${stats.kills}`))
+                    B.append(
+                        T(this.localization.translate("game-kills"), `${stats.kills}`),
+                    )
                         .append(
                             T(
                                 this.localization.translate("game-damage-dealt"),
@@ -1637,8 +1760,16 @@ export class UiManager {
                     html: this.localization.translate("game-play-new-game"),
                 });
                 restartButton.on("click", () => {
-                    if (!gameOver && !this.statsDownloaded && this.game.m_config.get("autoDownloadStats")) {
-                        if (!confirm("The game is still ongoing – leave anyway? Stats will be incomplete.")) {
+                    if (
+                        !gameOver &&
+                        !this.statsDownloaded &&
+                        this.game.m_config.get("autoDownloadStats")
+                    ) {
+                        if (
+                            !confirm(
+                                "The game is still ongoing – leave anyway? Stats will be incomplete.",
+                            )
+                        ) {
                             return;
                         }
                     }
@@ -1704,7 +1835,8 @@ export class UiManager {
                 this.statsOptions1.children().each((idx, elem) => {
                     const e = $(elem);
                     e.hide();
-                    const delay = statsDelay + baseDelay + (elemIdx + idx) * elemDelay + 500;
+                    const delay =
+                        statsDelay + baseDelay + (elemIdx + idx) * elemDelay + 500;
                     e.delay(delay).fadeIn(elemFadeTime);
                     elemIdx++;
                 });
@@ -1727,40 +1859,44 @@ export class UiManager {
                     1000,
                 );
             }
-        }else{
-            if (!spectating && betterStats || teamId == localTeamId && betterStats || gameOver && betterStats) {
+        } else {
+            if (
+                (!spectating && betterStats) ||
+                (teamId == localTeamId && betterStats) ||
+                (gameOver && betterStats)
+            ) {
                 console.log("Showing better stats");
                 this.toggleEscMenu(true);
                 this.displayingStats = true;
                 this.m_pieTimer.stop();
                 this.displayMapLarge(true);
-                
+
                 this.clearStatsElems();
-                
+
                 this.setSpectating(false, teamMode);
                 this.removeAds();
                 this.statsMain.css("display", "block");
                 this.statsLogo.css("display", "block");
-        
+
                 this.statsContentsContainer.css({ top: "" });
-        
+
                 const victory = localTeamId == winningTeamId;
                 const statsDelay = victory ? 1750 : 2500;
-        
+
                 this.setBannerAd(statsDelay, ui2);
-        
+
                 const title = $("<div/>", {
                     class: "ui-stats-title",
-                    text: "Battle Result"
+                    text: "Battle Result",
                 });
-        
+
                 const tableContainer = $("<div/>", {
                     class: "ui-stats-table-container",
-                    css: { opacity: 0 }
+                    css: { opacity: 0 },
                 });
-        
+
                 const tableHeader = $("<div/>", {
-                    class: "ui-stats-row header"
+                    class: "ui-stats-row header",
                 }).append([
                     $("<div/>", { class: "ui-stats-col rank", text: "RANK" }),
                     $("<div/>", { class: "ui-stats-col player-tittle", text: "PLAYER" }),
@@ -1770,19 +1906,19 @@ export class UiManager {
                     $("<div/>", { class: "ui-stats-col", text: "DAMAGE TAKEN" }),
                     $("<div/>", { class: "ui-stats-col", text: "TIME" }),
                 ]);
-        
+
                 const sortedPlayerStats = playerStats.sort((a, b) => {
                     if (a.rank === 0) return -1;
                     if (b.rank === 0) return 1;
                     return a.rank - b.rank;
                 });
-        
+
                 const tableRowsContainer = $("<div/>", {
-                    class: "ui-stats-table-rows"
+                    class: "ui-stats-table-rows",
                 });
 
                 let a = 0;
-        
+
                 for (const stats of sortedPlayerStats) {
                     const playerInfo = playerBarn.getPlayerInfo(stats.playerId);
                     const timeAlive = humanizeTime(stats.timeAlive);
@@ -1790,18 +1926,17 @@ export class UiManager {
                     if (stats.rank === 0) {
                         a++;
                     }
-                    
-        
+
                     const playerRow = $("<div/>", {
-                        class: "ui-stats-row"
+                        class: "ui-stats-row",
                     }).append([
                         $("<div/>", {
                             class: "ui-stats-col rank",
-                            text: stats.rank === 0 ? "#?" : "#" + stats.rank
+                            text: stats.rank === 0 ? "#?" : "#" + stats.rank,
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            text: helpers.htmlEscape(playerInfo.name)
+                            text: helpers.htmlEscape(playerInfo.name),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -1812,13 +1947,13 @@ export class UiManager {
                     if (stats.playerId == this.game.m_localId) {
                         playerRow.addClass("active-player");
                     }
-        
+
                     tableRowsContainer.append(playerRow);
                 }
-        
+
                 tableContainer.append(tableHeader);
                 tableContainer.append(tableRowsContainer);
-        
+
                 const statsOptions = $("<div/>", {
                     id: "ui-stats-options",
                 });
@@ -1828,14 +1963,22 @@ export class UiManager {
                     html: this.localization.translate("game-play-new-game"),
                 });
                 restartButton.on("click", () => {
-                    if (!gameOver && !this.statsDownloaded && this.game.m_config.get("autoDownloadStats")) {
-                        if (!confirm("The game is still ongoing – leave anyway? Stats will be incomplete.")) {
+                    if (
+                        !gameOver &&
+                        !this.statsDownloaded &&
+                        this.game.m_config.get("autoDownloadStats")
+                    ) {
+                        if (
+                            !confirm(
+                                "The game is still ongoing – leave anyway? Stats will be incomplete.",
+                            )
+                        ) {
                             return;
                         }
                     }
                     this.quitGame();
                 });
-        
+
                 /*if (!gameOver && !this.waitingForPlayers && a >= 2) {
                     const spectateButton = $("<a/>", {
                         class: "btn-green btn-darken menu-option ui-stats-spectate",
@@ -1885,41 +2028,39 @@ export class UiManager {
                 }*/
 
                 const spectateButton = $("<a/>", {
-                        class: "btn-green btn-darken menu-option ui-stats-spectate",
-                        html: this.localization.translate("game-spectate"),
-                    });
-                    spectateButton.on("click", this.beginSpectating.bind(this));
-                    statsOptions.append(spectateButton);
+                    class: "btn-green btn-darken menu-option ui-stats-spectate",
+                    html: this.localization.translate("game-spectate"),
+                });
+                spectateButton.on("click", this.beginSpectating.bind(this));
+                statsOptions.append(spectateButton);
 
-
-                    // Add download button
+                // Add download button
                 const downloadButton = $("<a/>", {
                     class: "btn-green btn-darken menu-option ui-stats-download",
                     text: "Download Stats",
                 });
-                
-                
+
                 downloadButton.on("click", () => doDownload());
                 statsOptions.append(downloadButton);
 
                 if (gameOver && this.game.m_config.get("autoDownloadStats")) {
                     doDownload();
                 }
-        
+
                 statsOptions.append(restartButton);
                 tableContainer.append(statsOptions);
-        
+
                 tableContainer.prepend(title);
-        
+
                 this.statsContentsContainer.append(tableContainer);
-        
+
                 let elemIdx = 0;
                 const elemFadeTime = 200;
                 const elemDelay = 150 / Math.max(1, playerStats.length);
                 const baseDelay = 450 / Math.max(1, playerStats.length);
-        
-                tableContainer.delay(statsDelay).animate({ opacity: 1 }, 1000); 
-        
+
+                tableContainer.delay(statsDelay).animate({ opacity: 1 }, 1000);
+
                 tableContainer.children().each((idx, elem) => {
                     const e = $(elem);
                     e.css("opacity", 0);
@@ -1932,23 +2073,17 @@ export class UiManager {
                                     .delay(idx * elemDelay)
                                     .animate({ opacity: 1 }, elemFadeTime);
                             });
-                        }
+                        },
                     );
                 });
-        
+
                 this.statsElem.stop(true, true);
                 this.statsElem.css("display", "block");
-                this.statsElem.delay(statsDelay).animate(
-                    { opacity: 1 },
-                    1000
-                );
-        
+                this.statsElem.delay(statsDelay).animate({ opacity: 1 }, 1000);
+
                 this.statsContents.stop(true, true);
                 this.statsContents.css("display", "block");
-                this.statsContents.delay(statsDelay).animate(
-                    { opacity: 1 },
-                    1000
-                );
+                this.statsContents.delay(statsDelay).animate({ opacity: 1 }, 1000);
             }
         }
     }
@@ -1984,8 +2119,6 @@ export class UiManager {
 
         this.statsMain.css("display", "none");
     }
-
-
 
     showTeamAd(playerStats: PlayerStatsMsg["playerStats"], _ui2Manager: unknown) {
         this.toggleEscMenu(true);
@@ -2097,12 +2230,23 @@ export class UiManager {
             const name = playerBarn.getPlayerName(targetId, localId, false);
             this.spectatedPlayerId = targetId;
             this.spectatedPlayerName = helpers.htmlEscape(name);
-            this.spectatedPlayerText
-                .find("#spectate-player")
-                .html(this.spectatedPlayerName);
+            this.updateSpectateText();
             this.actionSeq = -1;
             this.m_pieTimer.stop();
         }
+    }
+
+    // Shows "Freecam" at the top while advanced-spectator freecam is active,
+    // otherwise the spectated player's name.
+    updateSpectateText() {
+        const adv = this.game.m_advSpec;
+        const freecam = adv.enabled && adv.freecam && this.spectating;
+        this.spectatedPlayerText
+            .find(".spectate-desc")
+            .css("display", freecam ? "none" : "");
+        this.spectatedPlayerText
+            .find("#spectate-player")
+            .html(freecam ? "Freecam" : this.spectatedPlayerName);
     }
 
     setSpectating(spectating: boolean, teamMode?: TeamMode) {
@@ -2111,15 +2255,69 @@ export class UiManager {
             if (this.spectating) {
                 this.spectateMode.css("display", "block");
                 $(".ui-zoom").removeClass("ui-zoom-hover");
-                const hideSpec = teamMode == TeamMode.Solo;
+                // Advanced spectators (admins / dev) may cycle through every
+                // player, so keep the next/prev buttons available even in solo
+                // (also works while freecam is active — the weapon HUD follows
+                // whichever player is selected).
+                const hideSpec =
+                    teamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
                 this.specPrevButton.css("display", hideSpec ? "none" : "block");
                 this.specNextButton.css("display", hideSpec ? "none" : "block");
                 this.hideStats();
+                this.updateAdvancedSpectatorUi();
             } else {
                 this.spectateMode.css("display", "none");
                 $(".ui-zoom").addClass("ui-zoom-hover");
+                this.specAdvancedButton.css("display", "none");
+                this.specAdvancedOptions.css("display", "none");
             }
         }
+    }
+
+    /** Persists the current advanced spectator toggles so they survive games/sessions. */
+    saveAdvSpec() {
+        this.game.m_config.set(
+            "advancedSpectatorSettings",
+            this.game.m_advSpec.getSettings(),
+        );
+    }
+
+    // Reflects the advanced spectator state onto the buttons. The master button
+    // is shown when the server allows advanced spectator (admins, or any spectator
+    // on a non-prod server, so the feature can be tested before prod); the
+    // sub-toggles only appear once the mode is enabled.
+    updateAdvancedSpectatorUi() {
+        const advSpec = this.game.m_advSpec;
+        // Server-authoritative: m_advancedSpectatorAllowed already encodes "is a
+        // spectator" + "admin or non-prod" (see Player.advSpecAllowed).
+        const available = this.game.m_advancedSpectatorAllowed;
+
+        this.specAdvancedButton.css("display", available ? "block" : "none");
+        if (!available) {
+            this.specAdvancedOptions.css("display", "none");
+            return;
+        }
+
+        this.specAdvancedButton.toggleClass("active", advSpec.enabled);
+        this.specAdvancedOptions.css(
+            "display",
+            advSpec.enabled ? "inline-block" : "none",
+        );
+        // The collapse header is shown when the mode is enabled; it toggles the
+        // visibility of the option list without disabling any active feature.
+        this.specAdvancedList.css(
+            "display",
+            advSpec.enabled && !this.advCollapsed ? "block" : "none",
+        );
+        this.advCollapseButton.html(this.advCollapsed ? "▸ Options" : "▾ Options");
+        this.advFreecamButton.toggleClass("active", advSpec.freecam);
+        this.advZoomButton.toggleClass("active", advSpec.zoom);
+        this.advLayerButton.toggleClass("active", advSpec.layer === 1);
+        this.advTransparentButton.toggleClass("active", advSpec.transparentSurfaces);
+        this.advEnemiesMapButton.toggleClass("active", advSpec.enemiesOnMap);
+        this.advEspButton.toggleClass("active", advSpec.espLines);
+        this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
+        this.advNadesButton.toggleClass("active", advSpec.nadeEsp);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {
@@ -2300,7 +2498,7 @@ export class UiManager {
     displayAnnouncement(message: string, color?: string, stayTime?: number) {
         const timeout = Number.isNaN(stayTime) ? 3000 : (stayTime ?? 3000);
         if (message) {
-            if(color){
+            if (color) {
                 this.announcement.css("color", color);
             }
             this.announcement.html(message);
@@ -2308,8 +2506,8 @@ export class UiManager {
                 setTimeout(() => {
                     this.announcement.fadeOut(800, () => {
                         setTimeout(() => {
-                            this.announcement.css("color", "yellow")
-                        })
+                            this.announcement.css("color", "yellow");
+                        });
                     });
                 }, timeout);
             });
@@ -2899,39 +3097,38 @@ export class UiManager {
             class: "ui-arena-role-body-right",
         });
         const roleGuns = roleDef.defaultItems?.weapons;
-        if(roleGuns)
-        for (let i = 0; i < 2; i++) {
-            const gun = roleGuns[i];
-            const perkElem = $("<div/>", {
-                class: "ui-arena-role-body-perk",
-            });
-            const perkElemImg = $("<div/>", {
-                class: "ui-arena-role-body-perk-image-wrapper",
-            }).append(
-                $("<div/>", {
-                    class: "ui-arena-role-body-perk-image-icon",
-                }),
-            );
-            const perkElemName = $("<div/>", {
-                class: "ui-arena-role-body-perk-name",
-            });
+        if (roleGuns)
+            for (let i = 0; i < 2; i++) {
+                const gun = roleGuns[i];
+                const perkElem = $("<div/>", {
+                    class: "ui-arena-role-body-perk",
+                });
+                const perkElemImg = $("<div/>", {
+                    class: "ui-arena-role-body-perk-image-wrapper",
+                }).append(
+                    $("<div/>", {
+                        class: "ui-arena-role-body-perk-image-icon",
+                    }),
+                );
+                const perkElemName = $("<div/>", {
+                    class: "ui-arena-role-body-perk-name",
+                });
 
-             const rawWeapon = typeof gun === "function" ? null : gun;
-            if (!rawWeapon) continue;
+                const rawWeapon = typeof gun === "function" ? null : gun;
+                if (!rawWeapon) continue;
 
-            const weaponType = rawWeapon.type;
+                const weaponType = rawWeapon.type;
 
+                const weaponImg = helpers.getSvgFromGameType(weaponType);
+                perkElemImg.find(".ui-arena-role-body-perk-image-icon").css({
+                    "background-image": `url('${weaponImg}')`,
+                });
 
-            const weaponImg = helpers.getSvgFromGameType(weaponType);
-            perkElemImg.find(".ui-arena-role-body-perk-image-icon").css({
-                "background-image": `url('${weaponImg}')`,
-            });
-
-            const perkName = this.localization.translate(`game-${weaponType}`);
-            perkElemName.html(perkName);
-            perkElem.append(perkElemImg).append(perkElemName);
-            roleBodyRight.append(perkElem);
-        }
+                const perkName = this.localization.translate(`game-${weaponType}`);
+                perkElemName.html(perkName);
+                perkElem.append(perkElemImg).append(perkElemName);
+                roleBodyRight.append(perkElem);
+            }
         $("#ui-arena-role-body").html("").append(roleBodyLeft).append(roleBodyRight);
         this.roleArenaDisplayed = role;
     }

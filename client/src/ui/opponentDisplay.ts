@@ -1,5 +1,6 @@
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import type { DeathEffectDef } from "../../../shared/defs/gameObjects/deathEffectDefs";
 import type { OutfitDef } from "../../../shared/defs/gameObjects/outfitDefs";
 import { type Action, type Anim, GameConfig } from "../../../shared/gameConfig";
 import type { MapMsg } from "../../../shared/net/mapMsg";
@@ -7,6 +8,7 @@ import { type ObjectData, ObjectType } from "../../../shared/net/objectSerialize
 import { collider } from "../../../shared/utils/collider";
 import { type Loadout, loadout as loadouts } from "../../../shared/utils/loadout";
 import { math } from "../../../shared/utils/math";
+import { util } from "../../../shared/utils/util";
 import { v2 } from "../../../shared/utils/v2";
 import type { Account } from "../account";
 import type { AudioManager } from "../audioManager";
@@ -239,6 +241,70 @@ export class LoadoutDisplay {
         this.view = view;
     }
 
+    deathEffectSprite = new PIXI.AnimatedSprite([PIXI.Texture.EMPTY]);
+    deathEffectContainer = new PIXI.Container();
+
+    playDeathEffectPreview(deathEffectType: string) {
+        if (!this.initialized || !this.activePlayer) return;
+
+        const deathEffectDef = GameObjectDefs[deathEffectType] as
+            | DeathEffectDef
+            | undefined;
+        if (!deathEffectDef) return;
+
+        if (
+            deathEffectDef.isParticle === false &&
+            deathEffectDef.sprites &&
+            deathEffectDef.sprites.length > 0
+        ) {
+            const textures = deathEffectDef.sprites.map((s) => PIXI.Texture.from(s));
+            const sprite = this.deathEffectSprite;
+            sprite.textures = textures;
+            sprite.anchor.set(0.5, 0.5);
+            const scale = deathEffectDef.animationScale ?? 1.0;
+            sprite.scale.set(scale, scale);
+            sprite.animationSpeed = deathEffectDef.animationSpeed ?? 0.15;
+            sprite.loop = false;
+            sprite.position.set(0, 0);
+            sprite.visible = true;
+
+            this.deathEffectContainer.position.set(
+                this.activePlayer.container.position.x,
+                this.activePlayer.container.position.y,
+            );
+            this.deathEffectContainer.addChild(sprite);
+            this.renderer.addPIXIObj(
+                this.deathEffectContainer,
+                this.activePlayer.layer,
+                20,
+                0,
+            );
+
+            sprite.gotoAndPlay(0);
+            sprite.onComplete = () => {
+                sprite.visible = false;
+                this.deathEffectContainer.removeChild(sprite);
+            };
+        } else {
+            if (deathEffectDef.particleCount === 0) {
+                return;
+            }
+            const particleType = deathEffectDef.particle ?? "deathSplash";
+            const minParticles = deathEffectDef.minParticles ?? 30;
+            const maxParticles = deathEffectDef.maxParticles ?? 35;
+            const numParticles = Math.floor(util.random(minParticles, maxParticles));
+            for (let i = 0; i < numParticles; i++) {
+                const vel = v2.mul(v2.randomUnit(), util.random(5, 15));
+                this.particleBarn.addParticle(
+                    particleType,
+                    this.activePlayer.layer,
+                    this.activePlayer.m_pos,
+                    vel,
+                );
+            }
+        }
+    }
+
     updateCharDisplay(
         options = {} as Partial<{
             animType: Anim;
@@ -301,6 +367,7 @@ export class LoadoutDisplay {
             loadout: {
                 heal: this.loadout.heal,
                 boost: this.loadout.boost,
+                death_effect: this.loadout.death_effect,
             },
         });
     }
@@ -388,7 +455,9 @@ export class LoadoutDisplay {
         if (
             hasFocus &&
             (this.view == this.viewOld ||
-                (this.view != "heal" && this.view != "boost") ||
+                (this.view != "heal" &&
+                    this.view != "boost" &&
+                    this.view != "death_effect") ||
                 (this.animIdleTicker = 0),
             (this.viewOld = this.view),
             (this.animIdleTicker -= dt),
@@ -411,6 +480,9 @@ export class LoadoutDisplay {
                     actionSeq: this.actionSeq,
                 };
                 this.updateCharDisplay(options);
+                this.animIdleTicker = 2 + Math.random();
+            } else if (this.view == "death_effect") {
+                this.playDeathEffectPreview(this.loadout.death_effect);
                 this.animIdleTicker = 2 + Math.random();
             } else if (this.view != "emote" && this.view != "crosshair") {
                 this.animSeq = (this.animSeq + 1) % 8;

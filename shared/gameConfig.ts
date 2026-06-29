@@ -42,11 +42,11 @@ export enum Action {
 
 export enum Rarity {
     Stock,
-    Common,
-    Uncommon,
-    Rare,
-    Epic,
-    Mythic,
+    Common, // 100 - 150
+    Uncommon, // 50 - 100
+    Rare, // 25 - 50
+    Epic, // 10 - 25
+    Mythic, //0-10
 }
 
 export enum WeaponSlot {
@@ -99,7 +99,7 @@ export enum BuildingGroups {
     BunkerSpawns = 4,
     // Workshop
     WorkshopSpawns = 5,
-};
+}
 
 export enum MinDistance {
     POIs = 275,
@@ -170,7 +170,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1017,
+    protocolVersion: 1021,
     Input,
     EmoteSlot,
     WeaponSlot,
@@ -189,77 +189,95 @@ export const GameConfig = {
         shoreVariation: 3,
         grassVariation: 2,
     },
-    serverSettings:{
+    serverSettings: {
         passes: {
-            "pass_survivr1": {
+            pass_survivr1: {
                 passMaxLevel: 99,
                 seasonStart: "2026-03-01T22:00:00Z",
-                seasonEnd:   "2026-05-31T23:59:30Z",
+                seasonEnd: "2026-05-31T23:59:30Z",
             },
-            "pass_survivr2": {
+            pass_survivr2: {
                 passMaxLevel: 99,
                 seasonStart: "2026-05-31T22:00:00Z",
-                seasonEnd:   "2026-07-31T23:59:30",
+                seasonEnd: "2026-07-31T23:59:30",
             },
-            "pass_survivr3": {
+            pass_survivr3: {
                 passMaxLevel: 99,
                 seasonStart: "2026-07-31T23:59:59",
-                seasonEnd:   "2026-10-31T23:59:30",
+                seasonEnd: "2026-10-31T23:59:30",
             },
-        } as Record<string, { passMaxLevel: number; seasonStart: string; seasonEnd: string }>,
+        } as Record<
+            string,
+            { passMaxLevel: number; seasonStart: string; seasonEnd: string }
+        >,
         get currentPass(): string {
             const now = Date.now();
             for (const [id, cfg] of Object.entries(this.passes)) {
                 const start = new Date(cfg.seasonStart).getTime();
-                const end   = new Date(cfg.seasonEnd).getTime();
+                const end = new Date(cfg.seasonEnd).getTime();
                 if (now >= start && now <= end) return id;
             }
             return Object.keys(this.passes).at(-1)!;
         },
-        get seasonStart(): string  { return this.passes[this.currentPass].seasonStart; },
-        get seasonEnd(): string    { return this.passes[this.currentPass].seasonEnd; },
-        get passMaxLevel(): number { return this.passes[this.currentPass].passMaxLevel; },
+        get seasonStart(): string {
+            return this.passes[this.currentPass].seasonStart;
+        },
+        get seasonEnd(): string {
+            return this.passes[this.currentPass].seasonEnd;
+        },
+        get passMaxLevel(): number {
+            return this.passes[this.currentPass].passMaxLevel;
+        },
 
         xpBoostEvents: {
-            "pass_survivr2": {
-                "Happy New Pass!":{
+            pass_survivr2: {
+                "Happy New Pass!": {
                     maps: ["local", "two_vs_two", "comp"],
                     start: "2026-06-02T00:00:00Z",
-                    end:   "2026-06-02T23:59:59Z",
+                    end: "2026-06-02T23:59:59Z",
                     boost: 2,
                 },
                 "Weekend 1": {
                     maps: ["local"],
                     start: "2026-06-05T00:00:00Z",
-                    end:   "2026-06-07T23:59:59Z",
+                    end: "2026-06-07T23:59:59Z",
                     boost: 2,
                 },
                 "Weekend 2": {
                     maps: ["comp"],
                     start: "2026-06-12T00:00:00Z",
-                    end:   "2026-06-13T23:59:59Z",
+                    end: "2026-06-13T23:59:59Z",
                     boost: 2,
                 },
                 "Philipp Birthday": {
                     maps: ["local", "two_vs_two"],
                     start: "2026-06-14T00:00:00Z",
-                    end:   "2026-06-14T23:59:59Z",
+                    end: "2026-06-14T23:59:59Z",
                     boost: 2.5,
                 },
                 "Weekend 3": {
                     maps: ["local", "comp"],
                     start: "2026-06-19T00:00:00",
-                    end:   "2026-06-21T23:59:59",
+                    end: "2026-06-21T23:59:59",
                     boost: 2,
                 },
                 "Weekend 4": {
                     maps: ["scrims"],
                     start: "2026-06-26T00:00:00",
-                    end:   "2026-06-28T23:59:59",
+                    end: "2026-06-28T23:59:59",
                     boost: 3,
                 },
+                "ALL THE XP": {
+                    maps: ["local", "two_vs_two", "comp"],
+                    start: "2026-06-29T00:00:00",
+                    end: "2026-07-05T23:59:59",
+                    boost: 5,
+                },
             },
-        } as Record<string, Record<string, { maps: string[]; start: string; end: string; boost: number }>>,
+        } as Record<
+            string,
+            Record<string, { maps: string[]; start: string; end: string; boost: number }>
+        >,
     },
     player: {
         radius: 1,
@@ -275,7 +293,7 @@ export const GameConfig = {
         scopeDelay: 0.25,
         baseSwitchDelay: 0.25,
         freeSwitchCooldown: 1,
-        headshotChance: 0.00,
+        headshotChance: 0.0,
         moveSpeed: 12,
         waterSpeedPenalty: 3,
         cookSpeedPenalty: 3,
@@ -309,7 +327,7 @@ export const GameConfig = {
         centerNoSpawnRadius: 230, // no spawn zone in the center of the map
         minSpawnRad: 400, // spawn radius away from alive players
         minPosSpawnRad: 100, // spawn radius from other spawn locations
-        
+
         //boost decay settings to disable boostDecayAmount -> 0
         camperPunishmentDistance: 15, // distance player has to move to not decay boost
         camperDecayTime: 6, // time in *seconds* until boost decays
@@ -341,7 +359,7 @@ export const GameConfig = {
                 "308sub": 0,
                 flare: 0,
                 "45acp": 0,
-                "construction_item": 0,
+                construction_item: 0,
                 frag: 0,
                 smoke: 0,
                 strobe: 0,
@@ -349,6 +367,8 @@ export const GameConfig = {
                 snowball: 0,
                 potato: 0,
                 coconut: 0,
+                impact: 0,
+                mine: 0,
                 bandage: 0,
                 healthkit: 0,
                 soda: 0,
@@ -492,7 +512,7 @@ export const GameConfig = {
             chambered: 0xb500ff,
             apSaturated: 0x470349,
         },
-        "construction_item": {
+        construction_item: {
             regular: 0x333333,
             saturated: 0x333333,
             chambered: 0x333333,
@@ -527,7 +547,7 @@ export const GameConfig = {
         "308sub": [20, 40, 60, 80],
         flare: [2, 4, 6, 8],
         "45acp": [150, 300, 420, 540],
-        "construction_item": [5, 10, 15, 25],
+        construction_item: [5, 10, 15, 25],
         frag: [3, 6, 9, 12],
         smoke: [3, 6, 9, 12],
         strobe: [2, 3, 4, 5],
@@ -535,6 +555,8 @@ export const GameConfig = {
         snowball: [10, 20, 30, 40],
         potato: [10, 20, 30, 40],
         coconut: [3, 6, 9, 12],
+        impact: [2, 4, 6, 9],
+        mine: [1, 2, 3, 4],
         bandage: [5, 10, 15, 30],
         healthkit: [1, 2, 3, 4],
         soda: [2, 5, 10, 15],

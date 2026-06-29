@@ -54,6 +54,8 @@ export interface ObjectsPartialData {
         pos: Vec2;
         posZ: number;
         dir: Vec2;
+        // proximity mines: true once tripped, so the client blinks faster
+        mineTriggered: boolean;
     };
     [ObjectType.Smoke]: {
         pos: Vec2;
@@ -167,6 +169,9 @@ export interface ObjectsFullData {
     [ObjectType.Projectile]: {
         type: string;
         layer: number;
+        // Remaining fuse time (seconds) at the moment this full update is sent.
+        // Used by the admin advanced-spectator overlay to show a grenade timer.
+        fuseTime: number;
     };
     [ObjectType.Smoke]: {
         layer: number;
@@ -576,10 +581,15 @@ export const ObjectSerializeFns: {
             s.writeMapPos(data.pos);
             s.writeFloat(data.posZ, 0, GameConfig.projectile.maxHeight, 10);
             s.writeUnitVec(data.dir, 7);
+            s.writeBoolean(data.mineTriggered);
         },
         serializeFull: (s, data) => {
             s.writeGameType(data.type);
             s.writeBits(data.layer, 2);
+            // Clamp to 0..16s (8 bits ~= 0.06s resolution). Non-grenade
+            // throwables (snowball/potato with fuseTime 9999, mines with 300)
+            // saturate at 16 — harmless, the overlay never shows their timer.
+            s.writeFloat(Math.max(0, Math.min(16, data.fuseTime)), 0, 16, 8);
         },
         /* STRIP_FROM_PROD_CLIENT:END */
 
@@ -587,10 +597,12 @@ export const ObjectSerializeFns: {
             data.pos = s.readMapPos();
             data.posZ = s.readFloat(0, GameConfig.projectile.maxHeight, 10);
             data.dir = s.readUnitVec(7);
+            data.mineTriggered = s.readBoolean();
         },
         deserializeFull: (s, data) => {
             data.type = s.readGameType();
             data.layer = s.readBits(2);
+            data.fuseTime = s.readFloat(0, 16, 8);
         },
     },
     [ObjectType.Smoke]: {

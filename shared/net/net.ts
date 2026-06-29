@@ -357,6 +357,8 @@ export enum MsgType {
     JoinFeed,
     KillFeed,
     Assist,
+    SpectatorAdvanced,
+    PickupExtra,
 }
 
 export enum PickupMsgType {
@@ -369,6 +371,7 @@ export enum PickupMsgType {
     WeaponUpgraded,
     NoWeaponUpgrade,
     NotEnoughResources,
+    AlreadyMined,
 }
 
 export enum KillFeedMsgType {
@@ -395,6 +398,7 @@ export { JoinedMsg } from "./joinedMsg";
 export { JoinMsg } from "./joinMsg";
 export { KillMsg } from "./killMsg";
 export { AssistMsg } from "./assistMsg";
+export { PickupExtraMsg } from "./pickupExtraMsg";
 export { MapMsg } from "./mapMsg";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg";
 export { RoleSelectMsg } from "./roleSelectMsg";
@@ -404,6 +408,7 @@ export { PickupMsg } from "./pickupMsg";
 export { PlayerStatsMsg } from "./playerStatsMsg";
 export { RoleAnnouncementMsg } from "./roleAnnouncementMsg";
 export { SpectateMsg } from "./spectateMsg";
+export { SpectatorAdvancedMsg } from "./spectatorAdvancedMsg";
 export { JoinAsSpectatorMsg } from "./joinAsSpectatorMsg";
 export { KillFeedMsg } from "./killFeedMsg.ts"
 export { getPlayerStatusUpdateRate, UpdateMsg } from "./updateMsg";

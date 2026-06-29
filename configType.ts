@@ -108,6 +108,55 @@ export interface ConfigType {
              * Example: "index-south-america" will translate to "South America" in english.
              */
             l10n: string;
+            /**
+             * Geographic group this region belongs to (e.g. "eu", "asia").
+             *
+             * The client server selector shows one entry *per group* (deduplicated by
+             * this value, labelled with the group's `l10n`). The concrete region is then
+             * picked via the category tabs below. Regions sharing a `group` should also
+             * share the same `l10n`.
+             *
+             * Defaults to the region key when unset (so the region becomes its own group).
+             */
+            group?: string;
+            /**
+             * Playlist / category this region runs (e.g. "normal", "arena", "scrims").
+             *
+             * Within a group, each `category` becomes a tab in the client. Selecting
+             * (group, category) resolves back to the matching region key. The display
+             * order and labels come from the top-level `categories` object.
+             *
+             * Defaults to "default" when unset (a single-category group hides its tabs).
+             */
+            category?: string;
+        }
+    >;
+
+    /**
+     * Labels and ordering for the playlist categories referenced by `regions[].category`.
+     *
+     * Purely cosmetic + ordering — the categories that actually appear are derived from
+     * the regions themselves. A category not listed here falls back to its title-cased id
+     * for the label and to first-appearance order.
+     *
+     * Example:
+     * ```hjson
+     * {
+     *     categories: {
+     *         normal: { l10n: "index-play", order: 0 }
+     *         arena:  { l10n: "index-arena", order: 1 }
+     *         scrims: { l10n: "index-scrims", order: 2 }
+     *     }
+     * }
+     * ```
+     */
+    categories: Record<
+        string,
+        {
+            /** Translation key for the tab label. Falls back to the title-cased id. */
+            l10n?: string;
+            /** Sort order of the tab (ascending). Falls back to first-appearance order. */
+            order?: number;
         }
     >;
 
@@ -205,6 +254,12 @@ export interface ConfigType {
      * Webhook URL to log client errors.
      */
     clientErrorLoggingWebhook?: string;
+
+    /**
+     * Webhook URL for moderation/audit events (e.g. account deletions).
+     * Falls back to `errorLoggingWebhook` when unset.
+     */
+    moderationWebhook?: string;
 
     /**
      * PostgreSQL Database configuration, this will enable features like accounts, IP bans, leaderboards etc.
@@ -386,6 +441,42 @@ export interface ConfigType {
          * If the "mock" test account is enabled, used for testing account features without requiring discord or google oauth2 keys
          */
         allowMockAccount: boolean;
+    };
+
+    /**
+     * Game recording / replay configuration.
+     *
+     * When enabled, the game server records the exact server -> client byte stream
+     * per (real) player to gzipped `.svrep.gz` files on the game host's local disk.
+     * They are browsable + replayable from the moderation dashboard "Replays" tab.
+     *
+     * IMPORTANT (small/OOM-prone boxes): recording streams straight to disk and never
+     * buffers a whole match in RAM. The caps below bound disk/CPU/RAM — keep them
+     * conservative. Set `enabled: false` to disable recording entirely (zero overhead).
+     */
+    recording: {
+        /** Master on/off switch. */
+        enabled: boolean;
+        /** Record bot POVs too. Off by default — bots produce huge, useless recordings. */
+        recordBots: boolean;
+        /**
+         * Directory recordings are written to (per game host). Relative paths are
+         * resolved against the server working directory.
+         */
+        dir: string;
+        /** Stop a single player's recording once it exceeds this size (MB). */
+        maxGameMb: number;
+        /** Max simultaneously-recording player tracks per game process. */
+        maxConcurrentTracks: number;
+        /**
+         * If a track's gzip write stream backs up beyond this many buffered bytes
+         * (disk can't keep up), that track is stopped instead of buffering in RAM.
+         */
+        writeBackpressureBytes: number;
+        /** Retention: total recordings dir size cap (GB). Oldest games deleted first. */
+        maxTotalGb: number;
+        /** Retention: delete recordings older than this many days. */
+        maxAgeDays: number;
     };
 
     /**

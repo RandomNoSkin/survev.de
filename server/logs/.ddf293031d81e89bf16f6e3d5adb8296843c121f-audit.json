@@ -6,14 +6,14 @@
     "auditLog": "logs\\.ddf293031d81e89bf16f6e3d5adb8296843c121f-audit.json",
     "files": [
         {
-            "date": 1775824364688,
-            "name": "logs\\chat-2026-04-10.log",
-            "hash": "5f5153fcd6deec56a5e3a8a30c848f1b081ce4637ad801c1cea3cc85b3783388"
+            "date": 1781773936596,
+            "name": "logs\\chat-2026-06-18.log",
+            "hash": "d563def3a0eac47fd766b302aa9c4d78affb82242a92886467af2c18361aa843"
         },
         {
-            "date": 1776356168915,
-            "name": "logs\\chat-2026-04-16.log",
-            "hash": "6dac98156af7ee89ef8d659387301d3c3907074f1a8fc084092c6a097504ec57"
+            "date": 1782232247227,
+            "name": "logs\\chat-2026-06-23.log",
+            "hash": "da70fef282141d2ec7f39ade8e1215df964ea2d82e99f5f15b72476663ec2ffe"
         }
     ],
     "hashType": "sha256"

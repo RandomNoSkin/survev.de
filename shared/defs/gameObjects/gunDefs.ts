@@ -12,6 +12,8 @@ export interface GunDef {
     caseTiming: "shoot" | "reload";
     ammo: string;
     secondAmmo?: string;
+    preserveSecondAmmo?: boolean;
+    secondAmmoLabel?: string;
     ammoSpawnCount: number;
     maxClip: number;
     maxReload: number;
@@ -98,6 +100,9 @@ export interface GunDef {
     isLauncher?: boolean;
     deployGroup?: number;
     projType?: string;
+    // Granaten-Modus: verschießt die aktuell gewählte Wurfwaffe aus dem Inventar
+    // statt eines festen projType/Geschosses (siehe modified_hk416_grenade)
+    launchThrowable?: boolean;
     ignoreDetune?: boolean;
     aimDelay?: boolean;
     isBullpup?: boolean;
@@ -418,8 +423,8 @@ export const BaseDefs: Record<string, GunDef> = {
         caseTiming: "shoot",
         ammo: "9mm",
         ammoSpawnCount: 90,
-        maxClip: 15,
-        maxReload: 15,
+        maxClip: 22,
+        maxReload: 22,
         extendedClip: 40,
         extendedReload: 40,
         reloadTime: 1.8,
@@ -432,6 +437,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 4,
         bulletCount: 1,
         bulletType: "bullet_scorpion",
+        upgraded: { gun: "modified_scorpion", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -581,6 +587,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_hk416",
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
+        upgraded: { gun: "modified_hk416", cost: 7 },
         lootImg: {
             sprite: "loot-weapon-hk416.img",
             tint: 65280,
@@ -981,6 +988,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_scar",
+        upgraded: { gun: "modified_scar", cost: 3 },
         headshotMult: 1,
         speed: { equip: 0, attack: 3.5 },
         lootImg: {
@@ -1013,19 +1021,19 @@ export const BaseDefs: Record<string, GunDef> = {
         fireMode: "single",
         caseTiming: "shoot",
         ammo: "308sub",
-        ammoSpawnCount: 40,
+        ammoSpawnCount: 50,
         maxClip: 10,
         maxReload: 10,
         extendedClip: 20,
         extendedReload: 20,
         reloadTime: 2.7,
-        fireDelay: 0.3,
+        fireDelay: 0.23,
         switchDelay: 0.75,
         barrelLength: 3.9,
         barrelOffset: 0,
         recoilTime: 1e10,
-        moveSpread: 2.5,
-        shotSpread: 1.5,
+        moveSpread: 2,
+        shotSpread: 1.25,
         bulletCount: 1,
         bulletType: "bullet_scarssr",
         headshotMult: 1,
@@ -1629,7 +1637,7 @@ export const BaseDefs: Record<string, GunDef> = {
         extendedReload: 5,
         reloadTime: 0.4,
         fireDelay: 0.8,
-        switchDelay: 0.6,
+        switchDelay: 0.65,
         pullDelay: 1,
         barrelLength: 3.8,
         barrelOffset: 0,
@@ -2357,7 +2365,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 0.2,
         bulletType: "bullet_flechette",
-        upgraded: { gun: "modified_spas12", cost: 5 },
+        upgraded: { gun: "modified_spas12", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -2962,6 +2970,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 3,
         bulletCount: 1,
         bulletType: "bullet_p30l",
+        upgraded: { gun: "modified_p30l_dual", cost: 4 },
         headshotMult: 1,
         speed: { equip: 1.5, attack: 2 },
         lootImg: {
@@ -3396,7 +3405,7 @@ export const BaseDefs: Record<string, GunDef> = {
         fireMode: "auto",
         caseTiming: "shoot",
         ammo: "45acp",
-        ammoSpawnCount: 90,
+        ammoSpawnCount: 240,
         maxClip: 30,
         maxReload: 30,
         extendedClip: 50,
@@ -3978,6 +3987,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "MP220 [+]",
         fireMode: "dual",
         shotSpread: 4,
+        reloadTime: 2.7,
         upgraded: undefined,
         modifiedSound: "mp220_01",
         lootImg: {
@@ -3986,14 +3996,29 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         worldImg: {
             sprite: "gun-mp220-modified-01.img",
         },
+        sound: {
+            reload: "mp220_modified_reload_01",
+        },
     }),
     modified_p30l: defineGunSkin("p30l", {
         name: "P30L [+]",
         fireDelay: 0.12,
         isDual: false,
         fireMode: "auto",
-        dualWieldType: undefined,
+        dualWieldType: "modified_p30l_dual",
         speed: { equip: 2.5, attack: 3.5 },
+        upgraded: undefined,
+        modifiedSound: "p30l_01",
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    modified_p30l_dual: defineGunSkin("p30l_dual", {
+        name: "Dual P30L [+]",
+        isDual: true,
+        moveSpread: 6,
+        shotSpread: 8,
+        fireMode: "auto",
         upgraded: undefined,
         modifiedSound: "p30l_01",
         lootImg: {
@@ -4119,9 +4144,9 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     }),
     modified_bar: defineGunSkin("bar", {
         name: "BAR M1918 [+]",
-        moveSpread: 1.5,
-        shotSpread: 1.2,
-        fireDelay: 0.16,
+        moveSpread: 1.7,
+        shotSpread: 1.4,
+        fireDelay: 0.17,
         bulletTypeExtra: "bullet_bar_extra_modified",
         extraBulletTrigger: 2,
         bulletType: "bullet_bar_modified",
@@ -4145,6 +4170,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle: defineGunSkin("deagle", {
         name: "DEagle 50 [+]",
         secondAmmo: "modified_deagle_45acp",
+        preserveSecondAmmo: true,
         dualWieldType: "modified_deagle_dual",
         bulletType: "bullet_deagle_modified",
         fireDelay: 0.18,
@@ -4160,6 +4186,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle_45acp: defineGunSkin("deagle", {
         name: "DEagle 45 [+]",
         secondAmmo: "modified_deagle",
+        preserveSecondAmmo: true,
         fireMode: "auto",
         reloadTime: 1.8,
         fireDelay: 0.1,
@@ -4176,6 +4203,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle_dual: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 50 [+]",
         secondAmmo: "modified_deagle_dual_45acp",
+        preserveSecondAmmo: true,
         bulletType: "bullet_deagle_modified",
         moveSpread: 3,
         shotSpread: 1.5,
@@ -4189,6 +4217,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 45 [+]",
         secondAmmo: "modified_deagle_dual",
+        preserveSecondAmmo: true,
         ammo: "45acp",
         reloadTime: 3.5,
         fireDelay: 0.08,
@@ -4207,11 +4236,11 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         maxReload: 16,
         burstCount: 2,
         burstDelay: 0.001,
-        fireDelay: 0.35,
+        fireDelay: 0.3,
         fireMode: "burst",
-        moveSpread: 1.5,
-        shotSpread: 1.2,
-        switchDelay: 0.4,
+        moveSpread: 1.3,
+        shotSpread: 1,
+        switchDelay: 0.3,
         bulletType: "bullet_vss_modified",
         upgraded: undefined,
         modifiedSound: "vss_01",
@@ -4246,6 +4275,8 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_saiga: defineGunSkin("saiga", {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga_grenade",
+        preserveSecondAmmo: true,
+        secondAmmoLabel: "Auto",
         bulletType: "bullet_buckshot",
         upgraded: undefined,
         modifiedSound: "saiga_01",
@@ -4256,6 +4287,8 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_saiga_grenade: defineGunSkin("saiga", {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga",
+        preserveSecondAmmo: true,
+        secondAmmoLabel: "Grenade",
         bulletCount: 2,
         bulletType: "bullet_saiga_modified",
         upgraded: undefined,
@@ -4279,7 +4312,6 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "FAMAS [+]",
         bulletTypeExtra: "bullet_famas_modified",
         extraBulletTrigger: 3,
-        switchDelay: 0.15,
         upgraded: undefined,
         modifiedSound: "famas_01",
         lootImg: {
@@ -4287,7 +4319,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
     }),
     modified_l86: defineGunSkin("l86", {
-        name: "L86 [+]",
+        name: "L86A2 [+]",
         bulletType: "bullet_l86_modified",
         upgraded: undefined,
         modifiedSound: "l86_01",
@@ -4302,6 +4334,45 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         upgraded: undefined,
         modifiedSound: "m4a1_01",
         lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    // M416 [+]: Kugel-Modus, per SwitchAmmo (B) in den Granaten-Modus umschaltbar
+    modified_hk416: defineGunSkin("hk416", {
+        name: "M416 [+]",
+        secondAmmo: "modified_hk416_grenade",
+        preserveSecondAmmo: true,
+        secondAmmoLabel: "Auto",
+        moveSpread: 5,
+        shotSpread: 2,
+        fireDelay: 0.09,
+        bulletType: "bullet_hk416_modified",
+        upgraded: undefined,
+        modifiedSound: "hk416_01",
+        lootImg: {
+            sprite: "loot-weapon-hk416-modified.img",
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    // M416 [+]: Granaten-Modus – verschießt die aktuell gewählte Wurfwaffe aus dem
+    // Inventar (launchThrowable). 1-Schuss-Magazin, cursor-gezielt.
+    modified_hk416_grenade: defineGunSkin("hk416", {
+        name: "M416 [+]",
+        secondAmmo: "modified_hk416",
+        preserveSecondAmmo: true,
+        secondAmmoLabel: "Grenade",
+        launchThrowable: true,
+        fireMode: "single",
+        maxClip: 1,
+        maxReload: 1,
+        extendedClip: 1,
+        extendedReload: 1,
+        reloadTime: 1.0,
+        fireDelay: 0.5,
+        upgraded: undefined,
+        modifiedSound: "hk416_01",
+        lootImg: {
+            sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
         },
     }),
@@ -4332,6 +4403,31 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         backpackFed: true,
         upgraded: undefined,
         modifiedSound: "m249_01",
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    modified_scorpion: defineGunSkin("scorpion", {
+        name: "CZ-3A1 [+]",
+        reloadTime: 0.17,
+        maxReload: 2,
+        maxClip: 12,
+        upgraded: undefined,
+        modifiedSound: "scorpion_01",
+        lootImg: {
+            border: "loot-circle-outer-modified-01.img",
+        },
+    }),
+    modified_scar: defineGunSkin("scar", {
+        name: "SCAR-H [+]",
+        fireDelay: 0.045,
+        maxClip: 36,
+        maxReload: 36,
+        bulletTypeExtra: "bullet_scar",
+        extraBulletTrigger: 2,
+        bulletType: "bullet_scar_modified",
+        upgraded: undefined,
+        modifiedSound: "scar_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },

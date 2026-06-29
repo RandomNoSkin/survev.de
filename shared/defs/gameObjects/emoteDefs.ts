@@ -35,6 +35,15 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         noCustom: true,
         category: EmoteCategory.Locked,
     },
+    emote_adren: {
+        type: "emote",
+        texture: "emote-medical-pill.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: true,
+        noCustom: true,
+        category: EmoteCategory.Locked,
+    },
     emote_ammo: {
         type: "emote",
         texture: "ammo-box.img",

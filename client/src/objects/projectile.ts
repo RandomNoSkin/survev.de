@@ -42,6 +42,9 @@ class Projectile implements AbstractObject {
     layer!: number;
     type!: string;
     rad!: number;
+    // Remaining fuse time (seconds), seeded from the server's full update and
+    // counted down locally. Only used by the admin advanced-spectator overlay.
+    fuseTimer!: number;
     pos!: Vec2;
     posOld!: Vec2;
 
@@ -67,6 +70,11 @@ class Projectile implements AbstractObject {
     strobeTicker!: number;
     strobeDir!: number;
     strobeSpeed!: number;
+
+    // proximity mine blink (see ThrowableDef.proximityMine)
+    mineTriggered!: boolean;
+    mineBlinkTicker!: number;
+    mineBlinkOn!: boolean;
 
     constructor() {
         this.container.visible = false;
@@ -102,6 +110,7 @@ class Projectile implements AbstractObject {
             this.type = data.type;
             // Use a smaller visual radius for collision effects
             this.rad = itemDef.rad * 0.5;
+            this.fuseTimer = data.fuseTime;
         }
 
         this.posOld = isNew ? v2.copy(data.pos) : v2.copy(this.pos);
@@ -113,6 +122,7 @@ class Projectile implements AbstractObject {
         }
         this.posZ = data.posZ;
         this.dir = v2.copy(data.dir);
+        this.mineTriggered = data.mineTriggered;
 
         if (isNew) {
             const itemDef = GameObjectDefs[data.type] as ThrowableDef;
@@ -127,6 +137,8 @@ class Projectile implements AbstractObject {
             this.velZ = 0;
             this.grounded = false;
             this.inWater = false;
+            this.mineBlinkTicker = 0;
+            this.mineBlinkOn = false;
             this.lastSoundObjId = 0;
             this.playHitSfx = !itemDef.explodeOnImpact;
             this.alwaysRenderOntop = false;
@@ -196,6 +208,7 @@ export class ProjectileBarn {
             const p = projectiles[i];
             if (p.active) {
                 const itemDef = GameObjectDefs[p.type] as ThrowableDef;
+                p.fuseTimer = Math.max(0, p.fuseTimer - dt);
                 let rotDrag = p.rotDrag;
                 if (p.inWater) {
                     rotDrag *= 3;
@@ -331,6 +344,31 @@ export class ProjectileBarn {
                 }
                 p.sprite.rotation = p.rot;
                 p.sprite.alpha = p.inWater ? 0.3 : 1;
+
+                // Proximity mine: blink while it sits armed on the ground,
+                // much faster once it has been tripped, with a quiet beep in sync
+                if (itemDef.proximityMine) {
+                    if (p.posZ <= 0.1) {
+                        p.mineBlinkTicker += dt;
+                        const period = p.mineTriggered ? 0.12 : 1;
+                        const on = p.mineBlinkTicker % period < period * 0.5;
+                        p.sprite.tint = on ? 0xff2222 : itemDef.worldImg.tint;
+                        // beep on the rising edge of each blink
+                        if (on && !p.mineBlinkOn) {
+                            audioManager.playSound("strobe_click_01", {
+                                channel: "sfx",
+                                soundPos: p.pos,
+                                layer: p.layer,
+                                volumeScale: 0.08,
+                                rangeMult: 0.55,
+                            });
+                        }
+                        p.mineBlinkOn = on;
+                    } else {
+                        p.sprite.tint = itemDef.worldImg.tint;
+                        p.mineBlinkOn = false;
+                    }
+                }
 
                 // Trail
                 if (itemDef.trail) {
