@@ -1176,7 +1176,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitMarblePink: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Pink",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitMarblePink.img",
@@ -1195,7 +1195,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitMarblegreen: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Green",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitMarbleGreen.img",
@@ -1214,7 +1214,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitMarblered: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Red",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitMarbleRed.img",
@@ -1252,7 +1252,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitAuronV2: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "AuronV2",
-        rarity: Rarity.Uncommon,
+        rarity: Rarity.Rare,
         lore: "The better version of a scraped skin",
         skinImg: {
             baseTint: 0xffffff,
@@ -1311,7 +1311,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitSortablue: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Sorta Blue",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         lore: "Pure and simple.",
         skinImg: {
             baseTint: 0xffffff,
@@ -1350,10 +1350,10 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitYinyang: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Yin & Yang",
-        rarity: Rarity.Common,
+        rarity: Rarity.Rare,
         skinImg: {
             baseTint: 0xffffff,
-            baseSprite: "player-base-outfityinyang.img",
+            baseSprite: "player-base-outfitYinyang.img",
             handTint: 0xffffff,
             handSprite: "player-hands-01.img",
             footTint: 0x000000,
@@ -1490,7 +1490,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitPurplefade: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Purple Fade",
-        rarity: Rarity.Uncommon,
+        rarity: Rarity.Common,
         lore: "The old Twitch skin",
         skinImg: {
             baseTint: 0xffffff,
@@ -1510,7 +1510,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitPandora: defineOutfitSkin("outfitBase", {
         noDrop: true,
         name: "Pandora",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xbfcee4,
             baseSprite: "player-base-02.img",
@@ -1549,7 +1549,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitCrusader: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Crusader",
-        rarity: Rarity.Uncommon,
+        rarity: Rarity.Common,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitCrusader.img",

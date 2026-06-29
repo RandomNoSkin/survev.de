@@ -16,6 +16,8 @@ export const _allowedMeleeSkins = [
     "karambit_drowned",
     "karambit_fade",
     "karambit_dotexe",
+    "karambit_woodland",
+    "karambit_rust",
     "bayonet_fade",
     "bayonet",
     "bayonet_rugged",
@@ -23,6 +25,7 @@ export const _allowedMeleeSkins = [
     "huntsman",
     "huntsman_rugged",
     "huntsman_burnished",
+    "huntsman_blackwater",
     "bowie",
     "bowie_vintage",
     "bowie_frontier",
@@ -215,6 +218,7 @@ export const _allowedEmotes = [
     "emote_logoswine",
     "emote_logohydra",
     "emote_logostorm",
+    "emote_logocult",
     "emote_flaghonduras",
     "emote_logocaduceus",
     "emote_impface",
@@ -297,6 +301,8 @@ export const _allowedEmotes = [
     "emote_flamingo",
     "emote_watermelon",
     "emote_palm",
+    "emote_smh",
+    "emote_dove",
 ];
 
 export interface UnlockDef {

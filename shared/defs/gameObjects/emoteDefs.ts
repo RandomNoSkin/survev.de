@@ -966,6 +966,17 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         teamOnly: false,
         category: EmoteCategory.Logos,
     },
+        emote_logocult: {
+        type: "emote",
+        name: "The Cult",
+        rarity: Rarity.Common,
+        texture: "logo-cult.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Logos,
+    },
+    
     emote_flaghonduras: {
         type: "emote",
         name: "Flag Honduras",
@@ -1815,5 +1826,25 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         channel: "ui",
         teamOnly: false,
         category: EmoteCategory.Other,
+    },
+    emote_smh: {
+        type: "emote",
+        name: "SMH",
+        rarity: Rarity.Uncommon,
+        texture: "smh.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    },
+    emote_dove: {
+        type: "emote",
+        name: "Rest in Piece",
+        rarity: Rarity.Uncommon,
+        texture: "dove.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Animals,
     },
 };
