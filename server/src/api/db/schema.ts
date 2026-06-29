@@ -367,6 +367,16 @@ export const userXpTable = pgTable("user_xp", {
     level: integer("level").notNull(),
     xp: numeric("xp").notNull(),
     lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
+    // Deprecated/unused — kept only to avoid a destructive migration; superseded by
+    // the reconcile anchor below.
+    manualOverride: boolean("manual_override").notNull().default(false),
+    // Reconcile anchor for admin XP edits: when an admin sets the XP, we store that
+    // value as `reconcileBaseXp` and the time as `reconcileFrom`. The reconcile job
+    // then computes XP as `reconcileBaseXp + matches after reconcileFrom`, so the
+    // admin value sticks (old matches aren't re-counted) while new matches still
+    // accrue. `reconcileFrom = null` ⇒ no override (count the whole season).
+    reconcileBaseXp: numeric("reconcile_base_xp").notNull().default("0"),
+    reconcileFrom: timestamp("reconcile_from", { withTimezone: true }),
 },
     (table) => ({
         pk: primaryKey({ columns: [table.userId, table.passType] }),

@@ -146,3 +146,39 @@ export type LeaderboardResponse = {
 );
 
 export type LeaderboardRequest = z.infer<typeof zLeaderboardsRequest>;
+
+//
+// Server Stats (aggregate server-wide activity for the public /stats?view=server page)
+//
+export const zServerStatsRequest = z.object({
+    interval: z.enum(["daily", "weekly", "monthly", "yearly", "alltime"]),
+});
+
+export type ServerStatsRequest = z.infer<typeof zServerStatsRequest>;
+export type ServerStatsInterval = ServerStatsRequest["interval"];
+
+export interface ServerStatsResponse {
+    interval: ServerStatsInterval;
+    totals: {
+        /** Distinct games played. */
+        games: number;
+        /** Player-games (one row per player per game). */
+        participations: number;
+        /** Distinct players by encoded IP (includes anonymous). */
+        uniquePlayers: number;
+        /** Distinct logged-in accounts. */
+        registeredPlayers: number;
+    };
+    byTeamMode: { teamMode: number; games: number; participations: number }[];
+    byRegion: { region: string; games: number; participations: number }[];
+    byMap: { mapId: number; games: number }[];
+    /** Bucketed activity over time (bucket = ISO timestamp). */
+    timeseries: { bucket: string; games: number; players: number }[];
+    /** Current live activity (not cached; sampled from the region heartbeats). */
+    live: {
+        totalPlayers: number;
+        totalGames: number;
+        regions: { region: string; playerCount: number; gameCount: number }[];
+    };
+    generatedAt: number;
+}

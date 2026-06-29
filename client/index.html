@@ -507,6 +507,7 @@
         <div id="ui-equipped-ammo-wrapper" class="js-ui-map-hidden js-ui-hud-show">
           <div id="ui-equipped-ammo">
             <div id="ui-bullet-counter">
+              <div id="ui-second-clip">0</div>
               <div id="ui-current-clip">0</div>
               <div id="ui-remaining-ammo">0</div>
               <div id="ui-reload-button-container">
@@ -627,7 +628,21 @@
               <a class="menu-option btn-darken" id="btn-spectate-next-player" data-l10n="game-next-teammate">Next Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-prev-player" data-l10n="game-previous-teammate">Previous Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-view-stats" data-l10n="game-view-match-stats">View Match Stats</a>
+              <a class="menu-option btn-darken" id="btn-spectate-advanced" style="display: none;">Advanced Spectator</a>
               <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" data-l10n="game-leave-game">Leave Game</a>
+            </div>
+            <div id="ui-spectate-advanced-options" class="ui-bg-standard" style="display: none;">
+              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">▾ Options</a>
+              <div id="ui-spectate-advanced-list">
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-freecam">Freecam</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zoom">Zoom</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-layer">Underground</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-transparent">Transparent Surfaces</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-enemies-map">Enemies on Map</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-esp">ESP Lines</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-labels">Player Info</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-nades">Grenade Info</a>
+              </div>
             </div>
             <div id="ui-spectate-stats" class="ui-bg-standard">
               <div id="ui-spectate-stats-header" data-l10n="game-your-results">Your Results</div>
@@ -897,6 +912,7 @@
                   <optgroup id="server-opts" label="Region" data-l10n="index-region">
                   </optgroup>
                 </select>
+                <div id="category-tabs" class="btns-double-row menu-option"></div>
                 <a class="btn-green btn-darken menu-option" id="btn-start-mode-0" data-l10n="index-play-solo">Play Solo</a>
                 <div id="btns-quick-start">
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-1" data-l10n="index-play-duo">Play Duo</a>
@@ -973,6 +989,7 @@
                         <optgroup id="team-server-opts" label="Region">
                         </optgroup>
                       </select>
+                      <div id="team-category-tabs" class="btns-double-row menu-option"></div>
                       <div class="team-menu-options-buttons">
                         <a class="btn-hollow btn-hollow-selected btn-darken team-menu-option btn-team-queue" id="btn-team-queue-mode-1" data-l10n="index-duo">Duo</a>
                         <a class="btn-hollow btn-hollow-selected btn-darken team-menu-option btn-team-queue" id="btn-team-queue-mode-2" data-l10n="index-squad">Squad</a>
@@ -1026,6 +1043,7 @@
                         <optgroup id="private-lobby-server-opts" label="Region">
                         </optgroup>
                       </select>
+                      <div id="private-lobby-category-tabs" class="btns-double-row menu-option"></div>
                       <div class="team-menu-options-buttons" id="private-lobby-menu-modes">
                       </div>
                       <div id="private-lobby-menu-options-start">

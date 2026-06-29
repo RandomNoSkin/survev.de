@@ -177,7 +177,8 @@ a:active {
   height: 300px;
   margin: auto;
   margin-top: 20px;
-  margin-bottom: 65px;
+  /* Tighter gap so the menu sits closer under the logo (tune this value). */
+  margin-bottom: 24px;
   position: relative;
   /* In case of logo change, update this value to width divided by 2 ceiled  */
   width: 500px;
@@ -259,6 +260,8 @@ a:active {
   position: relative;
   display: flex;
   justify-content: center;
+  /* Pull the whole menu row up into the logo's lower whitespace (tune this value). */
+  margin-top: -30px;
 }
 
 .menu-column {
@@ -392,6 +395,20 @@ a:active {
   }
 }
 
+/* Adsterra native banner: compact block docked to the LEFT edge, vertically
+   centered -- the same dedicated spot as the home_vrec slot, so it never covers
+   the centered play menu. The native script fills the container width, so the
+   fixed width is what keeps the tiles small. Tune `width` to taste. */
+#adsterra-native-banner {
+  position: absolute;
+  left: var(--side-pad);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 200px;
+  text-align: center;
+  pointer-events: auto;
+}
+
 #social-share-block {
   margin-right: 30px;
   margin-top: 10px;
@@ -497,9 +514,17 @@ a:active {
 }
 
 #start-menu {
-  max-height: 412px;
-  padding: 20px;
+  /* The parent (#start-row-top) is a flex row with a fixed 360px height and the
+     default align-items: stretch, which forces this panel to 360px regardless of
+     content -- so the buttons overflow and the dark background stops short of the
+     Spectate button. align-self: flex-start opts out of the stretch so the panel
+     grows to fit ALL buttons; max-height: none removes the other cap. */
+  align-self: flex-start;
+  max-height: none;
+  padding: 20px 20px 28px;
   width: 300px;
+  /* Slightly more solid panel so the buttons read clearly against the map. */
+  background-color: rgba(0, 0, 0, 0.65);
 }
 
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
@@ -1184,6 +1209,7 @@ a:active {
   background: #50afab;
   border-bottom: 2px solid #387c79;
   box-shadow: inset 0 -2px #387c79;
+  margin-bottom: 0px;
 }
 
 #btn-start-spectate{

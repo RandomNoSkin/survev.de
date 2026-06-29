@@ -358,6 +358,8 @@ export class Player implements AbstractObject {
         m_weapons: Array<{
             type: string;
             ammo: number;
+            secondaryClip?: number;
+            loadedThrowable?: string;
         }>;
         m_spectatorCount: number;
     };
@@ -633,12 +635,16 @@ export class Player implements AbstractObject {
                     const w = {
                         type: data.weapons[i].type,
                         ammo: data.weapons[i].ammo + ammo,
+                        secondaryClip: data.weapons[i].secondaryClip,
+                        loadedThrowable: data.weapons[i].loadedThrowable,
                     };
                     this.m_localData.m_weapons.push(w);
                 }else {
                     const w = {
                         type: data.weapons[i].type,
                         ammo: data.weapons[i].ammo,
+                        secondaryClip: data.weapons[i].secondaryClip,
+                        loadedThrowable: data.weapons[i].loadedThrowable,
                     };
                     this.m_localData.m_weapons.push(w);
                 }
@@ -2565,6 +2571,8 @@ export class PlayerBarn {
 
     playerStatus: Record<number, PlayerStatus> = {};
     anonPlayerNames = false;
+    /** Advanced spectator: keep enemy indicators visible on the minimap. */
+    advSpecShowEnemies = false;
 
     m_update(
         dt: number,
@@ -2579,6 +2587,7 @@ export class PlayerBarn {
         preventInput: boolean,
         displayingStats: boolean,
         isSpectating?: boolean,
+        replayPaused = false,
     ) {
         // Update players
         const players = this.playerPool.m_getPool();
@@ -2625,7 +2634,10 @@ export class PlayerBarn {
 
         const statusUpdateRate = getPlayerStatusUpdateRate(map.factionMode);
         const keys = Object.keys(this.playerStatus);
-        for (let i = 0; i < keys.length; i++) {
+        // While a replay is paused no new frames arrive, so freeze status aging here.
+        // Otherwise timeSinceUpdate keeps growing and the stale-update fade below drives
+        // alive teammates' minimapAlpha to 0, making their map markers disappear.
+        for (let i = 0; !replayPaused && i < keys.length; i++) {
             const status = this.playerStatus[keys[i] as unknown as number];
             const playerId = status.playerId!;
             const playerInfo = this.getPlayerInfo(playerId);
@@ -2669,7 +2681,11 @@ export class PlayerBarn {
             // @HACK: Fix issue in non-faction mode when spectating and swapping
             // between teams. We don't want the old player indicators to fade out
             // after moving to the new team
-            if (!map.factionMode && playerInfo.teamId != activeInfo.teamId) {
+            if (
+                !map.factionMode &&
+                playerInfo.teamId != activeInfo.teamId &&
+                !this.advSpecShowEnemies
+            ) {
                 status.minimapAlpha = 0;
             }
             status.minimapVisible = status.minimapAlpha > 0.01;
@@ -2791,7 +2807,20 @@ export class PlayerBarn {
         teamId: number,
         playerStatus: PlayerStatus[],
         factionMode: boolean,
+        extended = false,
     ) {
+        // The admin-spectator extended stream carries each entry's playerId, so
+        // map by id — robust to any ordering / length differences.
+        if (extended) {
+            for (let i = 0; i < playerStatus.length; i++) {
+                const status = playerStatus[i];
+                if (status.hasData && status.playerId !== undefined) {
+                    this.setPlayerStatus(status.playerId, status);
+                }
+            }
+            return;
+        }
+
         // In factionMode, playerStatus refers to all playerIds in the game.
         // In all other modes, playerStatus refers to only playerIds in our team.
         const team = this.getTeamInfo(teamId);
@@ -2820,6 +2849,7 @@ export class PlayerBarn {
             posTarget: v2.copy(newStatus.pos!),
             posDelta: v2.create(0, 0),
             health: 100,
+            boost: 0,
             posInterp: 0,
             visible: false,
             dead: false,
@@ -2851,6 +2881,9 @@ export class PlayerBarn {
         status.role = newStatus.role!;
         if (newStatus.health !== undefined) {
             status.health = newStatus.health;
+        }
+        if (newStatus.boost !== undefined) {
+            status.boost = newStatus.boost;
         }
         if (newStatus.disconnected !== undefined) {
             status.disconnected = newStatus.disconnected;

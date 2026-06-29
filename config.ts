@@ -28,6 +28,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             port: 3000,
         },
         regions: {},
+        categories: {},
         proxies: {},
         modes: [
             { mapName: "local", teamMode: TeamMode.Solo, enabled: true },
@@ -69,6 +70,16 @@ export function getConfig(isProduction: boolean, dir: string) {
             allowBots: isDev,
             allowEditMsg: isDev,
             allowMockAccount: isDev,
+        },
+        recording: {
+            enabled: true,
+            recordBots: false,
+            dir: "recordings",
+            maxGameMb: 80,
+            maxConcurrentTracks: 40,
+            writeBackpressureBytes: 8 * 1024 * 1024,
+            maxTotalGb: 5,
+            maxAgeDays: 14,
         },
         defaultItems: {},
     };

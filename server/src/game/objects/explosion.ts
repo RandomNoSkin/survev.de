@@ -119,7 +119,7 @@ export class ExplosionBarn {
                     damageType: explosion.damageParams.damageType,
                     playerId: explosion.damageParams.source?.__id ?? 0,
                     shotFx: false,
-                    damageMult: 1,
+                    damageMult: explosion.damageMultiplier,
                     varianceT: Math.random(),
                     gameSourceType: explosion.damageParams.gameSourceType!,
                     mapSourceType: explosion.damageParams.mapSourceType,
@@ -128,16 +128,13 @@ export class ExplosionBarn {
             }
         }
 
-        // Trip any nearby armed proximity mine that has this explosion within
-        // its trigger radius (lets explosions chain-detonate mines)
+        // Trip any nearby armed proximity mine within its trigger radius (chains)
         for (const proj of this.game.projectileBarn.projectiles) {
-            if (proj.dead || proj.mineTriggered) continue;
+            if (proj.dead || proj.mineTriggered || !proj.mineArmed) continue;
             if (!util.sameLayer(proj.layer, explosion.layer)) continue;
             const projDef = GameObjectDefs[proj.type] as ThrowableDef;
             if (!projDef.proximityMine) continue;
-            if (
-                v2.distance(explosion.pos, proj.pos) <= projDef.proximityMine.triggerRad
-            ) {
+            if (v2.distance(explosion.pos, proj.pos) <= projDef.proximityMine.triggerRad) {
                 proj.triggerMine();
             }
         }
@@ -160,7 +157,7 @@ export class ExplosionBarn {
             return;
         }
 
-        let damage = def.damage;
+        let damage = def.damage * explosion.damageMultiplier;
 
         if (dist > def.rad.min) {
             damage = math.remap(dist, 0, def.rad.max, damage, 0);
@@ -219,6 +216,7 @@ export class ExplosionBarn {
 
     addExplosion(
         type: string,
+        damageMultiplier: number,
         pos: Vec2,
         layer: number,
         damageParams: Omit<DamageParams, "damage" | "dir">,
@@ -230,6 +228,7 @@ export class ExplosionBarn {
         const explosion: Explosion = {
             rad: def.rad.max,
             type,
+            damageMultiplier,
             pos,
             layer,
             damageParams,
@@ -243,6 +242,7 @@ export class ExplosionBarn {
 interface Explosion {
     rad: number;
     type: string;
+    damageMultiplier: number;
     pos: Vec2;
     layer: number;
     damageParams: Omit<DamageParams, "damage" | "dir">;

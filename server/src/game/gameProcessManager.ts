@@ -391,6 +391,10 @@ export class GameProcessManager implements GameManager {
         }, 0);
     }
 
+    getGameCount(): number {
+        return this.processes.filter((p) => !p.stopped).length;
+    }
+
     /**
      * Returns a game process to host `config`, reusing an idle (stopped) process if one
      * is free. Returns `undefined` when a new process would have to be forked but the
@@ -443,6 +447,12 @@ export class GameProcessManager implements GameManager {
         if (this.serverVerifiedOnly) {
             gameProc.send({ type: ProcessMsgType.AdminCmd, cmd: { action: "verify" } });
         }
+
+        // Diagnostic: log every game creation so duplicate/abandoned games are traceable.
+        this.logger.info(
+            `newGame #${id.slice(0, 4)} [private=${!!config.isPrivate}, mode=${config.teamMode}, map=${config.mapName}, ` +
+                `procs=${this.processes.length}, active=${this.processes.filter((p) => !p.stopped).length}]`,
+        );
 
         return gameProc;
     }

@@ -521,7 +521,7 @@ export class Obstacle extends BaseGameObject {
         }
 
         if (def.explosion) {
-            this.game.explosionBarn.addExplosion(def.explosion, this.pos, this.layer, {
+            this.game.explosionBarn.addExplosion(def.explosion, 1, this.pos, this.layer, {
                 ...params,
                 gameSourceType: "",
                 mapSourceType: this.type,

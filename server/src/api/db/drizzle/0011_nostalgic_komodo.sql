@@ -1,0 +1,1 @@
+ALTER TABLE "user_xp" ADD COLUMN "manual_override" boolean DEFAULT false NOT NULL;

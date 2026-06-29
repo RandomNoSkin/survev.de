@@ -1,7 +1,8 @@
-import fs from "node:fs";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
+import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/defs/types/misc";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
@@ -9,6 +10,7 @@ import type { Loadout } from "../../../shared/utils/loadout";
 import { math } from "../../../shared/utils/math";
 import { v2 } from "../../../shared/utils/v2";
 import { Config } from "../config";
+import { gameLogger } from "../utils/betterLogger";
 import { ServerLogger } from "../utils/logger";
 import { apiPrivateRouter, logErrorToWebhook } from "../utils/serverHelpers";
 import {
@@ -38,8 +40,7 @@ import { ProjectileBarn } from "./objects/projectile";
 import { SmokeBarn } from "./objects/smoke";
 import { PluginManager } from "./pluginManager";
 import { Profiler } from "./profiler";
-import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
-import { gameLogger } from "../utils/betterLogger";
+import { GameRecorder } from "./recording/gameRecorder";
 
 export interface JoinTokenData {
     expiresAt: number;
@@ -122,6 +123,9 @@ export class Game {
     map: GameMap;
     gas: Gas;
 
+    /** Records each real player's outgoing byte stream to disk for replays. */
+    recorder: GameRecorder;
+
     now!: number;
 
     perfTicker = 0;
@@ -174,7 +178,11 @@ export class Game {
         this.publicSpectating = config.publicSpectating ?? true;
         // Private lobby leader narrowed the arena role pool down (see `RoomData.enabledArenaRoles`);
         // takes priority over the map's full `arenaModeRoles` list (see `Player.playerJoin`/`playerRoleSelect`).
-        this.arenaRoles = config.customLoadoutEnabled ? [] : config.arenaRoles?.length ? [...config.arenaRoles] : [];
+        this.arenaRoles = config.customLoadoutEnabled
+            ? []
+            : config.arenaRoles?.length
+              ? [...config.arenaRoles]
+              : [];
         this.advancedSettings = config.advancedSettings ?? false;
         this.customLoadout = config.customLoadout;
         this.customLoadoutEnabled = config.customLoadoutEnabled ?? false;
@@ -196,6 +204,8 @@ export class Game {
         this.mapIndicatorBarn = new MapIndicatorBarn();
 
         this.gas = new Gas(this);
+
+        this.recorder = new GameRecorder(this);
 
         this.modeManager = new GameModeManager(this);
 
@@ -235,7 +245,7 @@ export class Game {
             }
         }
 
-        // Reap empty games: stop any game that has had no connected players for 3 minutes.
+        // Reap empty games: stop any game that has had no connected players for 1 minute.
         // The socket-close path reaps a game the instant its last player leaves; this also
         // catches lobbies that were created but never joined (players.length stays 0, so no
         // socket-close ever fires) and any game everyone left without a clean disconnect.
@@ -243,8 +253,8 @@ export class Game {
             this.emptyTime = 0;
         } else {
             this.emptyTime += dt;
-            if (this.emptyTime > 180) {
-                this.logger.info("Stopping empty game (no connected players for 3 min)");
+            if (this.emptyTime > 60) {
+                this.logger.info("Stopping empty game (no connected players for 1 min)");
                 this.stop();
                 return;
             }
@@ -262,19 +272,24 @@ export class Game {
 
         let freezeTimer = this.map.mapDef.gameMode.freezeTime || 0;
         const alivePlayers = this.playerBarn.livingPlayers;
-        if(alivePlayers.length > 0 && !this.teamsAnnounced && this.map.mapDef.gameMode.announceTeams && this.startedTime >= freezeTimer ){
-                    const enemyGroups = this.playerBarn.getAliveGroups();
-                if (enemyGroups.length >= 2) {
-                    const group1 = enemyGroups[0].getAlivePlayers().map(p => p.name);
-                    const group2 = enemyGroups[1].getAlivePlayers().map(p => p.name);
+        if (
+            alivePlayers.length > 0 &&
+            !this.teamsAnnounced &&
+            this.map.mapDef.gameMode.announceTeams &&
+            this.startedTime >= freezeTimer
+        ) {
+            const enemyGroups = this.playerBarn.getAliveGroups();
+            if (enemyGroups.length >= 2) {
+                const group1 = enemyGroups[0].getAlivePlayers().map((p) => p.name);
+                const group2 = enemyGroups[1].getAlivePlayers().map((p) => p.name);
 
-                    this.teamsAnnounced = true;
+                this.teamsAnnounced = true;
 
-                    const joinFeedMsg = new net.JoinFeedMsg();
-                    joinFeedMsg.group1 = group1;
-                    joinFeedMsg.group2 = group2;
-                    this.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
-                }
+                const joinFeedMsg = new net.JoinFeedMsg();
+                joinFeedMsg.group1 = group1;
+                joinFeedMsg.group2 = group2;
+                this.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
+            }
         }
 
         //
@@ -327,6 +342,9 @@ export class Game {
         this.profiler.addSample("planes");
         this.planeBarn.update(dt);
         this.profiler.endSample();
+
+        // God-view replay sampling (throttled internally; server has full visibility).
+        this.recorder.sampleTracks();
 
         const tickTime = performance.now() - this.now;
 
@@ -454,6 +472,7 @@ export class Game {
             | net.RoleSelectMsg
             | net.EditMsg
             | net.KillFeedMsg
+            | net.SpectatorAdvancedMsg
             | undefined = undefined;
 
         switch (type) {
@@ -516,6 +535,10 @@ export class Game {
                 break;
             case net.MsgType.Spectate:
                 msg = new net.SpectateMsg();
+                msg.deserialize(stream);
+                break;
+            case net.MsgType.SpectatorAdvanced:
+                msg = new net.SpectatorAdvancedMsg();
                 msg.deserialize(stream);
                 break;
             case net.MsgType.PerkModeRoleSelect:
@@ -616,17 +639,21 @@ export class Game {
                     player.spectate(msg as net.SpectateMsg);
                     break;
                 }
+                case net.MsgType.SpectatorAdvanced: {
+                    player.handleSpectatorAdvanced(msg as net.SpectatorAdvancedMsg);
+                    break;
+                }
                 case net.MsgType.PerkModeRoleSelect: {
                     player.roleSelect((msg as net.PerkModeRoleSelectMsg).role);
                     break;
                 }
                 case net.MsgType.RoleSelect: {
-                    if(player.role)return;
+                    if (player.role) return;
                     player.playerRoleSelect((msg as net.RoleSelectMsg).role);
                     break;
                 }
                 case net.MsgType.Edit: {
-                    if(!player.isAdmin && !Config.debug.allowEditMsg) break;
+                    if (!player.isAdmin && !Config.debug.allowEditMsg) break;
                     player.processEditMsg(msg as net.EditMsg);
                     break;
                 }
@@ -636,10 +663,15 @@ export class Game {
                 }
             }
         } catch (err) {
-            const details = err instanceof Error ? (err.stack ?? err.message) : String(err);
+            const details =
+                err instanceof Error ? (err.stack ?? err.message) : String(err);
             this.logger.error(`handleMsg dispatch crashed (type=${type}): ${details}`);
             gameLogger.error(`handleMsg dispatch crashed (type=${type}): ${details}`);
-            void logErrorToWebhook("server", `handleMsg dispatch crashed (type=${type})`, err);
+            void logErrorToWebhook(
+                "server",
+                `handleMsg dispatch crashed (type=${type})`,
+                err,
+            );
             this.closeSocket(socketId);
         }
     }
@@ -653,15 +685,18 @@ export class Game {
         player.spectating = undefined;
         player.dirNew = v2.create(1, 0);
         player.setPartDirty();
-        if (player.downed){
+        if (player.downed) {
             //player killed durch bleed out
             player.kill({
                 damageType: GameConfig.DamageType.Bleeding,
                 dir: player.dir,
                 source: player.downedBy,
             });
-        }else
-        if (player.spectator || (player.canDespawn() && this.map.mapDef.gameMode.canDespawn) || (!this.started && !player.spectator)) {
+        } else if (
+            player.spectator ||
+            (player.canDespawn() && this.map.mapDef.gameMode.canDespawn) ||
+            (!this.started && !player.spectator)
+        ) {
             player.game.playerBarn.removePlayer(player);
             player.mapIndicator?.kill();
         } else {
@@ -712,7 +747,9 @@ export class Game {
 
     /** Hashes a raw IP using the same salt as ModerationRouter. */
     private hashIp(ip: string): string {
-        return createHash("sha256").update(Config.secrets.SURVEV_IP_SECRET + ip).digest("hex");
+        return createHash("sha256")
+            .update(Config.secrets.SURVEV_IP_SECRET + ip)
+            .digest("hex");
     }
 
     /** Builds the live player list sent to the moderation dashboard. */
@@ -732,7 +769,12 @@ export class Game {
 
     /** Sends an announcement to all players in this game.
      *  duration is in milliseconds (client default = 3000). */
-    private broadcastAnnounce(text: string, color = "#ffffff", sender = "moderator", duration = 3000) {
+    private broadcastAnnounce(
+        text: string,
+        color = "#ffffff",
+        sender = "moderator",
+        duration = 3000,
+    ) {
         const msg = new net.KillFeedMsg();
         msg.type = net.KillFeedMsgType.CmdMsg;
         msg.player = sender;
@@ -744,7 +786,13 @@ export class Game {
 
     /** Sends an announcement only to the named player (direct message).
      *  duration is in milliseconds (client default = 3000). */
-    private announceToPlayer(targetName: string, text: string, color = "#ffffff", sender = "moderator", duration = 3000) {
+    private announceToPlayer(
+        targetName: string,
+        text: string,
+        color = "#ffffff",
+        sender = "moderator",
+        duration = 3000,
+    ) {
         const target = this.playerBarn.players.find((p) => p.name === targetName);
         if (!target) return;
         const msg = new net.KillFeedMsg();
@@ -830,7 +878,10 @@ export class Game {
         }
     }
 
-    addJoinTokensAsSpectator(tokens: FindGamePrivateBody["playerData"], autoFill: boolean) {
+    addJoinTokensAsSpectator(
+        tokens: FindGamePrivateBody["playerData"],
+        autoFill: boolean,
+    ) {
         const groupData = {
             playerCount: tokens.length,
             groupHashToJoin: "",
@@ -899,6 +950,7 @@ export class Game {
         if (this.stopped) return;
         this.stopped = true;
         this.allowJoin = false;
+        this.recorder.stopAll();
         for (const player of this.playerBarn.players) {
             if (!player.disconnected) {
                 this.closeSocket(player.socketId);
@@ -965,9 +1017,7 @@ export class Game {
         const cosmeticStats = players
             .filter(
                 ({ player }) =>
-                    !player.spectator &&
-                    player.userId &&
-                    player.equippedCosmetics.length,
+                    !player.spectator && player.userId && player.equippedCosmetics.length,
             )
             .map(({ player, rank }) => ({
                 userId: player.userId!,

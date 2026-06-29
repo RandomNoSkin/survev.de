@@ -17,29 +17,30 @@ import { ConfigManager, type ConfigType } from "./config";
 import { device } from "./device";
 import { errorLogManager } from "./errorLogs";
 import { Game } from "./game";
+import { GameInfo } from "./gameInfo";
 import { helpers } from "./helpers";
 import { InputHandler } from "./input";
 import { InputBinds, InputBindUi } from "./inputBinds";
 import { PingTest } from "./pingTest";
 import { proxy } from "./proxy";
+import { ReplayPlayer } from "./replay/replayPlayer";
 import { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { SiteInfo } from "./siteInfo";
+import { ChatUi } from "./ui/chat";
 import { LoadoutMenu } from "./ui/loadoutMenu";
 import { Localization } from "./ui/localization";
+import { MarketUi } from "./ui/marketUi";
 import Menu from "./ui/menu";
 import { MenuModal } from "./ui/menuModal";
 import { LoadoutDisplay } from "./ui/opponentDisplay";
 import { Pass } from "./ui/pass";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
-import { MarketUi } from "./ui/marketUi";
 import { ShopUi } from "./ui/shopUi";
+import { type MatchData, SpectatorMenu } from "./ui/spectatorMenu";
 import { TeamMenu } from "./ui/teamMenu";
 import { loadStaticDomImages } from "./ui/ui2";
-import { MatchData, SpectatorMenu } from "./ui/spectatorMenu";
-import { GameInfo } from "./gameInfo";
-import { ChatUi } from "./ui/chat";
 
 // Private lobby codes are 6 chars (vs. 4 for team codes) so codes/links
 // pasted or loaded from the URL hash can be told apart — keep in sync with
@@ -114,6 +115,8 @@ export class Application {
     };
 
     errorMessage = "";
+    /** True when this client was opened as a dedicated replay viewer (?replay=…) — locks out all game joining. */
+    replaySession = false;
     quickPlayPendingModeIdx = -1;
     findGameAttempts = 0;
     findGameTime = 0;
@@ -152,7 +155,9 @@ export class Application {
             this.pass.buildXpInfo(names);
             this.updateBoostBadges();
         };
-        setInterval(() => { if (this.siteInfo.loaded) this.updateBoostBadges(); }, 1000);
+        setInterval(() => {
+            if (this.siteInfo.loaded) this.updateBoostBadges();
+        }, 1000);
         this.gameInfo = new GameInfo(this.config);
 
         this.teamMenu = new TeamMenu(
@@ -193,7 +198,7 @@ export class Application {
             this.gameInfo,
             this.localization,
             this.account,
-            this.joinGameAsSpectator.bind(this)
+            this.joinGameAsSpectator.bind(this),
         );
     }
 
@@ -223,6 +228,7 @@ export class Application {
             this.localization.populateLanguageSelect();
             this.startPingTest();
             this.siteInfo.load();
+            this.initRegionSelection();
             this.localization.localizeIndex();
 
             if (this.config.get("rulesAcceptedVersion") !== GameConfig.protocolVersion) {
@@ -261,8 +267,15 @@ export class Application {
             });
 
             this.serverSelect.on("change", () => {
-                const t = this.serverSelect.find(":selected").val();
-                this.config.set("region", t as string);
+                const group = this.serverSelect.find(":selected").val() as string;
+                this.config.set("regionGroup", group);
+                this.resolveRegionSelection();
+            });
+            // Category tabs are rebuilt dynamically by SiteInfo, so delegate the click.
+            $("#category-tabs").on("click", ".btn-cat-tab", (e) => {
+                const category = $(e.currentTarget).data("category") as string;
+                this.config.set("playlist", category);
+                this.resolveRegionSelection();
             });
             this.nameInput.on("blur", (_t) => {
                 this.setConfigFromDOM();
@@ -359,7 +372,9 @@ export class Application {
                     this.tryJoinPrivateLobby(false, t);
                 } else {
                     $("#private-lobby-mobile-link-desc").css("display", "none");
-                    $("#private-lobby-mobile-link-warning").css("display", "none").fadeIn(100);
+                    $("#private-lobby-mobile-link-warning")
+                        .css("display", "none")
+                        .fadeIn(100);
                 }
             });
             $("#btn-private-lobby-leave").on("click", () => {
@@ -444,6 +459,14 @@ export class Application {
                 this.ambience.onGameStart();
             };
             const onQuit = (errMsg?: string) => {
+                // Replay viewer: leaving tears down the replay and closes the tab (it
+                // was opened by the dashboard via window.open) instead of dropping the
+                // user into a joinable menu.
+                if (this.replaySession) {
+                    this.game!.free();
+                    window.close();
+                    return;
+                }
                 if (this.game!.m_updatePass) {
                     this.pass.scheduleUpdatePass(this.game!.m_updatePassDelay);
                 }
@@ -502,10 +525,21 @@ export class Application {
             loadStaticDomImages();
 
             // Auto-spectate a specific game if triggered from the moderation dashboard
-            const spectateParam = new URLSearchParams(window.location.search).get("spectate");
+            const spectateParam = new URLSearchParams(window.location.search).get(
+                "spectate",
+            );
             if (spectateParam) {
                 history.replaceState(null, "", window.location.pathname);
                 this.joinGameAsSpectator(JSON.parse(spectateParam));
+            }
+
+            // Play back a recorded replay if opened from the moderation dashboard.
+            const replayParams = new URLSearchParams(window.location.search);
+            const replayParam = replayParams.get("replay");
+            if (replayParam) {
+                const pov = Number(replayParams.get("pov"));
+                history.replaceState(null, "", window.location.pathname);
+                this.startReplay(replayParam, Number.isFinite(pov) ? pov : undefined);
             }
 
             SDK.gameLoadComplete();
@@ -540,7 +574,10 @@ export class Application {
         let activeBoost = 2;
         if (events) {
             for (const ev of Object.values(events) as any[]) {
-                if (now >= new Date(ev.start).getTime() && now <= new Date(ev.end).getTime()) {
+                if (
+                    now >= new Date(ev.start).getTime() &&
+                    now <= new Date(ev.end).getTime()
+                ) {
                     activeMaps = ev.maps;
                     activeBoost = ev.boost;
                     break;
@@ -558,7 +595,7 @@ export class Application {
             if (!btnEl || !$(btnEl).is(":visible")) continue;
             const r = btnEl.getBoundingClientRect();
             $("body").append(
-                `<span class="xp-boost-badge" style="top:${r.top - 3}px;left:${r.right - 20}px;transform:translateX(-100%)">&#128293; ${activeBoost}&#xD7;</span>`
+                `<span class="xp-boost-badge" style="top:${r.top - 3}px;left:${r.right - 20}px;transform:translateX(-100%)">&#128293; ${activeBoost}&#xD7;</span>`,
             );
         }
     }
@@ -568,6 +605,50 @@ export class Application {
             ? [this.config.get("region")!]
             : this.pingTest.getRegionList();
         this.pingTest.start(regions);
+    }
+
+    /**
+     * Resolves the current `regionGroup` + `playlist` selection into the concrete
+     * `config.region` key (the value the whole find_game / ping pipeline runs on),
+     * fixing up the playlist if it isn't available in the selected group.
+     */
+    resolveRegionSelection() {
+        const group = this.config.get("regionGroup")!;
+        const cats = this.siteInfo.getCategoriesForGroup(group);
+        let playlist = this.config.get("playlist")!;
+        if (!cats.some((c) => c.category === playlist)) {
+            playlist = cats[0]?.category ?? "default";
+            this.config.set("playlist", playlist);
+        }
+        this.config.set("region", this.siteInfo.resolveRegion(group, playlist));
+    }
+
+    /** Picks a valid group/playlist from persisted config on startup, then resolves it. */
+    initRegionSelection() {
+        const groups = this.siteInfo.getGroups();
+        if (!groups.length) return;
+
+        let group = this.config.get("regionGroup")!;
+        if (!groups.some((g) => g.group === group)) {
+            // Derive from the persisted region key, else fall back to the first group.
+            group = this.siteInfo.regionMeta(this.config.get("region")!).group;
+            if (!groups.some((g) => g.group === group)) group = groups[0].group;
+            this.config.set("regionGroup", group);
+        }
+
+        const cats = this.siteInfo.getCategoriesForGroup(group);
+        if (!cats.some((c) => c.category === this.config.get("playlist"))) {
+            this.config.set("playlist", cats[0]?.category ?? "default");
+        }
+
+        // Only lock in a concrete region for returning users. First-time users keep
+        // regionSelected=false so the existing ping-based "best region" auto-select runs;
+        // we just render the menu with a sensible default in the meantime.
+        if (this.config.get("regionSelected")) {
+            this.resolveRegionSelection();
+        } else {
+            this.siteInfo.renderRegionSelection();
+        }
     }
 
     setAppActive(active: boolean) {
@@ -687,8 +768,11 @@ export class Application {
     setConfigFromDOM() {
         const playerName = helpers.sanitizeNameInput(this.nameInput.val() as string);
         this.config.set("playerName", playerName);
-        const region = this.serverSelect.find(":selected").val();
-        this.config.set("region", region as string);
+        const group = this.serverSelect.find(":selected").val() as string;
+        if (group) {
+            this.config.set("regionGroup", group);
+            this.resolveRegionSelection();
+        }
     }
 
     setDOMFromConfig() {
@@ -703,11 +787,13 @@ export class Application {
         this.nameInput.val(this.config.get("playerName")!);
         this.serverSelect.find("option").each((_i, ele) => {
             const spellSyncLang = SDK.isSpellSync && window.spellSync.language;
-            const configRegion = this.config.get("region");
+            // The main dropdown holds geographic groups; match against regionGroup.
+            const configGroup = this.config.get("regionGroup");
             ele.selected = spellSyncLang
                 ? ele.value === spellSyncLang
-                : ele.value === configRegion;
+                : ele.value === configGroup;
         });
+        this.siteInfo.renderRegionSelection();
         this.languageSelect.val(this.localization.getLocale());
     }
 
@@ -739,6 +825,14 @@ export class Application {
 
         if (key == "region") {
             this.config.set("regionSelected", true);
+            // Keep the geo dropdown + category tabs in sync when the region is changed
+            // from outside the main menu (ping auto-select, team menu, ?region= param).
+            // These only touch regionGroup/playlist, so they don't re-trigger a region set.
+            const meta = this.siteInfo.regionMeta(this.config.get("region")!);
+            if (this.siteInfo.getGroups().some((g) => g.group === meta.group)) {
+                this.config.set("regionGroup", meta.group);
+                if (meta.category !== "default") this.config.set("playlist", meta.category);
+            }
             this.startPingTest();
             this.siteInfo.updatePageFromInfo();
         }
@@ -815,6 +909,7 @@ export class Application {
     }
 
     tryJoinTeam(create: boolean, url?: string) {
+        if (this.replaySession) return; // replay viewer: no team/game joining
         if (this.active && this.quickPlayPendingModeIdx === -1) {
             // Join team if the url contains a team address
             let roomUrl = url || window.location.hash.slice(1);
@@ -861,7 +956,8 @@ export class Application {
             const roomUrl = match ? match[1] : raw;
             const suffix = match?.[2];
             const isSpectator = suffix === "s";
-            const teamId = !isSpectator && suffix !== undefined ? Number(suffix) : undefined;
+            const teamId =
+                !isSpectator && suffix !== undefined ? Number(suffix) : undefined;
 
             if (create || roomUrl != "") {
                 // Only creating a lobby requires an account; joining one (e.g. via link) doesn't
@@ -874,13 +970,20 @@ export class Application {
                 }
 
                 this.setConfigFromDOM();
-                this.privateLobbyMenu.connect(create, roomUrl, undefined, teamId, isSpectator);
+                this.privateLobbyMenu.connect(
+                    create,
+                    roomUrl,
+                    undefined,
+                    teamId,
+                    isSpectator,
+                );
                 this.refreshUi();
             }
         }
     }
 
     tryQuickStartGame(gameModeIdx: number) {
+        if (this.replaySession) return; // replay viewer: no game joining
         if (this.config.get("rulesAcceptedVersion") !== GameConfig.protocolVersion) {
             this.rulesModal.show(true);
             return;
@@ -1026,6 +1129,7 @@ export class Application {
     }
 
     joinGame(matchData: FindGameMatchData) {
+        if (this.replaySession) return; // replay viewer: no game joining
         if (!this.game) {
             setTimeout(() => {
                 this.joinGame(matchData);
@@ -1063,7 +1167,25 @@ export class Application {
         joinGameImpl(urls, matchData);
     }
 
+    /** Enters replay mode for a game-scoped token minted by the moderation dashboard. */
+    startReplay(token: string, initialPov?: number) {
+        this.replaySession = true; // lock the client to replay viewing only
+        if (!this.game) {
+            setTimeout(() => {
+                this.startReplay(token, initialPov);
+            }, 250);
+            return;
+        }
+        this.game.m_replayMode = true;
+        const player = new ReplayPlayer(this.game, token, initialPov);
+        player.load().catch((err) => {
+            console.error("Failed to start replay:", err);
+            alert("Failed to load replay: " + (err?.message ?? err));
+        });
+    }
+
     joinGameAsSpectator(matchData: MatchData) {
+        if (this.replaySession) return; // replay viewer: no spectator joining
         if (!this.game) {
             setTimeout(() => {
                 this.joinGameAsSpectator(matchData);
@@ -1072,7 +1194,7 @@ export class Application {
         }
         const hosts = matchData.hosts || [];
         const urls: string[] = [];
-        const appsid = localStorage.getItem('appsid'); // Retrieve the appsid from local storage
+        const appsid = localStorage.getItem("appsid"); // Retrieve the appsid from local storage
         console.log(`Appsid retrieved from localStorage: ${appsid}`); // Log the appsid to check its value
         for (let i = 0; i < hosts.length; i++) {
             let url = `ws${matchData.useHttps ? "s" : ""}://${hosts[i]}/spectate?gameId=${matchData.gameId}`;
@@ -1114,7 +1236,7 @@ export class Application {
         if (err == "invalid_protocol") {
             this.showInvalidProtocolModal();
         }
-        if(err == "player_not_verified"){
+        if (err == "player_not_verified") {
             this.showNotVerifiedModal();
         }
 
@@ -1194,7 +1316,10 @@ export class Application {
                 const region = this.pingTest.getRegion();
 
                 if (region) {
-                    this.config.set("region", region);
+                    // Pick the best-ping geographic group but keep the player's playlist,
+                    // so auto-select lands on e.g. "eu" + normal rather than "eu-scrims".
+                    this.config.set("regionGroup", this.siteInfo.regionMeta(region).group);
+                    this.resolveRegionSelection();
                     this.setDOMFromConfig();
                 }
             }
@@ -1231,7 +1356,7 @@ export class Application {
         if (this.active) {
             this.pass.update(dt);
         }
-        if (this.spectatorMenu.spectatorMenuOpen){
+        if (this.spectatorMenu.spectatorMenuOpen) {
             this.spectatorMenu.update(dt);
         }
         this.input!.flush();

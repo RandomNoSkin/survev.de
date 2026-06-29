@@ -2,7 +2,7 @@ import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import { getMapDefById, MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig } from "../../../../shared/gameConfig";
-import { reconcilePassGoldenFries } from "./goldenFries";
+import { backfillWelcomeGoldenFries, reconcilePassGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { grantPassItems } from "./passGrants";
 import { matchDataTable, userXpTable } from "./schema";
@@ -34,6 +34,10 @@ export async function reconcileAllPasses(): Promise<{
     let totalUnlocksGranted = 0;
     let totalGoldenFriesAwarded = 0;
 
+    // Retroactive one-time welcome Golden Fries for every account that predates the
+    // grant (idempotent; only the first run actually pays out).
+    totalGoldenFriesAwarded += await backfillWelcomeGoldenFries();
+
     for (const [passType, passCfg] of Object.entries(allPasses)) {
         const seasonStart = new Date(passCfg.seasonStart);
         const seasonEnd = new Date(passCfg.seasonEnd);
@@ -46,6 +50,13 @@ export async function reconcileAllPasses(): Promise<{
 
         for (const record of allUserXp) {
             const currentXp = Number(record.xp);
+
+            // Admin XP edits anchor the reconcile: only matches AFTER `reconcileFrom`
+            // count, added on top of `reconcileBaseXp` (0 / no anchor ⇒ whole season).
+            const windowStart =
+                record.reconcileFrom && record.reconcileFrom > seasonStart
+                    ? record.reconcileFrom
+                    : seasonStart;
 
             const stats = await db
                 .select({
@@ -61,14 +72,14 @@ export async function reconcileAllPasses(): Promise<{
                 .where(
                     and(
                         eq(matchDataTable.userId, record.userId),
-                        gte(matchDataTable.createdAt, seasonStart),
+                        gte(matchDataTable.createdAt, windowStart),
                         lte(matchDataTable.createdAt, seasonEnd),
                     ),
                 )
                 .groupBy(matchDataTable.gameId)
                 .having(sql`count(*) = 1`);
 
-            let correctXp = 0;
+            let correctXp = Number(record.reconcileBaseXp);
             for (const stat of stats) {
                 const mapDef = getMapDefById(stat.mapId);
                 const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
@@ -162,7 +173,7 @@ function getPassLevelXp(passType: string, level: number): number {
         : passDef.xp[passDef.xp.length - 1];
 }
 
-function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {
+export function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {
     const maxLevel = passMaxLevel ?? GameConfig.serverSettings.passMaxLevel;
     let xp = passXp;
     let level = 1;

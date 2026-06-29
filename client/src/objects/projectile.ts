@@ -42,6 +42,9 @@ class Projectile implements AbstractObject {
     layer!: number;
     type!: string;
     rad!: number;
+    // Remaining fuse time (seconds), seeded from the server's full update and
+    // counted down locally. Only used by the admin advanced-spectator overlay.
+    fuseTimer!: number;
     pos!: Vec2;
     posOld!: Vec2;
 
@@ -107,6 +110,7 @@ class Projectile implements AbstractObject {
             this.type = data.type;
             // Use a smaller visual radius for collision effects
             this.rad = itemDef.rad * 0.5;
+            this.fuseTimer = data.fuseTime;
         }
 
         this.posOld = isNew ? v2.copy(data.pos) : v2.copy(this.pos);
@@ -204,6 +208,7 @@ export class ProjectileBarn {
             const p = projectiles[i];
             if (p.active) {
                 const itemDef = GameObjectDefs[p.type] as ThrowableDef;
+                p.fuseTimer = Math.max(0, p.fuseTimer - dt);
                 let rotDrag = p.rotDrag;
                 if (p.inWater) {
                     rotDrag *= 3;
@@ -345,7 +350,7 @@ export class ProjectileBarn {
                 if (itemDef.proximityMine) {
                     if (p.posZ <= 0.1) {
                         p.mineBlinkTicker += dt;
-                        const period = p.mineTriggered ? 0.12 : 0.7;
+                        const period = p.mineTriggered ? 0.12 : 1;
                         const on = p.mineBlinkTicker % period < period * 0.5;
                         p.sprite.tint = on ? 0xff2222 : itemDef.worldImg.tint;
                         // beep on the rising edge of each blink

@@ -1,6 +1,7 @@
 import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
-import { DamageType, GameConfig } from "../../../../shared/gameConfig";
+import { DamageType, GameConfig, type InventoryItem } from "../../../../shared/gameConfig";
+import * as net from "../../../../shared/net/net";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import { type AABB, coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
@@ -41,6 +42,7 @@ export class ProjectileBarn {
         damageType: DamageType,
         throwDir?: Vec2,
         weaponSourceType?: string,
+        damageMultiplier?: number,
     ): Projectile {
         const proj = new Projectile(
             this.game,
@@ -54,6 +56,7 @@ export class ProjectileBarn {
             damageType,
             throwDir,
             weaponSourceType,
+            damageMultiplier,
         );
 
         this.projectiles.push(proj);
@@ -76,6 +79,7 @@ export class Projectile extends BaseGameObject {
     // used for "heavy" potatos and snowballs
     // so the kill source is still the regular potato
     weaponSourceType: string;
+    damageMultiplier: number;
 
     rad: number;
 
@@ -95,6 +99,8 @@ export class Projectile extends BaseGameObject {
     // networked so the client can blink faster once the mine has been tripped
     mineTriggered = false;
     mineTriggerTimer = 0;
+    // mines can't be placed inside another mine's detection radius
+    minePlacementChecked = false;
 
     strobe?: {
         timeToPing: number;
@@ -118,6 +124,7 @@ export class Projectile extends BaseGameObject {
         damageType: DamageType,
         throwDir?: Vec2,
         weaponSourceType?: string,
+        damageMultiplier?: number,
     ) {
         super(game, pos);
         this.layer = layer;
@@ -130,7 +137,7 @@ export class Projectile extends BaseGameObject {
         this.dir = v2.normalizeSafe(vel);
         this.throwDir = throwDir ?? v2.copy(this.dir);
         this.weaponSourceType = weaponSourceType || this.type;
-
+        this.damageMultiplier = damageMultiplier || 1;
         const def = GameObjectDefs[type] as ThrowableDef;
         this.velZ = def.throwPhysics.velZ;
         this.rad = def.rad * 0.5;
@@ -185,6 +192,13 @@ export class Projectile extends BaseGameObject {
         // once it has landed, plant it firmly so it doesn't slide on the ground
         if (this.posZ <= 0) {
             this.vel = v2.create(0, 0);
+            // reject placement if it landed inside another mine's detection radius
+            if (!this.minePlacementChecked) {
+                this.minePlacementChecked = true;
+                if (this.rejectMineIfOverlapping(def.proximityMine.triggerRad)) {
+                    return;
+                }
+            }
         }
 
         // once tripped, count down before detonating (committed even if the
@@ -227,6 +241,38 @@ export class Projectile extends BaseGameObject {
                 return;
             }
         }
+    }
+
+    /**
+     * Mines can't be placed inside another mine's detection radius. If this mine
+     * landed too close to an existing one, refund it to the thrower, notify them,
+     * and remove it. Returns true if the mine was rejected.
+     */
+    rejectMineIfOverlapping(radius: number): boolean {
+        const objs = this.game.grid.intersectCollider(
+            collider.createCircle(this.pos, radius),
+        );
+        for (const obj of objs) {
+            if (obj.__type !== ObjectType.Projectile) continue;
+            if (obj.__id === this.__id || obj.dead) continue;
+            const otherDef = GameObjectDefs[obj.type] as ThrowableDef;
+            if (!otherDef.proximityMine) continue;
+            if (v2.distance(this.pos, obj.pos) > radius) continue;
+
+            // give the mine back to the thrower and tell them why
+            const owner = this.game.objectRegister.getById(this.playerId);
+            if (owner?.__type === ObjectType.Player) {
+                owner.invManager.give(this.weaponSourceType as InventoryItem, 1);
+                const msg = new net.PickupMsg();
+                msg.type = net.PickupMsgType.AlreadyMined;
+                msg.item = this.weaponSourceType;
+                owner.msgsToSend.push({ type: net.MsgType.Pickup, msg });
+            }
+            this.dead = true;
+            this.destroy();
+            return true;
+        }
+        return false;
     }
 
     /** Trip an armed proximity mine; also called when a bullet hits it. */
@@ -432,6 +478,7 @@ export class Projectile extends BaseGameObject {
                     DamageType.Player,
                     undefined,
                     this.weaponSourceType,
+                    this.damageMultiplier,
                 );
             }
         }
@@ -446,6 +493,7 @@ export class Projectile extends BaseGameObject {
             const source = this.game.objectRegister.getById(this.playerId);
             this.game.explosionBarn.addExplosion(
                 explosionType,
+                this.damageMultiplier,
                 this.pos,
                 this.layer,
                 {

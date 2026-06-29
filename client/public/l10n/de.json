@@ -564,6 +564,7 @@
   "game-hud-impact": "Aufschlag",
   "game-mine": "Annäherungsmine",
   "game-hud-mine": "Mine",
+  "game-position-already-mined": "Position bereits vermint!",
   "game-smoke": "Rauchgranate",
   "game-hud-smoke": "Rauch",
   "game-mirv": "MIRV-Granate",

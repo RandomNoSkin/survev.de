@@ -487,6 +487,7 @@ export class Bullet {
 
                 this.bulletManager.game.explosionBarn.addExplosion(
                     this.onHitFx,
+                    this.damageMult,
                     // spawn the explosion a bit behind the bullet so it won't spawn inside obstacles
                     v2.sub(this.pos, v2.mul(this.dir, 0.01)),
                     this.layer,
@@ -659,13 +660,14 @@ export class Bullet {
                     break;
                 }
             } else if (obj.__type === ObjectType.Projectile) {
-                // shooting an armed proximity mine trips it; the bullet keeps going
                 const projDef = GameObjectDefs[obj.type] as ThrowableDef;
                 if (
                     projDef?.proximityMine &&
+                    obj.mineArmed &&
                     !obj.mineTriggered &&
                     util.sameLayer(obj.layer, this.layer)
                 ) {
+                    // shooting an armed proximity mine trips it; the bullet keeps going
                     // shrapnel trips the mine when flying near it; aimed shots
                     // need a more-or-less direct hit
                     const hitRad = this.isShrapnel ? 3 : math.max(obj.rad, 1);

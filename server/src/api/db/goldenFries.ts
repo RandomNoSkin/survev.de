@@ -9,6 +9,15 @@ import { goldenFriesLedgerTable, usersTable } from "./schema";
 // Re-exported for backwards compatibility; the source of truth now lives in passDefs.
 export { DEFAULT_PASS_GOLDEN_FRIES };
 
+/**
+ * One-time "welcome" Golden Fries every account receives — on creation AND,
+ * retroactively, for all existing accounts (via {@link backfillWelcomeGoldenFries},
+ * run by the reconcile job). Set to 0 to disable. Tune freely.
+ */
+export const WELCOME_GOLDEN_FRIES = 100;
+/** `pass:` prefix so the partial unique index dedupes it (granted at most once per user). */
+const WELCOME_FRIES_REASON = "pass:welcome_fries";
+
 /** Stable, per-(pass, level) ledger reason, used to detect what's already been paid out. */
 function passFriesReason(passType: string, level: number): string {
     return `pass:${passType}:level:${level}`;
@@ -225,4 +234,38 @@ export async function reconcilePassGoldenFries(
     }
 
     return totalAwarded;
+}
+
+/** Idempotently grants the welcome Golden Fries to one user (no-op if already granted or disabled). */
+export async function awardWelcomeGoldenFries(userId: string): Promise<number> {
+    if (WELCOME_GOLDEN_FRIES <= 0) return 0;
+    return awardGoldenFriesOnce(userId, WELCOME_GOLDEN_FRIES, WELCOME_FRIES_REASON);
+}
+
+/**
+ * Retroactively grants the welcome Golden Fries to every account that hasn't received
+ * it yet (idempotent, set-based). Returns the total newly awarded. Run by the reconcile.
+ */
+export async function backfillWelcomeGoldenFries(): Promise<number> {
+    if (WELCOME_GOLDEN_FRIES <= 0) return 0;
+    return db.transaction(async (tx) => {
+        // One welcome ledger row per user that doesn't have it yet; `balance_after` is
+        // the post-grant balance (current + amount), computed before the update below.
+        const inserted = await tx.execute(sql`
+            INSERT INTO golden_fries_ledger (user_id, amount, reason, balance_after)
+            SELECT id, ${WELCOME_GOLDEN_FRIES}, ${WELCOME_FRIES_REASON}, golden_fries + ${WELCOME_GOLDEN_FRIES}
+            FROM users
+            ON CONFLICT (user_id, reason) WHERE reason LIKE 'pass:%' DO NOTHING
+            RETURNING user_id
+        `);
+        const userIds = inserted.rows.map((r) => (r as { user_id: string }).user_id);
+        if (!userIds.length) return 0;
+
+        await tx
+            .update(usersTable)
+            .set({ goldenFries: sql`${usersTable.goldenFries} + ${WELCOME_GOLDEN_FRIES}` })
+            .where(inArray(usersTable.id, userIds));
+
+        return userIds.length * WELCOME_GOLDEN_FRIES;
+    });
 }
