@@ -27,7 +27,10 @@ export const loadoutSchema = z.object({
     melee: z.string(),
     heal: z.string(),
     boost: z.string(),
-    death_effect: z.string(),
+    // Newer field: default it so loadouts saved before death effects existed (which
+    // have no `death_effect` key) still pass schema validation — otherwise the game
+    // server rejects the join until the player re-saves their loadout (skin change).
+    death_effect: z.string().default("death_basic"),
     player_icon: z.string(),
     crosshair: z.object({
         type: z.string(),
