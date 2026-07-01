@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 33.866666 33.866667">
+  <!-- Lightning bolt particle shape -->
+  <path style="fill:#ffffff;fill-opacity:1;stroke:none"
+    d="M 20.5,1.5
+       L 8.5,18.5
+       L 15.5,18.5
+       L 13,32.366
+       L 25.5,13
+       L 18.5,13
+       Z" />
+</svg>

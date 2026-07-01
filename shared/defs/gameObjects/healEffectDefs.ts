@@ -95,4 +95,25 @@ export const HealEffectDefs: Record<string, HealEffectDef> = {
         texture: "part-boost-flame.img",
         emitter: "boost_flame",
     },
+    heal_cult: {
+        type: "heal_effect",
+        name: "Cult",
+        rarity: Rarity.Uncommon,
+        texture: "part-heal-cult.img",
+        emitter: "heal_cult",
+    },
+    boost_blitzgruen: {
+        type: "boost_effect",
+        name: "Lighting before the thunder",
+        rarity: Rarity.Rare,
+        texture: "part-boost-blitzgruen.img",
+        emitter: "boost_blitzgruen",
+    },
+    heal_bubble: {
+        type: "heal_effect",
+        name: "Bubble",
+        rarity: Rarity.Common,
+        texture: "part-heal-bubble.img",
+        emitter: "heal_bubble",
+    },
 };

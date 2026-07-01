@@ -22,6 +22,7 @@ export const _allowedMeleeSkins = [
     "bayonet",
     "bayonet_rugged",
     "bayonet_woodland",
+    "bayonet_glow",
     "huntsman",
     "huntsman_rugged",
     "huntsman_burnished",
@@ -102,6 +103,7 @@ export const _allowedOutfits = [
     "outfitDiamondred",
     "outfitPanorama",
     "outfitNordCode",
+<<<<<<< Updated upstream
     // resurviv skin accessories
     "outfitSnowman",
     "outfitChewieCheese",
@@ -146,6 +148,11 @@ export const _allowedOutfits = [
     "outfitBee",
     "outfitVitaminD",
     "outfitReTag",
+=======
+    "outfitCrimson",
+    "outfitDemon",
+    "outfitPinkwarrior",
+>>>>>>> Stashed changes
 ];
 export const _allowedEmotes = [
     "emote_thumbsup",

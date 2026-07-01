@@ -1297,6 +1297,18 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-bayonet-fade.img",
         },
     }),
+    //By Above not working aswell waiting till SVG file gets fixxed 
+    bayonet_glow: defineMeleeSkin("bayonet", {
+        name: "Bayonet Glow",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bayonet-glow.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bayonet-glow.img",
+        },
+    }),
     huntsman_rugged: defineMeleeSkin("huntsman", {
         name: "Huntsman Rugged",
         rarity: Rarity.Rare,
