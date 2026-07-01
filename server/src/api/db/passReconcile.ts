@@ -81,13 +81,6 @@ export async function reconcileAllPasses(): Promise<{
 
             let correctXp = Number(record.reconcileBaseXp);
             for (const stat of stats) {
-                const mapDef = getMapDefById(stat.mapId);
-                const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
-                    kill: 0,
-                    damage: 0,
-                    win: 0,
-                    timeSurvived: 0,
-                };
                 const mapTypeName = mapIdToName[stat.mapId] ?? "";
                 const boostEvents = (GameConfig.serverSettings as any).xpBoostEvents?.[
                     passType
@@ -109,12 +102,7 @@ export async function reconcileAllPasses(): Promise<{
                         }
                     }
                 }
-                let matchXp = 0;
-                matchXp += stat.kills * xpMultiplier.kill;
-                matchXp += stat.damage * xpMultiplier.damage;
-                matchXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
-                matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
-                correctXp += matchXp * boost;
+                correctXp += computeMatchXp(stat) * boost;
             }
             correctXp = Math.round(correctXp * 1e5) / 1e5;
 
@@ -171,6 +159,37 @@ function getPassLevelXp(passType: string, level: number): number {
     return levelIdx < passDef.xp.length
         ? passDef.xp[levelIdx]
         : passDef.xp[passDef.xp.length - 1];
+}
+
+/** Per-match XP stats, as aggregated (one row per game) from `match_data`. */
+export interface MatchXpStat {
+    kills: number;
+    damage: number;
+    timeAlive: number;
+    rank: number;
+    mapId: number;
+}
+
+/**
+ * Base XP a single match is worth, using the map's gameMode XP multipliers
+ * (kill / damage / win / timeSurvived). Boost events are intentionally NOT applied
+ * here — this is the deterministic, pass-independent intrinsic value of the match,
+ * used both by the full reconcile and by the moderation XP-gain report.
+ */
+export function computeMatchXp(stat: MatchXpStat): number {
+    const mapDef = getMapDefById(stat.mapId);
+    const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
+        kill: 0,
+        damage: 0,
+        win: 0,
+        timeSurvived: 0,
+    };
+    let matchXp = 0;
+    matchXp += stat.kills * xpMultiplier.kill;
+    matchXp += stat.damage * xpMultiplier.damage;
+    matchXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
+    matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
+    return matchXp;
 }
 
 export function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {

@@ -15,11 +15,11 @@ import {
     getItemCategory,
     getItemRarity,
     getMarketFee,
-    getMarketPriceBounds,
     getMarketTotal,
     MARKET_LIST_COOLDOWN_MS,
     MARKET_LISTING_TTL_MS,
     MARKET_MAX_LISTINGS,
+    MARKET_MAX_PRICE,
     type ShopCategory,
 } from "../../../../shared/defs/shopConfig";
 import type {
@@ -107,10 +107,11 @@ export async function listItem(
                 .where(eq(itemsTable.id, itemId));
             if (!item || item.userId !== userId) throw new MarketError("not_owned");
 
-            const bounds = getMarketPriceBounds(item.type);
             const category = getItemCategory(item.type);
-            if (!bounds || !category) throw new MarketError("not_listable");
-            if (!Number.isInteger(price) || price < bounds.min || price > bounds.max) {
+            if (!category) throw new MarketError("not_listable");
+            // Any whole-number price is allowed, including 0 (free); the cap only keeps
+            // price + fee inside the integer range.
+            if (!Number.isInteger(price) || price < 0 || price > MARKET_MAX_PRICE) {
                 throw new MarketError("bad_price");
             }
 

@@ -56,6 +56,7 @@ import {
     _allowedDeathEffects,
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
+import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
 import { GameConfig } from "../../../../shared/gameConfig";
 import { util } from "../../../../shared/utils/util";
@@ -67,21 +68,47 @@ import { validateParams } from "../auth/middleware";
 import { db } from "../db";
 import { awardGoldenFries } from "../db/goldenFries";
 import { grantPassItems, revokePassItemsAbove } from "../db/passGrants";
-import { getPassLevelAndXp, reconcileAllPasses } from "../db/passReconcile";
+import { computeMatchXp, getPassLevelAndXp, reconcileAllPasses } from "../db/passReconcile";
 import {
     banCommentsTable,
     banHistoryTable,
     bannedIpsTable,
     chatBannedIpsTable,
     chatLogsTable,
+    goldenFriesLedgerTable,
     ipLogsTable,
     itemsTable,
+    marketListingsTable,
     matchDataTable,
     usersTable,
     userXpTable,
 } from "../db/schema";
 import { signReplayToken } from "../replayToken";
 import { dashboardHtml } from "./moderationDashboard.html";
+
+/** map_id → MapDefs key (name), for labelling match rows in the XP-gain drill-down. */
+const MAP_ID_TO_NAME: Record<number, string> = Object.fromEntries(
+    Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
+);
+
+/** Length of a moderation time window (used by the XP-gain + Warnings endpoints). */
+function windowToMs(param: string): number {
+    return param === "24h"
+        ? 24 * 60 * 60 * 1000
+        : param === "30d"
+          ? 30 * 24 * 60 * 60 * 1000
+          : 7 * 24 * 60 * 60 * 1000; // default 7d
+}
+
+// ── Warnings-tab heuristics (all admin-tunable via constants) ────────────────
+/** Flag a game where one IP has at least this many joins (players OR spectators). */
+const WARN_MIN_JOINS_PER_GAME = 2;
+/** Flag an IP used by at least this many distinct accounts within the window. */
+const WARN_MIN_ACCOUNTS_PER_IP = 3;
+/** Per-window game count above which an account is flagged for suspiciously high volume. */
+const WARN_MIN_GAMES: Record<string, number> = { "24h": 40, "7d": 150, "30d": 400 };
+/** Floor for the "high XP per game" (farming) flag, so a tiny mean can't cause noise. */
+const WARN_XP_PER_GAME_FLOOR = 150;
 
 /** Every cosmetic an admin may grant, by category, for the account-detail "Give" UI. */
 const COSMETIC_CATALOG = {
@@ -537,7 +564,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/ip/:hash", async (c) => {
         const hash = c.req.param("hash");
 
-        const [banRecord, rows, banHistory] = await Promise.all([
+        const [banRecord, rows, banHistory, nameCounts] = await Promise.all([
             db.query.bannedIpsTable.findFirst({
                 where: eq(bannedIpsTable.encodedIp, hash),
             }),
@@ -568,19 +595,39 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 )
                 .orderBy(desc(banHistoryTable.bannedAt))
                 .limit(100),
+            // How often each name was seen from this IP (exact count, not limited to 200).
+            db
+                .select({
+                    username: ipLogsTable.username,
+                    count: sql<number>`count(*)::int`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.encodedIp, hash))
+                .groupBy(ipLogsTable.username),
         ]);
+
+        // Name → how many times that (name, this IP) combo was logged.
+        const countByName = new Map(
+            nameCounts.map((r) => [r.username, Number(r.count)]),
+        );
 
         // Collect ISP and deduplicate recent names from ip_logs
         const seenNames = new Set<string>();
-        const accounts: ((typeof rows)[number] & { source: "recent" | "historical" })[] =
-            [];
+        const accounts: ((typeof rows)[number] & {
+            source: "recent" | "historical";
+            count: number;
+        })[] = [];
         let isp = "";
 
         for (const row of rows) {
             if (!isp && row.isp) isp = row.isp;
             if (!seenNames.has(row.username)) {
                 seenNames.add(row.username);
-                accounts.push({ ...row, source: "recent" });
+                accounts.push({
+                    ...row,
+                    source: "recent",
+                    count: countByName.get(row.username) ?? 0,
+                });
             }
         }
 
@@ -609,6 +656,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     gameId: "",
                     createdAt: new Date(0),
                     source: "historical",
+                    count: countByName.get(row.username) ?? 0,
                 });
             }
         }
@@ -733,19 +781,32 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/player/:name", async (c) => {
         const name = c.req.param("name");
 
-        const rows = await db
-            .select({
-                encodedIp: ipLogsTable.encodedIp,
-                isp: ipLogsTable.isp,
-                region: ipLogsTable.region,
-                createdAt: ipLogsTable.createdAt,
-                slug: usersTable.slug,
-            })
-            .from(ipLogsTable)
-            .where(eq(ipLogsTable.username, name))
-            .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
-            .orderBy(desc(ipLogsTable.createdAt))
-            .limit(200);
+        const [rows, ipCounts] = await Promise.all([
+            db
+                .select({
+                    encodedIp: ipLogsTable.encodedIp,
+                    isp: ipLogsTable.isp,
+                    region: ipLogsTable.region,
+                    createdAt: ipLogsTable.createdAt,
+                    slug: usersTable.slug,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.username, name))
+                .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
+                .orderBy(desc(ipLogsTable.createdAt))
+                .limit(200),
+            // How often this name was seen from each IP (exact count, not limited to 200).
+            db
+                .select({
+                    encodedIp: ipLogsTable.encodedIp,
+                    count: sql<number>`count(*)::int`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.username, name))
+                .groupBy(ipLogsTable.encodedIp),
+        ]);
+
+        const countByIp = new Map(ipCounts.map((r) => [r.encodedIp, Number(r.count)]));
 
         const seenIps = new Set<string>();
         const ips: {
@@ -754,6 +815,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             region: string;
             lastSeen: Date;
             slug: string | null;
+            count: number;
         }[] = [];
         for (const row of rows) {
             if (!seenIps.has(row.encodedIp)) {
@@ -764,6 +826,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     region: row.region,
                     lastSeen: row.createdAt,
                     slug: row.slug,
+                    count: countByIp.get(row.encodedIp) ?? 0,
                 });
             }
         }
@@ -800,6 +863,90 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 : [];
 
         return c.json({ name, ips, banHistory });
+    })
+
+    /**
+     * Account "session" lookup by slug — shows every name and IP the account has
+     * played under (aggregated from ip_logs, keyed by the account's userId), plus
+     * ban history. Unlike opening the full account-detail modal, this keeps the
+     * moderator on the lookup view so they can spot alt names / shared IPs.
+     */
+    .get("/api/slug/:slug", async (c) => {
+        const slug = c.req.param("slug");
+
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: { id: true, slug: true, username: true },
+        });
+        if (!user) return c.json({ error: "not found" }, 404);
+
+        const [nameRows, ipRows] = await Promise.all([
+            // Every display name this account has used, with how often + when last seen.
+            db
+                .select({
+                    username: ipLogsTable.username,
+                    count: sql<number>`count(*)::int`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.userId, user.id))
+                .groupBy(ipLogsTable.username)
+                .orderBy(desc(sql`count(*)`)),
+            // Every IP this account has played from, with how often + when last seen.
+            db
+                .select({
+                    ip: ipLogsTable.encodedIp,
+                    isp: sql<string>`max(${ipLogsTable.isp})`,
+                    region: sql<string>`max(${ipLogsTable.region})`,
+                    count: sql<number>`count(*)::int`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.userId, user.id))
+                .groupBy(ipLogsTable.encodedIp)
+                .orderBy(desc(sql`max(${ipLogsTable.createdAt})`)),
+        ]);
+
+        // Ban history across the account's slug (account bans) + its IP hashes (ip/chat bans).
+        const hashes = ipRows.map((r) => r.ip);
+        const banHistory = await db
+            .select()
+            .from(banHistoryTable)
+            .where(
+                or(
+                    and(
+                        eq(banHistoryTable.banType, "account"),
+                        eq(banHistoryTable.banTarget, slug),
+                    ),
+                    hashes.length
+                        ? and(
+                              inArray(banHistoryTable.banType, ["ip", "chat"]),
+                              inArray(banHistoryTable.banTarget, hashes),
+                          )
+                        : undefined,
+                ),
+            )
+            .orderBy(desc(banHistoryTable.bannedAt))
+            .limit(100);
+
+        return c.json({
+            slug: user.slug,
+            username: user.username,
+            userId: user.id,
+            names: nameRows.map((r) => ({
+                username: r.username,
+                count: Number(r.count),
+                lastSeen: r.lastSeen,
+            })),
+            ips: ipRows.map((r) => ({
+                ip: r.ip,
+                isp: r.isp,
+                region: r.region,
+                count: Number(r.count),
+                lastSeen: r.lastSeen,
+            })),
+            banHistory,
+        });
     })
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1027,6 +1174,376 @@ export const ModerationDashboardRouter = new Hono<Context>()
         }
         // Game-scoped token: lets the viewer switch between every POV of this game.
         return c.json({ token: signReplayToken({ region, gameId }) });
+    })
+
+    /**
+     * XP-gain leaderboard for the "XP Gain" tab — surfaces accounts that earned a lot
+     * of XP within a recent time window, to spot account boosting.
+     *
+     * XP is recomputed from match_data (one row per game, same aggregation the pass
+     * reconcile uses) via computeMatchXp — base XP only, no boost events, so the
+     * ranking is deterministic and pass-independent. Returns the top gainers plus
+     * per-day buckets for a sparkline. Bounded to a window + top-N (the box is small,
+     * this is admin-triggered and off the hot path).
+     */
+    .get("/api/xp-gain", async (c) => {
+        const windowParam = c.req.query("window") ?? "7d";
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        // One row per (user, game): dedupe self-joins the same way passReconcile does
+        // (HAVING count(*) = 1 keeps only games where the account appears once).
+        const stats = await db
+            .select({
+                userId: matchDataTable.userId,
+                gameId: matchDataTable.gameId,
+                kills: sql<number>`max(${matchDataTable.kills})`,
+                damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                rank: sql<number>`min(${matchDataTable.rank})`,
+                mapId: sql<number>`max(${matchDataTable.mapId})`,
+                createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+            })
+            .from(matchDataTable)
+            .where(
+                and(
+                    gte(matchDataTable.createdAt, cutoff),
+                    sql`${matchDataTable.userId} <> ''`,
+                ),
+            )
+            .groupBy(matchDataTable.userId, matchDataTable.gameId)
+            .having(sql`count(*) = 1`);
+
+        // Aggregate per user: total XP, games, and a per-day XP bucket for the sparkline.
+        const perUser = new Map<
+            string,
+            { xpGained: number; games: number; spark: Map<string, number> }
+        >();
+        for (const s of stats) {
+            const xp = computeMatchXp(s);
+            let u = perUser.get(s.userId);
+            if (!u) {
+                u = { xpGained: 0, games: 0, spark: new Map() };
+                perUser.set(s.userId, u);
+            }
+            u.xpGained += xp;
+            u.games += 1;
+            const day = new Date(s.createdAt).toISOString().slice(0, 10);
+            u.spark.set(day, (u.spark.get(day) ?? 0) + xp);
+        }
+
+        // Rank by XP gained, keep the top 100 suspects.
+        const ranked = [...perUser.entries()]
+            .map(([userId, u]) => ({ userId, ...u }))
+            .sort((a, b) => b.xpGained - a.xpGained)
+            .slice(0, 100);
+
+        // Resolve slug / username for the ranked users.
+        const userIds = ranked.map((r) => r.userId);
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      username: usersTable.username,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+
+        return c.json({
+            window: windowParam,
+            users: ranked.map((r) => {
+                const u = userById.get(r.userId);
+                return {
+                    userId: r.userId,
+                    slug: u?.slug ?? null,
+                    username: u?.username || null,
+                    banned: u?.banned ?? false,
+                    xpGained: Math.round(r.xpGained * 100) / 100,
+                    games: r.games,
+                    xpPerGame:
+                        r.games > 0
+                            ? Math.round((r.xpGained / r.games) * 100) / 100
+                            : 0,
+                    spark: [...r.spark.entries()]
+                        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+                        .map(([d, xp]) => ({ d, xp: Math.round(xp * 100) / 100 })),
+                };
+            }),
+        });
+    })
+
+    /**
+     * Per-game XP breakdown for one account in a time window — the drill-down behind
+     * a row on the XP-gain leaderboard. Returns every game (one row per game, same
+     * dedupe as the reconcile) with its stats and computed XP, newest data first, so
+     * the dashboard can chart the individual games and link to each one.
+     */
+    .get("/api/xp-gain/user/:userId", async (c) => {
+        const userId = c.req.param("userId");
+        const windowParam = c.req.query("window") ?? "7d";
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        const [user, stats] = await Promise.all([
+            db.query.usersTable.findFirst({
+                where: eq(usersTable.id, userId),
+                columns: { id: true, slug: true, username: true, banned: true },
+            }),
+            db
+                .select({
+                    gameId: matchDataTable.gameId,
+                    region: sql<string>`max(${matchDataTable.region})`,
+                    mapId: sql<number>`max(${matchDataTable.mapId})`,
+                    teamMode: sql<number>`max(${matchDataTable.teamMode})`,
+                    kills: sql<number>`max(${matchDataTable.kills})`,
+                    damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                    timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                    rank: sql<number>`min(${matchDataTable.rank})`,
+                    createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+                })
+                .from(matchDataTable)
+                .where(
+                    and(
+                        eq(matchDataTable.userId, userId),
+                        gte(matchDataTable.createdAt, cutoff),
+                    ),
+                )
+                .groupBy(matchDataTable.gameId)
+                .having(sql`count(*) = 1`),
+        ]);
+
+        const games = stats
+            .map((s) => {
+                const mapId = Number(s.mapId);
+                const stat = {
+                    kills: Number(s.kills),
+                    damage: Number(s.damage),
+                    timeAlive: Number(s.timeAlive),
+                    rank: Number(s.rank),
+                    mapId,
+                };
+                return {
+                    gameId: s.gameId,
+                    region: s.region,
+                    mapId,
+                    mapName: MAP_ID_TO_NAME[mapId] ?? String(mapId),
+                    teamMode: Number(s.teamMode),
+                    kills: stat.kills,
+                    damage: stat.damage,
+                    timeAlive: stat.timeAlive,
+                    rank: stat.rank,
+                    createdAt: s.createdAt,
+                    xp: Math.round(computeMatchXp(stat) * 100) / 100,
+                };
+            })
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const totalXp = Math.round(games.reduce((sum, g) => sum + g.xp, 0) * 100) / 100;
+
+        return c.json({
+            userId,
+            slug: user?.slug ?? null,
+            username: user?.username || null,
+            banned: user?.banned ?? false,
+            window: windowParam,
+            totalXp,
+            games,
+        });
+    })
+
+    /**
+     * Warnings tab — surfaces suspicious behaviour in a recent window:
+     *   1. sharedIpGames    — one IP joined the same game 2+ times (players OR
+     *      spectators; ip_logs records both), i.e. multi-boxing / alt-farming / ghosting.
+     *   2. sharedIpAccounts — one IP used by many distinct accounts (alt farm).
+     *   3. xpSpikes         — accounts with abnormally high game volume or XP/game
+     *      (grinding/botting or feeding). XP is recomputed via computeMatchXp.
+     * All heuristics are windowed + capped; this is admin-triggered, off the hot path.
+     */
+    .get("/api/warnings", async (c) => {
+        const windowParam = c.req.query("window") ?? "24h";
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        // Distinct real-account count for an ip_logs group (ignores guests/spectators
+        // whose user_id is empty/null).
+        const distinctAccounts = sql<number>`count(distinct ${ipLogsTable.userId}) filter (where ${ipLogsTable.userId} is not null and ${ipLogsTable.userId} <> '')`;
+
+        const [sharedIpGames, sharedIpAccounts, xpStats] = await Promise.all([
+            // 1) Same IP appearing more than once in a single game.
+            db
+                .select({
+                    gameId: ipLogsTable.gameId,
+                    ip: ipLogsTable.encodedIp,
+                    region: sql<string>`max(${ipLogsTable.region})`,
+                    joins: sql<number>`count(*)::int`,
+                    accounts: sql<number>`${distinctAccounts}::int`,
+                    names: sql<string[]>`array_agg(distinct ${ipLogsTable.username})`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(
+                    and(
+                        gte(ipLogsTable.createdAt, cutoff),
+                        sql`${ipLogsTable.encodedIp} <> ''`,
+                    ),
+                )
+                .groupBy(ipLogsTable.gameId, ipLogsTable.encodedIp)
+                .having(sql`count(*) >= ${WARN_MIN_JOINS_PER_GAME}`)
+                .orderBy(desc(sql`count(*)`))
+                .limit(100),
+
+            // 2) Same IP used by many distinct accounts within the window.
+            db
+                .select({
+                    ip: ipLogsTable.encodedIp,
+                    isp: sql<string>`max(${ipLogsTable.isp})`,
+                    accounts: sql<number>`${distinctAccounts}::int`,
+                    joins: sql<number>`count(*)::int`,
+                    names: sql<string[]>`array_agg(distinct ${ipLogsTable.username})`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(
+                    and(
+                        gte(ipLogsTable.createdAt, cutoff),
+                        sql`${ipLogsTable.encodedIp} <> ''`,
+                    ),
+                )
+                .groupBy(ipLogsTable.encodedIp)
+                .having(sql`${distinctAccounts} >= ${WARN_MIN_ACCOUNTS_PER_IP}`)
+                .orderBy(desc(distinctAccounts))
+                .limit(100),
+
+            // 3) Per-user + per-game rows for XP-spike detection (one row per game).
+            db
+                .select({
+                    userId: matchDataTable.userId,
+                    gameId: matchDataTable.gameId,
+                    kills: sql<number>`max(${matchDataTable.kills})`,
+                    damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                    timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                    rank: sql<number>`min(${matchDataTable.rank})`,
+                    mapId: sql<number>`max(${matchDataTable.mapId})`,
+                })
+                .from(matchDataTable)
+                .where(
+                    and(
+                        gte(matchDataTable.createdAt, cutoff),
+                        sql`${matchDataTable.userId} <> ''`,
+                    ),
+                )
+                .groupBy(matchDataTable.userId, matchDataTable.gameId)
+                .having(sql`count(*) = 1`),
+        ]);
+
+        // Aggregate XP per user, then flag high volume and/or high XP/game (farming).
+        const perUser = new Map<string, { xp: number; games: number }>();
+        for (const s of xpStats) {
+            const xp = computeMatchXp({
+                kills: Number(s.kills),
+                damage: Number(s.damage),
+                timeAlive: Number(s.timeAlive),
+                rank: Number(s.rank),
+                mapId: Number(s.mapId),
+            });
+            let u = perUser.get(s.userId);
+            if (!u) {
+                u = { xp: 0, games: 0 };
+                perUser.set(s.userId, u);
+            }
+            u.xp += xp;
+            u.games += 1;
+        }
+
+        // Mean XP/game across established players → relative "farming" threshold.
+        let sumPerGame = 0;
+        let nPerGame = 0;
+        for (const u of perUser.values()) {
+            if (u.games >= 5) {
+                sumPerGame += u.xp / u.games;
+                nPerGame++;
+            }
+        }
+        const meanPerGame = nPerGame ? sumPerGame / nPerGame : 0;
+        const farmThreshold = Math.max(WARN_XP_PER_GAME_FLOOR, meanPerGame * 3);
+        const minGames = WARN_MIN_GAMES[windowParam] ?? WARN_MIN_GAMES["7d"];
+
+        const flagged: {
+            userId: string;
+            xpGained: number;
+            games: number;
+            xpPerGame: number;
+            reasons: string[];
+        }[] = [];
+        for (const [userId, u] of perUser) {
+            const xpPerGame = u.games ? u.xp / u.games : 0;
+            const reasons: string[] = [];
+            if (u.games >= minGames) reasons.push(`${u.games} games`);
+            if (u.games >= 5 && xpPerGame >= farmThreshold)
+                reasons.push(`high XP/game (${Math.round(xpPerGame)})`);
+            if (reasons.length) {
+                flagged.push({
+                    userId,
+                    xpGained: Math.round(u.xp * 100) / 100,
+                    games: u.games,
+                    xpPerGame: Math.round(xpPerGame * 100) / 100,
+                    reasons,
+                });
+            }
+        }
+        flagged.sort((a, b) => b.xpGained - a.xpGained);
+        const xpSpikes = flagged.slice(0, 100);
+
+        // Resolve slug / username / ban state for the flagged accounts.
+        const userIds = xpSpikes.map((s) => s.userId);
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      username: usersTable.username,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+
+        return c.json({
+            window: windowParam,
+            sharedIpGames: sharedIpGames.map((r) => ({
+                gameId: r.gameId,
+                ip: r.ip,
+                region: r.region,
+                joins: Number(r.joins),
+                accounts: Number(r.accounts),
+                names: r.names ?? [],
+                lastSeen: r.lastSeen,
+            })),
+            sharedIpAccounts: sharedIpAccounts.map((r) => ({
+                ip: r.ip,
+                isp: r.isp,
+                accounts: Number(r.accounts),
+                joins: Number(r.joins),
+                names: r.names ?? [],
+                lastSeen: r.lastSeen,
+            })),
+            xpSpikes: xpSpikes.map((s) => {
+                const u = userById.get(s.userId);
+                return {
+                    userId: s.userId,
+                    slug: u?.slug ?? null,
+                    username: u?.username || null,
+                    banned: u?.banned ?? false,
+                    xpGained: s.xpGained,
+                    games: s.games,
+                    xpPerGame: s.xpPerGame,
+                    reasons: s.reasons,
+                };
+            }),
+        });
     })
 
     /**
@@ -1279,6 +1796,142 @@ export const ModerationDashboardRouter = new Hono<Context>()
             xp,
             itemsBySource,
             matches: prettyMatches,
+        });
+    })
+
+    /**
+     * Golden Fries (GP) ledger for one account, for the account-detail "GP History".
+     * `?filter=earned` (amount > 0) or `?filter=spent` (amount < 0); default all.
+     * Totals are always over the full history so the summary is stable across filters.
+     */
+    .get("/api/account/:slug/gp", async (c) => {
+        const slug = c.req.param("slug");
+        const filter = c.req.query("filter") ?? "all";
+
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: { id: true, slug: true, goldenFries: true },
+        });
+        if (!user) return c.json({ error: "not found" }, 404);
+
+        const amountCond =
+            filter === "earned"
+                ? sql`${goldenFriesLedgerTable.amount} > 0`
+                : filter === "spent"
+                  ? sql`${goldenFriesLedgerTable.amount} < 0`
+                  : undefined;
+
+        const [totals, entries] = await Promise.all([
+            db
+                .select({
+                    earned: sql<number>`coalesce(sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} > 0), 0)::int`,
+                    spent: sql<number>`coalesce(-sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} < 0), 0)::int`,
+                    count: sql<number>`count(*)::int`,
+                })
+                .from(goldenFriesLedgerTable)
+                .where(eq(goldenFriesLedgerTable.userId, user.id)),
+            db
+                .select({
+                    id: goldenFriesLedgerTable.id,
+                    amount: goldenFriesLedgerTable.amount,
+                    reason: goldenFriesLedgerTable.reason,
+                    balanceAfter: goldenFriesLedgerTable.balanceAfter,
+                    createdAt: goldenFriesLedgerTable.createdAt,
+                })
+                .from(goldenFriesLedgerTable)
+                .where(and(eq(goldenFriesLedgerTable.userId, user.id), amountCond))
+                .orderBy(desc(goldenFriesLedgerTable.createdAt))
+                .limit(500),
+        ]);
+
+        // For marketplace rows (reason "market:buy:<id>" / "market:sell:<id>") resolve
+        // the trade counterparty + item, so the history shows who the fries went to/from.
+        const marketIds: number[] = [];
+        for (const e of entries) {
+            const m = /^market:(?:buy|sell):(\d+)$/.exec(e.reason);
+            if (m) marketIds.push(Number(m[1]));
+        }
+        const marketById = new Map<
+            number,
+            {
+                type: string;
+                sellerSlug: string | null;
+                sellerName: string | null;
+                buyerSlug: string | null;
+                buyerName: string | null;
+            }
+        >();
+        if (marketIds.length) {
+            const listings = await db
+                .select({
+                    id: marketListingsTable.id,
+                    type: marketListingsTable.type,
+                    sellerId: marketListingsTable.sellerId,
+                    sellerSlug: marketListingsTable.sellerSlug,
+                    buyerId: marketListingsTable.buyerId,
+                })
+                .from(marketListingsTable)
+                .where(inArray(marketListingsTable.id, marketIds));
+
+            const partyIds = new Set<string>();
+            for (const l of listings) {
+                if (l.sellerId) partyIds.add(l.sellerId);
+                if (l.buyerId) partyIds.add(l.buyerId);
+            }
+            const partyRows = partyIds.size
+                ? await db
+                      .select({
+                          id: usersTable.id,
+                          slug: usersTable.slug,
+                          username: usersTable.username,
+                      })
+                      .from(usersTable)
+                      .where(inArray(usersTable.id, [...partyIds]))
+                : [];
+            const partyById = new Map(partyRows.map((p) => [p.id, p]));
+            for (const l of listings) {
+                const seller = l.sellerId ? partyById.get(l.sellerId) : undefined;
+                const buyer = l.buyerId ? partyById.get(l.buyerId) : undefined;
+                marketById.set(l.id, {
+                    type: l.type,
+                    sellerSlug: seller?.slug ?? l.sellerSlug ?? null,
+                    sellerName: seller?.username || seller?.slug || l.sellerSlug || null,
+                    buyerSlug: buyer?.slug ?? null,
+                    buyerName: buyer?.username || buyer?.slug || null,
+                });
+            }
+        }
+
+        const entriesOut = entries.map((e) => {
+            const m = /^market:(buy|sell):(\d+)$/.exec(e.reason);
+            const info = m ? marketById.get(Number(m[2])) : undefined;
+            if (!m || !info) return { ...e, market: null };
+            const direction = m[1] as "buy" | "sell";
+            return {
+                ...e,
+                market: {
+                    direction,
+                    item: info.type,
+                    // Buyer's row → counterparty is the seller (fries went to them);
+                    // seller's row → counterparty is the buyer (fries came from them).
+                    counterpartySlug:
+                        direction === "buy" ? info.sellerSlug : info.buyerSlug,
+                    counterpartyName:
+                        direction === "buy" ? info.sellerName : info.buyerName,
+                },
+            };
+        });
+
+        const t = totals[0] ?? { earned: 0, spent: 0, count: 0 };
+        return c.json({
+            slug: user.slug,
+            userId: user.id,
+            balance: user.goldenFries ?? 0,
+            totalEarned: Number(t.earned),
+            totalSpent: Number(t.spent),
+            count: Number(t.count),
+            filter,
+            entries: entriesOut,
         });
     })
 
