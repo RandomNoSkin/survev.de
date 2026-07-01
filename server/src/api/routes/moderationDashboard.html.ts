@@ -110,6 +110,9 @@ export const dashboardHtml = `<!DOCTYPE html>
     .data-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
     .data-table tr:hover td { background: var(--surface2); }
     .data-table .ip-link { cursor: pointer; color: var(--blue-t); text-decoration: underline; font-family: monospace; font-size: 11px; }
+    .nav-link { color: var(--blue-t); text-decoration: underline; cursor: pointer; }
+    tr.flash td { animation: flashrow 1.5s ease-out; }
+    @keyframes flashrow { from { background: var(--blue-dim); } to { background: transparent; } }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; letter-spacing: .3px; }
     .badge-admin  { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
     .badge-self   { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
@@ -157,6 +160,12 @@ export const dashboardHtml = `<!DOCTYPE html>
     /* ── IP detail card ── */
     .detail-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 16px; }
     .detail-card h3 { font-size: 13px; margin-bottom: 10px; color: var(--text-dim); }
+    /* Collapsible account-detail cards: click the header to fold the body away. */
+    #account-modal-body .detail-card[data-card] > h3 { cursor: pointer; user-select: none; }
+    #account-modal-body .detail-card[data-card] > h3::before { content: '▾'; display: inline-block; width: 14px; color: var(--text-dim); }
+    #account-modal-body .detail-card.collapsed[data-card] > h3::before { content: '▸'; }
+    #account-modal-body .detail-card.collapsed[data-card] > h3 { margin-bottom: 0; }
+    #account-modal-body .detail-card.collapsed[data-card] > *:not(h3) { display: none; }
     .kv-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12px; }
     .kv-key { color: var(--text-dim); min-width: 90px; }
     .kv-val { color: var(--text); font-family: monospace; }
@@ -200,6 +209,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     .chat-msg .nm { min-width: 150px; color: var(--text); font-weight: 500; }
     .chat-msg .ch { font-size: 10px; font-weight: 600; min-width: 34px; }
     .chat-msg .mg { flex: 1; word-break: break-word; }
+    .chat-msg .chat-ban-link { color: var(--red-t); font-size: 10px; font-weight: 600; cursor: pointer; text-decoration: underline; white-space: nowrap; align-self: center; }
     .chat-msg.highlight { background: rgba(88,166,255,0.20); box-shadow: inset 3px 0 0 var(--blue); }
     .chat-msg mark { background: var(--blue); color: #fff; border-radius: 2px; padding: 0 2px; }
     #chatlog-back { margin-bottom: 10px; }
@@ -234,6 +244,8 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="accounts">Accounts</button>
   <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
   <button class="tab-btn"        data-tab="replays">Replays</button>
+  <button class="tab-btn"        data-tab="xp">XP Gain</button>
+  <button class="tab-btn"        data-tab="warnings">Warnings</button>
 </div>
 
 <div id="main">
@@ -330,9 +342,49 @@ export const dashboardHtml = `<!DOCTYPE html>
         <option value="day">Whole day</option>
       </select>
       <button class="btn btn-gray" id="replays-date-clear">✕ Date</button>
+      <select id="replays-limit" title="How many games to show"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="20" selected>Show 20</option>
+        <option value="10">Show 10</option>
+        <option value="50">Show 50</option>
+        <option value="100">Show 100</option>
+        <option value="all">Show all</option>
+      </select>
       <button class="btn btn-gray" id="replays-refresh-btn">↻ Refresh</button>
     </div>
     <div id="replays-container"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- ════════════════ TAB: XP GAIN ════════════════ -->
+  <div id="tab-xp" class="tab-pane">
+    <div class="toolbar">
+      <span style="font-size:12px;color:var(--text-dim);">XP gained in</span>
+      <select id="xp-window" title="Time window"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="24h">Last 24 hours</option>
+        <option value="7d" selected>Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
+      <button class="btn btn-gray" id="xp-refresh-btn">↻ Refresh</button>
+      <span id="xp-hint" style="font-size:11px;color:var(--text-dim);">Top XP gainers — sudden spikes may indicate account boosting.</span>
+    </div>
+    <div id="xp-container"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- ════════════════ TAB: WARNINGS ════════════════ -->
+  <div id="tab-warnings" class="tab-pane">
+    <div class="toolbar">
+      <span style="font-size:12px;color:var(--text-dim);">Suspicious activity in</span>
+      <select id="warnings-window" title="Time window"
+        style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="24h" selected>Last 24 hours</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
+      <button class="btn btn-gray" id="warnings-refresh-btn">↻ Refresh</button>
+      <span style="font-size:11px;color:var(--text-dim);">Heuristics — review before acting; not proof of cheating.</span>
+    </div>
+    <div id="warnings-container"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB 4: ACCOUNTS ════════════════ -->
@@ -578,23 +630,85 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+// ── Cross-navigation links ──────────────────────────────────────────────────
+// Every cross-reference (span, table row, card or button) carries data-nav="<deep
+// link hash>". A single delegated capture-phase handler drives it: plain left-click
+// routes in-page; Ctrl/Cmd/Shift-click and middle-click open the same view in a new
+// browser tab (the boot router resolves the hash there).
+function hLookup(qv)          { return 'view=lookup&q=' + encodeURIComponent(qv); }
+function hChatGame(gid, msg)  { return 'view=chatgame&gameId=' + encodeURIComponent(gid) + (msg != null ? '&msg=' + encodeURIComponent(msg) : ''); }
+function hAccount(slug)       { return 'view=account&slug=' + encodeURIComponent(slug); }
+function hReplays(qv)         { return 'view=replays&q=' + encodeURIComponent(qv); }
+function hXpUser(userId, win) { return 'view=xpuser&userId=' + encodeURIComponent(userId) + (win ? '&window=' + encodeURIComponent(win) : ''); }
+
+// Inline cross-link (styled span). labelHtml is already-escaped HTML.
+function navLink(hash, labelHtml, opts) {
+  opts = opts || {};
+  const cls   = 'nav-link' + (opts.cls ? ' ' + opts.cls : '');
+  const style = opts.style ? ' style="' + opts.style + '"' : '';
+  const title = opts.title ? ' title="' + esc(opts.title) + '"' : '';
+  return '<span class="' + cls + '" data-nav="' + esc(hash) + '"' + style + title + '>' + labelHtml + '</span>';
+}
+
+function navGo(hash, newTab) {
+  if (newTab) window.open(location.pathname + '#' + hash, '_blank');
+  else routeFromHash(hash);
+}
+
+// Capture phase so it runs before the element's own onclick and can suppress the
+// in-page handler when a new tab is requested.
+function navHandle(e, forceNewTab) {
+  const navEl = e.target.closest('[data-nav]');
+  if (!navEl) return;
+  // A nested control WITHOUT its own data-nav (ban / +GP / spectate, inputs) keeps its click.
+  const ctrl = e.target.closest('button, input, select, textarea, .chat-ban-link');
+  if (ctrl && ctrl !== navEl && !ctrl.hasAttribute('data-nav') && navEl.contains(ctrl)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  navGo(navEl.dataset.nav, forceNewTab || e.ctrlKey || e.metaKey || e.shiftKey);
+}
+document.addEventListener('click', (e) => navHandle(e, false), true);
+document.addEventListener('auxclick', (e) => { if (e.button === 1) navHandle(e, true); }, true);
+
+// Applies a deep-link hash (from a nav element, or from the address bar on load).
+function routeFromHash(h) {
+  const q = (h || '').replace(/^#/, '');
+  if (!q) return;
+  const p = new URLSearchParams(q);
+  const view = p.get('view');
+  if (view === 'lookup') {
+    const val = p.get('q') || '';
+    switchTab('lookup');
+    if (val) { document.getElementById('lookup-input').value = val; doLookup(val); }
+  } else if (view === 'chatgame') {
+    const gameId = p.get('gameId');
+    const msg = p.get('msg');
+    if (gameId) focusChatMessage(gameId, msg != null && msg !== '' ? Number(msg) : null);
+    else switchTab('chatlog');
+  } else if (view === 'account') {
+    switchTab('accounts');
+    const slug = p.get('slug');
+    if (slug) openAccountDetail(slug);
+  } else if (view === 'replays') {
+    const el = document.getElementById('replays-search');
+    if (el) el.value = p.get('q') || '';
+    switchTab('replays');
+  } else if (view === 'xpuser') {
+    const win = p.get('window');
+    if (win) { const sel = document.getElementById('xp-window'); if (sel) sel.value = win; }
+    switchTab('xp');
+    const userId = p.get('userId');
+    if (userId) loadXpUser(userId);
+  }
+}
+
 function ipLink(hash) {
-  return '<span class="ip-link" data-hash="' + esc(hash) + '" title="' + esc(hash) + '">' + esc(hash.slice(0,12)) + '…</span>';
+  return navLink(hLookup(hash), esc(hash.slice(0, 12)) + '…', { cls: 'ip-link', title: hash });
 }
 
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
-// Clicking an IP link navigates to the lookup tab
-document.addEventListener('click', (e) => {
-  if (e.target.classList.contains('ip-link')) {
-    const hash = e.target.dataset.hash;
-    switchTab('lookup');
-    document.getElementById('lookup-input').value = hash;
-    doLookup(hash);
-  }
-});
 
 // ── SSE connection ─────────────────────────────────────────────────────────
 
@@ -689,6 +803,12 @@ function switchTab(name) {
   } else if (name === 'replays') {
     closeSSE();
     loadReplays();
+  } else if (name === 'xp') {
+    closeSSE();
+    loadXpGain();
+  } else if (name === 'warnings') {
+    closeSSE();
+    loadWarnings();
   } else {
     closeSSE();
   }
@@ -775,7 +895,16 @@ function renderReplays() {
     return;
   }
 
-  container.innerHTML = games.map(({ regionId, rec }) => {
+  // Only render a capped number of games so the tab stays light (the DOM per game
+  // is a full POV table). Default 20; "all" removes the cap.
+  const limitVal = document.getElementById('replays-limit').value;
+  const limit = limitVal === 'all' ? Infinity : (Number(limitVal) || 20);
+  const shown = games.slice(0, limit);
+  const header = shown.length < games.length
+    ? \`<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Showing \${shown.length} of \${games.length} games — raise the limit to see more.</div>\`
+    : \`<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Showing \${games.length} game\${games.length === 1 ? '' : 's'}.</div>\`;
+
+  container.innerHTML = header + shown.map(({ regionId, rec }) => {
     const mode = TEAM_MODE_LABEL[rec.teamMode] || ('Mode ' + rec.teamMode);
     const dur = Math.round((rec.durationMs || 0) / 1000);
     const durStr = dur >= 60 ? (Math.floor(dur / 60) + 'm ' + (dur % 60) + 's') : (dur + 's');
@@ -824,10 +953,291 @@ document.getElementById('replays-refresh-btn').addEventListener('click', loadRep
 document.getElementById('replays-search').addEventListener('input', renderReplays);
 document.getElementById('replays-date').addEventListener('change', renderReplays);
 document.getElementById('replays-window').addEventListener('change', renderReplays);
+document.getElementById('replays-limit').addEventListener('change', renderReplays);
 document.getElementById('replays-date-clear').addEventListener('click', () => {
   document.getElementById('replays-date').value = '';
   renderReplays();
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – XP GAIN (recent XP-gain leaderboard to spot account boosting)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Leaderboard and per-user detail both render into #xp-container; a token guards
+// against a slower request overwriting a newer view (e.g. detail opened right after
+// the tab's leaderboard load started).
+let xpLoadToken = 0;
+
+async function loadXpGain() {
+  const container = document.getElementById('xp-container');
+  const token = ++xpLoadToken;
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const win = document.getElementById('xp-window').value;
+    const data = await get('/api/xp-gain?window=' + encodeURIComponent(win));
+    if (token !== xpLoadToken) return;
+    renderXpGain(data.users ?? []);
+  } catch (e) {
+    if (token !== xpLoadToken) return;
+    container.innerHTML = '<div class="empty">Failed to load XP gain.</div>';
+  }
+}
+
+async function loadXpUser(userId) {
+  const container = document.getElementById('xp-container');
+  const token = ++xpLoadToken;
+  container.innerHTML = '<div class="loading">Loading player games…</div>';
+  try {
+    const win = document.getElementById('xp-window').value;
+    const data = await get('/api/xp-gain/user/' + encodeURIComponent(userId) + '?window=' + encodeURIComponent(win));
+    if (token !== xpLoadToken) return;
+    renderXpUserDetail(data);
+  } catch (e) {
+    if (token !== xpLoadToken) return;
+    container.innerHTML = '<div class="empty">Failed to load player XP detail.</div>';
+  }
+}
+
+// Tiny inline-SVG sparkline of per-day XP (highlights the peak day → sudden spikes).
+function xpSparkline(spark) {
+  if (!spark || spark.length === 0) return '';
+  const w = 120, h = 24, pad = 2;
+  const xs = spark.map(p => p.xp);
+  const max = Math.max(...xs, 1);
+  const n = spark.length;
+  const coord = (i) => {
+    const x = n === 1 ? w / 2 : pad + (i * (w - 2 * pad)) / (n - 1);
+    const y = h - pad - (xs[i] / max) * (h - 2 * pad);
+    return [x, y];
+  };
+  const pts = spark.map((_, i) => coord(i).map(v => v.toFixed(1)).join(',')).join(' ');
+  let mi = 0; for (let i = 1; i < n; i++) if (xs[i] > xs[mi]) mi = i;
+  const [px, py] = coord(mi);
+  const dot = '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="2" fill="var(--red-t, #f66)"/>';
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="vertical-align:middle">' +
+    '<polyline points="' + pts + '" fill="none" stroke="var(--blue-t)" stroke-width="1.5"/>' + dot + '</svg>';
+}
+
+function renderXpGain(users) {
+  const container = document.getElementById('xp-container');
+  if (!users.length) { container.innerHTML = '<div class="empty">No XP gained in this window.</div>'; return; }
+  const win = document.getElementById('xp-window').value;
+  const maxXp = Math.max(...users.map(u => u.xpGained), 1);
+  const rows = users.map((u, i) => {
+    const pct = Math.max(2, (u.xpGained / maxXp) * 100);
+    const label = esc(u.username || u.slug || '(guest / unlinked)');
+    const nameCell = u.slug
+      ? \`\${navLink(hLookup(u.slug), label, { title: 'Look up account' })} <span style="color:var(--text-muted);font-size:10px;">(\${esc(u.slug)})</span>\`
+      : \`<span style="color:var(--text-muted)">\${label}</span>\`;
+    const bannedBadge = u.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+    return \`<tr data-nav="\${esc(hXpUser(u.userId, win))}" style="cursor:pointer" title="Show this player's games">
+      <td style="color:var(--text-dim)">#\${i + 1}</td>
+      <td>\${nameCell}\${bannedBadge}</td>
+      <td style="min-width:180px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;background:var(--surface3);border-radius:3px;height:10px;overflow:hidden;">
+            <div style="width:\${pct}%;height:100%;background:var(--blue-t);"></div>
+          </div>
+          <strong style="white-space:nowrap;">\${u.xpGained.toLocaleString()}</strong>
+        </div>
+      </td>
+      <td>\${u.games}</td>
+      <td>\${u.xpPerGame.toLocaleString()}</td>
+      <td>\${xpSparkline(u.spark)}</td>
+    </tr>\`;
+  }).join('');
+  container.innerHTML = \`
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Click a player to see their individual games and details.</div>
+    <table class="data-table">
+      <thead><tr><th>#</th><th>Account</th><th>XP gained</th><th>Games</th><th>XP / game</th><th>Trend</th></tr></thead>
+      <tbody>\${rows}</tbody>
+    </table>\`;
+}
+
+// Short m:ss / s duration, shared by the XP drill-down (replays render has its own local copy).
+function fmtSecs(s) { if (s == null) return '–'; return s >= 60 ? (Math.floor(s / 60) + 'm ' + (s % 60) + 's') : (s + 's'); }
+
+// Bigger inline-SVG chart: one bar per game over the window. Bars carry data-game so
+// a click jumps to (and flashes) that game's row — "click a moment, see the game".
+function xpUserChart(games) {
+  if (!games.length) return '<div class="empty">No games in this window.</div>';
+  const W = 760, H = 190, pad = 26;
+  const max = Math.max(...games.map(g => g.xp), 1);
+  const n = games.length;
+  const bw = (W - 2 * pad) / n;
+  const bars = games.map((g, i) => {
+    const h = Math.max(1, (g.xp / max) * (H - 2 * pad));
+    const x = pad + i * bw;
+    const y = H - pad - h;
+    const w = Math.max(1, bw - 2);
+    const title = fmtDate(g.createdAt) + ' · ' + g.mapName + ' · ' + g.xp.toLocaleString() + ' XP';
+    return '<rect data-game="' + esc(g.gameId) + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1" fill="var(--blue-t)" style="cursor:pointer"><title>' + esc(title) + '</title></rect>';
+  }).join('');
+  const axis = '<line x1="' + pad + '" y1="' + (H - pad) + '" x2="' + (W - pad) + '" y2="' + (H - pad) + '" stroke="var(--border2)"/>';
+  const labels =
+    '<text x="' + pad + '" y="' + (H - 8) + '" fill="var(--text-muted)" font-size="10">' + esc(fmtDate(games[0].createdAt)) + '</text>' +
+    '<text x="' + (W - pad) + '" y="' + (H - 8) + '" fill="var(--text-muted)" font-size="10" text-anchor="end">' + esc(fmtDate(games[n - 1].createdAt)) + '</text>';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="max-height:210px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;">' + axis + bars + labels + '</svg>';
+}
+
+function renderXpUserDetail(data) {
+  const container = document.getElementById('xp-container');
+  const games = data.games ?? [];
+  const label = esc(data.username || data.slug || data.userId);
+  const banned = data.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+  const lookup = data.slug ? ' · ' + navLink(hLookup(data.slug), 'look up account', { title: 'Open IP / Player lookup' }) : '';
+  const rows = games.slice().reverse().map(g => {
+    const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
+    return \`<tr id="xpgame-\${esc(g.gameId)}">
+      <td style="white-space:nowrap;font-size:11px;">\${fmtDate(g.createdAt)}</td>
+      <td>\${esc(g.region || '–')}</td>
+      <td>\${esc(g.mapName)} · \${mode}</td>
+      <td>\${g.kills}</td>
+      <td>\${g.damage}</td>
+      <td>\${g.rank}</td>
+      <td>\${fmtSecs(g.timeAlive)}</td>
+      <td><strong>\${g.xp.toLocaleString()}</strong></td>
+      <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${navLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\'s chat' })}</td>
+    </tr>\`;
+  }).join('');
+  container.innerHTML = \`
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn btn-gray btn-sm" id="xp-back-btn">← Back</button>
+      <div style="font-size:15px;font-weight:600;">\${label}\${banned}</div>
+      <div style="font-size:12px;color:var(--text-dim);">\${data.slug ? '(' + esc(data.slug) + ')' : ''}\${lookup}</div>
+      <div style="margin-left:auto;font-size:12px;color:var(--text-dim);">\${games.length} games · <strong style="color:var(--text)">\${(data.totalXp || 0).toLocaleString()}</strong> XP in \${esc(data.window)}</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Click a bar to jump to that game.</div>
+    \${xpUserChart(games)}
+    <div style="margin-top:14px;">
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>Region</th><th>Map · Mode</th><th>Kills</th><th>Dmg</th><th>Rank</th><th>Alive</th><th>XP</th><th>Game</th></tr></thead>
+        <tbody>\${rows || '<tr><td colspan="9" class="empty">No games.</td></tr>'}</tbody>
+      </table>
+    </div>\`;
+  document.getElementById('xp-back-btn').addEventListener('click', loadXpGain);
+}
+
+// Scroll to and briefly flash a game row (from a chart bar click).
+function highlightGame(gameId) {
+  const row = document.getElementById('xpgame-' + gameId);
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.remove('flash');
+  void row.offsetWidth; // restart the animation if the same bar is clicked again
+  row.classList.add('flash');
+}
+// Chart bars carry data-game; delegate their clicks (they have no data-nav).
+document.addEventListener('click', (e) => {
+  const bar = e.target.closest('[data-game]');
+  if (bar) highlightGame(bar.dataset.game);
+});
+
+document.getElementById('xp-refresh-btn').addEventListener('click', loadXpGain);
+document.getElementById('xp-window').addEventListener('change', loadXpGain);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – WARNINGS (heuristic suspicious-behaviour feed)
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadWarnings() {
+  const container = document.getElementById('warnings-container');
+  container.innerHTML = '<div class="loading">Analyzing…</div>';
+  try {
+    const win = document.getElementById('warnings-window').value;
+    const data = await get('/api/warnings?window=' + encodeURIComponent(win));
+    renderWarnings(data);
+  } catch (e) {
+    container.innerHTML = '<div class="empty">Failed to load warnings.</div>';
+  }
+}
+
+// Comma-joined name list, truncated so a shared IP with dozens of alts stays readable.
+function warnNames(names) {
+  const list = names || [];
+  const shown = list.slice(0, 6).map(n => esc(n)).join(', ');
+  return list.length > 6
+    ? shown + ' <span style="color:var(--text-muted)">+' + (list.length - 6) + ' more</span>'
+    : (shown || '–');
+}
+
+function warnSection(title, count, hint, tableHtml) {
+  return \`<div style="margin-bottom:18px;">
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+        <span style="font-size:13px;font-weight:600;">\${esc(title)}</span>
+        <span class="badge \${count ? 'badge-perm' : 'badge-alive'}">\${count}</span>
+        <span style="font-size:11px;color:var(--text-dim);">\${esc(hint)}</span>
+      </div>
+      \${tableHtml}
+    </div>\`;
+}
+
+function renderWarnings(data) {
+  const container = document.getElementById('warnings-container');
+  const win = document.getElementById('warnings-window').value;
+  const sharedGames = data.sharedIpGames ?? [];
+  const sharedAcc = data.sharedIpAccounts ?? [];
+  const spikes = data.xpSpikes ?? [];
+
+  // 1) Same IP appearing multiple times in one game.
+  const gRows = sharedGames.map(g => \`<tr>
+      <td>\${ipLink(g.ip)}</td>
+      <td><strong>\${g.joins}</strong></td>
+      <td>\${g.accounts}</td>
+      <td style="max-width:340px;">\${warnNames(g.names)}</td>
+      <td>\${esc(g.region || '–')}</td>
+      <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay' })} · \${navLink(hChatGame(g.gameId, null), 'chat', { title: 'Open game chat' })}</td>
+      <td style="white-space:nowrap;">\${fmtDate(g.lastSeen)}</td>
+    </tr>\`).join('');
+  const gTable = sharedGames.length
+    ? \`<table class="data-table"><thead><tr><th>IP</th><th>Joins</th><th>Accounts</th><th>Names</th><th>Region</th><th>Game</th><th>Last seen</th></tr></thead><tbody>\${gRows}</tbody></table>\`
+    : '<div class="empty">No games with a repeated IP.</div>';
+
+  // 2) Same IP used by many distinct accounts.
+  const aRows = sharedAcc.map(a => \`<tr>
+      <td>\${ipLink(a.ip)}</td>
+      <td>\${esc(a.isp || '–')}</td>
+      <td><strong>\${a.accounts}</strong></td>
+      <td>\${a.joins}</td>
+      <td style="max-width:340px;">\${warnNames(a.names)}</td>
+      <td style="white-space:nowrap;">\${fmtDate(a.lastSeen)}</td>
+    </tr>\`).join('');
+  const aTable = sharedAcc.length
+    ? \`<table class="data-table"><thead><tr><th>IP</th><th>ISP</th><th>Accounts</th><th>Joins</th><th>Names</th><th>Last seen</th></tr></thead><tbody>\${aRows}</tbody></table>\`
+    : '<div class="empty">No IP shared across many accounts.</div>';
+
+  // 3) XP spikes.
+  const sRows = spikes.map((s, i) => {
+    const label = esc(s.username || s.slug || s.userId);
+    const nameCell = s.slug
+      ? \`\${navLink(hLookup(s.slug), label, { title: 'Look up account' })} <span style="color:var(--text-muted);font-size:10px;">(\${esc(s.slug)})</span>\`
+      : \`<span style="color:var(--text-muted)">\${label}</span>\`;
+    const banned = s.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+    const reasons = (s.reasons || []).map(r => \`<span class="badge badge-disc">\${esc(r)}</span>\`).join(' ');
+    return \`<tr data-nav="\${esc(hXpUser(s.userId, win))}" style="cursor:pointer" title="Show this player's games">
+      <td style="color:var(--text-dim)">#\${i + 1}</td>
+      <td>\${nameCell}\${banned}</td>
+      <td><strong>\${s.xpGained.toLocaleString()}</strong></td>
+      <td>\${s.games}</td>
+      <td>\${s.xpPerGame.toLocaleString()}</td>
+      <td>\${reasons}</td>
+    </tr>\`;
+  }).join('');
+  const sTable = spikes.length
+    ? \`<table class="data-table"><thead><tr><th>#</th><th>Account</th><th>XP gained</th><th>Games</th><th>XP/game</th><th>Flags</th></tr></thead><tbody>\${sRows}</tbody></table>\`
+    : '<div class="empty">No XP spikes detected.</div>';
+
+  container.innerHTML =
+    warnSection('Same IP joined a game multiple times', sharedGames.length,
+      'Players or spectators sharing one IP in the same game (multi-boxing / alts / ghosting).', gTable) +
+    warnSection('IP used by many accounts', sharedAcc.length,
+      'One IP behind several accounts in this window (possible alt farm).', aTable) +
+    warnSection('XP spikes', spikes.length,
+      'Abnormal game volume or XP/game (grinding / botting / feeding). Click a row for their games.', sTable);
+}
+
+document.getElementById('warnings-refresh-btn').addEventListener('click', loadWarnings);
+document.getElementById('warnings-window').addEventListener('change', loadWarnings);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 – BAN MANAGEMENT (receives live "bans" events via SSE)
@@ -1058,8 +1468,8 @@ async function loadRecent() {
     const tbody = document.getElementById('recent-tbody');
     const rows  = data.recent ?? [];
     tbody.innerHTML = rows.length ? rows.map(r => \`
-      <tr style="cursor:pointer" onclick="lookupFromRecent('\${esc(r.username)}')">
-        <td><span style="color:var(--blue-t)">\${esc(r.username)}</span></td>
+      <tr style="cursor:pointer" data-nav="\${esc(hLookup(r.username))}" title="Look up this player">
+        <td>\${navLink(hLookup(r.username), esc(r.username), { style: 'color:var(--blue-t)' })}</td>
         <td>\${r.slug ? esc(r.slug) : '<span style="color:var(--text-muted)">–</span>'}</td>
         <td>\${ipLink(r.encodedIp)}</td>
         <td>\${esc(r.isp || '–')}</td>
@@ -1068,12 +1478,6 @@ async function loadRecent() {
       </tr>
     \`).join('') : '<tr><td colspan="6" class="empty">No recent players.</td></tr>';
   } catch { /* silently ignore */ }
-}
-
-/** Clicking a recent-list row fills the search box and runs the lookup. */
-function lookupFromRecent(name) {
-  document.getElementById('lookup-input').value = name;
-  doLookup(name);
 }
 
 async function doLookup(query) {
@@ -1088,12 +1492,12 @@ async function doLookup(query) {
     return;
   }
 
-  // Try an account slug first — opens the account detail modal if it matches.
+  // Account slug? Show the account's names + IPs on the lookup view (instead of
+  // jumping straight into the account-detail modal), so alt names / shared IPs are visible.
   try {
-    const acc = await get('/api/account/' + encodeURIComponent(query));
-    if (acc && acc.user) {
-      res.innerHTML = '<div class="empty">Opened account detail for slug "' + esc(query) + '".</div>';
-      openAccountDetail(query);
+    const data = await get('/api/slug/' + encodeURIComponent(query));
+    if (data && data.userId) {
+      renderSlugDetail(data, res);
       return;
     }
   } catch { /* not an account slug — fall back to player-name lookup */ }
@@ -1149,6 +1553,7 @@ function renderIpDetail(data, container) {
     return \`<tr>
       <td>\${esc(a.username)} \${sourceBadge}</td>
       <td>\${a.slug ? esc(a.slug) : '<span style="color:var(--text-muted)">–</span>'}</td>
+      <td>\${a.count ? a.count : '<span style="color:var(--text-muted)">–</span>'}</td>
       <td>\${esc(a.isp || '–')}</td>
       <td>\${esc(a.region || '–')}</td>
       <td>\${isHistorical ? '<span style="color:var(--text-muted)">via match history</span>' : fmtDate(a.createdAt)}</td>
@@ -1171,8 +1576,8 @@ function renderIpDetail(data, container) {
     \${renderBanHistory(data.banHistory)}
     <div style="margin-top:12px;">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Slug</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>
-        <tbody>\${rows || '<tr><td colspan="5" class="empty">No entries.</td></tr>'}</tbody>
+        <thead><tr><th>Name</th><th>Slug</th><th>Uses</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>
+        <tbody>\${rows || '<tr><td colspan="6" class="empty">No entries.</td></tr>'}</tbody>
       </table>
     </div>
   \`;
@@ -1184,6 +1589,7 @@ function renderPlayerDetail(data, container) {
       <td>\${ipLink(ip.ip)}</td>
       <td>\${esc(ip.isp || '–')}</td>
       <td>\${esc(ip.region || '–')}</td>
+      <td>\${ip.count ? ip.count : '<span style="color:var(--text-muted)">–</span>'}</td>
       <td>\${fmtDate(ip.lastSeen)}</td>
     </tr>
   \`).join('');
@@ -1199,8 +1605,51 @@ function renderPlayerDetail(data, container) {
     \${renderBanHistory(data.banHistory)}
     <div style="margin-top:12px;">
       <table class="data-table">
-        <thead><tr><th>IP Hash</th><th>ISP</th><th>Region</th><th>Last seen</th></tr></thead>
-        <tbody>\${rows || '<tr><td colspan="4" class="empty">No IPs found.</td></tr>'}</tbody>
+        <thead><tr><th>IP Hash</th><th>ISP</th><th>Region</th><th>Uses</th><th>Last seen</th></tr></thead>
+        <tbody>\${rows || '<tr><td colspan="5" class="empty">No IPs found.</td></tr>'}</tbody>
+      </table>
+    </div>
+  \`;
+}
+
+// Account-slug lookup: every name + IP the account played under (stays on lookup view).
+function renderSlugDetail(data, container) {
+  const nameRows = (data.names || []).map(n => \`
+    <tr>
+      <td>\${esc(n.username)}</td>
+      <td>\${n.count ? n.count : '<span style="color:var(--text-muted)">–</span>'}</td>
+      <td>\${fmtDate(n.lastSeen)}</td>
+    </tr>\`).join('');
+  const ipRows = (data.ips || []).map(ip => \`
+    <tr>
+      <td>\${ipLink(ip.ip)}</td>
+      <td>\${esc(ip.isp || '–')}</td>
+      <td>\${esc(ip.region || '–')}</td>
+      <td>\${ip.count ? ip.count : '<span style="color:var(--text-muted)">–</span>'}</td>
+      <td>\${fmtDate(ip.lastSeen)}</td>
+    </tr>\`).join('');
+  container.innerHTML = \`
+    <div class="detail-card">
+      <h3>Account: <strong>\${esc(data.username || data.slug)}</strong></h3>
+      <div class="kv-row"><span class="kv-key">Slug:</span><span class="kv-val">\${esc(data.slug)}</span></div>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:4px;">All names & IPs this account has played under — click an IP hash for full details.</p>
+      <div style="margin-top:8px;">
+        <button class="btn btn-blue btn-sm" data-nav="\${esc(hAccount(data.slug))}">Open full account detail</button>
+      </div>
+    </div>
+    \${renderBanHistory(data.banHistory)}
+    <div style="margin-top:12px;">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:.5px;">NAMES USED</div>
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Uses</th><th>Last seen</th></tr></thead>
+        <tbody>\${nameRows || '<tr><td colspan="3" class="empty">No names found.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600;letter-spacing:.5px;">IPS USED</div>
+      <table class="data-table">
+        <thead><tr><th>IP Hash</th><th>ISP</th><th>Region</th><th>Uses</th><th>Last seen</th></tr></thead>
+        <tbody>\${ipRows || '<tr><td colspan="5" class="empty">No IPs found.</td></tr>'}</tbody>
       </table>
     </div>
   \`;
@@ -1222,12 +1671,12 @@ async function loadChatLog(query, by, btn) {
     panel.innerHTML = \`
       <table class="data-table">
         <thead><tr><th>Time</th><th>Name</th><th>Channel</th><th>Message</th><th>Game</th></tr></thead>
-        <tbody>\${msgs.map(m => \`<tr onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})" style="cursor:pointer" title="Open in Chat Log with context">
+        <tbody>\${msgs.map(m => \`<tr data-nav="\${esc(hChatGame(m.gameId, m.id))}" style="cursor:pointer" title="Open in Chat Log with context">
           <td style="white-space:nowrap;font-size:11px;">\${fmtDate(m.createdAt)}</td>
           <td>\${esc(m.username)}\${m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : ''}</td>
           <td><span style="font-size:10px;font-weight:600;color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'};">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span></td>
           <td>\${esc(m.message)}</td>
-          <td style="font-family:monospace;font-size:10px;color:var(--text-muted);">\${esc((m.gameId||'').slice(0,8))}…</td>
+          <td style="font-family:monospace;font-size:10px;color:var(--text-muted);">\${navLink(hChatGame(m.gameId, m.id), esc((m.gameId||'').slice(0,8)) + '…', { title: 'Open in Chat Log with context' })}</td>
         </tr>\`).join('')}</tbody>
       </table>
     \`;
@@ -1266,15 +1715,20 @@ function chatlogMsgRow(m, search, highlightId) {
   const hl = (highlightId != null && m.id === highlightId) ? ' highlight' : '';
   const message = search ? chatlogHighlight(esc(m.message), search) : esc(m.message);
   const slug = m.slug ? \` <span style="color:var(--text-muted);font-size:10px;">(\${esc(m.slug)})</span>\` : '';
-  // Clicking the name jumps to the player's IP (where they can be banned)
-  const nameClick = m.encodedIp
-    ? \` onclick="event.stopPropagation();gotoIp('\${esc(m.encodedIp)}')" style="cursor:pointer;color:var(--blue-t);text-decoration:underline;" title="View IP / ban"\`
+  // Clicking the name jumps to the player's IP (where they can be banned).
+  const nameHtml = m.encodedIp
+    ? navLink(hLookup(m.encodedIp), esc(m.username), { title: 'View IP / ban' })
+    : esc(m.username);
+  // Trailing chat-ban action (text link at the end of the row; opens the ban modal prefilled).
+  const banBtn = m.encodedIp
+    ? \`<a class="chat-ban-link" onclick="event.stopPropagation();quickBanChat('\${esc(m.encodedIp)}')" title="Chat-ban this IP">chat ban</a>\`
     : '';
-  return \`<div class="chat-msg\${hl}" id="chatmsg-\${m.id}" onclick="focusChatMessage('\${esc(m.gameId)}', \${m.id})">
+  return \`<div class="chat-msg\${hl}" id="chatmsg-\${m.id}" data-nav="\${esc(hChatGame(m.gameId, m.id))}">
       <span class="t">\${fmtDate(m.createdAt)}</span>
-      <span class="nm"><span\${nameClick}>\${esc(m.username)}</span>\${slug}</span>
+      <span class="nm">\${nameHtml}\${slug}</span>
       <span class="ch" style="color:\${CHANNEL_COLORS[m.channel] ?? 'var(--text)'}">\${CHANNEL_LABELS[m.channel] ?? m.channel}</span>
       <span class="mg">\${message}</span>
+      \${banBtn}
     </div>\`;
 }
 
@@ -1283,7 +1737,7 @@ function chatlogRenderGroups(messages, search) {
   return chatlogGroupByGame(messages).map(g => \`
     <div class="chat-game-group">
       <div class="chat-game-header">
-        <span class="gid" onclick="focusChatMessage('\${esc(g.gameId)}', null)" title="Open full game chat">\${esc(g.gameId.slice(0, 8))}…</span>
+        \${navLink(hChatGame(g.gameId, null), esc(g.gameId.slice(0, 8)) + '…', { cls: 'gid', title: 'Open full game chat' })}
         <span>\${g.msgs.length} msg\${g.msgs.length === 1 ? '' : 's'}</span>
         <span>\${fmtDate(g.first)} – \${fmtDate(g.last)}</span>
       </div>
@@ -1339,16 +1793,22 @@ document.getElementById('chatlog-search').addEventListener('keydown', (e) => { i
 document.getElementById('chatlog-clear-btn').addEventListener('click', () => { document.getElementById('chatlog-search').value = ''; loadGlobalChatLog(''); });
 document.getElementById('chatlog-channel').addEventListener('change', () => loadGlobalChatLog(document.getElementById('chatlog-search').value.trim()));
 
-// Jump to a player's IP detail (from chat name clicks) so they can be banned there.
-function gotoIp(hash) {
-  switchTab('lookup');
-  document.getElementById('lookup-input').value = hash;
-  doLookup(hash);
-}
-
 function quickBanIp(hash) {
   // Pre-fill the ban modal and open it
   document.getElementById('modal-ban-type').value   = 'ip';
+  document.getElementById('modal-ban-target').value = hash;
+  document.getElementById('modal-ban-reason').value = '';
+  document.getElementById('modal-ban-days').value   = '7';
+  document.getElementById('modal-ban-days').disabled = false;
+  document.getElementById('modal-ban-perm').checked = false;
+  onBanTypeChange();
+  banModal.style.display = 'flex';
+}
+
+function quickBanChat(hash) {
+  // Pre-fill the ban modal as a chat ban (reason/duration editable before confirm).
+  delete banModal.dataset.kickTarget;
+  document.getElementById('modal-ban-type').value   = 'chat';
   document.getElementById('modal-ban-target').value = hash;
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
@@ -1748,7 +2208,7 @@ function renderAccounts() {
   const colCount = 8 + accountsPassTypes.length;
   const tbody = document.getElementById('accounts-tbody');
   tbody.innerHTML = rows.length ? rows.map((a, i) => \`
-    <tr style="cursor:pointer" onclick="onAccountRowClick(event,'\${esc(a.slug)}')" title="Open account detail">
+    <tr style="cursor:pointer" data-nav="\${esc(hAccount(a.slug))}" title="Open account detail">
       <td style="color:var(--text-muted);font-size:11px;">\${i+1}</td>
       <td><span style="color:var(--blue-t)">\${esc(a.username||'–')}</span></td>
       <td style="font-size:11px;color:var(--text-dim);">\${esc(a.slug||'–')}</td>
@@ -1787,13 +2247,27 @@ const accountModal = document.getElementById('account-modal');
 document.getElementById('account-modal-close').addEventListener('click', () => { accountModal.style.display = 'none'; });
 accountModal.addEventListener('click', (e) => { if (e.target === accountModal) accountModal.style.display = 'none'; });
 
-let currentAccountSlug = '';
-
-// Row click opens the detail, but ignore clicks on inner links/buttons (IP link, +GP)
-function onAccountRowClick(e, slug) {
-  if (e.target.closest('.ip-link') || e.target.closest('button')) return;
-  openAccountDetail(slug);
+// Which account-detail cards are folded. Kept across re-renders (a set-XP / give
+// action re-renders the whole modal) so a collapsed card stays collapsed.
+const collapsedCards = new Set();
+function applyCardCollapse() {
+  for (const card of document.querySelectorAll('#account-modal-body .detail-card[data-card]')) {
+    card.classList.toggle('collapsed', collapsedCards.has(card.dataset.card));
+  }
 }
+// Clicking a card header folds/unfolds it; ignore clicks on controls in the header
+// (e.g. the GP filter select) so those keep working.
+document.getElementById('account-modal-body').addEventListener('click', (e) => {
+  const h3 = e.target.closest('h3');
+  const card = h3 && h3.parentElement;
+  if (!card || !card.classList.contains('detail-card') || !card.dataset.card) return;
+  if (e.target.closest('select, input, button, a, option, [data-nav]')) return;
+  const collapsed = card.classList.toggle('collapsed');
+  if (collapsed) collapsedCards.add(card.dataset.card);
+  else collapsedCards.delete(card.dataset.card);
+});
+
+let currentAccountSlug = '';
 
 async function openAccountDetail(slug) {
   currentAccountSlug = slug;
@@ -1822,7 +2296,7 @@ function renderAccountDetail(data) {
   ].join(' ');
 
   const identity = \`
-    <div class="detail-card">
+    <div class="detail-card" data-card="identity">
       <h3>Identity</h3>
       <div class="kv-row"><span class="kv-key">Username:</span><span class="kv-val">\${esc(u.username||'–')}</span></div>
       <div class="kv-row"><span class="kv-key">Slug:</span><span class="kv-val">\${esc(u.slug)}</span></div>
@@ -1850,14 +2324,27 @@ function renderAccountDetail(data) {
     </tr>\`;
   }).join('');
   const xpCard = \`
-    <div class="detail-card" style="margin-top:12px;">
+    <div class="detail-card" style="margin-top:12px;" data-card="xp">
       <h3>XP / Pass Levels <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(level is derived from XP; setting it grants/revokes the matching unlocks)</span></h3>
       <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th></th></tr></thead>
       <tbody>\${xpRows || '<tr><td colspan="4" class="empty">No passes.</td></tr>'}</tbody></table>
     </div>\`;
 
+  const gpCard = \`
+    <div class="detail-card" style="margin-top:12px;" data-card="gp">
+      <h3 style="display:flex;align-items:center;gap:8px;">GP History
+        <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(Golden Fries earned / spent)</span>
+        <select id="gp-filter" onchange="loadAccountGp(currentAccountSlug, this.value)" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 8px;font-family:inherit;font-size:11px;">
+          <option value="all">All</option>
+          <option value="earned">Earned</option>
+          <option value="spent">Spent</option>
+        </select>
+      </h3>
+      <div id="gp-history"><div class="loading">Loading…</div></div>
+    </div>\`;
+
   const giveCard = \`
-    <div class="detail-card" style="margin-top:12px;">
+    <div class="detail-card" style="margin-top:12px;" data-card="give">
       <h3>Give Item</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <select id="give-item-select" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;max-width:320px;">\${buildCosmeticOptions()}</select>
@@ -1878,7 +2365,7 @@ function renderAccountDetail(data) {
         \${items.map(it => \`<span class="badge badge-disc" style="display:inline-flex;align-items:center;gap:5px;" title="\${esc(it.type)}">\${esc(cosmeticName(it.type))} <span style="cursor:pointer;color:var(--red-t);font-weight:700;" onclick="accRemoveItem('\${esc(it.type)}')">✕</span></span>\`).join('')}
       </div>
     </div>\`).join('') : '<div class="empty">No items owned.</div>';
-  const removeCard = \`<div class="detail-card" style="margin-top:12px;"><h3>Owned Items</h3>\${removeInner}</div>\`;
+  const removeCard = \`<div class="detail-card" style="margin-top:12px;" data-card="items"><h3>Owned Items</h3>\${removeInner}</div>\`;
 
   const matchRows = (data.matches || []).map(m => \`<tr>
     <td style="font-size:11px;white-space:nowrap;">\${fmtDate(m.createdAt)}</td>
@@ -1890,13 +2377,67 @@ function renderAccountDetail(data) {
     <td>\${m.timeAlive}s</td>
   </tr>\`).join('');
   const matchCard = \`
-    <div class="detail-card" style="margin-top:12px;">
+    <div class="detail-card" style="margin-top:12px;" data-card="matches">
       <h3>Recent Matches</h3>
       <table class="data-table"><thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Rank</th><th>Kills</th><th>Dmg</th><th>Alive</th></tr></thead>
       <tbody>\${matchRows || '<tr><td colspan="7" class="empty">No matches.</td></tr>'}</tbody></table>
     </div>\`;
 
-  document.getElementById('account-modal-body').innerHTML = identity + xpCard + giveCard + removeCard + matchCard;
+  document.getElementById('account-modal-body').innerHTML = identity + xpCard + gpCard + giveCard + removeCard + matchCard;
+  applyCardCollapse();
+  loadAccountGp(u.slug, 'all');
+}
+
+async function loadAccountGp(slug, filter) {
+  const cont = document.getElementById('gp-history');
+  if (!cont) return;
+  cont.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await get('/api/account/' + encodeURIComponent(slug) + '/gp?filter=' + encodeURIComponent(filter || 'all'));
+    renderAccountGp(data);
+  } catch (e) {
+    cont.innerHTML = '<div class="empty">Failed to load GP history.</div>';
+  }
+}
+
+// Human-readable ledger reason. Market trades show the item + a clickable counterparty
+// so it's clear who the fries went to (buy) or came from (sell).
+function gpReason(e) {
+  const m = e.market;
+  if (m) {
+    const item = esc(cosmeticName(m.item) || m.item);
+    const who = m.counterpartySlug
+      ? navLink(hAccount(m.counterpartySlug), esc(m.counterpartyName || m.counterpartySlug), { title: 'Open account' })
+      : esc(m.counterpartyName || 'unknown');
+    return m.direction === 'buy'
+      ? 'Bought ' + item + ' <span style="color:var(--text-muted)">from</span> ' + who
+      : 'Sold ' + item + ' <span style="color:var(--text-muted)">to</span> ' + who;
+  }
+  return esc(e.reason);
+}
+
+function renderAccountGp(data) {
+  const cont = document.getElementById('gp-history');
+  if (!cont) return;
+  const entries = data.entries ?? [];
+  const summary = \`<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-bottom:8px;">
+      <span>Balance: <strong>🍟 \${data.balance ?? 0}</strong></span>
+      <span style="color:var(--green-t)">Earned +\${(data.totalEarned ?? 0).toLocaleString()}</span>
+      <span style="color:var(--red-t)">Spent -\${(data.totalSpent ?? 0).toLocaleString()}</span>
+      <span style="color:var(--text-dim)">\${data.count ?? entries.length} total entries</span>
+    </div>\`;
+  const rows = entries.map(e => {
+    const earn = e.amount >= 0;
+    return \`<tr>
+      <td style="font-size:11px;white-space:nowrap;">\${fmtDate(e.createdAt)}</td>
+      <td style="font-weight:600;white-space:nowrap;color:\${earn ? 'var(--green-t)' : 'var(--red-t)'};">\${earn ? '+' : ''}\${e.amount.toLocaleString()}</td>
+      <td style="font-size:11px;">\${gpReason(e)}</td>
+      <td style="font-size:11px;color:var(--text-dim);">🍟 \${e.balanceAfter}</td>
+    </tr>\`;
+  }).join('');
+  cont.innerHTML = summary + (entries.length
+    ? \`<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Reason</th><th>Balance</th></tr></thead><tbody>\${rows}</tbody></table>\`
+    : '<div class="empty">No GP history for this filter.</div>');
 }
 
 async function accSetXp(passType) {
@@ -2015,6 +2556,11 @@ document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
 
   // Open initial SSE stream (covers both bans tab and basic server info)
   connectSSE(null, null);
+
+  // Deep-link routing: when opened via a nav link in a new tab (Ctrl/middle-click),
+  // land straight in the target view. Also react to manual hash changes.
+  routeFromHash(location.hash);
+  window.addEventListener('hashchange', () => routeFromHash(location.hash));
 })();
 </script>
 </body>

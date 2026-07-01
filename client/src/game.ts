@@ -1006,6 +1006,17 @@ export class Game {
             this.m_uiManager.specPrev = false;
         }
 
+        // Keybind to toggle advanced spectator mode. Only while actually spectating
+        // and only when the server allows it (spectators only) — the on-screen
+        // button routes through the same UiManager.toggleAdvancedSpectator().
+        if (
+            this.m_inputBinds.isBindPressed(Input.AdvSpecToggle) &&
+            this.m_spectating &&
+            this.m_advancedSpectatorAllowed
+        ) {
+            this.m_uiManager.toggleAdvancedSpectator();
+        }
+
         this.m_uiManager.reloadTouched = false;
         this.m_uiManager.interactionTouched = false;
         this.m_uiManager.swapWeapSlots = false;

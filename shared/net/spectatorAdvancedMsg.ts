@@ -3,12 +3,13 @@ import { v2 } from "../utils/v2";
 import type { AbstractMsg, BitStream } from "./net";
 
 /**
- * Sent from the client to the server while the admin-only advanced spectator
- * mode is active. Tells the server to stream the area around the free camera
- * (instead of around the spectated player) and to include full player status
- * (health/boost for every player) so the client can render ESP / enemy labels.
+ * Sent from the client to the server while advanced spectator mode is active.
+ * Tells the server to stream the area around the free camera (instead of around
+ * the spectated player) and to include full player status (health/boost for every
+ * player) so the client can render ESP / enemy labels.
  *
- * The server only honors this for receivers where `isAdmin && spectator`.
+ * The server only honors this for receivers that joined as a spectator
+ * (`this.spectator`) — never for a player actively in the game.
  */
 export class SpectatorAdvancedMsg implements AbstractMsg {
     enabled = false;

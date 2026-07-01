@@ -14,6 +14,10 @@ import {
 import { crc16 } from "./lib/crc";
 import type { Localization } from "./ui/localization";
 
+// Bump when adding a bind so existing saved configs run upgradeBinds() and pick up
+// the new action's default key. v2 added AdvSpecToggle.
+const BINDS_VERSION = 2;
+
 function def(name: string, defaultValue: InputValue | null) {
     return {
         name,
@@ -67,6 +71,7 @@ const BindDefs = {
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
     [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
     [GameInput.SwitchAmmo]: def("Switch Ammo", inputKey(Key.B)),
+    [GameInput.AdvSpecToggle]: def("Toggle Advanced Spectator", inputKey(Key.N)),
 };
 
 export class InputBinds {
@@ -86,7 +91,7 @@ export class InputBinds {
     toArray() {
         const buf = new ArrayBuffer(this.binds.length * 2 + 1);
         const stream = new BitStream(buf);
-        stream.writeUint8(1);
+        stream.writeUint8(BINDS_VERSION);
         for (let i = 0; i < this.binds.length; i++) {
             const bind = this.binds[i];
             const type = bind ? bind.type : 0;
@@ -131,7 +136,7 @@ export class InputBinds {
                 this.setBind(bind, type != 0 ? new InputValue(type, code) : null);
             }
         }
-        if (version < 1) {
+        if (version < BINDS_VERSION) {
             this.upgradeBinds(version);
             this.saveBinds();
         }
@@ -164,20 +169,16 @@ export class InputBinds {
     }
 
     upgradeBinds(_version: number) {
-        const newBinds: GameInput[] = [];
+        // Binds added after older configs were saved. Apply each one's default key
+        // for upgrading users, but never stomp a key they've already bound elsewhere
+        // and never overwrite a bind they've already set for this action.
+        const newBinds: GameInput[] = [GameInput.AdvSpecToggle];
 
-        // Set default inputs for the new binds, as long as those
-        // defaults haven't already been used.
-
-        for (let i = 0; i < newBinds.length; i++) {
-            const bind = newBinds[i];
+        for (const bind of newBinds) {
+            if (this.binds[bind]) continue;
             const input = BindDefs[bind as keyof typeof BindDefs].defaultValue;
-            const alreadyBound = false;
-            for (let j = 0; j < this.binds.length; j++) {
-                if (this.binds[j]?.equals(input!)) {
-                    break;
-                }
-            }
+            if (!input) continue;
+            const alreadyBound = this.binds.some((b) => b?.equals(input));
             if (!alreadyBound) {
                 this.setBind(bind, input);
             }

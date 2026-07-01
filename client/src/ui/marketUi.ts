@@ -4,7 +4,6 @@ import {
     getItemCategory,
     getItemPrice,
     getItemRarity,
-    getMarketPriceBounds,
     getMarketTotal,
     MARKET_LISTING_TTL_MS,
     type ShopCategory,
@@ -56,6 +55,8 @@ export class MarketUi {
 
     sellItemId = 0;
     sellType = "";
+    /** True after the first "List for sale" click, requiring a second click to confirm. */
+    private pendingSell = false;
 
     /** Ticks the per-listing auto-expiry countdowns while the market is visible. */
     private expiryInterval: ReturnType<typeof setInterval> | null = null;
@@ -95,7 +96,11 @@ export class MarketUi {
         });
         this.loadMoreEl.on("click", () => this.loadMore());
 
-        $("#market-sell-price").on("input", () => this.updateSellPreview());
+        $("#market-sell-price").on("input", () => {
+            this.resetSellConfirm();
+            this.updateSellPreview();
+        });
+        $("#market-sell-buyer").on("input", () => this.resetSellConfirm());
         $("#market-sell-confirm").on("click", () => this.confirmSell());
     }
 
@@ -574,61 +579,77 @@ export class MarketUi {
     openSellDialog(itemId: number, type: string) {
         this.sellItemId = itemId;
         this.sellType = type;
+        this.pendingSell = false;
         $("#market-sell-name").text(this.itemName(type));
         $("#market-sell-buyer").val("");
-        const bounds = getMarketPriceBounds(type);
-        const input = $("#market-sell-price");
         $("#market-sell-error").text("");
-        if (bounds) {
-            const suggested = Math.min(
-                Math.max(getItemPrice(type), bounds.min),
-                bounds.max,
-            );
-            input
-                .attr("min", bounds.min)
-                .attr("max", bounds.max)
-                .val(suggested)
-                .prop("disabled", false);
-            $("#market-sell-bounds").text(`Allowed: ${bounds.min} – ${bounds.max} fries`);
-            $("#market-sell-confirm").removeClass("shop-buy-disabled");
-        } else {
-            input.val("").prop("disabled", true);
-            $("#market-sell-bounds").text("This item can't be listed.");
-            $("#market-sell-confirm").addClass("shop-buy-disabled");
-        }
+        // Any price is allowed (incl. 0/free). We only suggest the rarity-based value.
+        const recommended = getItemPrice(type);
+        $("#market-sell-price")
+            .attr("min", 0)
+            .removeAttr("max")
+            .val(recommended > 0 ? recommended : 0)
+            .prop("disabled", false);
+        $("#market-sell-bounds").text(
+            recommended > 0
+                ? `Recommended price: ${recommended} fries (based on rarity). You can set any price, even 0 (free).`
+                : "You can set any price, even 0 (free).",
+        );
+        $("#market-sell-confirm").removeClass("shop-buy-disabled market-sell-confirming").text("List for sale");
         this.updateSellPreview();
         this.sellModal.show();
     }
 
     private updateSellPreview() {
         const price = parseInt(String($("#market-sell-price").val()), 10);
-        if (!Number.isFinite(price) || price <= 0) {
+        if (!Number.isFinite(price) || price < 0) {
             $("#market-sell-total").text("");
             return;
         }
         $("#market-sell-total").text(
-            `Buyer pays ${getMarketTotal(price)} — you receive ${price}`,
+            price === 0
+                ? "Free — buyer pays 0"
+                : `Buyer pays ${getMarketTotal(price)} — you receive ${price}`,
         );
+    }
+
+    /** Drops the "click again to confirm" state (called when the price/buyer is edited). */
+    private resetSellConfirm() {
+        if (this.busy || !this.pendingSell) return;
+        this.pendingSell = false;
+        $("#market-sell-confirm").removeClass("market-sell-confirming").text("List for sale");
     }
 
     private confirmSell() {
         if (this.busy) return;
-        const bounds = getMarketPriceBounds(this.sellType);
-        if (!bounds) return;
         const price = parseInt(String($("#market-sell-price").val()), 10);
-        if (!Number.isFinite(price) || price < bounds.min || price > bounds.max) {
-            $("#market-sell-error").text(
-                `Price must be ${bounds.min}–${bounds.max} fries.`,
-            );
+        if (!Number.isInteger(price) || price < 0) {
+            $("#market-sell-error").text("Enter a whole number of 0 or more.");
             return;
         }
+
+        // Require an explicit second click before the item is actually listed.
+        if (!this.pendingSell) {
+            this.pendingSell = true;
+            $("#market-sell-error").text("");
+            const priceLabel = price === 0 ? "for free" : `for ${price} fries`;
+            $("#market-sell-confirm")
+                .addClass("market-sell-confirming")
+                .text(`Confirm — list ${priceLabel} (click again)`);
+            return;
+        }
+
         const buyerSlug = String($("#market-sell-buyer").val() ?? "").trim() || undefined;
         this.busy = true;
-        $("#market-sell-confirm").addClass("shop-buy-disabled").text("…");
+        this.pendingSell = false;
+        $("#market-sell-confirm")
+            .removeClass("market-sell-confirming")
+            .addClass("shop-buy-disabled")
+            .text("…");
         this.account.listItem(this.sellItemId, price, buyerSlug, (err, res) => {
             this.busy = false;
             $("#market-sell-confirm")
-                .removeClass("shop-buy-disabled")
+                .removeClass("shop-buy-disabled market-sell-confirming")
                 .text("List for sale");
             if (err || !res || !res.success) {
                 $("#market-sell-error").text(
@@ -643,7 +664,7 @@ export class MarketUi {
     private listErrorText(code?: string, retryAfter?: number): string {
         switch (code) {
             case "bad_price":
-                return "Price is out of the allowed range.";
+                return "Enter a whole number of 0 or more.";
             case "not_listable":
                 return "This item can't be listed.";
             case "too_many_listings":

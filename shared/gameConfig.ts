@@ -162,6 +162,7 @@ export enum Input {
     TeamPingSingle,
     JoinChat,
     SwitchAmmo,
+    AdvSpecToggle,
     Count,
 }
 

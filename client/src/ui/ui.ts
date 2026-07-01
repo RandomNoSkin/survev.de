@@ -449,17 +449,7 @@ export class UiManager {
         // live in static HTML but UiManager is recreated each game, so a plain
         // .on() would stack handlers (and double-toggle the booleans).
         this.specAdvancedButton.off("click.advspec").on("click.advspec", () => {
-            const adv = this.game.m_advSpec;
-            adv.enabled = !adv.enabled;
-            // Restore the viewer's last-used settings whenever advanced spectator is
-            // (re)activated; capture them again when it's turned off.
-            if (adv.enabled) {
-                adv.applySettings(this.game.m_config.get("advancedSpectatorSettings"));
-            } else {
-                this.saveAdvSpec();
-            }
-            this.updateAdvancedSpectatorUi();
-            this.updateSpectateText();
+            this.toggleAdvancedSpectator();
         });
         const advToggle = (btn: JQuery, flip: () => void) => {
             btn.off("click.advspec").on("click.advspec", () => {
@@ -2255,10 +2245,9 @@ export class UiManager {
             if (this.spectating) {
                 this.spectateMode.css("display", "block");
                 $(".ui-zoom").removeClass("ui-zoom-hover");
-                // Advanced spectators (admins / dev) may cycle through every
-                // player, so keep the next/prev buttons available even in solo
-                // (also works while freecam is active — the weapon HUD follows
-                // whichever player is selected).
+                // Advanced spectators may cycle through every player, so keep the
+                // next/prev buttons available even in solo (also works while freecam
+                // is active — the weapon HUD follows whichever player is selected).
                 const hideSpec =
                     teamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
                 this.specPrevButton.css("display", hideSpec ? "none" : "block");
@@ -2282,10 +2271,26 @@ export class UiManager {
         );
     }
 
-    // Reflects the advanced spectator state onto the buttons. The master button
-    // is shown when the server allows advanced spectator (admins, or any spectator
-    // on a non-prod server, so the feature can be tested before prod); the
-    // sub-toggles only appear once the mode is enabled.
+    // Master on/off for advanced spectator. Shared by the on-screen button and the
+    // AdvSpecToggle keybind. No-op unless the server allows it (spectators only).
+    toggleAdvancedSpectator() {
+        if (!this.game.m_advancedSpectatorAllowed) return;
+        const adv = this.game.m_advSpec;
+        adv.enabled = !adv.enabled;
+        // Restore the viewer's last-used settings whenever advanced spectator is
+        // (re)activated; capture them again when it's turned off.
+        if (adv.enabled) {
+            adv.applySettings(this.game.m_config.get("advancedSpectatorSettings"));
+        } else {
+            this.saveAdvSpec();
+        }
+        this.updateAdvancedSpectatorUi();
+        this.updateSpectateText();
+    }
+
+    // Reflects the advanced spectator state onto the buttons. The master button is
+    // shown when the server allows advanced spectator (any player that joined as a
+    // spectator); the sub-toggles only appear once the mode is enabled.
     updateAdvancedSpectatorUi() {
         const advSpec = this.game.m_advSpec;
         // Server-authoritative: m_advancedSpectatorAllowed already encodes "is a
