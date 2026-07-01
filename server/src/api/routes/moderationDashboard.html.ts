@@ -391,6 +391,14 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div id="tab-accounts" class="tab-pane">
     <div class="toolbar">
       <input type="text" id="accounts-search" placeholder="Search by username or slug…">
+      <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;white-space:nowrap;">Created
+        <input type="date" id="accounts-date-from" title="Created from (inclusive)"
+          style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-family:inherit;font-size:12px;">
+        <span style="color:var(--text-muted);">–</span>
+        <input type="date" id="accounts-date-to" title="Created until (inclusive)"
+          style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-family:inherit;font-size:12px;">
+      </label>
+      <button class="btn btn-gray" id="accounts-date-clear">✕ Date</button>
       <button class="btn btn-orange" id="reconcile-btn">⚡ Reconcile All Passes + Unlocks + Fries</button>
       <span id="reconcile-result" style="font-size:11px;color:var(--text-dim);"></span>
     </div>
@@ -2172,9 +2180,24 @@ async function loadAccounts() {
 
 function renderAccounts() {
   const q = document.getElementById('accounts-search').value.toLowerCase();
-  let rows = accountsData.filter(a =>
-    !q || (a.username||'').toLowerCase().includes(q) || (a.slug||'').toLowerCase().includes(q)
-  );
+
+  // Optional creation-date range (inclusive). Empty inputs → unbounded on that end.
+  // Parsed as local time so a day picked here covers that whole calendar day locally.
+  const fromVal = document.getElementById('accounts-date-from').value;
+  const toVal   = document.getElementById('accounts-date-to').value;
+  let loTs = -Infinity, hiTs = Infinity;
+  if (fromVal) { const d = new Date(fromVal + 'T00:00:00');     if (!isNaN(d)) loTs = d.getTime(); }
+  if (toVal)   { const d = new Date(toVal + 'T23:59:59.999');   if (!isNaN(d)) hiTs = d.getTime(); }
+  const hasDateFilter = loTs !== -Infinity || hiTs !== Infinity;
+
+  let rows = accountsData.filter(a => {
+    if (q && !((a.username||'').toLowerCase().includes(q) || (a.slug||'').toLowerCase().includes(q))) return false;
+    if (hasDateFilter) {
+      const t = a.userCreated ? new Date(a.userCreated).getTime() : NaN;
+      if (isNaN(t) || t < loTs || t > hiTs) return false;
+    }
+    return true;
+  });
 
   // Sort
   rows = [...rows].sort((a, b) => {
@@ -2270,6 +2293,7 @@ document.getElementById('account-modal-body').addEventListener('click', (e) => {
 let currentAccountSlug = '';
 
 async function openAccountDetail(slug) {
+  if (slug !== currentAccountSlug) giveQueue = []; // fresh queue when switching accounts
   currentAccountSlug = slug;
   document.getElementById('account-modal-title').textContent = 'Account: ' + slug;
   document.getElementById('account-modal-body').innerHTML = '<div class="loading">Loading…</div>';
@@ -2348,10 +2372,12 @@ function renderAccountDetail(data) {
       <h3>Give Item</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
         <select id="give-item-select" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;max-width:320px;">\${buildCosmeticOptions()}</select>
+        <button class="btn btn-blue btn-sm" onclick="giveQueueAdd()">+ Add</button>
         <input id="give-source" type="text" value="admin_grant" title="source" style="width:130px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;">
-        <button class="btn btn-green btn-sm" onclick="accGiveItem()">Give</button>
+        <button class="btn btn-green btn-sm" onclick="accGiveItem()">Give selected</button>
         <button class="btn btn-gray btn-sm" onclick="accGiveItem('all')">Give ALL</button>
       </div>
+      <div id="give-queue" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;"></div>
     </div>\`;
 
   const groups = Object.entries(data.itemsBySource || {});
@@ -2385,7 +2411,33 @@ function renderAccountDetail(data) {
 
   document.getElementById('account-modal-body').innerHTML = identity + xpCard + gpCard + giveCard + removeCard + matchCard;
   applyCardCollapse();
+  renderGiveQueue();
   loadAccountGp(u.slug, 'all');
+}
+
+// ── Give-Item queue (pick skins one at a time, ✕ to drop, then grant all) ─────
+// Kept while the same account modal stays open; cleared when switching accounts
+// or after a successful "Give selected".
+let giveQueue = [];
+
+function renderGiveQueue() {
+  const cont = document.getElementById('give-queue');
+  if (!cont) return;
+  cont.innerHTML = giveQueue.length
+    ? giveQueue.map(t => \`<span class="badge badge-disc" style="display:inline-flex;align-items:center;gap:5px;" title="\${esc(t)}">\${esc(cosmeticName(t))} <span style="cursor:pointer;color:var(--red-t);font-weight:700;" onclick="giveQueueRemove('\${esc(t)}')">✕</span></span>\`).join('')
+    : '<span style="font-size:11px;color:var(--text-muted);">No items queued — pick one and press "+ Add".</span>';
+}
+
+function giveQueueAdd() {
+  const t = document.getElementById('give-item-select').value;
+  if (!t) return;
+  if (!giveQueue.includes(t)) giveQueue.push(t);
+  renderGiveQueue();
+}
+
+function giveQueueRemove(t) {
+  giveQueue = giveQueue.filter(x => x !== t);
+  renderGiveQueue();
 }
 
 async function loadAccountGp(slug, filter) {
@@ -2412,6 +2464,13 @@ function gpReason(e) {
     return m.direction === 'buy'
       ? 'Bought ' + item + ' <span style="color:var(--text-muted)">from</span> ' + who
       : 'Sold ' + item + ' <span style="color:var(--text-muted)">to</span> ' + who;
+  }
+  // Market row whose listing no longer exists: it is cascade-deleted when the traded
+  // item or the counterparty's account is deleted, so the partner can't be recovered.
+  const gone = /^market:(buy|sell):(\d+)$/.exec(e.reason || '');
+  if (gone) {
+    const verb = gone[1] === 'buy' ? 'Bought' : 'Sold';
+    return verb + ' item <span style="color:var(--text-muted)">· listing #' + esc(gone[2]) + ' (counterparty account deleted)</span>';
   }
   return esc(e.reason);
 }
@@ -2451,11 +2510,18 @@ async function accSetXp(passType) {
 }
 
 async function accGiveItem(item) {
-  const it = item || document.getElementById('give-item-select').value;
+  // 'all' (or an explicit single type) is a shortcut; otherwise give every queued skin.
+  const items = item ? [item] : giveQueue.slice();
+  if (!items.length) { toast('No item queued — pick one and press "+ Add".', true); return; }
   const source = (document.getElementById('give-source').value || '').trim() || 'admin_grant';
   try {
-    const r = await post('/api/account/give-item', { slug: currentAccountSlug, item: it, source });
-    toast('Gave ' + (r.given ?? 0) + ' item(s)');
+    let total = 0;
+    for (const it of items) {
+      const r = await post('/api/account/give-item', { slug: currentAccountSlug, item: it, source });
+      total += (r.given ?? 0);
+    }
+    toast('Gave ' + total + ' item(s)');
+    if (!item) giveQueue = []; // clear the queue after a successful "Give selected"
     openAccountDetail(currentAccountSlug);
   } catch (e) { toast('Error: ' + e.message, true); }
 }
@@ -2493,6 +2559,13 @@ async function accDeleteAccount() {
 }
 
 document.getElementById('accounts-search').addEventListener('input', renderAccounts);
+document.getElementById('accounts-date-from').addEventListener('change', renderAccounts);
+document.getElementById('accounts-date-to').addEventListener('change', renderAccounts);
+document.getElementById('accounts-date-clear').addEventListener('click', () => {
+  document.getElementById('accounts-date-from').value = '';
+  document.getElementById('accounts-date-to').value = '';
+  renderAccounts();
+});
 
 document.getElementById('accounts-table').addEventListener('click', (e) => {
   const th = e.target.closest('th.sortable');

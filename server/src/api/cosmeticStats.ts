@@ -1,4 +1,4 @@
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { UnlockDefs } from "../../../shared/defs/gameObjects/unlockDefs";
 import {
@@ -58,7 +58,13 @@ export async function computeCosmeticStats(): Promise<void> {
     if (!Config.database.enabled) return;
 
     try {
-        const [{ total }] = await db.select({ total: count() }).from(usersTable);
+        // Admin accounts are excluded everywhere below so the market stays fair: admins
+        // often own every cosmetic (self-grants), which would inflate copy counts and
+        // make genuinely rare skins look common. Rarity is measured over real players only.
+        const [{ total }] = await db
+            .select({ total: count() })
+            .from(usersTable)
+            .where(eq(usersTable.admin, false));
         const totalAccounts = Number(total) || 0;
 
         if (totalAccounts < MIN_ACCOUNTS) {
@@ -67,12 +73,14 @@ export async function computeCosmeticStats(): Promise<void> {
             return;
         }
 
-        // Total existing copies per item type. Each row is one copy, so duplicates a
-        // single user holds (e.g. from trading) all count — rarity is tied to how many
-        // of the item exist, not how many players own it.
+        // Total existing copies per item type, counting only items held by non-admin
+        // accounts. Each row is one copy, so duplicates a single user holds (e.g. from
+        // trading) all count — rarity is tied to how many of the item exist among players.
         const rows = await db
             .select({ type: itemsTable.type, copies: count() })
             .from(itemsTable)
+            .innerJoin(usersTable, eq(usersTable.id, itemsTable.userId))
+            .where(eq(usersTable.admin, false))
             .groupBy(itemsTable.type);
 
         const copiesByType = new Map<string, number>();
