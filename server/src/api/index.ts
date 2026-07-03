@@ -30,6 +30,7 @@ import {
     getCachedCosmeticStats,
     warmCosmeticStats,
 } from "./cosmeticStats";
+import { getOwnedLoadouts } from "./db/loadouts";
 import { expireOldListings } from "./db/market";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
@@ -246,6 +247,21 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
         return c.json<FindGameResponse>({ error: "player_not_verified" });
     }
 
+    // Re-validate the saved loadout against what the account CURRENTLY owns so a cosmetic
+    // that was traded/rented away can't be spawned with (see getOwnedLoadouts). Falls back
+    // to the raw stored loadout only if validation fails for some reason.
+    let userLoadout = user?.loadout;
+    if (user) {
+        try {
+            userLoadout = (await getOwnedLoadouts([user.id]))[0]?.loadout ?? userLoadout;
+        } catch (err) {
+            server.logger.error(
+                "/api/find_game: Failed to validate loadout ownership",
+                err,
+            );
+        }
+    }
+
     const data = await server.findGame({
         region: body.region,
         version: body.version,
@@ -257,7 +273,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 token,
                 userId: user?.id || null,
                 ip,
-                loadout: user?.loadout,
+                loadout: userLoadout,
                 admin: user?.admin ?? false,
             },
         ],

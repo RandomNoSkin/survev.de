@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import { inArray } from "drizzle-orm";
 import type { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type { UpgradeWebSocket, WSContext } from "hono/ws";
@@ -22,12 +21,10 @@ import {
     type ServerToClientPrivateLobbyMsg,
     zPrivateLobbyClientMsg,
 } from "../../shared/types/privateLobby";
-import type { Loadout } from "../../shared/utils/loadout";
 import { assert, util } from "../../shared/utils/util";
 import type { ApiServer } from "./api/apiServer";
 import { validateSessionToken } from "./api/auth";
-import { db } from "./api/db";
-import { usersTable } from "./api/db/schema";
+import { getOwnedLoadouts } from "./api/db/loadouts";
 import { hashIp, isBanned } from "./api/routes/private/ModerationRouter";
 import { Config } from "./config";
 import { ServerLogger } from "./utils/logger";
@@ -684,16 +681,9 @@ class Room {
 
         const userIds = this.players.map((p) => p.userId).filter((p) => p !== null);
 
-        let loadouts: Array<{ userId: string; loadout: Loadout }> = [];
-        if (userIds.length > 0) {
-            loadouts = await db
-                .select({
-                    userId: usersTable.id,
-                    loadout: usersTable.loadout,
-                })
-                .from(usersTable)
-                .where(inArray(usersTable.id, userIds));
-        }
+        // Strips cosmetics the account no longer owns (traded/rented away) from the
+        // stored loadout before the game server trusts it — see getOwnedLoadouts.
+        const loadouts = await getOwnedLoadouts(userIds);
 
         const regionModes = this.privateLobbyMenu.server.modesByRegion[region] ?? [];
         const mode = regionModes[this.data.gameModeIdx];
