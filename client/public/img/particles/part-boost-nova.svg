@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64" version="1.1">
+  <!-- Nova burst: 8-point starburst, black outline + shaded body with a bright core.
+       Runtime tint (ParticleDefs.boost_nova) multiplies the fill to a blue/indigo. -->
+  <path d="M 47,32 L 37.54,29.70 L 42.61,21.39 L 34.30,26.46 L 32,17 L 29.70,26.46 L 21.39,21.39 L 26.46,29.70 L 17,32 L 26.46,34.30 L 21.39,42.61 L 29.70,37.54 L 32,47 L 34.30,37.54 L 42.61,42.61 L 37.54,34.30 Z"
+        fill="#c7c7d4" stroke="#111114" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="32" cy="32" r="5.5" fill="#ffffff" stroke="#111114" stroke-width="1.2"/>
+</svg>

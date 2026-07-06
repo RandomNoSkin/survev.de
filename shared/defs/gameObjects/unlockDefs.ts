@@ -303,6 +303,14 @@ export const _allowedEmotes = [
     "emote_palm",
     "emote_smh",
     "emote_dove",
+    // pass_survivr3 space-themed emotes
+    "emote_saturn",
+    "emote_rocket",
+    "emote_ufo",
+    "emote_comet",
+    "emote_astrohelmet",
+    "emote_shootingstar",
+    "emote_blackhole",
 ];
 
 export interface UnlockDef {
