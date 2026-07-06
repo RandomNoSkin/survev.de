@@ -1362,6 +1362,17 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-bowie-frontier.img",
         },
     }),
+    bowie_redtiger: defineMeleeSkin("bowie", {
+        name: "Bowie Redtiger",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bowie-redtiger.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bowie-redtiger.img",
+        },
+    }),
     machete_taiga: defineMeleeSkin("machete", {
         name: "UVSR Taiga",
         noPotatoSwap: false,

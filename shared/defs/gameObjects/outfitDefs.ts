@@ -1402,7 +1402,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xffffff,
+            tint: 0xf8c137,
         },
     }),
     outfitRosepetals: defineOutfitSkin("outfitBase", {
@@ -1421,8 +1421,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
-            tint: 0xe78e8b,
+            sprite: "loot-shirt-outfitDiamondy.img",
+            tint: 0xffffff,
         },
     }),
     outfitGreenwheat: defineOutfitSkin("outfitBase", {
@@ -1523,7 +1523,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-01.img",
-            tint: 0x929292,
+            tint: 0xbfcee4,
         },
     }),
 
@@ -1581,7 +1581,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0x282828,
+            tint: 0x000000,
         },
     }),
     outfitPanorama: defineOutfitSkin("outfitBase", {
@@ -1600,7 +1600,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xa4a4f2,
+            tint: 0x8e8ee8,
         },
     }),
     outfitCrimson: defineOutfitSkin("outfitBase", {
@@ -1619,7 +1619,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xa4a4f2,
+            tint: 0x5e0c0c,
         },
     }),
     outfitDemon: defineOutfitSkin("outfitBase", {
@@ -1638,7 +1638,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xa4a4f2,
+            tint: 0x5e0c0c,
         },
     }),
 
@@ -1658,7 +1658,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-01.img",
-            tint: 0xe1a6ad,
+            tint: 0xea899a,
         },
     }),
 

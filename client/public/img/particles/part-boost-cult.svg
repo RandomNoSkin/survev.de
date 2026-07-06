@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 33.866666 33.866667">
+  <!-- Eye symbol particle: white fill, black outline -->
+  <g transform="translate(16.933,16.933) scale(0.105)">
+    <!-- strokes: white line with black casing via double-draw -->
+    <g fill="none" stroke-linecap="round">
+      <!-- black outline (drawn thicker, underneath) -->
+      <g stroke="#000000" stroke-width="30">
+        <path d="M -95 0 Q 0 -68 95 0 Q 0 68 -95 0 Z"/>
+        <path d="M -95 0 L -125 -28"/>
+        <path d="M -95 0 L -125 28"/>
+        <path d="M 95 0 L 125 -28"/>
+        <path d="M 95 0 L 125 28"/>
+      </g>
+      <!-- white core on top -->
+      <g stroke="#ffffff" stroke-width="14">
+        <path d="M -95 0 Q 0 -68 95 0 Q 0 68 -95 0 Z"/>
+        <path d="M -95 0 L -125 -28"/>
+        <path d="M -95 0 L -125 28"/>
+        <path d="M 95 0 L 125 -28"/>
+        <path d="M 95 0 L 125 28"/>
+      </g>
+    </g>
+    <!-- pupil: white with black outline -->
+    <circle cx="0" cy="0" r="22" fill="#ffffff" stroke="#000000" stroke-width="8"/>
+    <!-- top dot -->
+    <circle cx="0" cy="-90" r="13" fill="#ffffff" stroke="#000000" stroke-width="8"/>
+    <!-- bottom dot -->
+    <circle cx="0" cy="90" r="13" fill="#ffffff" stroke="#000000" stroke-width="8"/>
+  </g>
+</svg>
