@@ -3222,6 +3222,110 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         ignoreValueAdjust: true,
     },
+    boost_cosmic: {
+        image: ["part-boost-cosmic.img"],
+        life: new Range(0.7, 1),
+        drag: 0,
+        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.6),
+        scale: {
+            start: new Range(0.11, 0.14),
+            end: new Range(0.05, 0.08),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.7, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            // boost = green (hue ~0.3), spread for a green→lime gradient
+            return util.rgbToInt(util.hsvToRgb(util.random(0.28, 0.38), 1, util.random(0.6, 1)));
+        },
+        ignoreValueAdjust: true,
+    },
+    heal_nebula: {
+        image: ["part-heal-nebula.img"],
+        life: new Range(0.85, 1.15),
+        drag: 0.2,
+        rotVel: new Range(Math.PI * 0.05, Math.PI * 0.2),
+        scale: {
+            start: new Range(0.1, 0.13),
+            end: new Range(0.04, 0.07),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.65, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            // heal = red (hue ~0), spread for a red→orange gradient
+            return util.rgbToInt(util.hsvToRgb(util.random(0.0, 0.04), 1, util.random(0.6, 1)));
+        },
+        ignoreValueAdjust: true,
+    },
+    heal_stardust: {
+        image: ["part-heal-stardust.img"],
+        life: new Range(0.8, 1.1),
+        drag: 0.2,
+        rotVel: new Range(Math.PI * 0.2, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.09, 0.12),
+            end: new Range(0.03, 0.06),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.7, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            // heal = red (hue 0), lighter/pinker sparkle
+            return util.rgbToInt(util.hsvToRgb(0, util.random(0.8, 1), util.random(0.8, 1)));
+        },
+        ignoreValueAdjust: true,
+    },
+    boost_nova: {
+        image: ["part-boost-nova.img"],
+        life: new Range(0.6, 0.9),
+        drag: 0,
+        rotVel: new Range(Math.PI * 0.15, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.12, 0.15),
+            end: new Range(0.04, 0.07),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.65, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            // boost = green (hue ~0.3), spread for a green→teal gradient
+            return util.rgbToInt(util.hsvToRgb(util.random(0.3, 0.42), 1, util.random(0.7, 1)));
+        },
+        ignoreValueAdjust: true,
+    },
     revive_basic: {
         image: ["part-heal-basic.img"],
         life: new Range(0.75, 1),
@@ -3646,6 +3750,42 @@ const EmitterDefs: Record<string, EmitterDef> = {
         rate: new Range(0.3, 0.35),
         radius: 1.5,
         speed: new Range(1.5, 2),
+        angle: 0,
+        rot: new Range(0, Math.PI * 2),
+        maxCount: Number.MAX_VALUE,
+    },
+    boost_cosmic: {
+        particle: "boost_cosmic",
+        rate: new Range(0.3, 0.35),
+        radius: 1.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        rot: new Range(0, Math.PI * 2),
+        maxCount: Number.MAX_VALUE,
+    },
+    heal_nebula: {
+        particle: "heal_nebula",
+        rate: new Range(0.3, 0.35),
+        radius: 1.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        rot: 0,
+        maxCount: Number.MAX_VALUE,
+    },
+    heal_stardust: {
+        particle: "heal_stardust",
+        rate: new Range(0.3, 0.35),
+        radius: 1.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        rot: 0,
+        maxCount: Number.MAX_VALUE,
+    },
+    boost_nova: {
+        particle: "boost_nova",
+        rate: new Range(0.3, 0.35),
+        radius: 1.5,
+        speed: new Range(1, 1.5),
         angle: 0,
         rot: new Range(0, Math.PI * 2),
         maxCount: Number.MAX_VALUE,

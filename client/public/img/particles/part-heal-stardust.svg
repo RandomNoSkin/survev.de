@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64" version="1.1">
+  <!-- Stardust: a large twinkle plus a small one. Black outline + light body, white core.
+       Runtime tint (ParticleDefs.heal_stardust) multiplies the fill to a cyan/teal. -->
+  <path d="M 26,17 L 28.47,27.53 L 39,30 L 28.47,32.47 L 26,43 L 23.53,32.47 L 13,30 L 23.53,27.53 Z"
+        fill="#dfe6ee" stroke="#111114" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M 26,23 L 27.48,29.32 L 33.8,30 L 27.48,30.68 L 26,37 L 24.52,30.68 L 18.2,30 L 24.52,29.32 Z"
+        fill="#ffffff"/>
+  <path d="M 46,14 L 47.13,18.87 L 52,20 L 47.13,21.13 L 46,26 L 44.87,21.13 L 40,20 L 44.87,18.87 Z"
+        fill="#ffffff" stroke="#111114" stroke-width="1.2" stroke-linejoin="round"/>
+</svg>

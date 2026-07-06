@@ -1171,6 +1171,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-knuckles-heroic.img",
         },
     }),
+    // RESERVED: private cosmetic — DO NOT USE IN PASS
     knuckles_OldMan: defineMeleeSkin("knuckles", {
         name: "Knuckles Old Man",
         rarity: Rarity.Mythic,
@@ -1220,6 +1221,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-karambit-drowned.img",
         },
     }),
+    // RESERVED: S2 donator cosmetic — DO NOT USE IN PASS
     karambit_fade: defineMeleeSkin("karambit", {
         name: "Karambit Fade",
         rarity: Rarity.Epic,
