@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import Path from "node:path";
 import { createCanvas, loadImage } from "canvas";
+import sharp from "sharp";
 import {
     atlasLogger,
     type ImgCache,
@@ -19,13 +20,12 @@ const tmpCtx = tmpCanvas.getContext("2d");
  * box) can't decode `data:` URIs and renders them fully transparent, which then fails
  * edge detection ("Can't detect edges") and ships a blank sprite.
  *
- * For these pure wrappers we decode the embedded raster ourselves and hand the raw
- * PNG/JPEG bytes to node-canvas, which decodes them without librsvg — so it works on
- * every environment. Returns the raster bytes, or null when the SVG has real vector
- * content that must actually be rasterized.
+ * For a *pure* wrapper (the raster is the only content) we decode it ourselves and hand
+ * the raw PNG/JPEG bytes to node-canvas, which decodes them without librsvg — fastest and
+ * keeps the raster's native resolution. Returns the raster bytes, or null when the SVG has
+ * real vector content (e.g. a clip-path shaping the raster) that must actually be rendered.
  */
-function extractWrapperRaster(file: string): Buffer | null {
-    const txt = fs.readFileSync(file, "utf8");
+function extractWrapperRaster(txt: string): Buffer | null {
     const m = txt.match(/data:image\/(?:png|jpe?g);base64,([^"']+)/);
     if (!m) return null;
     // Only when the embedded raster is the sole content (no vector elements to render).
@@ -40,25 +40,49 @@ function extractWrapperRaster(file: string): Buffer | null {
     return Buffer.from(m[1].replace(/\s/g, ""), "base64");
 }
 
+/**
+ * Loads a sprite as a node-canvas image, working around the old-librsvg `data:` URI bug.
+ *
+ * SVGs that embed a base64 raster but ALSO carry vector content (typically a `<clip-path>`
+ * shaping the raster — e.g. player-base-outfitGalaxy/Diamond/Damascussteel) can't take the
+ * pure-wrapper shortcut, and node-canvas' librsvg blanks the raster on the prod box. For those
+ * we rasterize with sharp, which bundles its own modern librsvg (independent of the system one),
+ * then feed node-canvas the resulting PNG — so clip + transforms are preserved and it renders on
+ * every environment. Plain vector SVGs (no embedded raster) keep going straight through librsvg.
+ */
+async function loadSpriteImage(fullPath: string) {
+    if (!fullPath.endsWith(".svg")) return loadImage(fullPath);
+
+    const txt = fs.readFileSync(fullPath, "utf8");
+    if (!/data:image\/(?:png|jpe?g);base64,/.test(txt)) {
+        return loadImage(fullPath); // plain vector SVG — librsvg handles it fine
+    }
+
+    const raster = extractWrapperRaster(txt);
+    if (raster) {
+        try {
+            return await loadImage(raster);
+        } catch {
+            // Rare: the embedded raster has a chunk node-canvas' libpng rejects. Fall
+            // through to sharp, which decodes it.
+        }
+    }
+
+    try {
+        const png = await sharp(fullPath).png().toBuffer();
+        return await loadImage(png);
+    } catch {
+        return loadImage(fullPath); // last resort: original (possibly-blank) behaviour
+    }
+}
+
 async function renderImage(path: string, hash: string) {
     const pngFileName = Path.join(imagesCacheFolder, `${hash}.png`);
 
     const scale = scaledSprites[path] ?? 1;
 
     const fullPath = Path.join(imageFolder, path);
-    const embedded = path.endsWith(".svg") ? extractWrapperRaster(fullPath) : null;
-    let image: Awaited<ReturnType<typeof loadImage>>;
-    if (embedded) {
-        try {
-            image = await loadImage(embedded);
-        } catch {
-            // Rare: the embedded raster has a chunk node-canvas' libpng rejects but
-            // librsvg tolerates. Fall back to rendering the SVG itself.
-            image = await loadImage(fullPath);
-        }
-    } else {
-        image = await loadImage(fullPath);
-    }
+    const image = await loadSpriteImage(fullPath);
     tmpCanvas.width = Math.ceil(image.width * scale);
     tmpCanvas.height = Math.ceil(image.height * scale);
 
