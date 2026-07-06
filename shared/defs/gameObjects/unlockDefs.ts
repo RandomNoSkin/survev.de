@@ -103,7 +103,15 @@ export const _allowedOutfits = [
     "outfitDiamondred",
     "outfitPanorama",
     "outfitNordCode",
-<<<<<<< Updated upstream
+    "outfitCrimson",
+    "outfitDemon",
+    "outfitPinkwarrior",
+    "outfitYellowhero",
+    "outfitDarkslayed",
+    "outfitBluebell",
+    "outfitAegis",
+    "outfitUmbra",
+
     // resurviv skin accessories
     "outfitSnowman",
     "outfitChewieCheese",
@@ -148,11 +156,6 @@ export const _allowedOutfits = [
     "outfitBee",
     "outfitVitaminD",
     "outfitReTag",
-=======
-    "outfitCrimson",
-    "outfitDemon",
-    "outfitPinkwarrior",
->>>>>>> Stashed changes
 ];
 export const _allowedEmotes = [
     "emote_thumbsup",
