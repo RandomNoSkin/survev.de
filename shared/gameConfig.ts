@@ -269,10 +269,16 @@ export const GameConfig = {
                     boost: 3,
                 },
                 "ALL THE XP": {
-                    maps: ["local", "two_vs_two"],
+                    maps: ["local", "two_vs_two", "comp"],
                     start: "2026-06-29T00:00:00",
-                    end: "2026-07-07T23:59:59",
+                    end: "2026-07-05T23:59:59",
                     boost: 5,
+                },
+                "ALL THE XP #2": {
+                    maps: ["local", "two_vs_two", "comp"],
+                    start: "2026-06-06T19:00:00Z",
+                    end: "2026-07-07T23:59:59Z",
+                    boost: 2.5,
                 },
             },
             pass_survivr3: {
