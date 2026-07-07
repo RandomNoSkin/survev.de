@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MARKET_MAX_PRICE } from "../defs/shopConfig";
 import { Constants } from "../../shared/net/net";
 import { type Item, ItemStatus, type Loadout, loadoutSchema } from "../utils/loadout";
 
@@ -193,7 +194,9 @@ export type MyListing = {
 
 export const zListItemRequest = z.object({
     itemId: z.number().int().positive(),
-    price: z.number().int().positive(),
+    // 0 is allowed (free listing); the upper bound keeps price + fee inside the
+    // Golden Fries integer range. Matches the server-side check in listItem().
+    price: z.number().int().min(0).max(MARKET_MAX_PRICE),
     /** Optional: restrict the sale to this player (private listing). */
     buyerSlug: z.string().trim().min(1).max(64).optional(),
 });

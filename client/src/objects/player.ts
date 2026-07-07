@@ -200,6 +200,9 @@ export class Player implements AbstractObject {
     steelskinSprite = createSprite();
     helmetSprite = createSprite();
     visorSprite = createSprite();
+    // Halbtransparente Westen-Kopie, die über dem Accessoire (frontSprite) liegt,
+    // damit das Westen-Level an verdeckten Stellen mit 50% durchscheint.
+    chestOverlaySprite = createSprite();
     backpackSprite = createSprite();
     handLSprite = createSprite();
     handRSprite = createSprite();
@@ -427,6 +430,9 @@ export class Player implements AbstractObject {
         this.bodyContainer.addChild(this.handRContainer);
         this.bodyContainer.addChild(this.visorSprite);
         this.bodyContainer.addChild(this.helmetSprite);
+        // Halbtransparente Westen-Kopie; wird in updateVisuals dynamisch über das
+        // Accessoire, aber unter die Hände einsortiert.
+        this.bodyContainer.addChild(this.chestOverlaySprite);
 
         this.container.addChild(this.bodyContainer);
 
@@ -1576,6 +1582,7 @@ export class Player implements AbstractObject {
         // Chest
         if (this.m_netData.m_chest == "" || outfitDef.ghillie) {
             this.chestSprite.visible = false;
+            this.chestOverlaySprite.visible = false;
         } else {
             const chestDef = GameObjectDefs[this.m_netData.m_chest] as ChestDef;
             const chestSkin = chestDef.skinImg;
@@ -1583,6 +1590,20 @@ export class Player implements AbstractObject {
             this.chestSprite.scale.set(0.25, 0.25);
             this.chestSprite.tint = chestSkin.baseTint;
             this.chestSprite.visible = true;
+
+            // Bei Accessoire-Skins verdeckt der frontSprite die Weste. Eine
+            // halbtransparente Kopie über dem Accessoire lässt das Westen-Level
+            // dort durchscheinen; an unverdeckten Stellen liegt sie deckungsgleich
+            // auf der vollen Weste und ändert die Optik nicht.
+            if (outfitImg.frontSprite) {
+                this.chestOverlaySprite.texture = PIXI.Texture.from(chestSkin.baseSprite);
+                this.chestOverlaySprite.scale.set(0.25, 0.25);
+                this.chestOverlaySprite.tint = chestSkin.baseTint;
+                this.chestOverlaySprite.alpha = outfitImg.vestOverlayTransparency ?? 0.5;
+                this.chestOverlaySprite.visible = true;
+            } else {
+                this.chestOverlaySprite.visible = false;
+            }
         }
 
         // Steelskin
@@ -1842,6 +1863,18 @@ export class Player implements AbstractObject {
             this.bodyContainer.setChildIndex(this.frontSprite, clamped);
         } else {
             this.frontSprite.visible = false;
+        }
+
+        // Halbtransparente Westen-Kopie über dem Accessoire, aber weiterhin unter
+        // den Fäusten/Händen einsortieren (erst entfernen, dann Hand-Index
+        // bestimmen, dann direkt unter die tiefste Hand einfügen – deterministisch).
+        if (this.chestOverlaySprite.visible) {
+            this.bodyContainer.removeChild(this.chestOverlaySprite);
+            const handMin = math.min(
+                this.bodyContainer.getChildIndex(this.handLContainer),
+                this.bodyContainer.getChildIndex(this.handRContainer),
+            );
+            this.bodyContainer.addChildAt(this.chestOverlaySprite, handMin);
         }
 
         this.bodyContainer.scale.set(bodyScale, bodyScale);
