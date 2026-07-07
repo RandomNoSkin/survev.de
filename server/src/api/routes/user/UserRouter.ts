@@ -403,6 +403,8 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
             and(
                 eq(matchDataTable.userId, user.id),
                 gte(matchDataTable.createdAt, lastUpdated),
+                // Skip games a moderator voided (botted): their XP must not re-accrue.
+                eq(matchDataTable.voided, false),
             ),
         )
         .groupBy(matchDataTable.gameId)

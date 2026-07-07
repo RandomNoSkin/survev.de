@@ -46,7 +46,6 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
     _allowedCrosshairs,
     _allowedEmotes,
@@ -66,15 +65,17 @@ import { server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
+import { setGamePlayerModeration } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
-import { grantPassItems, revokePassItemsAbove } from "../db/passGrants";
-import { computeMatchXp, getPassLevelAndXp, reconcileAllPasses } from "../db/passReconcile";
+import { setPassXp } from "../db/passXp";
+import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import {
     banCommentsTable,
     banHistoryTable,
     bannedIpsTable,
     chatBannedIpsTable,
     chatLogsTable,
+    gameModerationTable,
     goldenFriesLedgerTable,
     ipLogsTable,
     itemsTable,
@@ -1208,6 +1209,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 and(
                     gte(matchDataTable.createdAt, cutoff),
                     sql`${matchDataTable.userId} <> ''`,
+                    // Voided (botted) games are excluded so the leaderboard reflects
+                    // the XP the accounts actually keep.
+                    eq(matchDataTable.voided, false),
                 ),
             )
             .groupBy(matchDataTable.userId, matchDataTable.gameId)
@@ -1220,10 +1224,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
         >();
         for (const s of stats) {
             const xp = computeMatchXp(s);
-            let u = perUser.get(s.userId);
+            const uid = s.userId ?? "";
+            let u = perUser.get(uid);
             if (!u) {
                 u = { xpGained: 0, games: 0, spark: new Map() };
-                perUser.set(s.userId, u);
+                perUser.set(uid, u);
             }
             u.xpGained += xp;
             u.games += 1;
@@ -1354,6 +1359,275 @@ export const ModerationDashboardRouter = new Hono<Context>()
     })
 
     /**
+     * XP-gain "Games" sub-tab: one entry per (player, game) in the window, sorted by
+     * the XP that player gained in that game (desc). Same one-row-per-game dedupe as
+     * the leaderboard, but NOT aggregated up to the account, so a single suspicious
+     * game surfaces directly. Voided (botted) games are still shown — tagged with
+     * their moderation status — so a moderator can review or undo them. Optional
+     * ?region= filters the list; the response also returns the distinct regions in
+     * the window to populate the filter dropdown.
+     */
+    .get("/api/xp-gain/games", async (c) => {
+        const windowParam = c.req.query("window") ?? "7d";
+        const regionParam = c.req.query("region") ?? "";
+        const limitRaw = Number(c.req.query("limit") ?? "200");
+        const limit =
+            Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 200;
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        const conds = [
+            gte(matchDataTable.createdAt, cutoff),
+            sql`${matchDataTable.userId} <> ''`,
+        ];
+        if (regionParam) conds.push(eq(matchDataTable.region, regionParam));
+
+        const stats = await db
+            .select({
+                userId: matchDataTable.userId,
+                gameId: matchDataTable.gameId,
+                region: sql<string>`max(${matchDataTable.region})`,
+                kills: sql<number>`max(${matchDataTable.kills})`,
+                damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                rank: sql<number>`min(${matchDataTable.rank})`,
+                mapId: sql<number>`max(${matchDataTable.mapId})`,
+                teamMode: sql<number>`max(${matchDataTable.teamMode})`,
+                createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+            })
+            .from(matchDataTable)
+            .where(and(...conds))
+            .groupBy(matchDataTable.userId, matchDataTable.gameId)
+            .having(sql`count(*) = 1`);
+
+        const entries = stats
+            .map((s) => {
+                const mapId = Number(s.mapId);
+                const stat = {
+                    kills: Number(s.kills),
+                    damage: Number(s.damage),
+                    timeAlive: Number(s.timeAlive),
+                    rank: Number(s.rank),
+                    mapId,
+                };
+                return {
+                    gameId: s.gameId,
+                    // Non-null in practice — the query filters `userId <> ''`.
+                    userId: s.userId ?? "",
+                    region: s.region,
+                    mapId,
+                    mapName: MAP_ID_TO_NAME[mapId] ?? String(mapId),
+                    teamMode: Number(s.teamMode),
+                    kills: stat.kills,
+                    damage: stat.damage,
+                    timeAlive: stat.timeAlive,
+                    rank: stat.rank,
+                    createdAt: s.createdAt,
+                    xp: Math.round(computeMatchXp(stat) * 100) / 100,
+                };
+            })
+            .sort((a, b) => b.xp - a.xp)
+            .slice(0, limit);
+
+        // Resolve account + per-(game,player) moderation status for the shown entries,
+        // plus the distinct regions in the window for the filter dropdown.
+        const userIds = [...new Set(entries.map((e) => e.userId))];
+        const gameIds = [...new Set(entries.map((e) => e.gameId))];
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      username: usersTable.username,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const mods = gameIds.length
+            ? await db
+                  .select({
+                      gameId: gameModerationTable.gameId,
+                      userId: gameModerationTable.userId,
+                      status: gameModerationTable.status,
+                  })
+                  .from(gameModerationTable)
+                  .where(inArray(gameModerationTable.gameId, gameIds))
+            : [];
+        const regionRows = await db
+            .selectDistinct({ region: matchDataTable.region })
+            .from(matchDataTable)
+            .where(
+                and(
+                    gte(matchDataTable.createdAt, cutoff),
+                    sql`${matchDataTable.userId} <> ''`,
+                ),
+            );
+        const userById = new Map(users.map((u) => [u.id, u]));
+        const modByKey = new Map(mods.map((m) => [m.gameId + "|" + m.userId, m.status]));
+        const regions = regionRows
+            .map((r) => r.region)
+            .filter(Boolean)
+            .sort();
+
+        return c.json({
+            window: windowParam,
+            region: regionParam,
+            regions,
+            games: entries.map((e) => {
+                const u = userById.get(e.userId);
+                return {
+                    ...e,
+                    slug: u?.slug ?? null,
+                    username: u?.username || null,
+                    banned: u?.banned ?? false,
+                    modStatus: modByKey.get(e.gameId + "|" + e.userId) ?? null,
+                };
+            }),
+        });
+    })
+
+    /**
+     * Full player roster for one game (the expandable detail in the "Games" sub-tab):
+     * every participant with their stats, the XP they earned, and their per-player
+     * moderation status — so a moderator can bott/un-bott each one individually.
+     */
+    .get("/api/game/:gameId/players", async (c) => {
+        const gameId = c.req.param("gameId");
+
+        const [rows, mods] = await Promise.all([
+            db
+                .select({
+                    userId: matchDataTable.userId,
+                    slug: usersTable.slug,
+                    banned: usersTable.banned,
+                    username: matchDataTable.username,
+                    playerId: matchDataTable.playerId,
+                    teamId: matchDataTable.teamId,
+                    timeAlive: matchDataTable.timeAlive,
+                    rank: matchDataTable.rank,
+                    died: matchDataTable.died,
+                    kills: matchDataTable.kills,
+                    assists: matchDataTable.assists,
+                    damageDealt: matchDataTable.damageDealt,
+                    damageTaken: matchDataTable.damageTaken,
+                    mapId: matchDataTable.mapId,
+                    teamMode: matchDataTable.teamMode,
+                    region: matchDataTable.region,
+                    createdAt: matchDataTable.createdAt,
+                    voided: matchDataTable.voided,
+                })
+                .from(matchDataTable)
+                .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
+                .where(eq(matchDataTable.gameId, gameId))
+                .orderBy(asc(matchDataTable.rank)),
+            db
+                .select({
+                    userId: gameModerationTable.userId,
+                    status: gameModerationTable.status,
+                })
+                .from(gameModerationTable)
+                .where(eq(gameModerationTable.gameId, gameId)),
+        ]);
+
+        const modByUser = new Map(mods.map((m) => [m.userId, m.status]));
+        const first = rows[0];
+        const meta = first
+            ? {
+                  region: first.region,
+                  mapId: first.mapId,
+                  mapName: MAP_ID_TO_NAME[first.mapId] ?? String(first.mapId),
+                  teamMode: first.teamMode,
+                  createdAt: first.createdAt,
+              }
+            : null;
+
+        return c.json({
+            gameId,
+            meta,
+            players: rows.map((r) => {
+                const stat = {
+                    kills: r.kills,
+                    damage: r.damageDealt,
+                    timeAlive: r.timeAlive,
+                    rank: r.rank,
+                    mapId: r.mapId,
+                };
+                return {
+                    userId: r.userId,
+                    slug: r.slug ?? null,
+                    banned: r.banned ?? false,
+                    username: r.username,
+                    playerId: r.playerId,
+                    teamId: r.teamId,
+                    timeAlive: r.timeAlive,
+                    rank: r.rank,
+                    died: r.died,
+                    kills: r.kills,
+                    assists: r.assists,
+                    damage: r.damageDealt,
+                    damageTaken: r.damageTaken,
+                    voided: r.voided,
+                    xp: Math.round(computeMatchXp(stat) * 100) / 100,
+                    modStatus: r.userId ? (modByUser.get(r.userId) ?? null) : null,
+                };
+            }),
+        });
+    })
+
+    /**
+     * Sets/clears the moderation status of ONE player in ONE game. "botted" revokes
+     * that player's XP (plus the pass cosmetics and Golden Fries earned from the game)
+     * and remembers the exact amount; "clear" restores it; "sus" is a label only.
+     * Fully reversible — see setGamePlayerModeration.
+     */
+    .post(
+        "/api/game/:gameId/moderate",
+        validateParams(
+            z.object({
+                userId: z.string().min(1),
+                status: z.enum(["sus", "botted", "clear"]),
+                note: z.string().max(500).optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId, status, note } = c.req.valid("json");
+
+            const result = await setGamePlayerModeration(
+                gameId,
+                userId,
+                status,
+                admin.slug,
+                note ?? "",
+            );
+
+            const removedXp = result.deltas.reduce((sum, d) => sum + d.xpDelta, 0);
+            void logModerationAction(
+                "🎮 Game moderation",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId },
+                    { name: "Status", value: result.status ?? "cleared" },
+                    {
+                        name: "XP",
+                        value:
+                            status === "botted"
+                                ? `-${Math.round(removedXp * 100) / 100}`
+                                : status === "clear"
+                                  ? "restored"
+                                  : "—",
+                    },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                status === "botted" ? 0xaa1a1a : 0x3355ee,
+            );
+
+            return c.json({ ok: true, ...result });
+        },
+    )
+
+    /**
      * Warnings tab — surfaces suspicious behaviour in a recent window:
      *   1. sharedIpGames    — one IP joined the same game 2+ times (players OR
      *      spectators; ip_logs records both), i.e. multi-boxing / alt-farming / ghosting.
@@ -1448,10 +1722,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 rank: Number(s.rank),
                 mapId: Number(s.mapId),
             });
-            let u = perUser.get(s.userId);
+            const uid = s.userId ?? "";
+            let u = perUser.get(uid);
             if (!u) {
                 u = { xp: 0, games: 0 };
-                perUser.set(s.userId, u);
+                perUser.set(uid, u);
             }
             u.xp += xp;
             u.games += 1;
@@ -1957,38 +2232,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             });
             if (!user) return c.json({ error: "account_not_found" }, 404);
 
-            // Derive the level from the (total) xp using the pass curve, so setting
-            // xp also sets the matching level.
-            const level = PassDefs[passType] ? getPassLevelAndXp(passType, xp).level : 0;
-
-            // Anchor the reconcile job at this admin value + time, so it won't
-            // re-count old matches but keeps accruing XP from new ones.
-            const now = new Date();
-            await db
-                .insert(userXpTable)
-                .values({
-                    userId: user.id,
-                    passType,
-                    level,
-                    xp: String(xp),
-                    reconcileBaseXp: String(xp),
-                    reconcileFrom: now,
-                })
-                .onConflictDoUpdate({
-                    target: [userXpTable.userId, userXpTable.passType],
-                    set: {
-                        level,
-                        xp: String(xp),
-                        reconcileBaseXp: String(xp),
-                        reconcileFrom: now,
-                        lastUpdated: now,
-                    },
-                });
-
-            // Bring owned pass items exactly in line with the derived level:
-            // grant everything up to it, take back anything above it.
-            const granted = await grantPassItems(user.id, passType, level);
-            const revoked = await revokePassItemsAbove(user.id, passType, level);
+            // One shared cascade: sets xp + derived level, anchors the reconcile so
+            // the value sticks, and lines up owned cosmetics AND Golden Fries.
+            const { level, granted, revoked, friesGranted, friesRevoked } =
+                await setPassXp(user.id, passType, xp);
 
             void logModerationAction(
                 "⭐ XP set",
@@ -1997,12 +2244,20 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     { name: "Pass", value: passType },
                     { name: "Level / XP", value: `${level} / ${xp}` },
                     { name: "Items +/-", value: `+${granted} / -${revoked}` },
+                    { name: "Fries +/-", value: `+${friesGranted} / -${friesRevoked}` },
                     { name: "By admin", value: adminTag(admin) },
                 ],
                 0x3355ee,
             );
 
-            return c.json({ ok: true, level, granted, revoked });
+            return c.json({
+                ok: true,
+                level,
+                granted,
+                revoked,
+                friesGranted,
+                friesRevoked,
+            });
         },
     )
 
