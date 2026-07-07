@@ -103,6 +103,9 @@ export const dashboardHtml = `<!DOCTYPE html>
       background: none; color: var(--text-dim); cursor: pointer; font-size: 12px; font-family: inherit;
     }
     .sub-tab-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue-t); }
+    /* XP-Gain sub-tabs — own class so they don't trip the global .sub-tab-btn handler. */
+    .xp-sub-btn { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border2); background: none; color: var(--text-dim); cursor: pointer; font-size: 12px; font-family: inherit; }
+    .xp-sub-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue-t); }
 
     /* ── Table ── */
     .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -122,6 +125,14 @@ export const dashboardHtml = `<!DOCTYPE html>
     .badge-perm   { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
     .badge-temp   { background: var(--orange-dim); color: var(--orange-t); }
     .badge-disc   { background: var(--surface3);   color: var(--text-muted); border: 1px solid var(--border2); }
+    .badge-sus    { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
+    .badge-botted { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
+
+    /* XP-Gain "Games" sub-tab — expandable per-game roster rows. */
+    .xp-game-row:hover td { background: var(--surface2); }
+    .xp-detail-row > td { background: var(--surface); padding: 0; border-bottom: 1px solid var(--border2); }
+    .xp-detail-wrap { padding: 10px 14px; }
+    .xp-modacts { display: inline-flex; gap: 4px; margin-left: 6px; }
 
     /* ── Buttons ── */
     .btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 11px; font-family: inherit; font-weight: 600; transition: opacity .15s; }
@@ -358,6 +369,10 @@ export const dashboardHtml = `<!DOCTYPE html>
   <!-- ════════════════ TAB: XP GAIN ════════════════ -->
   <div id="tab-xp" class="tab-pane">
     <div class="toolbar">
+      <div class="sub-tabs">
+        <button class="xp-sub-btn active" data-xpsub="players">Players</button>
+        <button class="xp-sub-btn"        data-xpsub="games">Games</button>
+      </div>
       <span style="font-size:12px;color:var(--text-dim);">XP gained in</span>
       <select id="xp-window" title="Time window"
         style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
@@ -365,10 +380,18 @@ export const dashboardHtml = `<!DOCTYPE html>
         <option value="7d" selected>Last 7 days</option>
         <option value="30d">Last 30 days</option>
       </select>
+      <select id="xp-games-region" title="Filter by server region" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="">All regions</option>
+      </select>
       <button class="btn btn-gray" id="xp-refresh-btn">↻ Refresh</button>
       <span id="xp-hint" style="font-size:11px;color:var(--text-dim);">Top XP gainers — sudden spikes may indicate account boosting.</span>
     </div>
-    <div id="xp-container"><div class="loading">Loading…</div></div>
+    <div id="xp-sub-players">
+      <div id="xp-container"><div class="loading">Loading…</div></div>
+    </div>
+    <div id="xp-sub-games" style="display:none">
+      <div id="xp-games-container"><div class="loading">Loading…</div></div>
+    </div>
   </div>
 
   <!-- ════════════════ TAB: WARNINGS ════════════════ -->
@@ -813,7 +836,7 @@ function switchTab(name) {
     loadReplays();
   } else if (name === 'xp') {
     closeSSE();
-    loadXpGain();
+    refreshXp();
   } else if (name === 'warnings') {
     closeSSE();
     loadWarnings();
@@ -1141,8 +1164,210 @@ document.addEventListener('click', (e) => {
   if (bar) highlightGame(bar.dataset.game);
 });
 
-document.getElementById('xp-refresh-btn').addEventListener('click', loadXpGain);
-document.getElementById('xp-window').addEventListener('change', loadXpGain);
+document.getElementById('xp-refresh-btn').addEventListener('click', refreshXp);
+document.getElementById('xp-window').addEventListener('change', refreshXp);
+document.getElementById('xp-games-region').addEventListener('change', loadXpGames);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – XP GAIN › GAMES sub-tab (per-(player,game) list, expandable roster, bott)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Active XP sub-tab: 'players' = leaderboard (unchanged), 'games' = per-game list.
+let xpActiveSub = 'players';
+
+function switchXpSub(name) {
+  xpActiveSub = name;
+  document.querySelectorAll('#tab-xp .xp-sub-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.xpsub === name); });
+  document.getElementById('xp-sub-players').style.display = name === 'players' ? '' : 'none';
+  document.getElementById('xp-sub-games').style.display   = name === 'games'   ? '' : 'none';
+  const region = document.getElementById('xp-games-region');
+  if (region) region.style.display = name === 'games' ? '' : 'none';
+  const hint = document.getElementById('xp-hint');
+  if (hint) hint.textContent = name === 'games'
+    ? 'Each row is one player in one game. Expand a row to see all players and mark them sus or botted.'
+    : 'Top XP gainers — sudden spikes may indicate account boosting.';
+  refreshXp();
+}
+document.querySelectorAll('#tab-xp .xp-sub-btn').forEach(function (b) {
+  b.addEventListener('click', function () { switchXpSub(b.dataset.xpsub); });
+});
+
+// Refresh whichever XP sub-tab is currently showing (shared window + refresh button).
+function refreshXp() { if (xpActiveSub === 'games') loadXpGames(); else loadXpGain(); }
+
+async function loadXpGames() {
+  const container = document.getElementById('xp-games-container');
+  const token = ++xpLoadToken;
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const win = document.getElementById('xp-window').value;
+    const region = document.getElementById('xp-games-region').value;
+    const q = '/api/xp-gain/games?window=' + encodeURIComponent(win) + (region ? '&region=' + encodeURIComponent(region) : '');
+    const data = await get(q);
+    if (token !== xpLoadToken) return;
+    populateXpRegionFilter(data.regions || []);
+    renderXpGames(data.games || []);
+  } catch (e) {
+    if (token !== xpLoadToken) return;
+    container.innerHTML = '<div class="empty">Failed to load games.</div>';
+  }
+}
+
+function populateXpRegionFilter(regions) {
+  const sel = document.getElementById('xp-games-region');
+  if (!sel) return;
+  const cur = sel.value;
+  let html = '<option value="">All regions</option>';
+  for (const r of regions) html += '<option value="' + esc(r) + '">' + esc(r) + '</option>';
+  sel.innerHTML = html;
+  sel.value = cur; // keep the current selection if it still exists
+}
+
+function modBadge(status) {
+  if (status === 'botted') return '<span class="badge badge-botted">BOTTED</span>';
+  if (status === 'sus')    return '<span class="badge badge-sus">SUS</span>';
+  return '';
+}
+
+// The sus / botted / clear buttons for one (game, player). The current status hides
+// the redundant button.
+function modActionsInner(gameId, userId, status) {
+  if (!userId) return '';
+  function btn(label, st, cls) {
+    return '<button class="btn ' + cls + ' btn-sm" data-mod="' + esc(gameId) + '" data-mod-user="' + esc(userId) + '" data-mod-status="' + st + '">' + label + '</button>';
+  }
+  const parts = [];
+  if (status !== 'sus')    parts.push(btn('sus', 'sus', 'btn-orange'));
+  if (status !== 'botted') parts.push(btn('botted', 'botted', 'btn-red'));
+  if (status)              parts.push(btn('clear', 'clear', 'btn-gray'));
+  return parts.join('');
+}
+
+function renderXpGames(games) {
+  const container = document.getElementById('xp-games-container');
+  if (!games.length) { container.innerHTML = '<div class="empty">No games in this window.</div>'; return; }
+  let rows = '';
+  for (let i = 0; i < games.length; i++) rows += xpGameRowHtml(games[i], i);
+  container.innerHTML =
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Click a row to expand the full game. Ctrl+click a name or replay to open it in a new tab.</div>' +
+    '<table class="data-table">' +
+    '<thead><tr><th>#</th><th>Player</th><th>Map · Mode</th><th>Region</th><th>K</th><th>Dmg</th><th>Rank</th><th>Alive</th><th>XP</th><th>Status</th><th>Actions</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+function xpGameRowHtml(g, i) {
+  const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
+  const nameLabel = esc(g.username || g.slug || '(guest / unlinked)');
+  const nameCell = g.slug
+    ? navLink(hAccount(g.slug), nameLabel, { title: 'Open account' })
+    : '<span style="color:var(--text-muted)">' + nameLabel + '</span>';
+  const banned = g.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+  const key = g.gameId + '|' + g.userId;
+  return '<tr class="xp-game-row" data-gid="' + esc(g.gameId) + '" data-uid="' + esc(g.userId) + '" style="cursor:pointer" title="Click to expand this game">' +
+    '<td style="color:var(--text-dim)">#' + (i + 1) + '</td>' +
+    '<td>' + nameCell + banned + '</td>' +
+    '<td>' + esc(g.mapName) + ' · ' + mode + '</td>' +
+    '<td>' + esc(g.region || '–') + '</td>' +
+    '<td>' + g.kills + '</td>' +
+    '<td>' + g.damage + '</td>' +
+    '<td>' + g.rank + '</td>' +
+    '<td>' + fmtSecs(g.timeAlive) + '</td>' +
+    '<td><strong>' + g.xp.toLocaleString() + '</strong></td>' +
+    '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + modBadge(g.modStatus) + '</span></td>' +
+    '<td style="white-space:nowrap;">' +
+      navLink(hReplays(g.gameId), '▶ replay', { title: 'Open this game in the Replays tab' }) +
+      '<span class="xp-modacts" data-key="' + esc(key) + '">' + modActionsInner(g.gameId, g.userId, g.modStatus) + '</span>' +
+    '</td>' +
+  '</tr>';
+}
+
+// Expand / collapse a game row into a full roster of every player in the game.
+async function toggleGameExpand(row) {
+  const gid = row.dataset.gid;
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('xp-detail-row')) { next.remove(); return; }
+  const colspan = row.children.length;
+  const detail = document.createElement('tr');
+  detail.className = 'xp-detail-row';
+  detail.innerHTML = '<td colspan="' + colspan + '"><div class="xp-detail-wrap"><div class="loading">Loading game…</div></div></td>';
+  row.after(detail);
+  const wrap = detail.querySelector('.xp-detail-wrap');
+  try {
+    const data = await get('/api/game/' + encodeURIComponent(gid) + '/players');
+    wrap.innerHTML = renderGameRoster(data);
+  } catch (e) {
+    wrap.innerHTML = '<div class="empty">Failed to load game.</div>';
+  }
+}
+
+function renderGameRoster(data) {
+  const players = data.players || [];
+  if (!players.length) return '<div class="empty">No player data for this game.</div>';
+  const m = data.meta;
+  const header = m
+    ? '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' + esc(m.mapName) + ' · ' + (TEAM_MODE_LABEL[m.teamMode] || ('Mode ' + m.teamMode)) + ' · ' + esc(m.region || '') + ' · ' + fmtDate(m.createdAt) + ' · <span style="font-family:monospace">' + esc(data.gameId) + '</span></div>'
+    : '';
+  let rows = '';
+  for (const p of players) {
+    const nameLabel = esc(p.username || p.slug || '(guest)');
+    const nameCell = p.slug
+      ? navLink(hAccount(p.slug), nameLabel, { title: 'Open account' })
+      : '<span style="color:var(--text-muted)">' + nameLabel + '</span>';
+    const banned = p.banned ? ' <span class="badge badge-perm">BAN</span>' : '';
+    const key = data.gameId + '|' + p.userId;
+    rows +=
+      '<tr>' +
+      '<td>' + nameCell + banned + '</td>' +
+      '<td>' + p.kills + '</td>' +
+      '<td>' + p.assists + '</td>' +
+      '<td>' + p.damage + '</td>' +
+      '<td>' + p.damageTaken + '</td>' +
+      '<td>' + p.rank + '</td>' +
+      '<td>' + fmtSecs(p.timeAlive) + '</td>' +
+      '<td><strong>' + p.xp.toLocaleString() + '</strong></td>' +
+      '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + modBadge(p.modStatus) + '</span></td>' +
+      '<td style="white-space:nowrap;"><span class="xp-modacts" data-key="' + esc(key) + '">' + modActionsInner(data.gameId, p.userId, p.modStatus) + '</span></td>' +
+      '</tr>';
+  }
+  return header +
+    '<table class="data-table">' +
+    '<thead><tr><th>Player</th><th>K</th><th>A</th><th>Dmg</th><th>Taken</th><th>Rank</th><th>Alive</th><th>XP</th><th>Status</th><th>Actions</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+// Apply a moderation action, then patch every place that shows this (game, player).
+async function doGameModerate(gameId, userId, status) {
+  try {
+    const res = await post('/api/game/' + encodeURIComponent(gameId) + '/moderate', { userId: userId, status: status });
+    updateModUI(gameId, userId, res.status || null);
+    toast(status === 'botted' ? 'Player botted — XP, cosmetics and fries revoked'
+        : status === 'clear'  ? 'Cleared — XP, cosmetics and fries restored'
+        : 'Marked as suspicious');
+  } catch (e) {
+    toast('Moderation failed: ' + e.message, true);
+  }
+}
+
+function updateModUI(gameId, userId, status) {
+  const key = gameId + '|' + userId;
+  document.querySelectorAll('.xp-modcell').forEach(function (el) { if (el.dataset.key === key) el.innerHTML = modBadge(status); });
+  document.querySelectorAll('.xp-modacts').forEach(function (el) { if (el.dataset.key === key) el.innerHTML = modActionsInner(gameId, userId, status); });
+}
+
+// Delegated clicks for the Games sub-tab: moderation buttons first, then row-expand.
+// (Cross-nav links carry data-nav and are handled by the capture-phase nav handler.)
+document.addEventListener('click', function (e) {
+  const modBtn = e.target.closest('[data-mod]');
+  if (modBtn) {
+    e.stopPropagation();
+    doGameModerate(modBtn.dataset.mod, modBtn.dataset.modUser, modBtn.dataset.modStatus);
+    return;
+  }
+  const row = e.target.closest('.xp-game-row');
+  if (!row) return;
+  if (e.target.closest('[data-nav]')) return; // let the name / replay links act
+  toggleGameExpand(row);
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB – WARNINGS (heuristic suspicious-behaviour feed)

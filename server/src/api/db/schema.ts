@@ -217,6 +217,11 @@ export const matchDataTable = pgTable(
         killedIds: integer("killed_ids").array().notNull(),
         assistedIds: integer("assisted_ids").array().notNull().default([]),
         encodedIp: text("encoded_ip").notNull().default(""),
+        // Set true when a moderator marks this player's participation in the game as
+        // "botted": voided rows are excluded from EVERY XP aggregation (reconcile,
+        // /get_pass, the XP-gain leaderboard) so the revoked XP never re-accrues.
+        // Reversible — clearing the flag lets the XP be recomputed again.
+        voided: boolean("voided").notNull().default(false),
     },
     (table) => [
         index("idx_match_data_user_stats").on(
@@ -356,6 +361,41 @@ export const banHistoryTable = pgTable(
 );
 
 export type BanHistoryTable = typeof banHistoryTable.$inferSelect;
+
+/**
+ * Per-(game, player) moderation flag, set from the XP-gain "Games" view.
+ *
+ *   status = "sus"    → watchlist label only, no effect on XP.
+ *   status = "botted" → the XP this player gained in this game, plus the pass
+ *                       cosmetics and Golden Fries earned from it, are revoked.
+ *
+ * Reversible: the exact per-pass XP amount removed is stored in `xpDeltas`, so
+ * clearing a "botted" flag adds it back (and the idempotent grant helpers restore
+ * the cosmetics + fries). Mirrors the reversible-audit shape of `ban_history`.
+ */
+export const gameModerationTable = pgTable(
+    "game_moderation",
+    {
+        gameId: uuid("game_id").notNull(),
+        userId: text("user_id").notNull(),
+        status: text("status").notNull(), // "sus" | "botted"
+        note: text("note").notNull().default(""),
+        markedBy: text("marked_by").notNull(), // admin slug
+        markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+        // For "botted": the exact XP removed per pass, so a later un-bott restores it
+        // precisely. Empty for "sus".
+        xpDeltas: json("xp_deltas")
+            .$type<{ passType: string; xpDelta: number }[]>()
+            .notNull()
+            .default([]),
+    },
+    (table) => [
+        primaryKey({ columns: [table.gameId, table.userId] }),
+        index("game_moderation_user_idx").on(table.userId),
+    ],
+);
+
+export type GameModerationTable = typeof gameModerationTable.$inferSelect;
 
 export const userXpTable = pgTable("user_xp", {
     userId: text("user_id").notNull()
