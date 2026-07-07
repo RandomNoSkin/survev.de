@@ -18,6 +18,9 @@ export interface OutfitDef {
         frontSprite?: string;
         frontSpritePos?: { x: number; y: number };
         aboveHand?: boolean;
+        // Vest rendered over skin accessoire, with adjustable transparency. Defaults to 0.5 on skins with frontSprite.
+        // Value between 0.0 and 1.0, where 0.0 is fully transparent and 1.0 is fully opaque.
+        vestOverlayTransparency?: number;
     };
     lootImg: {
         sprite: string;
@@ -2378,6 +2381,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-back-camo-deer.img",
             frontSpritePos: { x: 5, y: 0 },
             frontSprite: "player-accessory-camo-deer.img",
+            vestOverlayTransparency: 0.0,
         },
         lootImg: {
             sprite: "loot-camo-deer-outfit.img",
