@@ -12,6 +12,7 @@ export interface PassDef {
          *  level grants. Defaults to a server-side fallback when omitted. */
         amount?: number;
     }>;
+    donatorSkin: string;
 }
 
 export const PassDefs: Record<string, PassDef> = {
@@ -115,6 +116,7 @@ export const PassDefs: Record<string, PassDef> = {
                 item: "bayonet_woodland",
             },
         ],
+        donatorSkin: "outfitElf",
     },
     pass_survivr2: {
         type: "pass",
@@ -181,6 +183,7 @@ export const PassDefs: Record<string, PassDef> = {
             { level: 85, item: "golden_fries", amount: 100 },
             { level: 90, item: "golden_fries", amount: 120 },
         ],
+        donatorSkin: "karambit_fade",
     },
     pass_survivr3: {
         type: "pass",
@@ -226,7 +229,7 @@ export const PassDefs: Record<string, PassDef> = {
             { level: 13, item: "golden_fries", amount: 150 },
             { level: 14, item: "heal_nebula" },
             { level: 15, item: "emote_ufo" },
-            { level: 16, item: "outfitGalaxy" },
+            { level: 16, item: "outfitSunset" },
             { level: 17, item: "golden_fries", amount: 155 },
             { level: 18, item: "emote_comet" },
             { level: 19, item: "golden_fries", amount: 165 },
@@ -234,7 +237,7 @@ export const PassDefs: Record<string, PassDef> = {
             { level: 21, item: "golden_fries", amount: 170 },
             { level: 22, item: "emote_astrohelmet" },
             { level: 23, item: "golden_fries", amount: 175 },
-            { level: 24, item: "outfitSunset" },
+            { level: 24, item: "outfitGalaxy" },
             { level: 25, item: "heal_stardust" },
             { level: 26, item: "outfitYinyang" },
             { level: 27, item: "golden_fries", amount: 180 },
@@ -284,5 +287,6 @@ export const PassDefs: Record<string, PassDef> = {
             { level: 98, item: "golden_fries", amount: 130 },
             { level: 99, item: "outfitDisasteroid" }, // lvl 99 very very rare outfit
         ],
+        donatorSkin: "outfitVillageNinja",
     },
 };

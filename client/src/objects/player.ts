@@ -1868,7 +1868,7 @@ export class Player implements AbstractObject {
         // Halbtransparente Westen-Kopie über dem Accessoire, aber weiterhin unter
         // den Fäusten/Händen einsortieren (erst entfernen, dann Hand-Index
         // bestimmen, dann direkt unter die tiefste Hand einfügen – deterministisch).
-        if (this.chestOverlaySprite.visible) {
+        if (this.chestOverlaySprite.visible && !outfitImg.aboveHand) {
             this.bodyContainer.removeChild(this.chestOverlaySprite);
             const handMin = math.min(
                 this.bodyContainer.getChildIndex(this.handLContainer),

@@ -1959,6 +1959,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSpritePos: { x: -2, y: 0 },
             frontSprite: "player-accessory-village-ninja.img",
             aboveHand: false,
+            vestOverlayTransparency: 0.9,
         },
         lootImg: {
             sprite: "loot-village-ninja-outfit.img",
@@ -2451,6 +2452,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSpritePos: { x: 0, y: 0 },
             frontSprite: "player-accessory-meow.img",
             aboveHand: true,
+            vestOverlayTransparency: 0.7,
         },
         lootImg: {
             sprite: "loot-shirt-outfitMeow.img",

@@ -3254,8 +3254,8 @@ const ParticleDefs: Record<string, ParticleDef> = {
         drag: 0.2,
         rotVel: new Range(Math.PI * 0.05, Math.PI * 0.2),
         scale: {
-            start: new Range(0.1, 0.13),
-            end: new Range(0.04, 0.07),
+            start: new Range(0.21, 0.26),
+            end: new Range(0.07, 0.12),
             lerp: new Range(0, 1),
         },
         alpha: {
@@ -3280,8 +3280,8 @@ const ParticleDefs: Record<string, ParticleDef> = {
         drag: 0.2,
         rotVel: new Range(Math.PI * 0.2, Math.PI * 0.5),
         scale: {
-            start: new Range(0.09, 0.12),
-            end: new Range(0.03, 0.06),
+            start: new Range(0.21, 0.26),
+            end: new Range(0.07, 0.12),
             lerp: new Range(0, 1),
         },
         alpha: {
@@ -3306,8 +3306,8 @@ const ParticleDefs: Record<string, ParticleDef> = {
         drag: 0,
         rotVel: new Range(Math.PI * 0.15, Math.PI * 0.5),
         scale: {
-            start: new Range(0.12, 0.15),
-            end: new Range(0.04, 0.07),
+            start: new Range(0.21, 0.26),
+            end: new Range(0.07, 0.12),
             lerp: new Range(0, 1),
         },
         alpha: {

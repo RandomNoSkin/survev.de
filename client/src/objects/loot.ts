@@ -16,6 +16,7 @@ import { debugLines } from "../debug/debugLines";
 import { device } from "../device";
 import type { Map } from "../map";
 import type { Renderer } from "../renderer";
+import { getOutfitLootTexture } from "../ui/loadoutIcon";
 import { Pool } from "./objectPool";
 import type { Emitter, ParticleBarn } from "./particles";
 import type { AbstractObject, Player } from "./player";
@@ -118,8 +119,24 @@ export class Loot implements AbstractObject {
                 (itemDef as { lootImg: { innerScale?: number } }).lootImg.innerScale ||
                 0.8;
             this.sprite.scale.set(innerScale, innerScale);
-            this.sprite.texture = PIXI.Texture.from(itemDef.lootImg?.sprite);
-            this.sprite.tint = itemDef.lootImg?.tint;
+
+            // In-game outfit loot shows the full composed character (like the
+            // loadout menu) instead of a plain shirt, for skins without their own
+            // dedicated loot art.
+            const usesGenericShirt =
+                itemDef.type === "outfit" &&
+                (itemDef.lootImg.sprite === "loot-shirt-01.img" ||
+                    itemDef.lootImg.sprite === "loot-shirt-outfitBase.img");
+            const outfitTex = usesGenericShirt
+                ? getOutfitLootTexture(this.type, ctx.renderer.game.m_pixi.renderer)
+                : null;
+            if (outfitTex) {
+                this.sprite.texture = outfitTex;
+                this.sprite.tint = 0xffffff; // tints are baked into the texture
+            } else {
+                this.sprite.texture = PIXI.Texture.from(itemDef.lootImg?.sprite);
+                this.sprite.tint = itemDef.lootImg?.tint;
+            }
             this.container.texture = itemDef.lootImg.border
                 ? PIXI.Texture.from(itemDef.lootImg.border)
                 : PIXI.Texture.EMPTY;
@@ -148,6 +165,15 @@ export class Loot implements AbstractObject {
             this.sprite.scale.x = (itemDef as MeleeDef).lootImg.mirror
                 ? -innerScale
                 : innerScale;
+
+            // Size the composed character to match the shirt sprite it replaces,
+            // so it fits the loot bubble the same way (overrides the scale above).
+            if (outfitTex) {
+                const shirtTex = PIXI.Texture.from(itemDef.lootImg.sprite);
+                const shirtMax = Math.max(shirtTex.width, shirtTex.height) || 1;
+                const outMax = Math.max(outfitTex.width, outfitTex.height) || 1;
+                this.sprite.scale.set(innerScale * (shirtMax / outMax));
+            }
 
             this.container.visible = true;
         }
