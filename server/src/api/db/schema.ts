@@ -40,6 +40,9 @@ export const usersTable = pgTable("users", {
     banned: boolean("banned").notNull().default(false),
     banReason: text("ban_reason").notNull().default(""),
     bannedBy: text("banned_by").notNull().default(""),
+    // When the account ban auto-expires. null = permanent (or no ban). Temporary
+    // account bans are lifted by the ban-expiry sweep (see db/banExpiry.ts).
+    banExpiresAt: timestamp("ban_expires_at", { withTimezone: true }),
     username: text("username").notNull().default(""),
     usernameSet: boolean("username_set").notNull().default(false),
     userCreated: timestamp("user_created", { withTimezone: true }).notNull().defaultNow(),
@@ -222,6 +225,11 @@ export const matchDataTable = pgTable(
         // /get_pass, the XP-gain leaderboard) so the revoked XP never re-accrues.
         // Reversible — clearing the flag lets the XP be recomputed again.
         voided: boolean("voided").notNull().default(false),
+        // Set when a moderator "removes" this player from the game: their user_id is
+        // moved here and user_id is blanked, so the row becomes a guest row and the
+        // game disappears from that account's stats AND the leaderboard (both filter
+        // user_id <> ''), without deleting the game. Reversible — restore moves it back.
+        removedUserId: text("removed_user_id"),
     },
     (table) => [
         index("idx_match_data_user_stats").on(
@@ -378,7 +386,7 @@ export const gameModerationTable = pgTable(
     {
         gameId: uuid("game_id").notNull(),
         userId: text("user_id").notNull(),
-        status: text("status").notNull(), // "sus" | "botted"
+        status: text("status").notNull(), // "sus" | "botted" | "removed"
         note: text("note").notNull().default(""),
         markedBy: text("marked_by").notNull(), // admin slug
         markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),

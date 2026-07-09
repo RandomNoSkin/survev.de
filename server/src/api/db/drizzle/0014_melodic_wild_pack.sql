@@ -1,0 +1,1 @@
+ALTER TABLE "match_data" ADD COLUMN "removed_user_id" text;

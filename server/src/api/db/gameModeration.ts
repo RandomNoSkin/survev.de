@@ -122,7 +122,7 @@ async function restoreXp(gameId: string, userId: string, deltas: XpDelta[]): Pro
 async function upsertModeration(
     gameId: string,
     userId: string,
-    status: "sus" | "botted",
+    status: "sus" | "botted" | "removed",
     adminSlug: string,
     note: string,
     xpDeltas: XpDelta[],
@@ -188,4 +188,153 @@ export async function setGamePlayerModeration(
     const deltas = await revokeXp(gameId, userId);
     await upsertModeration(gameId, userId, "botted", adminSlug, note, deltas);
     return { status: "botted", deltas };
+}
+
+/**
+ * Permanently removes a game from the leaderboard and all stats: first revokes the
+ * XP (plus the pass cosmetics and Golden Fries earned from it) from every real
+ * account that gained XP in the game — otherwise deleting the source rows would
+ * leave phantom pass levels — then hard-deletes the game's `match_data` rows and any
+ * moderation flags. Irreversible (the rows are gone), unlike "botted".
+ */
+export async function deleteGame(
+    gameId: string,
+): Promise<{ players: number; xpRemoved: number; rowsDeleted: number }> {
+    const userRows = await db
+        .selectDistinct({ userId: matchDataTable.userId })
+        .from(matchDataTable)
+        .where(
+            and(eq(matchDataTable.gameId, gameId), sql`${matchDataTable.userId} <> ''`),
+        );
+
+    let players = 0;
+    let xpRemoved = 0;
+    for (const { userId } of userRows) {
+        if (!userId) continue;
+        const deltas = await computeGameXpDeltas(gameId, userId);
+        if (!deltas.length) continue;
+        players++;
+        for (const d of deltas) {
+            const rec = await db.query.userXpTable.findFirst({
+                where: and(
+                    eq(userXpTable.userId, userId),
+                    eq(userXpTable.passType, d.passType),
+                ),
+            });
+            if (!rec) continue;
+            await setPassXp(userId, d.passType, Math.max(0, Number(rec.xp) - d.xpDelta));
+            xpRemoved += d.xpDelta;
+        }
+    }
+
+    const deleted = await db
+        .delete(matchDataTable)
+        .where(eq(matchDataTable.gameId, gameId))
+        .returning({ gameId: matchDataTable.gameId });
+    await db.delete(gameModerationTable).where(eq(gameModerationTable.gameId, gameId));
+
+    return {
+        players,
+        xpRemoved: Math.round(xpRemoved * 100) / 100,
+        rowsDeleted: deleted.length,
+    };
+}
+
+/**
+ * Removes ONE player from a game WITHOUT deleting it: their user_id is moved to
+ * `removed_user_id` and user_id is blanked, turning their rows into guest rows. The
+ * game then disappears from that account's stats AND every leaderboard (all of which
+ * filter user_id <> ''), while the game and the other players stay intact. The XP the
+ * player gained from the game is revoked too (unless a prior "botted" already did it),
+ * so no phantom pass levels remain. Fully reversible via {@link restoreUserToGame}.
+ */
+export async function removeUserFromGame(
+    gameId: string,
+    userId: string,
+    adminSlug: string,
+    note = "",
+): Promise<{ status: "removed"; deltas: XpDelta[] }> {
+    const existing = await db.query.gameModerationTable.findFirst({
+        where: and(
+            eq(gameModerationTable.gameId, gameId),
+            eq(gameModerationTable.userId, userId),
+        ),
+    });
+    if (existing?.status === "removed") {
+        return { status: "removed", deltas: existing.xpDeltas };
+    }
+
+    // Deltas of the game for this player (rows still carry user_id at this point).
+    const deltas = await computeGameXpDeltas(gameId, userId);
+    // If the game was already "botted", its XP was already revoked — don't double it.
+    const alreadyRevoked = existing?.status === "botted";
+    if (!alreadyRevoked) {
+        for (const d of deltas) {
+            const rec = await db.query.userXpTable.findFirst({
+                where: and(
+                    eq(userXpTable.userId, userId),
+                    eq(userXpTable.passType, d.passType),
+                ),
+            });
+            if (!rec) continue;
+            await setPassXp(userId, d.passType, Math.max(0, Number(rec.xp) - d.xpDelta));
+        }
+    }
+
+    // Detach: move user_id → removed_user_id, blank user_id. Clear the botted flag too
+    // (removal is now the exclusion mechanism); restore re-adds the deltas either way.
+    await db
+        .update(matchDataTable)
+        .set({ removedUserId: userId, userId: "", voided: false })
+        .where(and(eq(matchDataTable.gameId, gameId), eq(matchDataTable.userId, userId)));
+
+    await upsertModeration(gameId, userId, "removed", adminSlug, note, deltas);
+    return { status: "removed", deltas };
+}
+
+/** Inverse of {@link removeUserFromGame}: re-attaches the player and restores their XP. */
+export async function restoreUserToGame(
+    gameId: string,
+    userId: string,
+): Promise<{ deltas: XpDelta[] }> {
+    const existing = await db.query.gameModerationTable.findFirst({
+        where: and(
+            eq(gameModerationTable.gameId, gameId),
+            eq(gameModerationTable.userId, userId),
+        ),
+    });
+    if (!existing || existing.status !== "removed") return { deltas: [] };
+
+    // Re-attach: removed_user_id → user_id.
+    await db
+        .update(matchDataTable)
+        .set({ userId, removedUserId: null })
+        .where(
+            and(
+                eq(matchDataTable.gameId, gameId),
+                eq(matchDataTable.removedUserId, userId),
+            ),
+        );
+
+    // Add the game's XP back.
+    for (const d of existing.xpDeltas) {
+        const rec = await db.query.userXpTable.findFirst({
+            where: and(
+                eq(userXpTable.userId, userId),
+                eq(userXpTable.passType, d.passType),
+            ),
+        });
+        const base = rec ? Number(rec.xp) : 0;
+        await setPassXp(userId, d.passType, base + d.xpDelta);
+    }
+
+    await db
+        .delete(gameModerationTable)
+        .where(
+            and(
+                eq(gameModerationTable.gameId, gameId),
+                eq(gameModerationTable.userId, userId),
+            ),
+        );
+    return { deltas: existing.xpDeltas };
 }

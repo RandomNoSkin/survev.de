@@ -7,6 +7,8 @@ export type ProfileResponse =
     | {
           readonly banned: true;
           reason: string;
+          /** Epoch ms when the ban auto-expires; null = permanent. */
+          expiresAt?: number | null;
           success?: false;
       }
     | {

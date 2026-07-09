@@ -30,6 +30,7 @@ import {
     getCachedCosmeticStats,
     warmCosmeticStats,
 } from "./cosmeticStats";
+import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { expireOldListings } from "./db/market";
 import { backfillPassItemGrants } from "./db/passGrants";
@@ -432,6 +433,16 @@ setInterval(
     },
     10 * 60 * 1000,
 );
+
+// Lift time-limited account, IP and chat bans once their duration has run out and
+// append the matching ban-history unban entries. Runs shortly after boot (so a
+// restart clears anything that expired while down) and every 5 minutes after.
+const sweepBans = () =>
+    sweepExpiredBans().catch((err) =>
+        server.logger.error("Failed to sweep expired bans", err),
+    );
+setTimeout(sweepBans, 15 * 1000);
+setInterval(sweepBans, 5 * 60 * 1000);
 
 // One-time backfill of pass item grants for existing accounts (no-op after the
 // first run). Must finish before requests are served so the new grant logic doesn't
