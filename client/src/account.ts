@@ -242,7 +242,7 @@ export class Account {
             if (err) {
                 errorLogManager.storeGeneric("account", "load_profile_error");
             } else if (data.banned) {
-                this.emit("error", "account_banned", data.reason);
+                this.emit("error", "account_banned", data.reason, data.expiresAt);
             } else if (data.success) {
                 this.loggedIn = true;
                 this.profile = data.profile;

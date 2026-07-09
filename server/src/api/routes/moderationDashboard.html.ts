@@ -125,8 +125,9 @@ export const dashboardHtml = `<!DOCTYPE html>
     .badge-perm   { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
     .badge-temp   { background: var(--orange-dim); color: var(--orange-t); }
     .badge-disc   { background: var(--surface3);   color: var(--text-muted); border: 1px solid var(--border2); }
-    .badge-sus    { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
-    .badge-botted { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
+    .badge-sus     { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
+    .badge-botted  { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
+    .badge-removed { background: var(--surface3);   color: var(--orange-t); border: 1px solid var(--orange); }
 
     /* XP-Gain "Games" sub-tab — expandable per-game roster rows. */
     .xp-game-row:hover td { background: var(--surface2); }
@@ -256,6 +257,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
   <button class="tab-btn"        data-tab="replays">Replays</button>
   <button class="tab-btn"        data-tab="xp">XP Gain</button>
+  <button class="tab-btn"        data-tab="leaderboard">Leaderboard</button>
   <button class="tab-btn"        data-tab="warnings">Warnings</button>
 </div>
 
@@ -287,9 +289,9 @@ export const dashboardHtml = `<!DOCTYPE html>
     <div id="sub-account" style="display:none">
       <table class="data-table">
         <thead><tr>
-          <th>Slug</th><th>Username</th><th>Reason</th><th>Banned By</th><th>Actions</th>
+          <th>Slug</th><th>Username</th><th>Reason</th><th>Banned By</th><th>Type</th><th>Expires</th><th>Actions</th>
         </tr></thead>
-        <tbody id="account-ban-tbody"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+        <tbody id="account-ban-tbody"><tr><td colspan="7" class="loading">Loading…</td></tr></tbody>
       </table>
     </div>
 
@@ -392,6 +394,34 @@ export const dashboardHtml = `<!DOCTYPE html>
     <div id="xp-sub-games" style="display:none">
       <div id="xp-games-container"><div class="loading">Loading…</div></div>
     </div>
+  </div>
+
+  <!-- ════════════════ TAB: LEADERBOARD ════════════════ -->
+  <div id="tab-leaderboard" class="tab-pane">
+    <div class="toolbar">
+      <select id="lb-type" title="Stat" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="kills">Kills</option>
+        <option value="wins">Wins</option>
+        <option value="kpg">K / Game</option>
+        <option value="most_damage_dealt">Max Damage</option>
+      </select>
+      <select id="lb-mode" title="Team mode" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="1">Solo</option>
+        <option value="2">Duo</option>
+        <option value="4">Squad</option>
+      </select>
+      <select id="lb-interval" title="Time interval" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="alltime">All time</option>
+        <option value="weekly">Last 7 days</option>
+        <option value="daily">Last 24 hours</option>
+      </select>
+      <select id="lb-map" title="Map" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="">All maps</option>
+      </select>
+      <button class="btn btn-gray" id="lb-refresh-btn">↻ Refresh</button>
+      <span style="font-size:11px;color:var(--text-dim);">Click a player to open their games, expand a game to see all players and delete botted ones.</span>
+    </div>
+    <div id="lb-container"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB: WARNINGS ════════════════ -->
@@ -545,13 +575,18 @@ export const dashboardHtml = `<!DOCTYPE html>
         <div style="color:var(--text-dim);margin-bottom:4px;">Reason</div>
         <input id="modal-ban-reason" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
       </div>
-      <!-- Duration fields – hidden for Account Bans (no expiry in DB) -->
+      <!-- Duration fields – used by IP, chat and (time-limited) account bans -->
       <div id="modal-duration-block">
-        <div style="color:var(--text-dim);margin-bottom:4px;">Duration (days)</div>
+        <div style="color:var(--text-dim);margin-bottom:4px;">Duration</div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <input id="modal-ban-days" type="number" value="7" min="1" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
+          <input id="modal-ban-days" type="number" value="7" min="0" step="any" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
+          <select id="modal-ban-unit" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
+            <option value="minutes">Minutes</option>
+            <option value="hours">Hours</option>
+            <option value="days" selected>Days</option>
+          </select>
           <label style="display:flex;align-items:center;gap:6px;color:var(--text-dim);cursor:pointer;">
-            <input id="modal-ban-perm" type="checkbox" onchange="document.getElementById('modal-ban-days').disabled=this.checked">
+            <input id="modal-ban-perm" type="checkbox" onchange="document.getElementById('modal-ban-days').disabled=this.checked;document.getElementById('modal-ban-unit').disabled=this.checked;">
             Permanent
           </label>
         </div>
@@ -837,6 +872,9 @@ function switchTab(name) {
   } else if (name === 'xp') {
     closeSSE();
     refreshXp();
+  } else if (name === 'leaderboard') {
+    closeSSE();
+    loadLeaderboard();
   } else if (name === 'warnings') {
     closeSSE();
     loadWarnings();
@@ -1119,10 +1157,10 @@ function renderXpUserDetail(data) {
   const lookup = data.slug ? ' · ' + navLink(hLookup(data.slug), 'look up account', { title: 'Open IP / Player lookup' }) : '';
   const rows = games.slice().reverse().map(g => {
     const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
-    return \`<tr id="xpgame-\${esc(g.gameId)}">
+    return \`<tr id="xpgame-\${esc(g.gameId)}"\${g.removed ? ' style="opacity:.55"' : ''}>
       <td style="white-space:nowrap;font-size:11px;">\${fmtDate(g.createdAt)}</td>
       <td>\${esc(g.region || '–')}</td>
-      <td>\${esc(g.mapName)} · \${mode}</td>
+      <td>\${esc(g.mapName)} · \${mode}\${g.removed ? ' ' + modBadge('removed') : ''}</td>
       <td>\${g.kills}</td>
       <td>\${g.damage}</td>
       <td>\${g.rank}</td>
@@ -1224,8 +1262,9 @@ function populateXpRegionFilter(regions) {
 }
 
 function modBadge(status) {
-  if (status === 'botted') return '<span class="badge badge-botted">BOTTED</span>';
-  if (status === 'sus')    return '<span class="badge badge-sus">SUS</span>';
+  if (status === 'botted')  return '<span class="badge badge-botted">BOTTED</span>';
+  if (status === 'sus')     return '<span class="badge badge-sus">SUS</span>';
+  if (status === 'removed') return '<span class="badge badge-removed">REMOVED</span>';
   return '';
 }
 
@@ -1241,6 +1280,48 @@ function modActionsInner(gameId, userId, status) {
   if (status !== 'botted') parts.push(btn('botted', 'botted', 'btn-red'));
   if (status)              parts.push(btn('clear', 'clear', 'btn-gray'));
   return parts.join('');
+}
+
+// Per-player roster actions: a removed player only offers Restore; otherwise the
+// sus/botted/clear controls plus "Remove" (detach from stats + leaderboard).
+function rosterActionsInner(gameId, userId, status, removed) {
+  if (!userId) return '';
+  if (removed) {
+    return '<button class="btn btn-blue btn-sm" data-restoreuser="' + esc(gameId) + '" data-ruser="' + esc(userId) + '" title="Re-attach this player and restore their XP">↩ Restore</button>';
+  }
+  return modActionsInner(gameId, userId, status) +
+    ' <button class="btn btn-orange btn-sm" data-removeuser="' + esc(gameId) + '" data-ruser="' + esc(userId) + '" title="Remove this player from the game — hides it from their stats and the leaderboard and revokes its XP">➖ Remove</button>';
+}
+
+// Re-fetches and re-renders one expanded game roster (after a remove/restore).
+async function refreshRoster(wrap, gameId) {
+  try {
+    const data = await get('/api/game/' + encodeURIComponent(gameId) + '/players');
+    wrap.innerHTML = renderGameRoster(data);
+  } catch (e) { /* leave the current roster in place */ }
+}
+
+async function doRemoveUser(gameId, userId, btn) {
+  if (!confirm('Remove this player from the game?\\n\\nThe game will no longer appear in their stats or the leaderboard, and the XP they gained from it is revoked. The game itself and the other players are kept. This can be undone with Restore.')) return;
+  try {
+    await post('/api/game/' + encodeURIComponent(gameId) + '/remove-user', { userId: userId });
+    toast('Player removed from game — XP revoked');
+    const wrap = btn.closest('.xp-detail-wrap');
+    if (wrap) refreshRoster(wrap, gameId);
+  } catch (e) {
+    toast('Remove failed: ' + e.message, true);
+  }
+}
+
+async function doRestoreUser(gameId, userId, btn) {
+  try {
+    await post('/api/game/' + encodeURIComponent(gameId) + '/restore-user', { userId: userId });
+    toast('Player restored to game — XP restored');
+    const wrap = btn.closest('.xp-detail-wrap');
+    if (wrap) refreshRoster(wrap, gameId);
+  } catch (e) {
+    toast('Restore failed: ' + e.message, true);
+  }
 }
 
 function renderXpGames(games) {
@@ -1309,10 +1390,7 @@ function renderGameRoster(data) {
     ? '<div style="font-size:11px;color:var(--text-dim);">' + esc(m.mapName) + ' · ' + (TEAM_MODE_LABEL[m.teamMode] || ('Mode ' + m.teamMode)) + ' · ' + esc(m.region || '') + ' · ' + fmtDate(m.createdAt) + ' · <span style="font-family:monospace">' + esc(data.gameId) + '</span></div>'
     : '';
   const header =
-    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' +
-      metaHtml +
-      '<button class="btn btn-red btn-sm" data-delgame="' + esc(data.gameId) + '" style="margin-left:auto;" title="Permanently delete this game and revoke its XP">🗑 Delete Game</button>' +
-    '</div>';
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' + metaHtml + '</div>';
   let rows = '';
   for (const p of players) {
     const nameLabel = esc(p.username || p.slug || '(guest)');
@@ -1321,8 +1399,9 @@ function renderGameRoster(data) {
       : '<span style="color:var(--text-muted)">' + nameLabel + '</span>';
     const banned = p.banned ? ' <span class="badge badge-perm">BAN</span>' : '';
     const key = data.gameId + '|' + p.userId;
+    const badge = p.removed ? modBadge('removed') : modBadge(p.modStatus);
     rows +=
-      '<tr>' +
+      '<tr' + (p.removed ? ' style="opacity:.55"' : '') + '>' +
       '<td>' + nameCell + banned + '</td>' +
       '<td>' + p.kills + '</td>' +
       '<td>' + p.assists + '</td>' +
@@ -1331,8 +1410,8 @@ function renderGameRoster(data) {
       '<td>' + p.rank + '</td>' +
       '<td>' + fmtSecs(p.timeAlive) + '</td>' +
       '<td><strong>' + p.xp.toLocaleString() + '</strong></td>' +
-      '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + modBadge(p.modStatus) + '</span></td>' +
-      '<td style="white-space:nowrap;"><span class="xp-modacts" data-key="' + esc(key) + '">' + modActionsInner(data.gameId, p.userId, p.modStatus) + '</span></td>' +
+      '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + badge + '</span></td>' +
+      '<td style="white-space:nowrap;"><span class="xp-modacts" data-key="' + esc(key) + '">' + rosterActionsInner(data.gameId, p.userId, p.modStatus, p.removed) + '</span></td>' +
       '</tr>';
   }
   return header +
@@ -1385,6 +1464,18 @@ async function doDeleteGame(gameId) {
 // Delegated clicks for the Games sub-tab: moderation buttons first, then row-expand.
 // (Cross-nav links carry data-nav and are handled by the capture-phase nav handler.)
 document.addEventListener('click', function (e) {
+  const removeBtn = e.target.closest('[data-removeuser]');
+  if (removeBtn) {
+    e.stopPropagation();
+    doRemoveUser(removeBtn.dataset.removeuser, removeBtn.dataset.ruser, removeBtn);
+    return;
+  }
+  const restoreBtn = e.target.closest('[data-restoreuser]');
+  if (restoreBtn) {
+    e.stopPropagation();
+    doRestoreUser(restoreBtn.dataset.restoreuser, restoreBtn.dataset.ruser, restoreBtn);
+    return;
+  }
   const delBtn = e.target.closest('[data-delgame]');
   if (delBtn) {
     e.stopPropagation();
@@ -1401,6 +1492,130 @@ document.addEventListener('click', function (e) {
   if (!row) return;
   if (e.target.closest('[data-nav]')) return; // let the name / replay links act
   toggleGameExpand(row);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – LEADERBOARD (competitive stats leaderboard + game deletion)
+// Mirrors the public stats leaderboard; drilling into a player reuses the Games
+// sub-tab machinery (.xp-game-row expand → full roster → delete).
+// ═══════════════════════════════════════════════════════════════════════════
+
+let lbLoadToken = 0;
+const LB_TYPE_LABEL = { kills: 'Kills', wins: 'Wins', kpg: 'K/G', most_damage_dealt: 'Max Dmg' };
+
+async function loadLeaderboard() {
+  const container = document.getElementById('lb-container');
+  const token = ++lbLoadToken;
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const type = document.getElementById('lb-type').value;
+    const mode = document.getElementById('lb-mode').value;
+    const interval = document.getElementById('lb-interval').value;
+    const map = document.getElementById('lb-map').value;
+    const q = '/api/leaderboard?type=' + encodeURIComponent(type) + '&teamMode=' + encodeURIComponent(mode) + '&interval=' + encodeURIComponent(interval) + (map ? '&mapId=' + encodeURIComponent(map) : '');
+    const data = await get(q);
+    if (token !== lbLoadToken) return;
+    populateLbMaps(data.maps || []);
+    renderLeaderboard(data);
+  } catch (e) {
+    if (token !== lbLoadToken) return;
+    container.innerHTML = '<div class="empty">Failed to load leaderboard.</div>';
+  }
+}
+
+function populateLbMaps(maps) {
+  const sel = document.getElementById('lb-map');
+  if (!sel) return;
+  const cur = sel.value;
+  let html = '<option value="">All maps</option>';
+  for (const m of maps) html += '<option value="' + m.mapId + '">' + esc(m.name) + '</option>';
+  sel.innerHTML = html;
+  sel.value = cur;
+}
+
+function renderLeaderboard(data) {
+  const container = document.getElementById('lb-container');
+  const players = data.players || [];
+  if (!players.length) { container.innerHTML = '<div class="empty">No data for this filter.</div>'; return; }
+  const valLabel = LB_TYPE_LABEL[data.type] || 'Value';
+  let rows = '';
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    const label = esc(p.username || p.slug || '(guest)');
+    const nameCell = p.slug ? navLink(hAccount(p.slug), label, { title: 'Open account' }) : '<span style="color:var(--text-muted)">' + label + '</span>';
+    const banned = p.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+    rows += '<tr class="lb-row" data-lbuser="' + esc(p.userId) + '" data-lbslug="' + esc(p.slug || '') + '" data-lbname="' + esc(label) + '" style="cursor:pointer" title="Open games">' +
+      '<td style="color:var(--text-dim)">#' + (i + 1) + '</td>' +
+      '<td>' + nameCell + banned + '</td>' +
+      '<td><strong>' + p.val.toLocaleString() + '</strong></td>' +
+      '<td>' + p.games + '</td>' +
+      '</tr>';
+  }
+  container.innerHTML =
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Click a player to open their games.</div>' +
+    '<table class="data-table"><thead><tr><th>#</th><th>Player</th><th>' + esc(valLabel) + '</th><th>Games</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+async function loadLbPlayer(userId, slug, name) {
+  const container = document.getElementById('lb-container');
+  const token = ++lbLoadToken;
+  container.innerHTML = '<div class="loading">Loading player games…</div>';
+  try {
+    // Reuse the per-user XP endpoint — it returns each game with stats + gameId + region.
+    const data = await get('/api/xp-gain/user/' + encodeURIComponent(userId) + '?window=30d');
+    if (token !== lbLoadToken) return;
+    renderLbPlayer(data, name);
+  } catch (e) {
+    if (token !== lbLoadToken) return;
+    container.innerHTML = '<div class="empty">Failed to load games.</div>';
+  }
+}
+
+function renderLbPlayer(data, name) {
+  const container = document.getElementById('lb-container');
+  const games = (data.games || []).slice().reverse();
+  const label = esc(name || data.username || data.slug || data.userId);
+  const banned = data.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+  const lookup = data.slug ? ' · ' + navLink(hAccount(data.slug), 'open account', { title: 'Open account' }) : '';
+  let rows = '';
+  for (const g of games) {
+    const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
+    rows += '<tr class="xp-game-row" data-gid="' + esc(g.gameId) + '" data-uid="' + esc(data.userId) + '" style="cursor:pointer' + (g.removed ? ';opacity:.55' : '') + '" title="Click to expand this game">' +
+      '<td style="white-space:nowrap;font-size:11px;">' + fmtDate(g.createdAt) + '</td>' +
+      '<td>' + esc(g.region || '–') + '</td>' +
+      '<td>' + esc(g.mapName) + ' · ' + mode + (g.removed ? ' ' + modBadge('removed') : '') + '</td>' +
+      '<td>' + g.kills + '</td>' +
+      '<td>' + g.damage + '</td>' +
+      '<td>' + g.rank + '</td>' +
+      '<td>' + fmtSecs(g.timeAlive) + '</td>' +
+      '<td style="white-space:nowrap;">' + navLink(hReplays(g.gameId), 'replay', { title: 'Open in the Replays tab' }) + '</td>' +
+      '</tr>';
+  }
+  container.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
+      '<button class="btn btn-gray btn-sm" id="lb-back-btn">← Back</button>' +
+      '<div style="font-size:15px;font-weight:600;">' + label + banned + '</div>' +
+      '<div style="font-size:12px;color:var(--text-dim);">' + (data.slug ? '(' + esc(data.slug) + ')' : '') + lookup + '</div>' +
+      '<div style="margin-left:auto;font-size:12px;color:var(--text-dim);">' + games.length + ' games (last 30d)</div>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Click a game to expand the full roster and delete it if botted.</div>' +
+    '<table class="data-table"><thead><tr><th>Time</th><th>Region</th><th>Map · Mode</th><th>Kills</th><th>Dmg</th><th>Rank</th><th>Alive</th><th>Replay</th></tr></thead><tbody>' +
+    (rows || '<tr><td colspan="8" class="empty">No games in the last 30 days.</td></tr>') +
+    '</tbody></table>';
+  document.getElementById('lb-back-btn').addEventListener('click', loadLeaderboard);
+}
+
+// Click a leaderboard player row to open their games (nav links keep their own click).
+document.addEventListener('click', function (e) {
+  const row = e.target.closest('.lb-row');
+  if (!row) return;
+  if (e.target.closest('[data-nav]')) return;
+  loadLbPlayer(row.dataset.lbuser, row.dataset.lbslug, row.dataset.lbname);
+});
+
+document.getElementById('lb-refresh-btn').addEventListener('click', loadLeaderboard);
+['lb-type', 'lb-mode', 'lb-interval', 'lb-map'].forEach(function (id) {
+  document.getElementById(id).addEventListener('change', loadLeaderboard);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1549,12 +1764,14 @@ function renderAccountBans(q) {
       <td>\${esc(b.username)}</td>
       <td>\${esc(b.banReason||'–')}</td>
       <td>\${esc(b.bannedBy||'–')}</td>
+      <td>\${!b.banExpiresAt ? '<span class="badge badge-perm">PERMANENT</span>' : '<span class="badge badge-temp">TEMP</span>'}</td>
+      <td>\${!b.banExpiresAt ? '∞' : fmtDate(b.banExpiresAt)}</td>
       <td>
         <button class="btn btn-green btn-sm" onclick="unbanAccount('\${esc(b.slug)}')">Unban</button>
         <button class="btn btn-gray btn-sm" onclick="toggleBanComments('account','\${esc(b.slug)}', this)">💬</button>
       </td>
     </tr>
-  \`).join('') : '<tr><td colspan="5" class="empty">No account bans.</td></tr>';
+  \`).join('') : '<tr><td colspan="7" class="empty">No account bans.</td></tr>';
   reopenComments('account', tbody);
 }
 
@@ -1674,9 +1891,9 @@ async function unbanChat(ip) {
 // Show/hide duration block + update target hint based on selected ban type
 function onBanTypeChange() {
   const type = document.getElementById('modal-ban-type').value;
-  const durationBlock = document.getElementById('modal-duration-block');
   const targetHint    = document.getElementById('modal-target-hint');
-  durationBlock.style.display = type === 'account' ? 'none' : '';
+  // Account bans now support an optional duration too, so the block stays visible
+  // for every ban type.
   targetHint.textContent = type === 'account' ? '(account slug)' : '(IP hash)';
 }
 
@@ -1689,6 +1906,8 @@ document.getElementById('ban-new-btn').addEventListener('click', () => {
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
   document.getElementById('modal-ban-days').disabled = false;
+  document.getElementById('modal-ban-unit').value    = 'days';
+  document.getElementById('modal-ban-unit').disabled = false;
   document.getElementById('modal-ban-perm').checked = false;
   document.getElementById('modal-ban-type').value   = 'ip';
   onBanTypeChange();
@@ -1702,18 +1921,23 @@ document.getElementById('modal-confirm-btn').addEventListener('click', async () 
   const target = document.getElementById('modal-ban-target').value.trim();
   const reason = document.getElementById('modal-ban-reason').value.trim();
   const perm   = document.getElementById('modal-ban-perm').checked;
-  const days   = perm ? 36500 : (parseInt(document.getElementById('modal-ban-days').value) || 7);
+  const amount = parseFloat(document.getElementById('modal-ban-days').value) || 0;
+  const unit   = document.getElementById('modal-ban-unit').value;
+  const unitDays = unit === 'minutes' ? 1/1440 : unit === 'hours' ? 1/24 : 1;
+  // duration is sent in (fractional) days; daysToMs turns it into a precise expiry.
+  const days   = perm ? 36500 : amount * unitDays;
   if (!target) return toast('Please specify a target!', true);
+  if (!perm && amount <= 0) return toast('Please specify a duration!', true);
   try {
     if (type === 'ip')      await post('/api/ban/ip',      { ip: target, reason, duration: days, permanent: perm });
-    if (type === 'account') await post('/api/ban/account', { slug: target, reason });
+    if (type === 'account') await post('/api/ban/account', { slug: target, reason, duration: days, permanent: perm });
     if (type === 'chat')    await post('/api/ban/chat',    { ip: target, reason, duration: days, permanent: perm });
 
     // If opened from player list: also ban account + kick the player
     const kickTarget = banModal.dataset.kickTarget;
     if (kickTarget) {
       delete banModal.dataset.kickTarget;
-      await post('/api/ban/account', { slug: kickTarget, reason });
+      await post('/api/ban/account', { slug: kickTarget, reason, duration: days, permanent: perm });
       await gameCmd({ action: 'kick', target: kickTarget });
     }
 
@@ -2067,6 +2291,8 @@ function quickBanIp(hash) {
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
   document.getElementById('modal-ban-days').disabled = false;
+  document.getElementById('modal-ban-unit').value    = 'days';
+  document.getElementById('modal-ban-unit').disabled = false;
   document.getElementById('modal-ban-perm').checked = false;
   onBanTypeChange();
   banModal.style.display = 'flex';
@@ -2080,6 +2306,8 @@ function quickBanChat(hash) {
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
   document.getElementById('modal-ban-days').disabled = false;
+  document.getElementById('modal-ban-unit').value    = 'days';
+  document.getElementById('modal-ban-unit').disabled = false;
   document.getElementById('modal-ban-perm').checked = false;
   onBanTypeChange();
   banModal.style.display = 'flex';
@@ -2378,6 +2606,8 @@ function quickBanPlayer(name, hash) {
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
   document.getElementById('modal-ban-days').disabled = false;
+  document.getElementById('modal-ban-unit').value    = 'days';
+  document.getElementById('modal-ban-unit').disabled = false;
   document.getElementById('modal-ban-perm').checked = false;
   onBanTypeChange();
   // Store the player name so the confirm handler can also ban the account + kick

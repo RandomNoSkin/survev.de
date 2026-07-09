@@ -87,16 +87,23 @@ UserRouter.post("/profile", async (c) => {
         lastUsernameChangeTime,
         banned,
         banReason,
+        banExpiresAt,
         goldenFries,
     } = user;
 
-    if (banned) {
+    // A time-limited account ban whose duration has run out is treated as lifted
+    // right away; the ban-expiry sweep clears the DB row + writes history shortly
+    // after (see db/banExpiry.ts). Permanent bans have a null banExpiresAt.
+    const banActive =
+        banned && (banExpiresAt == null || banExpiresAt.getTime() > Date.now());
+    if (banActive) {
         const session = c.get("session")!;
         await logoutUser(c, session.id);
 
         return c.json<ProfileResponse>({
             banned: true,
             reason: banReason,
+            expiresAt: banExpiresAt ? banExpiresAt.getTime() : null,
         });
     }
 

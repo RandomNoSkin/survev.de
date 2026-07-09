@@ -40,6 +40,7 @@ import {
     lte,
     notInArray,
     or,
+    type SQL,
     sql,
 } from "drizzle-orm";
 import { Hono } from "hono";
@@ -57,7 +58,7 @@ import {
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
-import { GameConfig } from "../../../../shared/gameConfig";
+import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
@@ -65,7 +66,12 @@ import { server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { deleteGame, setGamePlayerModeration } from "../db/gameModeration";
+import {
+    deleteGame,
+    removeUserFromGame,
+    restoreUserToGame,
+    setGamePlayerModeration,
+} from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
 import { setPassXp } from "../db/passXp";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
@@ -191,6 +197,7 @@ async function fetchAllBans() {
                 username: true,
                 banReason: true,
                 bannedBy: true,
+                banExpiresAt: true,
                 userCreated: true,
             },
         }),
@@ -199,6 +206,20 @@ async function fetchAllBans() {
         }),
     ]);
     return { ipBans, accountBans, chatBans };
+}
+
+/** Human-friendly rendering of a (possibly fractional) day duration for logs. */
+function fmtBanDuration(days: number): string {
+    const totalMin = Math.round(days * 24 * 60);
+    if (totalMin < 60) return `${totalMin}m`;
+    if (totalMin < 60 * 24) {
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        return m ? `${h}h ${m}m` : `${h}h`;
+    }
+    const d = Math.floor(totalMin / (60 * 24));
+    const h = Math.floor((totalMin % (60 * 24)) / 60);
+    return h ? `${d}d ${h}h` : `${d}d`;
 }
 
 /** Appends a ban event to the audit log (`ban_history`). */
@@ -233,9 +254,10 @@ async function recordUnban(
 
 /**
  * Pushes the current ban list to every connected admin browser.
- * Called after any ban or unban operation so all open dashboards update instantly.
+ * Called after any ban or unban operation (including the auto-expiry sweep) so all
+ * open dashboards update instantly.
  */
-async function broadcastBans() {
+export async function broadcastBans() {
     if (activeSseStreams.size === 0) return;
     const bans = await fetchAllBans();
     const data = JSON.stringify(bans);
@@ -327,7 +349,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
             if (userIds.length) {
                 await db
                     .update(usersTable)
-                    .set({ banned: true, banReason: reason, bannedBy: admin.slug })
+                    // Linked account bans inherit the IP ban's expiry so they lift
+                    // together (independently, via the account expiry sweep).
+                    .set({
+                        banned: true,
+                        banReason: reason,
+                        bannedBy: admin.slug,
+                        banExpiresAt: permanent ? null : expiresIn,
+                    })
                     .where(inArray(usersTable.id, userIds));
             }
 
@@ -343,7 +372,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             void logModerationAction("🔨 IP banned", [
                 { name: "IP hash", value: ip },
                 { name: "Reason", value: reason || "–" },
-                { name: "Duration", value: permanent ? "permanent" : `${duration}d` },
+                {
+                    name: "Duration",
+                    value: permanent ? "permanent" : fmtBanDuration(duration),
+                },
                 { name: "By admin", value: adminTag(admin) },
             ]);
 
@@ -352,22 +384,28 @@ export const ModerationDashboardRouter = new Hono<Context>()
         },
     )
 
-    /** Creates an account ban. Broadcasts updated bans. */
+    /** Creates an account ban (permanent or time-limited). Broadcasts updated bans. */
     .post(
         "/api/ban/account",
         validateParams(
             z.object({
                 slug: z.string(),
                 reason: z.string().default(""),
+                duration: z.number().default(7),
+                permanent: z.boolean().default(false),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { slug, reason } = c.req.valid("json");
+            const { slug, reason, duration, permanent } = c.req.valid("json");
+            // null = permanent; otherwise the ban-expiry sweep lifts it after this date.
+            const banExpiresAt = permanent
+                ? null
+                : new Date(Date.now() + util.daysToMs(duration));
 
             await db
                 .update(usersTable)
-                .set({ banned: true, banReason: reason, bannedBy: admin.slug })
+                .set({ banned: true, banReason: reason, bannedBy: admin.slug, banExpiresAt })
                 .where(eq(usersTable.slug, slug));
 
             await recordBan({
@@ -375,13 +413,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 banTarget: slug,
                 reason,
                 bannedBy: admin.slug,
-                expiresAt: null,
-                permanent: false,
+                expiresAt: banExpiresAt,
+                permanent,
             });
 
             void logModerationAction("🔨 Account banned", [
                 { name: "Account", value: slug },
                 { name: "Reason", value: reason || "–" },
+                {
+                    name: "Duration",
+                    value: permanent ? "permanent" : fmtBanDuration(duration),
+                },
                 { name: "By admin", value: adminTag(admin) },
             ]);
 
@@ -432,7 +474,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             void logModerationAction("🔇 Chat banned", [
                 { name: "IP hash", value: ip },
                 { name: "Reason", value: reason || "–" },
-                { name: "Duration", value: permanent ? "permanent" : `${duration}d` },
+                {
+                    name: "Duration",
+                    value: permanent ? "permanent" : fmtBanDuration(duration),
+                },
                 { name: "By admin", value: adminTag(admin) },
             ]);
 
@@ -458,7 +503,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
         if (userIds.length) {
             await db
                 .update(usersTable)
-                .set({ banned: false, banReason: "", bannedBy: "" })
+                .set({ banned: false, banReason: "", bannedBy: "", banExpiresAt: null })
                 .where(inArray(usersTable.id, userIds));
         }
 
@@ -486,7 +531,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const { slug } = c.req.valid("json");
             await db
                 .update(usersTable)
-                .set({ banned: false, banReason: "", bannedBy: "" })
+                .set({ banned: false, banReason: "", bannedBy: "", banExpiresAt: null })
                 .where(eq(usersTable.slug, slug));
             await recordUnban("account", slug, admin.slug);
             void logModerationAction(
@@ -1307,11 +1352,18 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
                     rank: sql<number>`min(${matchDataTable.rank})`,
                     createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+                    // True if this game was "removed" from the account (user_id blanked).
+                    removed: sql<boolean>`bool_or(${matchDataTable.removedUserId} = ${userId})`,
                 })
                 .from(matchDataTable)
+                // Match live rows AND rows this account was removed from, so removed
+                // games stay visible here (badged) and can be restored.
                 .where(
                     and(
-                        eq(matchDataTable.userId, userId),
+                        or(
+                            eq(matchDataTable.userId, userId),
+                            eq(matchDataTable.removedUserId, userId),
+                        ),
                         gte(matchDataTable.createdAt, cutoff),
                     ),
                 )
@@ -1340,12 +1392,15 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     timeAlive: stat.timeAlive,
                     rank: stat.rank,
                     createdAt: s.createdAt,
+                    removed: !!s.removed,
                     xp: Math.round(computeMatchXp(stat) * 100) / 100,
                 };
             })
             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-        const totalXp = Math.round(games.reduce((sum, g) => sum + g.xp, 0) * 100) / 100;
+        const totalXp =
+            Math.round(games.reduce((sum, g) => sum + (g.removed ? 0 : g.xp), 0) * 100) /
+            100;
 
         return c.json({
             userId,
@@ -1507,12 +1562,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/game/:gameId/players", async (c) => {
         const gameId = c.req.param("gameId");
 
+        // No user join here: a "removed" player's user_id is blanked (moved to
+        // removed_user_id), so we resolve the effective account id per row and look
+        // the accounts up in a batch, so removed players still show with their name.
         const [rows, mods] = await Promise.all([
             db
                 .select({
                     userId: matchDataTable.userId,
-                    slug: usersTable.slug,
-                    banned: usersTable.banned,
+                    removedUserId: matchDataTable.removedUserId,
                     username: matchDataTable.username,
                     playerId: matchDataTable.playerId,
                     teamId: matchDataTable.teamId,
@@ -1530,7 +1587,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     voided: matchDataTable.voided,
                 })
                 .from(matchDataTable)
-                .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
                 .where(eq(matchDataTable.gameId, gameId))
                 .orderBy(asc(matchDataTable.rank)),
             db
@@ -1542,7 +1598,22 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .where(eq(gameModerationTable.gameId, gameId)),
         ]);
 
+        const effId = (r: { userId: string | null; removedUserId: string | null }) =>
+            r.userId ? r.userId : (r.removedUserId ?? "");
+        const userIds = [...new Set(rows.map(effId).filter(Boolean))];
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
         const modByUser = new Map(mods.map((m) => [m.userId, m.status]));
+
         const first = rows[0];
         const meta = first
             ? {
@@ -1558,6 +1629,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
             gameId,
             meta,
             players: rows.map((r) => {
+                const uid = effId(r);
+                const u = uid ? userById.get(uid) : undefined;
+                const removed = !!r.removedUserId && !r.userId;
                 const stat = {
                     kills: r.kills,
                     damage: r.damageDealt,
@@ -1566,9 +1640,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     mapId: r.mapId,
                 };
                 return {
-                    userId: r.userId,
-                    slug: r.slug ?? null,
-                    banned: r.banned ?? false,
+                    userId: uid, // effective account id — used by the row's actions
+                    slug: u?.slug ?? null,
+                    banned: u?.banned ?? false,
                     username: r.username,
                     playerId: r.playerId,
                     teamId: r.teamId,
@@ -1580,8 +1654,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     damage: r.damageDealt,
                     damageTaken: r.damageTaken,
                     voided: r.voided,
+                    removed,
                     xp: Math.round(computeMatchXp(stat) * 100) / 100,
-                    modStatus: r.userId ? (modByUser.get(r.userId) ?? null) : null,
+                    modStatus: uid ? (modByUser.get(uid) ?? null) : null,
                 };
             }),
         });
@@ -1665,6 +1740,142 @@ export const ModerationDashboardRouter = new Hono<Context>()
         );
 
         return c.json({ ok: true, ...result });
+    })
+
+    /**
+     * Removes ONE player from a game (without deleting the game): blanks their user_id
+     * so the game vanishes from that account's stats AND the leaderboard, and revokes
+     * the XP they gained from it. Reversible via /restore-user.
+     */
+    .post(
+        "/api/game/:gameId/remove-user",
+        validateParams(
+            z.object({ userId: z.string().min(1), note: z.string().max(500).optional() }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId, note } = c.req.valid("json");
+
+            const result = await removeUserFromGame(gameId, userId, admin.slug, note ?? "");
+            const removedXp = result.deltas.reduce((sum, d) => sum + d.xpDelta, 0);
+            void logModerationAction(
+                "➖ Player removed from game",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId },
+                    { name: "XP removed", value: String(Math.round(removedXp * 100) / 100) },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xaa4400,
+            );
+            return c.json({ ok: true, ...result });
+        },
+    )
+
+    /** Undoes /remove-user: re-attaches the player to the game and restores their XP. */
+    .post(
+        "/api/game/:gameId/restore-user",
+        validateParams(z.object({ userId: z.string().min(1) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId } = c.req.valid("json");
+
+            const result = await restoreUserToGame(gameId, userId);
+            void logModerationAction(
+                "➕ Player restored to game",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x3355ee,
+            );
+            return c.json({ ok: true, ...result });
+        },
+    )
+
+    /**
+     * Competitive leaderboard for the moderation dashboard — mirrors the public stats
+     * leaderboard (rank players by kills / wins / KPG / max damage, filtered by team
+     * mode, map and time interval) but is admin-scoped: banned players are INCLUDED
+     * (flagged) and voided (botted) games are excluded. Each ranked player links to
+     * their games, where the full roster can be reviewed and botted games deleted.
+     */
+    .get("/api/leaderboard", async (c) => {
+        const type = c.req.query("type") ?? "kills";
+        const teamMode = Number(c.req.query("teamMode") ?? "1");
+        const interval = c.req.query("interval") ?? "alltime";
+        const mapIdParam = c.req.query("mapId");
+
+        // Whitelisted stat expressions (same semantics as the public leaderboard).
+        const valExpr =
+            (
+                {
+                    kills: "SUM(match_data.kills)",
+                    wins: "COUNT(CASE WHEN match_data.rank = 1 THEN 1 END)",
+                    kpg: "ROUND(SUM(match_data.kills) * 1.0 / COUNT(DISTINCT match_data.game_id), 2)",
+                    most_damage_dealt: "MAX(match_data.damage_dealt)",
+                } as Record<string, string>
+            )[type] ?? "SUM(match_data.kills)";
+
+        const conds = [
+            sql`${matchDataTable.userId} <> ''`,
+            eq(matchDataTable.voided, false),
+            eq(matchDataTable.teamMode, teamMode as TeamMode),
+        ];
+        if (mapIdParam) conds.push(eq(matchDataTable.mapId, Number(mapIdParam)));
+        if (interval === "daily")
+            conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '1 day'`));
+        else if (interval === "weekly")
+            conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '7 days'`));
+
+        const rows = await db
+            .select({
+                userId: matchDataTable.userId,
+                slug: usersTable.slug,
+                username: usersTable.username,
+                banned: usersTable.banned,
+                games: sql<number>`count(distinct ${matchDataTable.gameId})`,
+                val: sql.raw(`${valExpr} as val`) as SQL<number>,
+            })
+            .from(matchDataTable)
+            .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
+            .where(and(...conds))
+            .groupBy(
+                matchDataTable.userId,
+                usersTable.slug,
+                usersTable.username,
+                usersTable.banned,
+            )
+            .orderBy(sql`val DESC`)
+            .limit(100);
+
+        // Distinct maps in the data, for the filter dropdown.
+        const mapRows = await db
+            .selectDistinct({ mapId: matchDataTable.mapId })
+            .from(matchDataTable)
+            .where(sql`${matchDataTable.userId} <> ''`);
+        const maps = mapRows
+            .map((m) => ({ mapId: m.mapId, name: MAP_ID_TO_NAME[m.mapId] ?? String(m.mapId) }))
+            .sort((a, b) => a.mapId - b.mapId);
+
+        return c.json({
+            type,
+            teamMode,
+            interval,
+            mapId: mapIdParam ?? "",
+            maps,
+            players: rows.map((r) => ({
+                userId: r.userId ?? "",
+                slug: r.slug ?? null,
+                username: r.username || null,
+                banned: r.banned ?? false,
+                games: Number(r.games),
+                val: Number(r.val),
+            })),
+        });
     })
 
     /**
