@@ -33,6 +33,43 @@ const templates = {
     playerCards,
 };
 
+/** Same "1h 2m 3s" formatting the in-game end-of-match stats download uses. */
+function humanizeTime(time: number): string {
+    const hours = Math.floor(time / 3600);
+    const minutes = Math.floor(time / 60) % 60;
+    const seconds = Math.floor(time) % 60;
+    let out = "";
+    if (hours > 0) out += `${hours}h `;
+    if (hours > 0 || minutes > 0) out += `${minutes}m `;
+    return out + `${seconds}s`;
+}
+
+/**
+ * Downloads a CSV of a match's player stats — identical format to the "Download
+ * Stats" button shown at the end of a game (see client/src/ui/ui.ts).
+ */
+function downloadMatchStatsCsv(data: MatchDataResponse): void {
+    const headers = "Name,Rank,Kills,Damage Dealt,Damage Taken,Time Alive,Elo Gained\n";
+    const csv =
+        headers +
+        data
+            .map(
+                (d) =>
+                    `${d.username},${d.rank},${d.kills},${d.damage_dealt},${d.damage_taken},${humanizeTime(d.time_alive)}`,
+            )
+            .join("\n");
+    const now = new Date();
+    const p = (n: number) => String(n).padStart(2, "0");
+    const fileName = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}-${p(now.getHours())}-${p(now.getMinutes())}-${p(now.getSeconds())}_stats.csv`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
 export interface TeamModes {
     teamMode: TeamMode;
     games: number;
@@ -520,6 +557,12 @@ export class PlayerView {
             }
 
             $("#match-data").html(matchDataContent);
+
+            // "Download Stats" — same CSV export as the end-of-game button.
+            this.el.find(".match-download-btn").on("click", () => {
+                const game = this.games.find((x) => x.expanded);
+                if (game?.data?.length) downloadMatchStatsCsv(game.data);
+            });
 
             if (expandedGame && expandedGame.summary.guid === params.gameId) {
                 const elm = document.querySelector(

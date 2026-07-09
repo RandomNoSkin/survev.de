@@ -189,3 +189,53 @@ export async function setGamePlayerModeration(
     await upsertModeration(gameId, userId, "botted", adminSlug, note, deltas);
     return { status: "botted", deltas };
 }
+
+/**
+ * Permanently removes a game from the leaderboard and all stats: first revokes the
+ * XP (plus the pass cosmetics and Golden Fries earned from it) from every real
+ * account that gained XP in the game — otherwise deleting the source rows would
+ * leave phantom pass levels — then hard-deletes the game's `match_data` rows and any
+ * moderation flags. Irreversible (the rows are gone), unlike "botted".
+ */
+export async function deleteGame(
+    gameId: string,
+): Promise<{ players: number; xpRemoved: number; rowsDeleted: number }> {
+    const userRows = await db
+        .selectDistinct({ userId: matchDataTable.userId })
+        .from(matchDataTable)
+        .where(
+            and(eq(matchDataTable.gameId, gameId), sql`${matchDataTable.userId} <> ''`),
+        );
+
+    let players = 0;
+    let xpRemoved = 0;
+    for (const { userId } of userRows) {
+        if (!userId) continue;
+        const deltas = await computeGameXpDeltas(gameId, userId);
+        if (!deltas.length) continue;
+        players++;
+        for (const d of deltas) {
+            const rec = await db.query.userXpTable.findFirst({
+                where: and(
+                    eq(userXpTable.userId, userId),
+                    eq(userXpTable.passType, d.passType),
+                ),
+            });
+            if (!rec) continue;
+            await setPassXp(userId, d.passType, Math.max(0, Number(rec.xp) - d.xpDelta));
+            xpRemoved += d.xpDelta;
+        }
+    }
+
+    const deleted = await db
+        .delete(matchDataTable)
+        .where(eq(matchDataTable.gameId, gameId))
+        .returning({ gameId: matchDataTable.gameId });
+    await db.delete(gameModerationTable).where(eq(gameModerationTable.gameId, gameId));
+
+    return {
+        players,
+        xpRemoved: Math.round(xpRemoved * 100) / 100,
+        rowsDeleted: deleted.length,
+    };
+}

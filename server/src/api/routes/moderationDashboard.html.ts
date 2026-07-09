@@ -1251,7 +1251,7 @@ function renderXpGames(games) {
   container.innerHTML =
     '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Click a row to expand the full game. Ctrl+click a name or replay to open it in a new tab.</div>' +
     '<table class="data-table">' +
-    '<thead><tr><th>#</th><th>Player</th><th>Map · Mode</th><th>Region</th><th>K</th><th>Dmg</th><th>Rank</th><th>Alive</th><th>XP</th><th>Status</th><th>Actions</th></tr></thead>' +
+    '<thead><tr><th>#</th><th>Player</th><th>Map · Mode</th><th>Region</th><th title="Distinct players in the game — low counts hint at a bot lobby">Players</th><th>K</th><th>Dmg</th><th>Rank</th><th>Alive</th><th>XP</th><th>Status</th><th>Actions</th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table>';
 }
 
@@ -1268,6 +1268,7 @@ function xpGameRowHtml(g, i) {
     '<td>' + nameCell + banned + '</td>' +
     '<td>' + esc(g.mapName) + ' · ' + mode + '</td>' +
     '<td>' + esc(g.region || '–') + '</td>' +
+    '<td>' + (g.players != null ? g.players : '–') + '</td>' +
     '<td>' + g.kills + '</td>' +
     '<td>' + g.damage + '</td>' +
     '<td>' + g.rank + '</td>' +
@@ -1304,9 +1305,14 @@ function renderGameRoster(data) {
   const players = data.players || [];
   if (!players.length) return '<div class="empty">No player data for this game.</div>';
   const m = data.meta;
-  const header = m
-    ? '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">' + esc(m.mapName) + ' · ' + (TEAM_MODE_LABEL[m.teamMode] || ('Mode ' + m.teamMode)) + ' · ' + esc(m.region || '') + ' · ' + fmtDate(m.createdAt) + ' · <span style="font-family:monospace">' + esc(data.gameId) + '</span></div>'
+  const metaHtml = m
+    ? '<div style="font-size:11px;color:var(--text-dim);">' + esc(m.mapName) + ' · ' + (TEAM_MODE_LABEL[m.teamMode] || ('Mode ' + m.teamMode)) + ' · ' + esc(m.region || '') + ' · ' + fmtDate(m.createdAt) + ' · <span style="font-family:monospace">' + esc(data.gameId) + '</span></div>'
     : '';
+  const header =
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' +
+      metaHtml +
+      '<button class="btn btn-red btn-sm" data-delgame="' + esc(data.gameId) + '" style="margin-left:auto;" title="Permanently delete this game and revoke its XP">🗑 Delete Game</button>' +
+    '</div>';
   let rows = '';
   for (const p of players) {
     const nameLabel = esc(p.username || p.slug || '(guest)');
@@ -1354,9 +1360,37 @@ function updateModUI(gameId, userId, status) {
   document.querySelectorAll('.xp-modacts').forEach(function (el) { if (el.dataset.key === key) el.innerHTML = modActionsInner(gameId, userId, status); });
 }
 
+// Removes every list row (and its expanded detail) for a game after it is deleted.
+function removeGameFromList(gameId) {
+  document.querySelectorAll('.xp-game-row').forEach(function (row) {
+    if (row.dataset.gid !== gameId) return;
+    const next = row.nextElementSibling;
+    if (next && next.classList.contains('xp-detail-row')) next.remove();
+    row.remove();
+  });
+}
+
+// Permanently deletes a game (revokes its XP too). Reviewed from the expanded roster.
+async function doDeleteGame(gameId) {
+  if (!confirm('Permanently DELETE this game?\\n\\nAll its match rows are removed from the leaderboard, stats and match history, and the XP (plus cosmetics and fries) every player gained from it is revoked. This cannot be undone.')) return;
+  try {
+    const res = await post('/api/game/' + encodeURIComponent(gameId) + '/delete', {});
+    toast('Game deleted — ' + res.rowsDeleted + ' rows, ' + res.xpRemoved + ' XP revoked from ' + res.players + ' player(s)');
+    removeGameFromList(gameId);
+  } catch (e) {
+    toast('Delete failed: ' + e.message, true);
+  }
+}
+
 // Delegated clicks for the Games sub-tab: moderation buttons first, then row-expand.
 // (Cross-nav links carry data-nav and are handled by the capture-phase nav handler.)
 document.addEventListener('click', function (e) {
+  const delBtn = e.target.closest('[data-delgame]');
+  if (delBtn) {
+    e.stopPropagation();
+    doDeleteGame(delBtn.dataset.delgame);
+    return;
+  }
   const modBtn = e.target.closest('[data-mod]');
   if (modBtn) {
     e.stopPropagation();
@@ -2729,7 +2763,9 @@ async function accSetXp(passType) {
   const xp = parseFloat(document.getElementById('xp-xp-' + passType).value) || 0;
   try {
     const r = await post('/api/account/set-xp', { slug: currentAccountSlug, passType, xp });
-    toast(passType + ' → lvl ' + (r.level ?? '?') + ' (+' + (r.granted ?? 0) + ' / -' + (r.revoked ?? 0) + ' items)');
+    toast(passType + ' → lvl ' + (r.level ?? '?') +
+      ' · items +' + (r.granted ?? 0) + '/-' + (r.revoked ?? 0) +
+      ' · fries +' + (r.friesGranted ?? 0) + '/-' + (r.friesRevoked ?? 0));
     openAccountDetail(currentAccountSlug);
   } catch (e) { toast('Error: ' + e.message, true); }
 }

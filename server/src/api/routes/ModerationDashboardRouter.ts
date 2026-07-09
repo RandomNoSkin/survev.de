@@ -65,7 +65,7 @@ import { server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
-import { setGamePlayerModeration } from "../db/gameModeration";
+import { deleteGame, setGamePlayerModeration } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
 import { setPassXp } from "../db/passXp";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
@@ -1453,6 +1453,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
                   .from(gameModerationTable)
                   .where(inArray(gameModerationTable.gameId, gameIds))
             : [];
+        // Distinct player-slot count per shown game (low counts = likely bot lobby).
+        const counts = gameIds.length
+            ? await db
+                  .select({
+                      gameId: matchDataTable.gameId,
+                      n: sql<number>`count(distinct ${matchDataTable.playerId})`,
+                  })
+                  .from(matchDataTable)
+                  .where(inArray(matchDataTable.gameId, gameIds))
+                  .groupBy(matchDataTable.gameId)
+            : [];
         const regionRows = await db
             .selectDistinct({ region: matchDataTable.region })
             .from(matchDataTable)
@@ -1464,6 +1475,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             );
         const userById = new Map(users.map((u) => [u.id, u]));
         const modByKey = new Map(mods.map((m) => [m.gameId + "|" + m.userId, m.status]));
+        const playersByGame = new Map(counts.map((c) => [c.gameId, Number(c.n)]));
         const regions = regionRows
             .map((r) => r.region)
             .filter(Boolean)
@@ -1480,6 +1492,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     slug: u?.slug ?? null,
                     username: u?.username || null,
                     banned: u?.banned ?? false,
+                    players: playersByGame.get(e.gameId) ?? 0,
                     modStatus: modByKey.get(e.gameId + "|" + e.userId) ?? null,
                 };
             }),
@@ -1626,6 +1639,33 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, ...result });
         },
     )
+
+    /**
+     * Permanently deletes a game: revokes the XP (+ cosmetics + Golden Fries) every
+     * account gained from it, then hard-deletes its match rows and moderation flags.
+     * Removes the game from the leaderboard, stats and match history entirely.
+     * Irreversible — the moderator reviews the full roster first (expandable row).
+     */
+    .post("/api/game/:gameId/delete", async (c) => {
+        const admin = c.get("user")!;
+        const gameId = c.req.param("gameId");
+
+        const result = await deleteGame(gameId);
+
+        void logModerationAction(
+            "🗑️ Game deleted",
+            [
+                { name: "Game", value: gameId },
+                { name: "Players affected", value: String(result.players) },
+                { name: "XP removed", value: String(result.xpRemoved) },
+                { name: "Rows deleted", value: String(result.rowsDeleted) },
+                { name: "By admin", value: adminTag(admin) },
+            ],
+            0xaa1a1a,
+        );
+
+        return c.json({ ok: true, ...result });
+    })
 
     /**
      * Warnings tab — surfaces suspicious behaviour in a recent window:
