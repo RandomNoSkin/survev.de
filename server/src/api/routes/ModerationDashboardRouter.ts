@@ -223,6 +223,16 @@ function fmtBanDuration(days: number): string {
     return h ? `${d}d ${h}h` : `${d}d`;
 }
 
+/**
+ * Resolves a ban's absolute expiry: an explicit `expiresAt` (epoch ms, e.g. an exact
+ * end date/time picked in the dashboard) wins; otherwise it's `now + duration` days.
+ */
+function resolveBanExpiry(duration: number, expiresAt?: number): Date {
+    return expiresAt != null
+        ? new Date(expiresAt)
+        : new Date(Date.now() + util.daysToMs(duration));
+}
+
 /** Appends a ban event to the audit log (`ban_history`). */
 async function recordBan(entry: {
     banType: "ip" | "account" | "chat";
@@ -317,12 +327,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 reason: z.string().default(""),
                 duration: z.number().default(7),
                 permanent: z.boolean().default(false),
+                // Optional absolute expiry (epoch ms); overrides `duration` when set.
+                expiresAt: z.number().int().positive().optional(),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { ip, reason, duration, permanent } = c.req.valid("json");
-            const expiresIn = new Date(Date.now() + util.daysToMs(duration));
+            const { ip, reason, duration, permanent, expiresAt } = c.req.valid("json");
+            const expiresIn = resolveBanExpiry(duration, expiresAt);
 
             await db
                 .insert(bannedIpsTable)
@@ -394,15 +406,18 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 reason: z.string().default(""),
                 duration: z.number().default(7),
                 permanent: z.boolean().default(false),
+                // Optional absolute expiry (epoch ms); overrides `duration` when set.
+                expiresAt: z.number().int().positive().optional(),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { slug, reason, duration, permanent } = c.req.valid("json");
+            const { slug, reason, duration, permanent, expiresAt } =
+                c.req.valid("json");
             // null = permanent; otherwise the ban-expiry sweep lifts it after this date.
             const banExpiresAt = permanent
                 ? null
-                : new Date(Date.now() + util.daysToMs(duration));
+                : resolveBanExpiry(duration, expiresAt);
 
             await db
                 .update(usersTable)
@@ -442,12 +457,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 reason: z.string().default(""),
                 duration: z.number().default(7),
                 permanent: z.boolean().default(false),
+                // Optional absolute expiry (epoch ms); overrides `duration` when set.
+                expiresAt: z.number().int().positive().optional(),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { ip, reason, duration, permanent } = c.req.valid("json");
-            const expiresIn = new Date(Date.now() + util.daysToMs(duration));
+            const { ip, reason, duration, permanent, expiresAt } = c.req.valid("json");
+            const expiresIn = resolveBanExpiry(duration, expiresAt);
 
             await db
                 .insert(chatBannedIpsTable)
@@ -1552,6 +1569,113 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     modStatus: modByKey.get(e.gameId + "|" + e.userId) ?? null,
                 };
             }),
+        });
+    })
+
+    /**
+     * Game-level search for the "Games" tab. Returns one summary row per game so the
+     * moderator can drill into the full roster (all per-player actions + delete). An
+     * exact game id is looked up directly by the client; here we support browsing recent
+     * games with filters: `player` (slug), `mapId`, `teamMode`, `region`, `window`, and
+     * `minKills` / `minDamage` (top value in the game) to surface outlier/botted lobbies.
+     */
+    .get("/api/games/search", async (c) => {
+        const windowParam = c.req.query("window") ?? "7d";
+        const region = c.req.query("region") ?? "";
+        const mapIdParam = c.req.query("mapId") ?? "";
+        const teamModeParam = c.req.query("teamMode") ?? "";
+        const player = (c.req.query("player") ?? "").trim().toLowerCase();
+        const minKills = Math.max(0, Number(c.req.query("minKills") ?? "0") || 0);
+        const minDamage = Math.max(0, Number(c.req.query("minDamage") ?? "0") || 0);
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        const conds = [gte(matchDataTable.createdAt, cutoff)];
+        if (region) conds.push(eq(matchDataTable.region, region));
+        if (mapIdParam) conds.push(eq(matchDataTable.mapId, Number(mapIdParam)));
+        if (teamModeParam)
+            conds.push(eq(matchDataTable.teamMode, Number(teamModeParam) as TeamMode));
+
+        // Restrict to games a specific player appeared in (slug → their game ids).
+        if (player) {
+            const [u] = await db
+                .select({ id: usersTable.id })
+                .from(usersTable)
+                .where(eq(usersTable.slug, player))
+                .limit(1);
+            if (!u) return c.json({ games: [], maps: [], regions: [], unknownPlayer: true });
+            const gidRows = await db
+                .selectDistinct({ gameId: matchDataTable.gameId })
+                .from(matchDataTable)
+                .where(
+                    and(
+                        eq(matchDataTable.userId, u.id),
+                        gte(matchDataTable.createdAt, cutoff),
+                    ),
+                );
+            const gids = gidRows.map((r) => r.gameId);
+            if (!gids.length) return c.json({ games: [], maps: [], regions: [] });
+            conds.push(inArray(matchDataTable.gameId, gids));
+        }
+
+        const rows = await db
+            .select({
+                gameId: matchDataTable.gameId,
+                createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+                mapId: sql<number>`max(${matchDataTable.mapId})`,
+                teamMode: sql<number>`max(${matchDataTable.teamMode})`,
+                region: sql<string>`max(${matchDataTable.region})`,
+                players: sql<number>`count(distinct ${matchDataTable.playerId})`,
+                topKills: sql<number>`max(${matchDataTable.kills})`,
+                topDamage: sql<number>`max(${matchDataTable.damageDealt})`,
+            })
+            .from(matchDataTable)
+            .where(and(...conds))
+            .groupBy(matchDataTable.gameId)
+            .having(
+                sql`max(${matchDataTable.kills}) >= ${minKills} AND max(${matchDataTable.damageDealt}) >= ${minDamage}`,
+            )
+            .orderBy(desc(sql`max(${matchDataTable.createdAt})`))
+            .limit(100);
+
+        // Which of these games already carry any moderation flag (sus/botted/removed)?
+        const gameIds = rows.map((r) => r.gameId);
+        const modRows = gameIds.length
+            ? await db
+                  .selectDistinct({ gameId: gameModerationTable.gameId })
+                  .from(gameModerationTable)
+                  .where(inArray(gameModerationTable.gameId, gameIds))
+            : [];
+        const flagged = new Set(modRows.map((m) => m.gameId));
+
+        // Filter dropdown sources (distinct maps + regions currently in the data).
+        const [mapRows, regionRows] = await Promise.all([
+            db.selectDistinct({ mapId: matchDataTable.mapId }).from(matchDataTable),
+            db
+                .selectDistinct({ region: matchDataTable.region })
+                .from(matchDataTable)
+                .where(gte(matchDataTable.createdAt, cutoff)),
+        ]);
+        const maps = mapRows
+            .map((m) => ({ mapId: m.mapId, name: MAP_ID_TO_NAME[m.mapId] ?? String(m.mapId) }))
+            .sort((a, b) => a.mapId - b.mapId);
+        const regions = regionRows.map((r) => r.region).filter(Boolean).sort();
+
+        return c.json({
+            window: windowParam,
+            maps,
+            regions,
+            games: rows.map((r) => ({
+                gameId: r.gameId,
+                createdAt: r.createdAt,
+                mapId: Number(r.mapId),
+                mapName: MAP_ID_TO_NAME[Number(r.mapId)] ?? String(r.mapId),
+                teamMode: Number(r.teamMode),
+                region: r.region,
+                players: Number(r.players),
+                topKills: Number(r.topKills),
+                topDamage: Number(r.topDamage),
+                flagged: flagged.has(r.gameId),
+            })),
         });
     })
 
