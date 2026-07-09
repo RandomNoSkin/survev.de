@@ -642,7 +642,6 @@ export const LoadoutAtlas: AtlasDef = {
         "particles/part-boost-shuriken.svg",
         "particles/part-boost-star.svg",
         "particles/part-boost-blitzgruen.svg",
-        "particles/part-boost-cult.svg",
         "particles/part-cloth-01.svg",
         "particles/part-coconut-01.svg",
         "particles/part-coconut-02.svg",

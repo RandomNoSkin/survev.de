@@ -102,13 +102,6 @@ export const HealEffectDefs: Record<string, HealEffectDef> = {
         texture: "part-heal-cult.img",
         emitter: "heal_cult",
     },
-    boost_cult: {
-        type: "boost_effect",
-        name: "The Cult",
-        rarity: Rarity.Rare,
-        texture: "part-boost-cult.img",
-        emitter: "boost_cult",
-    },
     boost_blitzgruen: {
         type: "boost_effect",
         name: "Gruen Blitz",
