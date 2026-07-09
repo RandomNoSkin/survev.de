@@ -257,6 +257,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
   <button class="tab-btn"        data-tab="replays">Replays</button>
   <button class="tab-btn"        data-tab="xp">XP Gain</button>
+  <button class="tab-btn"        data-tab="games">Games</button>
   <button class="tab-btn"        data-tab="leaderboard">Leaderboard</button>
   <button class="tab-btn"        data-tab="warnings">Warnings</button>
 </div>
@@ -424,6 +425,25 @@ export const dashboardHtml = `<!DOCTYPE html>
     <div id="lb-container"><div class="loading">Loading…</div></div>
   </div>
 
+  <!-- ════════════════ TAB: GAMES ════════════════ -->
+  <div id="tab-games" class="tab-pane">
+    <div class="toolbar" style="flex-wrap:wrap;">
+      <input id="games-search" type="text" placeholder="Game ID (exact) or player slug…" style="width:280px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+      <select id="games-map" title="Map" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;"><option value="">All maps</option></select>
+      <select id="games-mode" title="Team mode" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="">All modes</option><option value="1">Solo</option><option value="2">Duo</option><option value="4">Squad</option>
+      </select>
+      <select id="games-window" title="Time window" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="24h">Last 24h</option><option value="7d" selected>Last 7 days</option><option value="30d">Last 30 days</option><option value="3650d">All time</option>
+      </select>
+      <input id="games-minkills" type="number" min="0" placeholder="min K" title="Min top kills" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+      <input id="games-mindmg" type="number" min="0" placeholder="min Dmg" title="Min top damage" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+      <button class="btn btn-blue" id="games-search-btn">🔍 Search</button>
+      <span style="font-size:11px;color:var(--text-dim);">Paste a game ID to jump straight to its roster; otherwise filter recent games. Expand a game for the full roster + botted/remove/delete.</span>
+    </div>
+    <div id="games-container"><div class="empty">Enter a game ID or set filters, then hit Search.</div></div>
+  </div>
+
   <!-- ════════════════ TAB: WARNINGS ════════════════ -->
   <div id="tab-warnings" class="tab-pane">
     <div class="toolbar">
@@ -575,19 +595,28 @@ export const dashboardHtml = `<!DOCTYPE html>
         <div style="color:var(--text-dim);margin-bottom:4px;">Reason</div>
         <input id="modal-ban-reason" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
       </div>
-      <!-- Duration fields – used by IP, chat and (time-limited) account bans -->
+      <!-- Duration fields – used by IP, chat and account bans -->
       <div id="modal-duration-block">
         <div style="color:var(--text-dim);margin-bottom:4px;">Duration</div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <input id="modal-ban-days" type="number" value="7" min="0" step="any" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
-          <select id="modal-ban-unit" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
-            <option value="minutes">Minutes</option>
-            <option value="hours">Hours</option>
-            <option value="days" selected>Days</option>
-          </select>
-          <label style="display:flex;align-items:center;gap:6px;color:var(--text-dim);cursor:pointer;">
-            <input id="modal-ban-perm" type="checkbox" onchange="document.getElementById('modal-ban-days').disabled=this.checked;document.getElementById('modal-ban-unit').disabled=this.checked;">
-            Permanent
+        <label style="display:flex;align-items:center;gap:6px;color:var(--text-dim);cursor:pointer;margin-bottom:6px;">
+          <input id="modal-ban-perm" type="checkbox" onchange="syncBanDurationInputs()">
+          Permanent
+        </label>
+        <div id="modal-ban-timed" style="display:flex;flex-direction:column;gap:6px;">
+          <label style="display:flex;align-items:center;gap:8px;color:var(--text-dim);cursor:pointer;">
+            <input type="radio" name="modal-ban-mode" value="duration" checked onchange="syncBanDurationInputs()">
+            <span style="min-width:38px;">For</span>
+            <input id="modal-ban-days" type="number" value="7" min="0" step="any" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
+            <select id="modal-ban-unit" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days" selected>Days</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;color:var(--text-dim);cursor:pointer;">
+            <input type="radio" name="modal-ban-mode" value="until" onchange="syncBanDurationInputs()">
+            <span style="min-width:38px;">Until</span>
+            <input id="modal-ban-until" type="datetime-local" style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;">
           </label>
         </div>
       </div>
@@ -872,6 +901,8 @@ function switchTab(name) {
   } else if (name === 'xp') {
     closeSSE();
     refreshXp();
+  } else if (name === 'games') {
+    closeSSE();
   } else if (name === 'leaderboard') {
     closeSSE();
     loadLeaderboard();
@@ -1660,6 +1691,84 @@ document.getElementById('lb-refresh-btn').addEventListener('click', loadLeaderbo
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TAB – GAMES (search a game by id or filters → full roster with all mod options)
+// A game id jumps straight to the roster; otherwise the filtered list renders
+// .xp-game-row rows, so the existing expand → roster → bott/remove/delete machinery
+// is reused verbatim.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const GAME_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function populateGamesMaps(maps) {
+  const sel = document.getElementById('games-map');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All maps</option>' +
+    maps.map(m => '<option value="' + m.mapId + '">' + esc(m.name) + '</option>').join('');
+  sel.value = cur;
+}
+
+function renderGamesList(games) {
+  const cont = document.getElementById('games-container');
+  if (!games.length) { cont.innerHTML = '<div class="empty">No games match.</div>'; return; }
+  const rows = games.map(g =>
+    '<tr class="xp-game-row" data-gid="' + esc(g.gameId) + '" data-uid="" style="cursor:pointer" title="Click to expand the full roster">' +
+      '<td style="font-size:11px;white-space:nowrap;">' + fmtDate(g.createdAt) + '</td>' +
+      '<td>' + esc(g.mapName) + ' · ' + (TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode)) + '</td>' +
+      '<td>' + esc(g.region || '–') + '</td>' +
+      '<td title="Distinct players — low counts hint at a bot lobby">' + g.players + '</td>' +
+      '<td>' + g.topKills + '</td>' +
+      '<td>' + g.topDamage + '</td>' +
+      '<td>' + (g.flagged ? '<span class="badge badge-perm">flagged</span>' : '') + '</td>' +
+      '<td style="font-family:monospace;font-size:10px;color:var(--text-muted);">' + esc(g.gameId) + '</td>' +
+    '</tr>'
+  ).join('');
+  cont.innerHTML =
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + games.length + ' game(s). Click a row to expand the full roster and moderate players.</div>' +
+    '<table class="data-table"><thead><tr><th>Time</th><th>Map · Mode</th><th>Region</th><th>Players</th><th>Top K</th><th>Top Dmg</th><th>Flags</th><th>Game ID</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+async function loadGamesSearch() {
+  const cont = document.getElementById('games-container');
+  const raw = document.getElementById('games-search').value.trim();
+
+  // Exact game id → jump straight to its roster (all info + all actions).
+  if (GAME_ID_RE.test(raw)) {
+    cont.innerHTML = '<div class="loading">Loading game…</div>';
+    try {
+      const data = await get('/api/game/' + encodeURIComponent(raw) + '/players');
+      cont.innerHTML = data.meta
+        ? renderGameRoster(data)
+        : '<div class="empty">No game found with that ID.</div>';
+    } catch (e) { cont.innerHTML = '<div class="empty">Failed to load game.</div>'; }
+    return;
+  }
+
+  // Otherwise: filtered list of recent games (raw, if any, is a player slug).
+  cont.innerHTML = '<div class="loading">Searching…</div>';
+  const p = new URLSearchParams();
+  if (raw) p.set('player', raw);
+  const map  = document.getElementById('games-map').value;   if (map)  p.set('mapId', map);
+  const mode = document.getElementById('games-mode').value;  if (mode) p.set('teamMode', mode);
+  p.set('window', document.getElementById('games-window').value);
+  const mk = document.getElementById('games-minkills').value; if (mk) p.set('minKills', mk);
+  const md = document.getElementById('games-mindmg').value;   if (md) p.set('minDamage', md);
+  try {
+    const data = await get('/api/games/search?' + p.toString());
+    populateGamesMaps(data.maps || []);
+    if (data.unknownPlayer) { cont.innerHTML = '<div class="empty">No account found with that slug.</div>'; return; }
+    renderGamesList(data.games || []);
+  } catch (e) { cont.innerHTML = '<div class="empty">Search failed.</div>'; }
+}
+
+document.getElementById('games-search-btn').addEventListener('click', loadGamesSearch);
+document.getElementById('games-search').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') loadGamesSearch();
+});
+['games-map', 'games-mode', 'games-window'].forEach(function (id) {
+  document.getElementById(id).addEventListener('change', loadGamesSearch);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // TAB – WARNINGS (heuristic suspicious-behaviour feed)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1938,6 +2047,18 @@ function onBanTypeChange() {
   targetHint.textContent = type === 'account' ? '(account slug)' : '(IP hash)';
 }
 
+// Enable exactly the inputs that apply: nothing when Permanent, otherwise the
+// "For <n> <unit>" fields or the "Until <datetime>" picker per the selected mode.
+function syncBanDurationInputs() {
+  const perm = document.getElementById('modal-ban-perm').checked;
+  const modeEl = document.querySelector('input[name="modal-ban-mode"]:checked');
+  const mode = modeEl ? modeEl.value : 'duration';
+  document.querySelectorAll('input[name="modal-ban-mode"]').forEach(r => { r.disabled = perm; });
+  document.getElementById('modal-ban-days').disabled  = perm || mode !== 'duration';
+  document.getElementById('modal-ban-unit').disabled  = perm || mode !== 'duration';
+  document.getElementById('modal-ban-until').disabled = perm || mode !== 'until';
+}
+
 const banModal = document.getElementById('ban-modal');
 
 document.getElementById('ban-new-btn').addEventListener('click', () => {
@@ -1946,10 +2067,11 @@ document.getElementById('ban-new-btn').addEventListener('click', () => {
   document.getElementById('modal-ban-target').value = '';
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-days').disabled = false;
   document.getElementById('modal-ban-unit').value    = 'days';
-  document.getElementById('modal-ban-unit').disabled = false;
+  document.getElementById('modal-ban-until').value  = '';
   document.getElementById('modal-ban-perm').checked = false;
+  document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
+  syncBanDurationInputs();
   document.getElementById('modal-ban-type').value   = 'ip';
   onBanTypeChange();
   banModal.style.display = 'flex';
@@ -1962,23 +2084,40 @@ document.getElementById('modal-confirm-btn').addEventListener('click', async () 
   const target = document.getElementById('modal-ban-target').value.trim();
   const reason = document.getElementById('modal-ban-reason').value.trim();
   const perm   = document.getElementById('modal-ban-perm').checked;
-  const amount = parseFloat(document.getElementById('modal-ban-days').value) || 0;
-  const unit   = document.getElementById('modal-ban-unit').value;
-  const unitDays = unit === 'minutes' ? 1/1440 : unit === 'hours' ? 1/24 : 1;
-  // duration is sent in (fractional) days; daysToMs turns it into a precise expiry.
-  const days   = perm ? 36500 : amount * unitDays;
+  const modeEl = document.querySelector('input[name="modal-ban-mode"]:checked');
+  const mode   = modeEl ? modeEl.value : 'duration';
   if (!target) return toast('Please specify a target!', true);
-  if (!perm && amount <= 0) return toast('Please specify a duration!', true);
+
+  // days = (fractional) days for the server's fallback + log; expiresAt = an absolute
+  // epoch-ms end time that overrides it when the admin picked an exact date & time.
+  let days = 36500; // permanent sentinel
+  let expiresAt;
+  if (!perm) {
+    if (mode === 'until') {
+      const raw = document.getElementById('modal-ban-until').value;
+      const t = raw ? new Date(raw).getTime() : NaN;
+      if (!Number.isFinite(t)) return toast('Please pick an end date & time!', true);
+      if (t <= Date.now()) return toast('End date & time must be in the future!', true);
+      expiresAt = t;
+      days = (t - Date.now()) / 86400000;
+    } else {
+      const amount = parseFloat(document.getElementById('modal-ban-days').value) || 0;
+      if (amount <= 0) return toast('Please specify a duration!', true);
+      const unit = document.getElementById('modal-ban-unit').value;
+      const unitDays = unit === 'minutes' ? 1/1440 : unit === 'hours' ? 1/24 : 1;
+      days = amount * unitDays;
+    }
+  }
   try {
-    if (type === 'ip')      await post('/api/ban/ip',      { ip: target, reason, duration: days, permanent: perm });
-    if (type === 'account') await post('/api/ban/account', { slug: target, reason, duration: days, permanent: perm });
-    if (type === 'chat')    await post('/api/ban/chat',    { ip: target, reason, duration: days, permanent: perm });
+    if (type === 'ip')      await post('/api/ban/ip',      { ip: target, reason, duration: days, permanent: perm, expiresAt });
+    if (type === 'account') await post('/api/ban/account', { slug: target, reason, duration: days, permanent: perm, expiresAt });
+    if (type === 'chat')    await post('/api/ban/chat',    { ip: target, reason, duration: days, permanent: perm, expiresAt });
 
     // If opened from player list: also ban account + kick the player
     const kickTarget = banModal.dataset.kickTarget;
     if (kickTarget) {
       delete banModal.dataset.kickTarget;
-      await post('/api/ban/account', { slug: kickTarget, reason, duration: days, permanent: perm });
+      await post('/api/ban/account', { slug: kickTarget, reason, duration: days, permanent: perm, expiresAt });
       await gameCmd({ action: 'kick', target: kickTarget });
     }
 
@@ -2331,10 +2470,11 @@ function quickBanIp(hash) {
   document.getElementById('modal-ban-target').value = hash;
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-days').disabled = false;
   document.getElementById('modal-ban-unit').value    = 'days';
-  document.getElementById('modal-ban-unit').disabled = false;
+  document.getElementById('modal-ban-until').value  = '';
   document.getElementById('modal-ban-perm').checked = false;
+  document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
+  syncBanDurationInputs();
   onBanTypeChange();
   banModal.style.display = 'flex';
 }
@@ -2346,10 +2486,11 @@ function quickBanChat(hash) {
   document.getElementById('modal-ban-target').value = hash;
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-days').disabled = false;
   document.getElementById('modal-ban-unit').value    = 'days';
-  document.getElementById('modal-ban-unit').disabled = false;
+  document.getElementById('modal-ban-until').value  = '';
   document.getElementById('modal-ban-perm').checked = false;
+  document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
+  syncBanDurationInputs();
   onBanTypeChange();
   banModal.style.display = 'flex';
 }
@@ -2646,10 +2787,11 @@ function quickBanPlayer(name, hash) {
   document.getElementById('modal-ban-target').value = hash;
   document.getElementById('modal-ban-reason').value = '';
   document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-days').disabled = false;
   document.getElementById('modal-ban-unit').value    = 'days';
-  document.getElementById('modal-ban-unit').disabled = false;
+  document.getElementById('modal-ban-until').value  = '';
   document.getElementById('modal-ban-perm').checked = false;
+  document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
+  syncBanDurationInputs();
   onBanTypeChange();
   // Store the player name so the confirm handler can also ban the account + kick
   banModal.dataset.kickTarget = name;
