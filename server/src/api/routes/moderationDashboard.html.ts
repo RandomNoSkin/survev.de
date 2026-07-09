@@ -1390,7 +1390,9 @@ function renderGameRoster(data) {
     ? '<div style="font-size:11px;color:var(--text-dim);">' + esc(m.mapName) + ' · ' + (TEAM_MODE_LABEL[m.teamMode] || ('Mode ' + m.teamMode)) + ' · ' + esc(m.region || '') + ' · ' + fmtDate(m.createdAt) + ' · <span style="font-family:monospace">' + esc(data.gameId) + '</span></div>'
     : '';
   const header =
-    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' + metaHtml + '</div>';
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' + metaHtml +
+    '<button class="btn btn-red btn-sm" data-delgame="' + esc(data.gameId) + '" style="margin-left:auto;" title="Permanently delete this whole game from stats, leaderboard and match history">🗑 Delete game</button>' +
+    '</div>';
   let rows = '';
   for (const p of players) {
     const nameLabel = esc(p.username || p.slug || '(guest)');
@@ -1456,6 +1458,9 @@ async function doDeleteGame(gameId) {
     const res = await post('/api/game/' + encodeURIComponent(gameId) + '/delete', {});
     toast('Game deleted — ' + res.rowsDeleted + ' rows, ' + res.xpRemoved + ' XP revoked from ' + res.players + ' player(s)');
     removeGameFromList(gameId);
+    // If this was the leaderboard's single-game view, return to the leaderboard.
+    const lbc = document.getElementById('lb-container');
+    if (lbc && lbc.dataset.openGame === gameId) loadLeaderboard();
   } catch (e) {
     toast('Delete failed: ' + e.message, true);
   }
@@ -1506,6 +1511,7 @@ const LB_TYPE_LABEL = { kills: 'Kills', wins: 'Wins', kpg: 'K/G', most_damage_de
 async function loadLeaderboard() {
   const container = document.getElementById('lb-container');
   const token = ++lbLoadToken;
+  container.dataset.openGame = '';
   container.innerHTML = '<div class="loading">Loading…</div>';
   try {
     const type = document.getElementById('lb-type').value;
@@ -1538,22 +1544,34 @@ function renderLeaderboard(data) {
   const players = data.players || [];
   if (!players.length) { container.innerHTML = '<div class="empty">No data for this filter.</div>'; return; }
   const valLabel = LB_TYPE_LABEL[data.type] || 'Value';
+  // Only "Max Damage" rows map to one exact game (the MAX-damage game), so only
+  // there do we offer a direct "Open game" jump.
+  const isDmg = data.type === 'most_damage_dealt';
   let rows = '';
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
     const label = esc(p.username || p.slug || '(guest)');
     const nameCell = p.slug ? navLink(hAccount(p.slug), label, { title: 'Open account' }) : '<span style="color:var(--text-muted)">' + label + '</span>';
     const banned = p.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+    const gameCell = isDmg
+      ? '<td>' + (p.topGameId
+          ? '<button class="btn btn-blue btn-sm" data-lbgame="' + esc(p.topGameId) + '" title="Open the exact game behind this score to review or delete it">Open game</button>'
+          : '<span style="color:var(--text-muted)">–</span>') + '</td>'
+      : '';
     rows += '<tr class="lb-row" data-lbuser="' + esc(p.userId) + '" data-lbslug="' + esc(p.slug || '') + '" data-lbname="' + esc(label) + '" style="cursor:pointer" title="Open games">' +
       '<td style="color:var(--text-dim)">#' + (i + 1) + '</td>' +
       '<td>' + nameCell + banned + '</td>' +
       '<td><strong>' + p.val.toLocaleString() + '</strong></td>' +
       '<td>' + p.games + '</td>' +
+      gameCell +
       '</tr>';
   }
+  const hint = isDmg
+    ? 'Click a player to open their games, or “Open game” to jump straight to the exact game behind the score.'
+    : 'Click a player to open their games.';
   container.innerHTML =
-    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">Click a player to open their games.</div>' +
-    '<table class="data-table"><thead><tr><th>#</th><th>Player</th><th>' + esc(valLabel) + '</th><th>Games</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + hint + '</div>' +
+    '<table class="data-table"><thead><tr><th>#</th><th>Player</th><th>' + esc(valLabel) + '</th><th>Games</th>' + (isDmg ? '<th>Game</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 async function loadLbPlayer(userId, slug, name) {
@@ -1605,8 +1623,31 @@ function renderLbPlayer(data, name) {
   document.getElementById('lb-back-btn').addEventListener('click', loadLeaderboard);
 }
 
-// Click a leaderboard player row to open their games (nav links keep their own click).
+// Open the exact game behind a leaderboard row (Max Damage) in an inline roster
+// view — which now carries a 🗑 Delete game button — reusing the shared renderer.
+async function loadLbGame(gameId) {
+  const container = document.getElementById('lb-container');
+  const token = ++lbLoadToken;
+  container.dataset.openGame = gameId;
+  container.innerHTML = '<div class="loading">Loading game…</div>';
+  try {
+    const data = await get('/api/game/' + encodeURIComponent(gameId) + '/players');
+    if (token !== lbLoadToken) return;
+    container.innerHTML =
+      '<div style="margin-bottom:12px;"><button class="btn btn-gray btn-sm" id="lb-back-btn">← Back to leaderboard</button></div>' +
+      renderGameRoster(data);
+    document.getElementById('lb-back-btn').addEventListener('click', loadLeaderboard);
+  } catch (e) {
+    if (token !== lbLoadToken) return;
+    container.innerHTML = '<div class="empty">Failed to load game.</div>';
+  }
+}
+
+// Click a leaderboard row: the "Open game" button jumps to the exact game; the rest
+// of the row opens that player's games (nav links keep their own click).
 document.addEventListener('click', function (e) {
+  const gbtn = e.target.closest('[data-lbgame]');
+  if (gbtn) { loadLbGame(gbtn.dataset.lbgame); return; }
   const row = e.target.closest('.lb-row');
   if (!row) return;
   if (e.target.closest('[data-nav]')) return;
@@ -2961,7 +3002,18 @@ function gpReason(e) {
     const verb = gone[1] === 'buy' ? 'Bought' : 'Sold';
     return verb + ' item <span style="color:var(--text-muted)">· listing #' + esc(gone[2]) + ' (counterparty account deleted)</span>';
   }
-  return esc(e.reason);
+  const r = e.reason || '';
+  const rev = /^revert:(.+)$/.exec(r);
+  if (rev) return '<span style="color:var(--text-muted)">↩️ Reverted transaction #' + esc(rev[1]) + '</span>';
+  if (r === 'pass:welcome_fries') return 'Welcome fries';
+  const pass = /^pass:(.+):level:(\d+)$/.exec(r);
+  if (pass) return 'Pass reward · ' + esc(pass[1]) + ' · lvl ' + esc(pass[2]);
+  const shop = /^shop:(.+):(\d+)$/.exec(r);
+  if (shop) return 'Shop purchase · ' + esc(shop[1]) + ' · slot ' + esc(shop[2]);
+  if (/^revoke_pass_fries:/.test(r)) return '<span style="color:var(--text-muted)">Revoked pass fries</span>';
+  const adm = /^admin_grant(?::(.+))?$/.exec(r);
+  if (adm) return 'Admin grant' + (adm[1] ? ' <span style="color:var(--text-muted)">by ' + esc(adm[1]) + '</span>' : '');
+  return esc(r);
 }
 
 function renderAccountGp(data) {
@@ -2976,16 +3028,41 @@ function renderAccountGp(data) {
     </div>\`;
   const rows = entries.map(e => {
     const earn = e.amount >= 0;
-    return \`<tr>
+    const action = e.reverted
+      ? '<span class="badge" style="background:var(--surface2);color:var(--text-muted);">reverted</span>'
+      : e.revertable
+        ? '<button class="btn btn-orange btn-sm" onclick="doRevertGp(' + e.id + ')" title="Revert this transaction (type-specific rollback)">↩ Revert</button>'
+        : '';
+    return \`<tr\${e.reverted ? ' style="opacity:.55"' : ''}>
       <td style="font-size:11px;white-space:nowrap;">\${fmtDate(e.createdAt)}</td>
       <td style="font-weight:600;white-space:nowrap;color:\${earn ? 'var(--green-t)' : 'var(--red-t)'};">\${earn ? '+' : ''}\${e.amount.toLocaleString()}</td>
       <td style="font-size:11px;">\${gpReason(e)}</td>
       <td style="font-size:11px;color:var(--text-dim);">🍟 \${e.balanceAfter}</td>
+      <td style="white-space:nowrap;">\${action}</td>
     </tr>\`;
   }).join('');
   cont.innerHTML = summary + (entries.length
-    ? \`<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Reason</th><th>Balance</th></tr></thead><tbody>\${rows}</tbody></table>\`
+    ? \`<table class="data-table"><thead><tr><th>Date</th><th>Amount</th><th>Reason</th><th>Balance</th><th>Actions</th></tr></thead><tbody>\${rows}</tbody></table>\`
     : '<div class="empty">No GP history for this filter.</div>');
+}
+
+// Revert one Golden Fries transaction (pass reward / shop buy / market trade). The
+// server does the type-specific rollback; a blocked revert (e.g. item since traded
+// away) surfaces its reason as a toast.
+async function doRevertGp(id) {
+  if (!confirm('Revert this Golden Fries transaction?\\n\\n' +
+      '• Pass reward: fries removed, and NOT re-grantable via reconcile.\\n' +
+      '• Shop buy: fries refunded, item removed, slot freed.\\n' +
+      '• Market trade: buyer refunded, seller charged, item returned to seller.\\n' +
+      '• Admin grant: the granted amount is simply reversed.\\n\\n' +
+      'Blocked if the item has since been traded/sold away.')) return;
+  try {
+    const r = await post('/api/account/gp/' + id + '/revert', {});
+    toast('Reverted (' + r.type + ') — ' + r.detail);
+    loadAccountGp(currentAccountSlug, document.getElementById('gp-filter').value);
+  } catch (e) {
+    toast('Revert failed: ' + e.message, true);
+  }
 }
 
 async function accSetXp(passType) {

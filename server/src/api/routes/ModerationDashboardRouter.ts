@@ -72,6 +72,7 @@ import {
     restoreUserToGame,
     setGamePlayerModeration,
 } from "../db/gameModeration";
+import { RevertError, revertLedgerEntry } from "../db/friesRevert";
 import { awardGoldenFries } from "../db/goldenFries";
 import { setPassXp } from "../db/passXp";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
@@ -1839,6 +1840,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 banned: usersTable.banned,
                 games: sql<number>`count(distinct ${matchDataTable.gameId})`,
                 val: sql.raw(`${valExpr} as val`) as SQL<number>,
+                // Only "Max Damage" maps a row to one exact game: the game where the
+                // player dealt that MAX damage. null for the aggregate types (no
+                // array_agg cost, since NULL short-circuits).
+                topGameId: (type === "most_damage_dealt"
+                    ? sql`(array_agg(${matchDataTable.gameId} ORDER BY ${matchDataTable.damageDealt} DESC))[1]`
+                    : sql`NULL`) as SQL<string | null>,
             })
             .from(matchDataTable)
             .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
@@ -1874,6 +1881,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 banned: r.banned ?? false,
                 games: Number(r.games),
                 val: Number(r.val),
+                // The exact game behind a "Max Damage" row, for the "Open game" action.
+                topGameId: r.topGameId ?? null,
             })),
         });
     })
@@ -2428,13 +2437,39 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
         }
 
+        // Which entries have already been reverted? A compensating `revert:<id>` row
+        // exists in this user's ledger for each reverted entry.
+        const revertRows = await db
+            .select({ reason: goldenFriesLedgerTable.reason })
+            .from(goldenFriesLedgerTable)
+            .where(
+                and(
+                    eq(goldenFriesLedgerTable.userId, user.id),
+                    sql`${goldenFriesLedgerTable.reason} LIKE 'revert:%'`,
+                ),
+            );
+        const revertedIds = new Set<number>();
+        for (const r of revertRows) {
+            const n = Number(r.reason.slice("revert:".length));
+            if (Number.isInteger(n)) revertedIds.add(n);
+        }
+        const isRevertableReason = (reason: string) =>
+            reason.startsWith("pass:") ||
+            reason.startsWith("shop:") ||
+            reason.startsWith("admin_grant") ||
+            /^market:(buy|sell):\d+$/.test(reason);
+
         const entriesOut = entries.map((e) => {
+            const reverted = revertedIds.has(e.id);
+            const revertable = !reverted && isRevertableReason(e.reason);
             const m = /^market:(buy|sell):(\d+)$/.exec(e.reason);
             const info = m ? marketById.get(Number(m[2])) : undefined;
-            if (!m || !info) return { ...e, market: null };
+            if (!m || !info) return { ...e, market: null, reverted, revertable };
             const direction = m[1] as "buy" | "sell";
             return {
                 ...e,
+                reverted,
+                revertable,
                 market: {
                     direction,
                     item: info.type,
@@ -2459,6 +2494,30 @@ export const ModerationDashboardRouter = new Hono<Context>()
             filter,
             entries: entriesOut,
         });
+    })
+
+    /**
+     * Reverts a single Golden Fries ledger entry (pass reward, shop buy, or market
+     * trade). Type-specific rollback lives in {@link revertLedgerEntry}; blocked with a
+     * clear code (e.g. `item_gone`, `already_reverted`) when it can't be done cleanly.
+     */
+    .post("/api/account/gp/:id/revert", async (c) => {
+        const admin = c.get("user")!;
+        const id = Number(c.req.param("id"));
+        if (!Number.isInteger(id)) return c.json({ error: "bad_id" }, 400);
+        try {
+            const res = await revertLedgerEntry(id, admin.slug);
+            void logModerationAction("↩️ Fries revert", [
+                { name: "Ledger #", value: String(id) },
+                { name: "Type", value: res.type },
+                { name: "Detail", value: res.detail },
+                { name: "By admin", value: adminTag(admin) },
+            ]);
+            return c.json({ ok: true, ...res });
+        } catch (e) {
+            const code = e instanceof RevertError ? e.code : "error";
+            return c.json({ error: code }, 400);
+        }
     })
 
     /** Sets a pass's level + xp absolutely, then grants the corresponding unlocks. */
