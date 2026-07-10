@@ -113,6 +113,13 @@
       "when": 1783614401355,
       "tag": "0015_foamy_maximus",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783680807076,
+      "tag": "0016_thick_thunderbird",
+      "breakpoints": true
     }
   ]
 }

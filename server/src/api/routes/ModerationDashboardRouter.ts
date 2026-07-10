@@ -149,11 +149,24 @@ function adminTag(admin: {
 // ─── Admin guard middleware ────────────────────────────────────────────────────
 
 /**
- * Checks for a valid session with admin=true.
+ * Gates the dashboard. A full admin gets everything; a moderator (limited staff role)
+ * may ONLY reach the replays-related routes below — every other route 403s for them.
  * If not authenticated → redirect to Discord OAuth with a return-to cookie.
- * If authenticated but not admin → 403.
  */
 const isProd = process.env["NODE_ENV"] === "production";
+
+/**
+ * Sub-paths (relative to the `/moderation` mount) a moderator (non-admin) may hit: the
+ * SPA shell + replays only. Matched after stripping the mount prefix, so it works
+ * whether Hono reports the full or the prefix-stripped path.
+ */
+const MODERATOR_ALLOWED_PATHS = new Set([
+    "",
+    "/",
+    "/api/me",
+    "/api/replays",
+    "/api/replays/token",
+]);
 
 async function adminGuard(c: any, next: () => Promise<void>) {
     if (!isProd) {
@@ -174,7 +187,14 @@ async function adminGuard(c: any, next: () => Promise<void>) {
     }
 
     if (!user.admin) {
-        return c.text("Forbidden: admin access required", 403);
+        // Moderators are a replays-only staff role; anyone else is forbidden.
+        if (!user.moderator) {
+            return c.text("Forbidden: admin access required", 403);
+        }
+        const subPath = c.req.path.replace(/^\/moderation/, "");
+        if (!MODERATOR_ALLOWED_PATHS.has(subPath)) {
+            return c.text("Forbidden: moderators may only access replays", 403);
+        }
     }
 
     c.set("user", user);
@@ -306,7 +326,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
     // ── Current user info (for the frontend to display "logged in as ...") ─
     .get("/api/me", (c) => {
         const user = c.get("user")!;
-        return c.json({ id: user.id, username: user.username, slug: user.slug });
+        return c.json({
+            id: user.id,
+            username: user.username,
+            slug: user.slug,
+            admin: !!user.admin,
+            moderator: !!user.moderator,
+        });
     })
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -2376,6 +2402,44 @@ export const ModerationDashboardRouter = new Hono<Context>()
         },
     )
 
+    /**
+     * Grants or revokes the limited "moderator" staff role (replays-only access to this
+     * dashboard). Admin-only — this route isn't in MODERATOR_ALLOWED_PATHS, so a
+     * moderator can't self-promote. Admins can't be demoted to moderator here.
+     */
+    .post(
+        "/api/account/moderator",
+        validateParams(
+            z.object({ slug: z.string().min(1), moderator: z.boolean() }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, moderator } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true, admin: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+            if (target.admin) return c.json({ error: "target_is_admin" }, 400);
+
+            await db
+                .update(usersTable)
+                .set({ moderator })
+                .where(eq(usersTable.id, target.id));
+
+            void logModerationAction(
+                moderator ? "🛡 Moderator added" : "🛡 Moderator removed",
+                [
+                    { name: "Account", value: slug },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x8888ff,
+            );
+            return c.json({ ok: true, moderator });
+        },
+    )
+
     /** Full account detail: identity (incl. discord id), per-pass XP, owned items grouped by source, recent matches. */
     .get("/api/account/:slug", async (c) => {
         const slug = c.req.param("slug");
@@ -2393,6 +2457,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 banned: true,
                 banReason: true,
                 admin: true,
+                moderator: true,
                 goldenFries: true,
                 userCreated: true,
             },

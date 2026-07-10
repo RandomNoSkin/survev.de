@@ -37,6 +37,10 @@ export const usersTable = pgTable("users", {
     authId: text("auth_id").notNull(),
     slug: text("slug").notNull().unique(),
     admin: boolean("admin").notNull().default(false),
+    // Limited staff role: access to the moderation dashboard's Replays tab only
+    // (enforced server-side by the dashboard's adminGuard). Admins implicitly outrank
+    // moderators, so this flag only matters when `admin` is false.
+    moderator: boolean("moderator").notNull().default(false),
     banned: boolean("banned").notNull().default(false),
     banReason: text("ban_reason").notNull().default(""),
     bannedBy: text("banned_by").notNull().default(""),
