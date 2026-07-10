@@ -2988,6 +2988,7 @@ function renderAccountDetail(data) {
   const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
   const flags = [
     u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
+    u.moderator ? '<span class="badge badge-admin">MODERATOR</span>' : '',
     u.banned ? '<span class="badge badge-perm">BANNED</span>'  : '',
   ].join(' ');
 
@@ -3001,10 +3002,13 @@ function renderAccountDetail(data) {
       <div class="kv-row"><span class="kv-key">Created:</span><span class="kv-val">\${fmtDate(u.userCreated)}</span></div>
       <div class="kv-row"><span class="kv-key">Golden Fries:</span><span class="kv-val">🍟 \${u.goldenFries ?? 0}</span></div>
       <div style="margin-top:6px;">\${flags}</div>
-      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         \${u.admin
           ? '<span style="font-size:11px;color:var(--orange-t);">🛡 Admin account — cannot be deleted.</span>'
-          : '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
+          : (u.moderator
+              ? '<button class="btn btn-gray btn-sm" onclick="accSetModerator(false)">Remove moderator</button>'
+              : '<button class="btn btn-blue btn-sm" onclick="accSetModerator(true)" title="Grant replays-only dashboard access">🛡 Make moderator</button>') +
+            '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
       </div>
     </div>\`;
 
@@ -3268,6 +3272,15 @@ async function accDeleteAccount() {
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }
 
+// Grant / revoke the replays-only moderator role for the open account.
+async function accSetModerator(makeMod) {
+  try {
+    await post('/api/account/moderator', { slug: currentAccountSlug, moderator: makeMod });
+    toast(makeMod ? 'Moderator added — replays-only access' : 'Moderator role removed');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
 document.getElementById('accounts-search').addEventListener('input', renderAccounts);
 document.getElementById('accounts-date-from').addEventListener('change', renderAccounts);
 document.getElementById('accounts-date-to').addEventListener('change', renderAccounts);
@@ -3330,12 +3343,23 @@ document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 (async () => {
+  let moderatorOnly = false;
   try {
     const me = await get('/api/me');
     currentAdminId   = me.id;
     currentAdminSlug = me.slug;
-    document.getElementById('topbar-user').textContent = 'Logged in as ' + (me.username || me.slug);
+    moderatorOnly = !!me.moderator && !me.admin;
+    document.getElementById('topbar-user').textContent =
+      'Logged in as ' + (me.username || me.slug) + (moderatorOnly ? ' · moderator (replays only)' : '');
   } catch { /* already redirected by server */ }
+
+  if (moderatorOnly) {
+    // Moderators may only use the Replays tab — hide every other tab and land there.
+    // (The server also 403s non-replay routes for them, so this is just UX.)
+    document.querySelectorAll('.tab-btn').forEach(b => { if (b.dataset.tab !== 'replays') b.style.display = 'none'; });
+    switchTab('replays');
+    return;
+  }
 
   // Open initial SSE stream (covers both bans tab and basic server info)
   connectSSE(null, null);
