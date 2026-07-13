@@ -18,6 +18,8 @@ export const _allowedMeleeSkins = [
     "karambit_dotexe",
     "karambit_woodland",
     "karambit_rust",
+    "karambit_case_hardened",
+    "karambit_ice",
     "bayonet_fade",
     "bayonet",
     "bayonet_rugged",
@@ -27,10 +29,14 @@ export const _allowedMeleeSkins = [
     "huntsman_rugged",
     "huntsman_burnished",
     "huntsman_blackwater",
+    "huntsman_ice",
+    "huntsman_pink",
+    "huntsman_purple",
     "bowie",
     "bowie_vintage",
     "bowie_frontier",
     "bowie_redtiger",
+    "bowie_ice",
 ];
 export const _allowedOutfits = [
     "outfitBase",

@@ -3372,7 +3372,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         ignoreValueAdjust: true,
     },
-    heal_bubble: {
+    heal_bubble: { // made by Felix 
         image: ["part-heal-bubble.img"],
         life: new Range(0.8, 1.1),
         drag: 0.15,
@@ -3804,7 +3804,7 @@ const EmitterDefs: Record<string, EmitterDef> = {
         rot: new Range(0, Math.PI * 2),
         maxCount: Number.MAX_VALUE,
     },
-    heal_bubble: {
+    heal_bubble: { // made by felix 
         particle: "heal_bubble",
         rate: new Range(0.3, 0.35),
         radius: 1.5,

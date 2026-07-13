@@ -109,7 +109,7 @@ export const HealEffectDefs: Record<string, HealEffectDef> = {
         texture: "part-boost-blitzgruen.img",
         emitter: "boost_blitzgruen",
     },
-    heal_bubble: {
+    heal_bubble: { //made by felix 
         type: "heal_effect",
         name: "Bubble",
         rarity: Rarity.Common,
