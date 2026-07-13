@@ -116,4 +116,11 @@ export const HealEffectDefs: Record<string, HealEffectDef> = {
         texture: "part-heal-bubble.img",
         emitter: "heal_bubble",
     },
+    heal_ruby: { //Aboves Particles 
+        type: "heal_effect",
+        name: "rubi",
+        rarity: Rarity.Common,
+        texture: "part-heal-ruby.img",
+        emitter: "heal_ruby",
+    },
 };
