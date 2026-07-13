@@ -284,6 +284,60 @@ const BaseDefs: Record<string, MeleeDef> = {
             tint: 0xffffff,
         },
     },
+        wakizashi: {
+        name: "Wakizashi",
+        type: "melee",
+        quality: 0,
+        autoAttack: false,
+        switchDelay: 0.25,
+        damage: 24,
+        obstacleDamage: 1,
+        noPotatoSwap: true,
+        noDropOnDeath: true,
+        attack: {
+            offset: {
+                x: 1.35,
+                y: 0,
+            },
+            rad: 0.9,
+            damageTimes: [0.1],
+            cooldownTime: 0.25,
+        },
+        speed: {
+            equip: 1,
+        },
+        anim: {
+            idlePose: "thrust",
+            attackAnims: ["cut","cutReverseShort"],
+        },
+        sound: {
+            pickup: "frag_pickup_01",
+            swing: "knife_swing_01",
+            deploy: "knife_deploy_01",
+            playerHit: "knife_hit_01",
+        },
+        lootImg: {
+            sprite: "loot-melee-wakizashi.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-02.img",
+            borderTint: 0xffffff,
+            scale: 0.3,
+            rot: 0.785,
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi.img",
+            pos: {
+                x: -0.5,
+                y: -32.5,
+            },
+            rot: 0.785,
+            scale: {
+                x: 0.35,
+                y: 0.35,
+            },
+            tint: 0xffffff,
+        },
+    },
     huntsman: {
         name: "Huntsman",
         type: "melee",
@@ -1297,6 +1351,28 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-bayonet-fade.img",
+        },
+    }),
+    wakizashi_rust: defineMeleeSkin("wakizashi", {
+        name: "Wakizashi Rust",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-wakizashi-rust.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi-rust.img",
+        },
+    }),
+    wakizashi_ninja: defineMeleeSkin("wakizashi", {
+        name: "Wakizashi Ninja",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-wakizashi-ninja.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi-ninja.img",
         },
     }),
     huntsman_rugged: defineMeleeSkin("huntsman", {

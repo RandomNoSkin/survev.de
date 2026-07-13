@@ -22,6 +22,9 @@ export const _allowedMeleeSkins = [
     "bayonet",
     "bayonet_rugged",
     "bayonet_woodland",
+    "wakizashi",
+    "wakizashi_rust",
+    "wakizashi_ninja",
     "huntsman",
     "huntsman_rugged",
     "huntsman_burnished",
@@ -492,6 +495,7 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "death_none",
             "death_basic"
 
+            
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,
