@@ -76,9 +76,9 @@ export const mapDef: PartialMapDef = {
 
         xpMultiplier: {
             kill: 0,
-            damage: 0.01, // 1 XP per 100 damage
+            damage: 0.0125, // 1 XP per 100 damage
             win: 1,
-            timeSurvived: 0.005, 
+            timeSurvived: 0, 
         },
     },
     /* STRIP_FROM_PROD_CLIENT:START */

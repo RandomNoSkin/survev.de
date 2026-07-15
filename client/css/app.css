@@ -5557,11 +5557,17 @@ a:active {
   justify-content: center;
   position: relative;
   display: flex;
+  /* It's a flex item of #golden-fries-container (which gets display:flex from the
+     generic `#start-top-left > div` rule). Without this it can shrink below its
+     content, so the padded label overflows a smaller box and only part of the
+     visible pill is clickable. Pin the box so the whole pill is the hitbox. */
+  flex: 0 0 auto;
+  box-sizing: border-box;
   margin-top: 12px;
   margin-left: 30px;
   padding: 8px 26px;
-  width: 150px;
-  height: 40px;
+  width: 202px;
+  height: 56px;
   background: linear-gradient(180deg, #f5d840 0%, #caa022 100%);
   color: #2a230a;
   font-weight: 700;
@@ -5985,6 +5991,13 @@ a:active {
 #market-sell-confirm {
   margin-top: 8px;
   width: 180px;
+}
+/* Second-click confirmation state: gold + wide enough for the longer label. */
+#market-sell-confirm.market-sell-confirming {
+  width: auto;
+  white-space: nowrap;
+  background: #e0a23c;
+  color: #2a230a;
 }
 .customize-listed-badge {
   position: absolute;

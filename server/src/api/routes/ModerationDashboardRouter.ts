@@ -40,13 +40,13 @@ import {
     lte,
     notInArray,
     or,
+    type SQL,
     sql,
 } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
     _allowedCrosshairs,
     _allowedEmotes,
@@ -56,8 +56,9 @@ import {
     _allowedDeathEffects,
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
+import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
-import { GameConfig } from "../../../../shared/gameConfig";
+import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
@@ -65,23 +66,57 @@ import { server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
+import {
+    deleteGame,
+    removeUserFromGame,
+    restoreUserToGame,
+    setGamePlayerModeration,
+} from "../db/gameModeration";
+import { RevertError, revertLedgerEntry } from "../db/friesRevert";
 import { awardGoldenFries } from "../db/goldenFries";
-import { grantPassItems, revokePassItemsAbove } from "../db/passGrants";
-import { getPassLevelAndXp, reconcileAllPasses } from "../db/passReconcile";
+import { setPassXp } from "../db/passXp";
+import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import {
     banCommentsTable,
     banHistoryTable,
     bannedIpsTable,
     chatBannedIpsTable,
     chatLogsTable,
+    gameModerationTable,
+    goldenFriesLedgerTable,
     ipLogsTable,
     itemsTable,
+    marketListingsTable,
     matchDataTable,
     usersTable,
     userXpTable,
 } from "../db/schema";
 import { signReplayToken } from "../replayToken";
 import { dashboardHtml } from "./moderationDashboard.html";
+
+/** map_id → MapDefs key (name), for labelling match rows in the XP-gain drill-down. */
+const MAP_ID_TO_NAME: Record<number, string> = Object.fromEntries(
+    Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
+);
+
+/** Length of a moderation time window (used by the XP-gain + Warnings endpoints). */
+function windowToMs(param: string): number {
+    return param === "24h"
+        ? 24 * 60 * 60 * 1000
+        : param === "30d"
+          ? 30 * 24 * 60 * 60 * 1000
+          : 7 * 24 * 60 * 60 * 1000; // default 7d
+}
+
+// ── Warnings-tab heuristics (all admin-tunable via constants) ────────────────
+/** Flag a game where one IP has at least this many joins (players OR spectators). */
+const WARN_MIN_JOINS_PER_GAME = 2;
+/** Flag an IP used by at least this many distinct accounts within the window. */
+const WARN_MIN_ACCOUNTS_PER_IP = 3;
+/** Per-window game count above which an account is flagged for suspiciously high volume. */
+const WARN_MIN_GAMES: Record<string, number> = { "24h": 40, "7d": 150, "30d": 400 };
+/** Floor for the "high XP per game" (farming) flag, so a tiny mean can't cause noise. */
+const WARN_XP_PER_GAME_FLOOR = 150;
 
 /** Every cosmetic an admin may grant, by category, for the account-detail "Give" UI. */
 const COSMETIC_CATALOG = {
@@ -114,11 +149,24 @@ function adminTag(admin: {
 // ─── Admin guard middleware ────────────────────────────────────────────────────
 
 /**
- * Checks for a valid session with admin=true.
+ * Gates the dashboard. A full admin gets everything; a moderator (limited staff role)
+ * may ONLY reach the replays-related routes below — every other route 403s for them.
  * If not authenticated → redirect to Discord OAuth with a return-to cookie.
- * If authenticated but not admin → 403.
  */
 const isProd = process.env["NODE_ENV"] === "production";
+
+/**
+ * Sub-paths (relative to the `/moderation` mount) a moderator (non-admin) may hit: the
+ * SPA shell + replays only. Matched after stripping the mount prefix, so it works
+ * whether Hono reports the full or the prefix-stripped path.
+ */
+const MODERATOR_ALLOWED_PATHS = new Set([
+    "",
+    "/",
+    "/api/me",
+    "/api/replays",
+    "/api/replays/token",
+]);
 
 async function adminGuard(c: any, next: () => Promise<void>) {
     if (!isProd) {
@@ -139,7 +187,14 @@ async function adminGuard(c: any, next: () => Promise<void>) {
     }
 
     if (!user.admin) {
-        return c.text("Forbidden: admin access required", 403);
+        // Moderators are a replays-only staff role; anyone else is forbidden.
+        if (!user.moderator) {
+            return c.text("Forbidden: admin access required", 403);
+        }
+        const subPath = c.req.path.replace(/^\/moderation/, "");
+        if (!MODERATOR_ALLOWED_PATHS.has(subPath)) {
+            return c.text("Forbidden: moderators may only access replays", 403);
+        }
     }
 
     c.set("user", user);
@@ -163,6 +218,7 @@ async function fetchAllBans() {
                 username: true,
                 banReason: true,
                 bannedBy: true,
+                banExpiresAt: true,
                 userCreated: true,
             },
         }),
@@ -171,6 +227,30 @@ async function fetchAllBans() {
         }),
     ]);
     return { ipBans, accountBans, chatBans };
+}
+
+/** Human-friendly rendering of a (possibly fractional) day duration for logs. */
+function fmtBanDuration(days: number): string {
+    const totalMin = Math.round(days * 24 * 60);
+    if (totalMin < 60) return `${totalMin}m`;
+    if (totalMin < 60 * 24) {
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        return m ? `${h}h ${m}m` : `${h}h`;
+    }
+    const d = Math.floor(totalMin / (60 * 24));
+    const h = Math.floor((totalMin % (60 * 24)) / 60);
+    return h ? `${d}d ${h}h` : `${d}d`;
+}
+
+/**
+ * Resolves a ban's absolute expiry: an explicit `expiresAt` (epoch ms, e.g. an exact
+ * end date/time picked in the dashboard) wins; otherwise it's `now + duration` days.
+ */
+function resolveBanExpiry(duration: number, expiresAt?: number): Date {
+    return expiresAt != null
+        ? new Date(expiresAt)
+        : new Date(Date.now() + util.daysToMs(duration));
 }
 
 /** Appends a ban event to the audit log (`ban_history`). */
@@ -205,9 +285,10 @@ async function recordUnban(
 
 /**
  * Pushes the current ban list to every connected admin browser.
- * Called after any ban or unban operation so all open dashboards update instantly.
+ * Called after any ban or unban operation (including the auto-expiry sweep) so all
+ * open dashboards update instantly.
  */
-async function broadcastBans() {
+export async function broadcastBans() {
     if (activeSseStreams.size === 0) return;
     const bans = await fetchAllBans();
     const data = JSON.stringify(bans);
@@ -245,7 +326,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
     // ── Current user info (for the frontend to display "logged in as ...") ─
     .get("/api/me", (c) => {
         const user = c.get("user")!;
-        return c.json({ id: user.id, username: user.username, slug: user.slug });
+        return c.json({
+            id: user.id,
+            username: user.username,
+            slug: user.slug,
+            admin: !!user.admin,
+            moderator: !!user.moderator,
+        });
     })
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -266,12 +353,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 reason: z.string().default(""),
                 duration: z.number().default(7),
                 permanent: z.boolean().default(false),
+                // Optional absolute expiry (epoch ms); overrides `duration` when set.
+                expiresAt: z.number().int().positive().optional(),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { ip, reason, duration, permanent } = c.req.valid("json");
-            const expiresIn = new Date(Date.now() + util.daysToMs(duration));
+            const { ip, reason, duration, permanent, expiresAt } = c.req.valid("json");
+            const expiresIn = resolveBanExpiry(duration, expiresAt);
 
             await db
                 .insert(bannedIpsTable)
@@ -299,7 +388,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
             if (userIds.length) {
                 await db
                     .update(usersTable)
-                    .set({ banned: true, banReason: reason, bannedBy: admin.slug })
+                    // Linked account bans inherit the IP ban's expiry so they lift
+                    // together (independently, via the account expiry sweep).
+                    .set({
+                        banned: true,
+                        banReason: reason,
+                        bannedBy: admin.slug,
+                        banExpiresAt: permanent ? null : expiresIn,
+                    })
                     .where(inArray(usersTable.id, userIds));
             }
 
@@ -315,7 +411,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             void logModerationAction("🔨 IP banned", [
                 { name: "IP hash", value: ip },
                 { name: "Reason", value: reason || "–" },
-                { name: "Duration", value: permanent ? "permanent" : `${duration}d` },
+                {
+                    name: "Duration",
+                    value: permanent ? "permanent" : fmtBanDuration(duration),
+                },
                 { name: "By admin", value: adminTag(admin) },
             ]);
 
@@ -324,22 +423,31 @@ export const ModerationDashboardRouter = new Hono<Context>()
         },
     )
 
-    /** Creates an account ban. Broadcasts updated bans. */
+    /** Creates an account ban (permanent or time-limited). Broadcasts updated bans. */
     .post(
         "/api/ban/account",
         validateParams(
             z.object({
                 slug: z.string(),
                 reason: z.string().default(""),
+                duration: z.number().default(7),
+                permanent: z.boolean().default(false),
+                // Optional absolute expiry (epoch ms); overrides `duration` when set.
+                expiresAt: z.number().int().positive().optional(),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { slug, reason } = c.req.valid("json");
+            const { slug, reason, duration, permanent, expiresAt } =
+                c.req.valid("json");
+            // null = permanent; otherwise the ban-expiry sweep lifts it after this date.
+            const banExpiresAt = permanent
+                ? null
+                : resolveBanExpiry(duration, expiresAt);
 
             await db
                 .update(usersTable)
-                .set({ banned: true, banReason: reason, bannedBy: admin.slug })
+                .set({ banned: true, banReason: reason, bannedBy: admin.slug, banExpiresAt })
                 .where(eq(usersTable.slug, slug));
 
             await recordBan({
@@ -347,13 +455,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 banTarget: slug,
                 reason,
                 bannedBy: admin.slug,
-                expiresAt: null,
-                permanent: false,
+                expiresAt: banExpiresAt,
+                permanent,
             });
 
             void logModerationAction("🔨 Account banned", [
                 { name: "Account", value: slug },
                 { name: "Reason", value: reason || "–" },
+                {
+                    name: "Duration",
+                    value: permanent ? "permanent" : fmtBanDuration(duration),
+                },
                 { name: "By admin", value: adminTag(admin) },
             ]);
 
@@ -371,12 +483,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 reason: z.string().default(""),
                 duration: z.number().default(7),
                 permanent: z.boolean().default(false),
+                // Optional absolute expiry (epoch ms); overrides `duration` when set.
+                expiresAt: z.number().int().positive().optional(),
             }),
         ),
         async (c) => {
             const admin = c.get("user")!;
-            const { ip, reason, duration, permanent } = c.req.valid("json");
-            const expiresIn = new Date(Date.now() + util.daysToMs(duration));
+            const { ip, reason, duration, permanent, expiresAt } = c.req.valid("json");
+            const expiresIn = resolveBanExpiry(duration, expiresAt);
 
             await db
                 .insert(chatBannedIpsTable)
@@ -404,7 +518,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             void logModerationAction("🔇 Chat banned", [
                 { name: "IP hash", value: ip },
                 { name: "Reason", value: reason || "–" },
-                { name: "Duration", value: permanent ? "permanent" : `${duration}d` },
+                {
+                    name: "Duration",
+                    value: permanent ? "permanent" : fmtBanDuration(duration),
+                },
                 { name: "By admin", value: adminTag(admin) },
             ]);
 
@@ -430,7 +547,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
         if (userIds.length) {
             await db
                 .update(usersTable)
-                .set({ banned: false, banReason: "", bannedBy: "" })
+                .set({ banned: false, banReason: "", bannedBy: "", banExpiresAt: null })
                 .where(inArray(usersTable.id, userIds));
         }
 
@@ -458,7 +575,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const { slug } = c.req.valid("json");
             await db
                 .update(usersTable)
-                .set({ banned: false, banReason: "", bannedBy: "" })
+                .set({ banned: false, banReason: "", bannedBy: "", banExpiresAt: null })
                 .where(eq(usersTable.slug, slug));
             await recordUnban("account", slug, admin.slug);
             void logModerationAction(
@@ -537,7 +654,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/ip/:hash", async (c) => {
         const hash = c.req.param("hash");
 
-        const [banRecord, rows, banHistory] = await Promise.all([
+        const [banRecord, rows, banHistory, nameCounts] = await Promise.all([
             db.query.bannedIpsTable.findFirst({
                 where: eq(bannedIpsTable.encodedIp, hash),
             }),
@@ -568,19 +685,39 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 )
                 .orderBy(desc(banHistoryTable.bannedAt))
                 .limit(100),
+            // How often each name was seen from this IP (exact count, not limited to 200).
+            db
+                .select({
+                    username: ipLogsTable.username,
+                    count: sql<number>`count(*)::int`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.encodedIp, hash))
+                .groupBy(ipLogsTable.username),
         ]);
+
+        // Name → how many times that (name, this IP) combo was logged.
+        const countByName = new Map(
+            nameCounts.map((r) => [r.username, Number(r.count)]),
+        );
 
         // Collect ISP and deduplicate recent names from ip_logs
         const seenNames = new Set<string>();
-        const accounts: ((typeof rows)[number] & { source: "recent" | "historical" })[] =
-            [];
+        const accounts: ((typeof rows)[number] & {
+            source: "recent" | "historical";
+            count: number;
+        })[] = [];
         let isp = "";
 
         for (const row of rows) {
             if (!isp && row.isp) isp = row.isp;
             if (!seenNames.has(row.username)) {
                 seenNames.add(row.username);
-                accounts.push({ ...row, source: "recent" });
+                accounts.push({
+                    ...row,
+                    source: "recent",
+                    count: countByName.get(row.username) ?? 0,
+                });
             }
         }
 
@@ -609,6 +746,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     gameId: "",
                     createdAt: new Date(0),
                     source: "historical",
+                    count: countByName.get(row.username) ?? 0,
                 });
             }
         }
@@ -733,19 +871,32 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/player/:name", async (c) => {
         const name = c.req.param("name");
 
-        const rows = await db
-            .select({
-                encodedIp: ipLogsTable.encodedIp,
-                isp: ipLogsTable.isp,
-                region: ipLogsTable.region,
-                createdAt: ipLogsTable.createdAt,
-                slug: usersTable.slug,
-            })
-            .from(ipLogsTable)
-            .where(eq(ipLogsTable.username, name))
-            .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
-            .orderBy(desc(ipLogsTable.createdAt))
-            .limit(200);
+        const [rows, ipCounts] = await Promise.all([
+            db
+                .select({
+                    encodedIp: ipLogsTable.encodedIp,
+                    isp: ipLogsTable.isp,
+                    region: ipLogsTable.region,
+                    createdAt: ipLogsTable.createdAt,
+                    slug: usersTable.slug,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.username, name))
+                .leftJoin(usersTable, eq(ipLogsTable.userId, usersTable.id))
+                .orderBy(desc(ipLogsTable.createdAt))
+                .limit(200),
+            // How often this name was seen from each IP (exact count, not limited to 200).
+            db
+                .select({
+                    encodedIp: ipLogsTable.encodedIp,
+                    count: sql<number>`count(*)::int`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.username, name))
+                .groupBy(ipLogsTable.encodedIp),
+        ]);
+
+        const countByIp = new Map(ipCounts.map((r) => [r.encodedIp, Number(r.count)]));
 
         const seenIps = new Set<string>();
         const ips: {
@@ -754,6 +905,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             region: string;
             lastSeen: Date;
             slug: string | null;
+            count: number;
         }[] = [];
         for (const row of rows) {
             if (!seenIps.has(row.encodedIp)) {
@@ -764,6 +916,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     region: row.region,
                     lastSeen: row.createdAt,
                     slug: row.slug,
+                    count: countByIp.get(row.encodedIp) ?? 0,
                 });
             }
         }
@@ -800,6 +953,90 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 : [];
 
         return c.json({ name, ips, banHistory });
+    })
+
+    /**
+     * Account "session" lookup by slug — shows every name and IP the account has
+     * played under (aggregated from ip_logs, keyed by the account's userId), plus
+     * ban history. Unlike opening the full account-detail modal, this keeps the
+     * moderator on the lookup view so they can spot alt names / shared IPs.
+     */
+    .get("/api/slug/:slug", async (c) => {
+        const slug = c.req.param("slug");
+
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: { id: true, slug: true, username: true },
+        });
+        if (!user) return c.json({ error: "not found" }, 404);
+
+        const [nameRows, ipRows] = await Promise.all([
+            // Every display name this account has used, with how often + when last seen.
+            db
+                .select({
+                    username: ipLogsTable.username,
+                    count: sql<number>`count(*)::int`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.userId, user.id))
+                .groupBy(ipLogsTable.username)
+                .orderBy(desc(sql`count(*)`)),
+            // Every IP this account has played from, with how often + when last seen.
+            db
+                .select({
+                    ip: ipLogsTable.encodedIp,
+                    isp: sql<string>`max(${ipLogsTable.isp})`,
+                    region: sql<string>`max(${ipLogsTable.region})`,
+                    count: sql<number>`count(*)::int`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(eq(ipLogsTable.userId, user.id))
+                .groupBy(ipLogsTable.encodedIp)
+                .orderBy(desc(sql`max(${ipLogsTable.createdAt})`)),
+        ]);
+
+        // Ban history across the account's slug (account bans) + its IP hashes (ip/chat bans).
+        const hashes = ipRows.map((r) => r.ip);
+        const banHistory = await db
+            .select()
+            .from(banHistoryTable)
+            .where(
+                or(
+                    and(
+                        eq(banHistoryTable.banType, "account"),
+                        eq(banHistoryTable.banTarget, slug),
+                    ),
+                    hashes.length
+                        ? and(
+                              inArray(banHistoryTable.banType, ["ip", "chat"]),
+                              inArray(banHistoryTable.banTarget, hashes),
+                          )
+                        : undefined,
+                ),
+            )
+            .orderBy(desc(banHistoryTable.bannedAt))
+            .limit(100);
+
+        return c.json({
+            slug: user.slug,
+            username: user.username,
+            userId: user.id,
+            names: nameRows.map((r) => ({
+                username: r.username,
+                count: Number(r.count),
+                lastSeen: r.lastSeen,
+            })),
+            ips: ipRows.map((r) => ({
+                ip: r.ip,
+                isp: r.isp,
+                region: r.region,
+                count: Number(r.count),
+                lastSeen: r.lastSeen,
+            })),
+            banHistory,
+        });
     })
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1030,6 +1267,971 @@ export const ModerationDashboardRouter = new Hono<Context>()
     })
 
     /**
+     * XP-gain leaderboard for the "XP Gain" tab — surfaces accounts that earned a lot
+     * of XP within a recent time window, to spot account boosting.
+     *
+     * XP is recomputed from match_data (one row per game, same aggregation the pass
+     * reconcile uses) via computeMatchXp — base XP only, no boost events, so the
+     * ranking is deterministic and pass-independent. Returns the top gainers plus
+     * per-day buckets for a sparkline. Bounded to a window + top-N (the box is small,
+     * this is admin-triggered and off the hot path).
+     */
+    .get("/api/xp-gain", async (c) => {
+        const windowParam = c.req.query("window") ?? "7d";
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        // One row per (user, game): dedupe self-joins the same way passReconcile does
+        // (HAVING count(*) = 1 keeps only games where the account appears once).
+        const stats = await db
+            .select({
+                userId: matchDataTable.userId,
+                gameId: matchDataTable.gameId,
+                kills: sql<number>`max(${matchDataTable.kills})`,
+                damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                rank: sql<number>`min(${matchDataTable.rank})`,
+                mapId: sql<number>`max(${matchDataTable.mapId})`,
+                createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+            })
+            .from(matchDataTable)
+            .where(
+                and(
+                    gte(matchDataTable.createdAt, cutoff),
+                    sql`${matchDataTable.userId} <> ''`,
+                    // Voided (botted) games are excluded so the leaderboard reflects
+                    // the XP the accounts actually keep.
+                    eq(matchDataTable.voided, false),
+                ),
+            )
+            .groupBy(matchDataTable.userId, matchDataTable.gameId)
+            .having(sql`count(*) = 1`);
+
+        // Aggregate per user: total XP, games, and a per-day XP bucket for the sparkline.
+        const perUser = new Map<
+            string,
+            { xpGained: number; games: number; spark: Map<string, number> }
+        >();
+        for (const s of stats) {
+            const xp = computeMatchXp(s);
+            const uid = s.userId ?? "";
+            let u = perUser.get(uid);
+            if (!u) {
+                u = { xpGained: 0, games: 0, spark: new Map() };
+                perUser.set(uid, u);
+            }
+            u.xpGained += xp;
+            u.games += 1;
+            const day = new Date(s.createdAt).toISOString().slice(0, 10);
+            u.spark.set(day, (u.spark.get(day) ?? 0) + xp);
+        }
+
+        // Rank by XP gained, keep the top 100 suspects.
+        const ranked = [...perUser.entries()]
+            .map(([userId, u]) => ({ userId, ...u }))
+            .sort((a, b) => b.xpGained - a.xpGained)
+            .slice(0, 100);
+
+        // Resolve slug / username for the ranked users.
+        const userIds = ranked.map((r) => r.userId);
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      username: usersTable.username,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+
+        return c.json({
+            window: windowParam,
+            users: ranked.map((r) => {
+                const u = userById.get(r.userId);
+                return {
+                    userId: r.userId,
+                    slug: u?.slug ?? null,
+                    username: u?.username || null,
+                    banned: u?.banned ?? false,
+                    xpGained: Math.round(r.xpGained * 100) / 100,
+                    games: r.games,
+                    xpPerGame:
+                        r.games > 0
+                            ? Math.round((r.xpGained / r.games) * 100) / 100
+                            : 0,
+                    spark: [...r.spark.entries()]
+                        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+                        .map(([d, xp]) => ({ d, xp: Math.round(xp * 100) / 100 })),
+                };
+            }),
+        });
+    })
+
+    /**
+     * Per-game XP breakdown for one account in a time window — the drill-down behind
+     * a row on the XP-gain leaderboard. Returns every game (one row per game, same
+     * dedupe as the reconcile) with its stats and computed XP, newest data first, so
+     * the dashboard can chart the individual games and link to each one.
+     */
+    .get("/api/xp-gain/user/:userId", async (c) => {
+        const userId = c.req.param("userId");
+        const windowParam = c.req.query("window") ?? "7d";
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        const [user, stats] = await Promise.all([
+            db.query.usersTable.findFirst({
+                where: eq(usersTable.id, userId),
+                columns: { id: true, slug: true, username: true, banned: true },
+            }),
+            db
+                .select({
+                    gameId: matchDataTable.gameId,
+                    region: sql<string>`max(${matchDataTable.region})`,
+                    mapId: sql<number>`max(${matchDataTable.mapId})`,
+                    teamMode: sql<number>`max(${matchDataTable.teamMode})`,
+                    kills: sql<number>`max(${matchDataTable.kills})`,
+                    damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                    timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                    rank: sql<number>`min(${matchDataTable.rank})`,
+                    createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+                    // True if this game was "removed" from the account (user_id blanked).
+                    removed: sql<boolean>`bool_or(${matchDataTable.removedUserId} = ${userId})`,
+                })
+                .from(matchDataTable)
+                // Match live rows AND rows this account was removed from, so removed
+                // games stay visible here (badged) and can be restored.
+                .where(
+                    and(
+                        or(
+                            eq(matchDataTable.userId, userId),
+                            eq(matchDataTable.removedUserId, userId),
+                        ),
+                        gte(matchDataTable.createdAt, cutoff),
+                    ),
+                )
+                .groupBy(matchDataTable.gameId)
+                .having(sql`count(*) = 1`),
+        ]);
+
+        const games = stats
+            .map((s) => {
+                const mapId = Number(s.mapId);
+                const stat = {
+                    kills: Number(s.kills),
+                    damage: Number(s.damage),
+                    timeAlive: Number(s.timeAlive),
+                    rank: Number(s.rank),
+                    mapId,
+                };
+                return {
+                    gameId: s.gameId,
+                    region: s.region,
+                    mapId,
+                    mapName: MAP_ID_TO_NAME[mapId] ?? String(mapId),
+                    teamMode: Number(s.teamMode),
+                    kills: stat.kills,
+                    damage: stat.damage,
+                    timeAlive: stat.timeAlive,
+                    rank: stat.rank,
+                    createdAt: s.createdAt,
+                    removed: !!s.removed,
+                    xp: Math.round(computeMatchXp(stat) * 100) / 100,
+                };
+            })
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        const totalXp =
+            Math.round(games.reduce((sum, g) => sum + (g.removed ? 0 : g.xp), 0) * 100) /
+            100;
+
+        return c.json({
+            userId,
+            slug: user?.slug ?? null,
+            username: user?.username || null,
+            banned: user?.banned ?? false,
+            window: windowParam,
+            totalXp,
+            games,
+        });
+    })
+
+    /**
+     * XP-gain "Games" sub-tab: one entry per (player, game) in the window, sorted by
+     * the XP that player gained in that game (desc). Same one-row-per-game dedupe as
+     * the leaderboard, but NOT aggregated up to the account, so a single suspicious
+     * game surfaces directly. Voided (botted) games are still shown — tagged with
+     * their moderation status — so a moderator can review or undo them. Optional
+     * ?region= filters the list; the response also returns the distinct regions in
+     * the window to populate the filter dropdown.
+     */
+    .get("/api/xp-gain/games", async (c) => {
+        const windowParam = c.req.query("window") ?? "7d";
+        const regionParam = c.req.query("region") ?? "";
+        const limitRaw = Number(c.req.query("limit") ?? "200");
+        const limit =
+            Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 200;
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        const conds = [
+            gte(matchDataTable.createdAt, cutoff),
+            sql`${matchDataTable.userId} <> ''`,
+        ];
+        if (regionParam) conds.push(eq(matchDataTable.region, regionParam));
+
+        const stats = await db
+            .select({
+                userId: matchDataTable.userId,
+                gameId: matchDataTable.gameId,
+                region: sql<string>`max(${matchDataTable.region})`,
+                kills: sql<number>`max(${matchDataTable.kills})`,
+                damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                rank: sql<number>`min(${matchDataTable.rank})`,
+                mapId: sql<number>`max(${matchDataTable.mapId})`,
+                teamMode: sql<number>`max(${matchDataTable.teamMode})`,
+                createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+            })
+            .from(matchDataTable)
+            .where(and(...conds))
+            .groupBy(matchDataTable.userId, matchDataTable.gameId)
+            .having(sql`count(*) = 1`);
+
+        const entries = stats
+            .map((s) => {
+                const mapId = Number(s.mapId);
+                const stat = {
+                    kills: Number(s.kills),
+                    damage: Number(s.damage),
+                    timeAlive: Number(s.timeAlive),
+                    rank: Number(s.rank),
+                    mapId,
+                };
+                return {
+                    gameId: s.gameId,
+                    // Non-null in practice — the query filters `userId <> ''`.
+                    userId: s.userId ?? "",
+                    region: s.region,
+                    mapId,
+                    mapName: MAP_ID_TO_NAME[mapId] ?? String(mapId),
+                    teamMode: Number(s.teamMode),
+                    kills: stat.kills,
+                    damage: stat.damage,
+                    timeAlive: stat.timeAlive,
+                    rank: stat.rank,
+                    createdAt: s.createdAt,
+                    xp: Math.round(computeMatchXp(stat) * 100) / 100,
+                };
+            })
+            .sort((a, b) => b.xp - a.xp)
+            .slice(0, limit);
+
+        // Resolve account + per-(game,player) moderation status for the shown entries,
+        // plus the distinct regions in the window for the filter dropdown.
+        const userIds = [...new Set(entries.map((e) => e.userId))];
+        const gameIds = [...new Set(entries.map((e) => e.gameId))];
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      username: usersTable.username,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const mods = gameIds.length
+            ? await db
+                  .select({
+                      gameId: gameModerationTable.gameId,
+                      userId: gameModerationTable.userId,
+                      status: gameModerationTable.status,
+                  })
+                  .from(gameModerationTable)
+                  .where(inArray(gameModerationTable.gameId, gameIds))
+            : [];
+        // Distinct player-slot count per shown game (low counts = likely bot lobby).
+        const counts = gameIds.length
+            ? await db
+                  .select({
+                      gameId: matchDataTable.gameId,
+                      n: sql<number>`count(distinct ${matchDataTable.playerId})`,
+                  })
+                  .from(matchDataTable)
+                  .where(inArray(matchDataTable.gameId, gameIds))
+                  .groupBy(matchDataTable.gameId)
+            : [];
+        const regionRows = await db
+            .selectDistinct({ region: matchDataTable.region })
+            .from(matchDataTable)
+            .where(
+                and(
+                    gte(matchDataTable.createdAt, cutoff),
+                    sql`${matchDataTable.userId} <> ''`,
+                ),
+            );
+        const userById = new Map(users.map((u) => [u.id, u]));
+        const modByKey = new Map(mods.map((m) => [m.gameId + "|" + m.userId, m.status]));
+        const playersByGame = new Map(counts.map((c) => [c.gameId, Number(c.n)]));
+        const regions = regionRows
+            .map((r) => r.region)
+            .filter(Boolean)
+            .sort();
+
+        return c.json({
+            window: windowParam,
+            region: regionParam,
+            regions,
+            games: entries.map((e) => {
+                const u = userById.get(e.userId);
+                return {
+                    ...e,
+                    slug: u?.slug ?? null,
+                    username: u?.username || null,
+                    banned: u?.banned ?? false,
+                    players: playersByGame.get(e.gameId) ?? 0,
+                    modStatus: modByKey.get(e.gameId + "|" + e.userId) ?? null,
+                };
+            }),
+        });
+    })
+
+    /**
+     * Game-level search for the "Games" tab. Returns one summary row per game so the
+     * moderator can drill into the full roster (all per-player actions + delete). An
+     * exact game id is looked up directly by the client; here we support browsing recent
+     * games with filters: `player` (slug), `mapId`, `teamMode`, `region`, `window`, and
+     * `minKills` / `minDamage` (top value in the game) to surface outlier/botted lobbies.
+     */
+    .get("/api/games/search", async (c) => {
+        const windowParam = c.req.query("window") ?? "7d";
+        const region = c.req.query("region") ?? "";
+        const mapIdParam = c.req.query("mapId") ?? "";
+        const teamModeParam = c.req.query("teamMode") ?? "";
+        const player = (c.req.query("player") ?? "").trim().toLowerCase();
+        const minKills = Math.max(0, Number(c.req.query("minKills") ?? "0") || 0);
+        const minDamage = Math.max(0, Number(c.req.query("minDamage") ?? "0") || 0);
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        const conds = [gte(matchDataTable.createdAt, cutoff)];
+        if (region) conds.push(eq(matchDataTable.region, region));
+        if (mapIdParam) conds.push(eq(matchDataTable.mapId, Number(mapIdParam)));
+        if (teamModeParam)
+            conds.push(eq(matchDataTable.teamMode, Number(teamModeParam) as TeamMode));
+
+        // Restrict to games a specific player appeared in (slug → their game ids).
+        if (player) {
+            const [u] = await db
+                .select({ id: usersTable.id })
+                .from(usersTable)
+                .where(eq(usersTable.slug, player))
+                .limit(1);
+            if (!u) return c.json({ games: [], maps: [], regions: [], unknownPlayer: true });
+            const gidRows = await db
+                .selectDistinct({ gameId: matchDataTable.gameId })
+                .from(matchDataTable)
+                .where(
+                    and(
+                        eq(matchDataTable.userId, u.id),
+                        gte(matchDataTable.createdAt, cutoff),
+                    ),
+                );
+            const gids = gidRows.map((r) => r.gameId);
+            if (!gids.length) return c.json({ games: [], maps: [], regions: [] });
+            conds.push(inArray(matchDataTable.gameId, gids));
+        }
+
+        const rows = await db
+            .select({
+                gameId: matchDataTable.gameId,
+                createdAt: sql<Date>`max(${matchDataTable.createdAt})`,
+                mapId: sql<number>`max(${matchDataTable.mapId})`,
+                teamMode: sql<number>`max(${matchDataTable.teamMode})`,
+                region: sql<string>`max(${matchDataTable.region})`,
+                players: sql<number>`count(distinct ${matchDataTable.playerId})`,
+                topKills: sql<number>`max(${matchDataTable.kills})`,
+                topDamage: sql<number>`max(${matchDataTable.damageDealt})`,
+            })
+            .from(matchDataTable)
+            .where(and(...conds))
+            .groupBy(matchDataTable.gameId)
+            .having(
+                sql`max(${matchDataTable.kills}) >= ${minKills} AND max(${matchDataTable.damageDealt}) >= ${minDamage}`,
+            )
+            .orderBy(desc(sql`max(${matchDataTable.createdAt})`))
+            .limit(100);
+
+        // Which of these games already carry any moderation flag (sus/botted/removed)?
+        const gameIds = rows.map((r) => r.gameId);
+        const modRows = gameIds.length
+            ? await db
+                  .selectDistinct({ gameId: gameModerationTable.gameId })
+                  .from(gameModerationTable)
+                  .where(inArray(gameModerationTable.gameId, gameIds))
+            : [];
+        const flagged = new Set(modRows.map((m) => m.gameId));
+
+        // Filter dropdown sources (distinct maps + regions currently in the data).
+        const [mapRows, regionRows] = await Promise.all([
+            db.selectDistinct({ mapId: matchDataTable.mapId }).from(matchDataTable),
+            db
+                .selectDistinct({ region: matchDataTable.region })
+                .from(matchDataTable)
+                .where(gte(matchDataTable.createdAt, cutoff)),
+        ]);
+        const maps = mapRows
+            .map((m) => ({ mapId: m.mapId, name: MAP_ID_TO_NAME[m.mapId] ?? String(m.mapId) }))
+            .sort((a, b) => a.mapId - b.mapId);
+        const regions = regionRows.map((r) => r.region).filter(Boolean).sort();
+
+        return c.json({
+            window: windowParam,
+            maps,
+            regions,
+            games: rows.map((r) => ({
+                gameId: r.gameId,
+                createdAt: r.createdAt,
+                mapId: Number(r.mapId),
+                mapName: MAP_ID_TO_NAME[Number(r.mapId)] ?? String(r.mapId),
+                teamMode: Number(r.teamMode),
+                region: r.region,
+                players: Number(r.players),
+                topKills: Number(r.topKills),
+                topDamage: Number(r.topDamage),
+                flagged: flagged.has(r.gameId),
+            })),
+        });
+    })
+
+    /**
+     * Full player roster for one game (the expandable detail in the "Games" sub-tab):
+     * every participant with their stats, the XP they earned, and their per-player
+     * moderation status — so a moderator can bott/un-bott each one individually.
+     */
+    .get("/api/game/:gameId/players", async (c) => {
+        const gameId = c.req.param("gameId");
+
+        // No user join here: a "removed" player's user_id is blanked (moved to
+        // removed_user_id), so we resolve the effective account id per row and look
+        // the accounts up in a batch, so removed players still show with their name.
+        const [rows, mods] = await Promise.all([
+            db
+                .select({
+                    userId: matchDataTable.userId,
+                    removedUserId: matchDataTable.removedUserId,
+                    username: matchDataTable.username,
+                    playerId: matchDataTable.playerId,
+                    teamId: matchDataTable.teamId,
+                    timeAlive: matchDataTable.timeAlive,
+                    rank: matchDataTable.rank,
+                    died: matchDataTable.died,
+                    kills: matchDataTable.kills,
+                    assists: matchDataTable.assists,
+                    damageDealt: matchDataTable.damageDealt,
+                    damageTaken: matchDataTable.damageTaken,
+                    mapId: matchDataTable.mapId,
+                    teamMode: matchDataTable.teamMode,
+                    region: matchDataTable.region,
+                    createdAt: matchDataTable.createdAt,
+                    voided: matchDataTable.voided,
+                })
+                .from(matchDataTable)
+                .where(eq(matchDataTable.gameId, gameId))
+                .orderBy(asc(matchDataTable.rank)),
+            db
+                .select({
+                    userId: gameModerationTable.userId,
+                    status: gameModerationTable.status,
+                })
+                .from(gameModerationTable)
+                .where(eq(gameModerationTable.gameId, gameId)),
+        ]);
+
+        const effId = (r: { userId: string | null; removedUserId: string | null }) =>
+            r.userId ? r.userId : (r.removedUserId ?? "");
+        const userIds = [...new Set(rows.map(effId).filter(Boolean))];
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+        const modByUser = new Map(mods.map((m) => [m.userId, m.status]));
+
+        const first = rows[0];
+        const meta = first
+            ? {
+                  region: first.region,
+                  mapId: first.mapId,
+                  mapName: MAP_ID_TO_NAME[first.mapId] ?? String(first.mapId),
+                  teamMode: first.teamMode,
+                  createdAt: first.createdAt,
+              }
+            : null;
+
+        return c.json({
+            gameId,
+            meta,
+            players: rows.map((r) => {
+                const uid = effId(r);
+                const u = uid ? userById.get(uid) : undefined;
+                const removed = !!r.removedUserId && !r.userId;
+                const stat = {
+                    kills: r.kills,
+                    damage: r.damageDealt,
+                    timeAlive: r.timeAlive,
+                    rank: r.rank,
+                    mapId: r.mapId,
+                };
+                return {
+                    userId: uid, // effective account id — used by the row's actions
+                    slug: u?.slug ?? null,
+                    banned: u?.banned ?? false,
+                    username: r.username,
+                    playerId: r.playerId,
+                    teamId: r.teamId,
+                    timeAlive: r.timeAlive,
+                    rank: r.rank,
+                    died: r.died,
+                    kills: r.kills,
+                    assists: r.assists,
+                    damage: r.damageDealt,
+                    damageTaken: r.damageTaken,
+                    voided: r.voided,
+                    removed,
+                    xp: Math.round(computeMatchXp(stat) * 100) / 100,
+                    modStatus: uid ? (modByUser.get(uid) ?? null) : null,
+                };
+            }),
+        });
+    })
+
+    /**
+     * Sets/clears the moderation status of ONE player in ONE game. "botted" revokes
+     * that player's XP (plus the pass cosmetics and Golden Fries earned from the game)
+     * and remembers the exact amount; "clear" restores it; "sus" is a label only.
+     * Fully reversible — see setGamePlayerModeration.
+     */
+    .post(
+        "/api/game/:gameId/moderate",
+        validateParams(
+            z.object({
+                userId: z.string().min(1),
+                status: z.enum(["sus", "botted", "clear"]),
+                note: z.string().max(500).optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId, status, note } = c.req.valid("json");
+
+            const result = await setGamePlayerModeration(
+                gameId,
+                userId,
+                status,
+                admin.slug,
+                note ?? "",
+            );
+
+            const removedXp = result.deltas.reduce((sum, d) => sum + d.xpDelta, 0);
+            void logModerationAction(
+                "🎮 Game moderation",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId },
+                    { name: "Status", value: result.status ?? "cleared" },
+                    {
+                        name: "XP",
+                        value:
+                            status === "botted"
+                                ? `-${Math.round(removedXp * 100) / 100}`
+                                : status === "clear"
+                                  ? "restored"
+                                  : "—",
+                    },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                status === "botted" ? 0xaa1a1a : 0x3355ee,
+            );
+
+            return c.json({ ok: true, ...result });
+        },
+    )
+
+    /**
+     * Permanently deletes a game: revokes the XP (+ cosmetics + Golden Fries) every
+     * account gained from it, then hard-deletes its match rows and moderation flags.
+     * Removes the game from the leaderboard, stats and match history entirely.
+     * Irreversible — the moderator reviews the full roster first (expandable row).
+     */
+    .post("/api/game/:gameId/delete", async (c) => {
+        const admin = c.get("user")!;
+        const gameId = c.req.param("gameId");
+
+        const result = await deleteGame(gameId);
+
+        void logModerationAction(
+            "🗑️ Game deleted",
+            [
+                { name: "Game", value: gameId },
+                { name: "Players affected", value: String(result.players) },
+                { name: "XP removed", value: String(result.xpRemoved) },
+                { name: "Rows deleted", value: String(result.rowsDeleted) },
+                { name: "By admin", value: adminTag(admin) },
+            ],
+            0xaa1a1a,
+        );
+
+        return c.json({ ok: true, ...result });
+    })
+
+    /**
+     * Removes ONE player from a game (without deleting the game): blanks their user_id
+     * so the game vanishes from that account's stats AND the leaderboard, and revokes
+     * the XP they gained from it. Reversible via /restore-user.
+     */
+    .post(
+        "/api/game/:gameId/remove-user",
+        validateParams(
+            z.object({ userId: z.string().min(1), note: z.string().max(500).optional() }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId, note } = c.req.valid("json");
+
+            const result = await removeUserFromGame(gameId, userId, admin.slug, note ?? "");
+            const removedXp = result.deltas.reduce((sum, d) => sum + d.xpDelta, 0);
+            void logModerationAction(
+                "➖ Player removed from game",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId },
+                    { name: "XP removed", value: String(Math.round(removedXp * 100) / 100) },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xaa4400,
+            );
+            return c.json({ ok: true, ...result });
+        },
+    )
+
+    /** Undoes /remove-user: re-attaches the player to the game and restores their XP. */
+    .post(
+        "/api/game/:gameId/restore-user",
+        validateParams(z.object({ userId: z.string().min(1) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId } = c.req.valid("json");
+
+            const result = await restoreUserToGame(gameId, userId);
+            void logModerationAction(
+                "➕ Player restored to game",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x3355ee,
+            );
+            return c.json({ ok: true, ...result });
+        },
+    )
+
+    /**
+     * Competitive leaderboard for the moderation dashboard — mirrors the public stats
+     * leaderboard (rank players by kills / wins / KPG / max damage, filtered by team
+     * mode, map and time interval) but is admin-scoped: banned players are INCLUDED
+     * (flagged) and voided (botted) games are excluded. Each ranked player links to
+     * their games, where the full roster can be reviewed and botted games deleted.
+     */
+    .get("/api/leaderboard", async (c) => {
+        const type = c.req.query("type") ?? "kills";
+        const teamMode = Number(c.req.query("teamMode") ?? "1");
+        const interval = c.req.query("interval") ?? "alltime";
+        const mapIdParam = c.req.query("mapId");
+
+        // Whitelisted stat expressions (same semantics as the public leaderboard).
+        const valExpr =
+            (
+                {
+                    kills: "SUM(match_data.kills)",
+                    wins: "COUNT(CASE WHEN match_data.rank = 1 THEN 1 END)",
+                    kpg: "ROUND(SUM(match_data.kills) * 1.0 / COUNT(DISTINCT match_data.game_id), 2)",
+                    most_damage_dealt: "MAX(match_data.damage_dealt)",
+                } as Record<string, string>
+            )[type] ?? "SUM(match_data.kills)";
+
+        const conds = [
+            sql`${matchDataTable.userId} <> ''`,
+            eq(matchDataTable.voided, false),
+            eq(matchDataTable.teamMode, teamMode as TeamMode),
+        ];
+        if (mapIdParam) conds.push(eq(matchDataTable.mapId, Number(mapIdParam)));
+        if (interval === "daily")
+            conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '1 day'`));
+        else if (interval === "weekly")
+            conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '7 days'`));
+
+        const rows = await db
+            .select({
+                userId: matchDataTable.userId,
+                slug: usersTable.slug,
+                username: usersTable.username,
+                banned: usersTable.banned,
+                games: sql<number>`count(distinct ${matchDataTable.gameId})`,
+                val: sql.raw(`${valExpr} as val`) as SQL<number>,
+                // Only "Max Damage" maps a row to one exact game: the game where the
+                // player dealt that MAX damage. null for the aggregate types (no
+                // array_agg cost, since NULL short-circuits).
+                topGameId: (type === "most_damage_dealt"
+                    ? sql`(array_agg(${matchDataTable.gameId} ORDER BY ${matchDataTable.damageDealt} DESC))[1]`
+                    : sql`NULL`) as SQL<string | null>,
+            })
+            .from(matchDataTable)
+            .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
+            .where(and(...conds))
+            .groupBy(
+                matchDataTable.userId,
+                usersTable.slug,
+                usersTable.username,
+                usersTable.banned,
+            )
+            .orderBy(sql`val DESC`)
+            .limit(100);
+
+        // Distinct maps in the data, for the filter dropdown.
+        const mapRows = await db
+            .selectDistinct({ mapId: matchDataTable.mapId })
+            .from(matchDataTable)
+            .where(sql`${matchDataTable.userId} <> ''`);
+        const maps = mapRows
+            .map((m) => ({ mapId: m.mapId, name: MAP_ID_TO_NAME[m.mapId] ?? String(m.mapId) }))
+            .sort((a, b) => a.mapId - b.mapId);
+
+        return c.json({
+            type,
+            teamMode,
+            interval,
+            mapId: mapIdParam ?? "",
+            maps,
+            players: rows.map((r) => ({
+                userId: r.userId ?? "",
+                slug: r.slug ?? null,
+                username: r.username || null,
+                banned: r.banned ?? false,
+                games: Number(r.games),
+                val: Number(r.val),
+                // The exact game behind a "Max Damage" row, for the "Open game" action.
+                topGameId: r.topGameId ?? null,
+            })),
+        });
+    })
+
+    /**
+     * Warnings tab — surfaces suspicious behaviour in a recent window:
+     *   1. sharedIpGames    — one IP joined the same game 2+ times (players OR
+     *      spectators; ip_logs records both), i.e. multi-boxing / alt-farming / ghosting.
+     *   2. sharedIpAccounts — one IP used by many distinct accounts (alt farm).
+     *   3. xpSpikes         — accounts with abnormally high game volume or XP/game
+     *      (grinding/botting or feeding). XP is recomputed via computeMatchXp.
+     * All heuristics are windowed + capped; this is admin-triggered, off the hot path.
+     */
+    .get("/api/warnings", async (c) => {
+        const windowParam = c.req.query("window") ?? "24h";
+        const cutoff = new Date(Date.now() - windowToMs(windowParam));
+
+        // Distinct real-account count for an ip_logs group (ignores guests/spectators
+        // whose user_id is empty/null).
+        const distinctAccounts = sql<number>`count(distinct ${ipLogsTable.userId}) filter (where ${ipLogsTable.userId} is not null and ${ipLogsTable.userId} <> '')`;
+
+        const [sharedIpGames, sharedIpAccounts, xpStats] = await Promise.all([
+            // 1) Same IP appearing more than once in a single game.
+            db
+                .select({
+                    gameId: ipLogsTable.gameId,
+                    ip: ipLogsTable.encodedIp,
+                    region: sql<string>`max(${ipLogsTable.region})`,
+                    joins: sql<number>`count(*)::int`,
+                    accounts: sql<number>`${distinctAccounts}::int`,
+                    names: sql<string[]>`array_agg(distinct ${ipLogsTable.username})`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(
+                    and(
+                        gte(ipLogsTable.createdAt, cutoff),
+                        sql`${ipLogsTable.encodedIp} <> ''`,
+                    ),
+                )
+                .groupBy(ipLogsTable.gameId, ipLogsTable.encodedIp)
+                .having(sql`count(*) >= ${WARN_MIN_JOINS_PER_GAME}`)
+                .orderBy(desc(sql`count(*)`))
+                .limit(100),
+
+            // 2) Same IP used by many distinct accounts within the window.
+            db
+                .select({
+                    ip: ipLogsTable.encodedIp,
+                    isp: sql<string>`max(${ipLogsTable.isp})`,
+                    accounts: sql<number>`${distinctAccounts}::int`,
+                    joins: sql<number>`count(*)::int`,
+                    names: sql<string[]>`array_agg(distinct ${ipLogsTable.username})`,
+                    lastSeen: sql<Date>`max(${ipLogsTable.createdAt})`,
+                })
+                .from(ipLogsTable)
+                .where(
+                    and(
+                        gte(ipLogsTable.createdAt, cutoff),
+                        sql`${ipLogsTable.encodedIp} <> ''`,
+                    ),
+                )
+                .groupBy(ipLogsTable.encodedIp)
+                .having(sql`${distinctAccounts} >= ${WARN_MIN_ACCOUNTS_PER_IP}`)
+                .orderBy(desc(distinctAccounts))
+                .limit(100),
+
+            // 3) Per-user + per-game rows for XP-spike detection (one row per game).
+            db
+                .select({
+                    userId: matchDataTable.userId,
+                    gameId: matchDataTable.gameId,
+                    kills: sql<number>`max(${matchDataTable.kills})`,
+                    damage: sql<number>`max(${matchDataTable.damageDealt})`,
+                    timeAlive: sql<number>`max(${matchDataTable.timeAlive})`,
+                    rank: sql<number>`min(${matchDataTable.rank})`,
+                    mapId: sql<number>`max(${matchDataTable.mapId})`,
+                })
+                .from(matchDataTable)
+                .where(
+                    and(
+                        gte(matchDataTable.createdAt, cutoff),
+                        sql`${matchDataTable.userId} <> ''`,
+                    ),
+                )
+                .groupBy(matchDataTable.userId, matchDataTable.gameId)
+                .having(sql`count(*) = 1`),
+        ]);
+
+        // Aggregate XP per user, then flag high volume and/or high XP/game (farming).
+        const perUser = new Map<string, { xp: number; games: number }>();
+        for (const s of xpStats) {
+            const xp = computeMatchXp({
+                kills: Number(s.kills),
+                damage: Number(s.damage),
+                timeAlive: Number(s.timeAlive),
+                rank: Number(s.rank),
+                mapId: Number(s.mapId),
+            });
+            const uid = s.userId ?? "";
+            let u = perUser.get(uid);
+            if (!u) {
+                u = { xp: 0, games: 0 };
+                perUser.set(uid, u);
+            }
+            u.xp += xp;
+            u.games += 1;
+        }
+
+        // Mean XP/game across established players → relative "farming" threshold.
+        let sumPerGame = 0;
+        let nPerGame = 0;
+        for (const u of perUser.values()) {
+            if (u.games >= 5) {
+                sumPerGame += u.xp / u.games;
+                nPerGame++;
+            }
+        }
+        const meanPerGame = nPerGame ? sumPerGame / nPerGame : 0;
+        const farmThreshold = Math.max(WARN_XP_PER_GAME_FLOOR, meanPerGame * 3);
+        const minGames = WARN_MIN_GAMES[windowParam] ?? WARN_MIN_GAMES["7d"];
+
+        const flagged: {
+            userId: string;
+            xpGained: number;
+            games: number;
+            xpPerGame: number;
+            reasons: string[];
+        }[] = [];
+        for (const [userId, u] of perUser) {
+            const xpPerGame = u.games ? u.xp / u.games : 0;
+            const reasons: string[] = [];
+            if (u.games >= minGames) reasons.push(`${u.games} games`);
+            if (u.games >= 5 && xpPerGame >= farmThreshold)
+                reasons.push(`high XP/game (${Math.round(xpPerGame)})`);
+            if (reasons.length) {
+                flagged.push({
+                    userId,
+                    xpGained: Math.round(u.xp * 100) / 100,
+                    games: u.games,
+                    xpPerGame: Math.round(xpPerGame * 100) / 100,
+                    reasons,
+                });
+            }
+        }
+        flagged.sort((a, b) => b.xpGained - a.xpGained);
+        const xpSpikes = flagged.slice(0, 100);
+
+        // Resolve slug / username / ban state for the flagged accounts.
+        const userIds = xpSpikes.map((s) => s.userId);
+        const users = userIds.length
+            ? await db
+                  .select({
+                      id: usersTable.id,
+                      slug: usersTable.slug,
+                      username: usersTable.username,
+                      banned: usersTable.banned,
+                  })
+                  .from(usersTable)
+                  .where(inArray(usersTable.id, userIds))
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+
+        return c.json({
+            window: windowParam,
+            sharedIpGames: sharedIpGames.map((r) => ({
+                gameId: r.gameId,
+                ip: r.ip,
+                region: r.region,
+                joins: Number(r.joins),
+                accounts: Number(r.accounts),
+                names: r.names ?? [],
+                lastSeen: r.lastSeen,
+            })),
+            sharedIpAccounts: sharedIpAccounts.map((r) => ({
+                ip: r.ip,
+                isp: r.isp,
+                accounts: Number(r.accounts),
+                joins: Number(r.joins),
+                names: r.names ?? [],
+                lastSeen: r.lastSeen,
+            })),
+            xpSpikes: xpSpikes.map((s) => {
+                const u = userById.get(s.userId);
+                return {
+                    userId: s.userId,
+                    slug: u?.slug ?? null,
+                    username: u?.username || null,
+                    banned: u?.banned ?? false,
+                    xpGained: s.xpGained,
+                    games: s.games,
+                    xpPerGame: s.xpPerGame,
+                    reasons: s.reasons,
+                };
+            }),
+        });
+    })
+
+    /**
      * Returns the live player list for a specific running game.
      * Calls the game server via HTTP, which uses IPC to query the game process.
      */
@@ -1200,6 +2402,44 @@ export const ModerationDashboardRouter = new Hono<Context>()
         },
     )
 
+    /**
+     * Grants or revokes the limited "moderator" staff role (replays-only access to this
+     * dashboard). Admin-only — this route isn't in MODERATOR_ALLOWED_PATHS, so a
+     * moderator can't self-promote. Admins can't be demoted to moderator here.
+     */
+    .post(
+        "/api/account/moderator",
+        validateParams(
+            z.object({ slug: z.string().min(1), moderator: z.boolean() }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, moderator } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true, admin: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+            if (target.admin) return c.json({ error: "target_is_admin" }, 400);
+
+            await db
+                .update(usersTable)
+                .set({ moderator })
+                .where(eq(usersTable.id, target.id));
+
+            void logModerationAction(
+                moderator ? "🛡 Moderator added" : "🛡 Moderator removed",
+                [
+                    { name: "Account", value: slug },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x8888ff,
+            );
+            return c.json({ ok: true, moderator });
+        },
+    )
+
     /** Full account detail: identity (incl. discord id), per-pass XP, owned items grouped by source, recent matches. */
     .get("/api/account/:slug", async (c) => {
         const slug = c.req.param("slug");
@@ -1217,6 +2457,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 banned: true,
                 banReason: true,
                 admin: true,
+                moderator: true,
                 goldenFries: true,
                 userCreated: true,
             },
@@ -1282,6 +2523,192 @@ export const ModerationDashboardRouter = new Hono<Context>()
         });
     })
 
+    /**
+     * Golden Fries (GP) ledger for one account, for the account-detail "GP History".
+     * `?filter=earned` (amount > 0) or `?filter=spent` (amount < 0); default all.
+     * Totals are always over the full history so the summary is stable across filters.
+     */
+    .get("/api/account/:slug/gp", async (c) => {
+        const slug = c.req.param("slug");
+        const filter = c.req.query("filter") ?? "all";
+
+        const user = await db.query.usersTable.findFirst({
+            where: eq(usersTable.slug, slug),
+            columns: { id: true, slug: true, goldenFries: true },
+        });
+        if (!user) return c.json({ error: "not found" }, 404);
+
+        const amountCond =
+            filter === "earned"
+                ? sql`${goldenFriesLedgerTable.amount} > 0`
+                : filter === "spent"
+                  ? sql`${goldenFriesLedgerTable.amount} < 0`
+                  : undefined;
+
+        const [totals, entries] = await Promise.all([
+            db
+                .select({
+                    earned: sql<number>`coalesce(sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} > 0), 0)::int`,
+                    spent: sql<number>`coalesce(-sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} < 0), 0)::int`,
+                    count: sql<number>`count(*)::int`,
+                })
+                .from(goldenFriesLedgerTable)
+                .where(eq(goldenFriesLedgerTable.userId, user.id)),
+            db
+                .select({
+                    id: goldenFriesLedgerTable.id,
+                    amount: goldenFriesLedgerTable.amount,
+                    reason: goldenFriesLedgerTable.reason,
+                    balanceAfter: goldenFriesLedgerTable.balanceAfter,
+                    createdAt: goldenFriesLedgerTable.createdAt,
+                })
+                .from(goldenFriesLedgerTable)
+                .where(and(eq(goldenFriesLedgerTable.userId, user.id), amountCond))
+                .orderBy(desc(goldenFriesLedgerTable.createdAt))
+                .limit(500),
+        ]);
+
+        // For marketplace rows (reason "market:buy:<id>" / "market:sell:<id>") resolve
+        // the trade counterparty + item, so the history shows who the fries went to/from.
+        const marketIds: number[] = [];
+        for (const e of entries) {
+            const m = /^market:(?:buy|sell):(\d+)$/.exec(e.reason);
+            if (m) marketIds.push(Number(m[1]));
+        }
+        const marketById = new Map<
+            number,
+            {
+                type: string;
+                sellerSlug: string | null;
+                sellerName: string | null;
+                buyerSlug: string | null;
+                buyerName: string | null;
+            }
+        >();
+        if (marketIds.length) {
+            const listings = await db
+                .select({
+                    id: marketListingsTable.id,
+                    type: marketListingsTable.type,
+                    sellerId: marketListingsTable.sellerId,
+                    sellerSlug: marketListingsTable.sellerSlug,
+                    buyerId: marketListingsTable.buyerId,
+                })
+                .from(marketListingsTable)
+                .where(inArray(marketListingsTable.id, marketIds));
+
+            const partyIds = new Set<string>();
+            for (const l of listings) {
+                if (l.sellerId) partyIds.add(l.sellerId);
+                if (l.buyerId) partyIds.add(l.buyerId);
+            }
+            const partyRows = partyIds.size
+                ? await db
+                      .select({
+                          id: usersTable.id,
+                          slug: usersTable.slug,
+                          username: usersTable.username,
+                      })
+                      .from(usersTable)
+                      .where(inArray(usersTable.id, [...partyIds]))
+                : [];
+            const partyById = new Map(partyRows.map((p) => [p.id, p]));
+            for (const l of listings) {
+                const seller = l.sellerId ? partyById.get(l.sellerId) : undefined;
+                const buyer = l.buyerId ? partyById.get(l.buyerId) : undefined;
+                marketById.set(l.id, {
+                    type: l.type,
+                    sellerSlug: seller?.slug ?? l.sellerSlug ?? null,
+                    sellerName: seller?.username || seller?.slug || l.sellerSlug || null,
+                    buyerSlug: buyer?.slug ?? null,
+                    buyerName: buyer?.username || buyer?.slug || null,
+                });
+            }
+        }
+
+        // Which entries have already been reverted? A compensating `revert:<id>` row
+        // exists in this user's ledger for each reverted entry.
+        const revertRows = await db
+            .select({ reason: goldenFriesLedgerTable.reason })
+            .from(goldenFriesLedgerTable)
+            .where(
+                and(
+                    eq(goldenFriesLedgerTable.userId, user.id),
+                    sql`${goldenFriesLedgerTable.reason} LIKE 'revert:%'`,
+                ),
+            );
+        const revertedIds = new Set<number>();
+        for (const r of revertRows) {
+            const n = Number(r.reason.slice("revert:".length));
+            if (Number.isInteger(n)) revertedIds.add(n);
+        }
+        const isRevertableReason = (reason: string) =>
+            reason.startsWith("pass:") ||
+            reason.startsWith("shop:") ||
+            reason.startsWith("admin_grant") ||
+            /^market:(buy|sell):\d+$/.test(reason);
+
+        const entriesOut = entries.map((e) => {
+            const reverted = revertedIds.has(e.id);
+            const revertable = !reverted && isRevertableReason(e.reason);
+            const m = /^market:(buy|sell):(\d+)$/.exec(e.reason);
+            const info = m ? marketById.get(Number(m[2])) : undefined;
+            if (!m || !info) return { ...e, market: null, reverted, revertable };
+            const direction = m[1] as "buy" | "sell";
+            return {
+                ...e,
+                reverted,
+                revertable,
+                market: {
+                    direction,
+                    item: info.type,
+                    // Buyer's row → counterparty is the seller (fries went to them);
+                    // seller's row → counterparty is the buyer (fries came from them).
+                    counterpartySlug:
+                        direction === "buy" ? info.sellerSlug : info.buyerSlug,
+                    counterpartyName:
+                        direction === "buy" ? info.sellerName : info.buyerName,
+                },
+            };
+        });
+
+        const t = totals[0] ?? { earned: 0, spent: 0, count: 0 };
+        return c.json({
+            slug: user.slug,
+            userId: user.id,
+            balance: user.goldenFries ?? 0,
+            totalEarned: Number(t.earned),
+            totalSpent: Number(t.spent),
+            count: Number(t.count),
+            filter,
+            entries: entriesOut,
+        });
+    })
+
+    /**
+     * Reverts a single Golden Fries ledger entry (pass reward, shop buy, or market
+     * trade). Type-specific rollback lives in {@link revertLedgerEntry}; blocked with a
+     * clear code (e.g. `item_gone`, `already_reverted`) when it can't be done cleanly.
+     */
+    .post("/api/account/gp/:id/revert", async (c) => {
+        const admin = c.get("user")!;
+        const id = Number(c.req.param("id"));
+        if (!Number.isInteger(id)) return c.json({ error: "bad_id" }, 400);
+        try {
+            const res = await revertLedgerEntry(id, admin.slug);
+            void logModerationAction("↩️ Fries revert", [
+                { name: "Ledger #", value: String(id) },
+                { name: "Type", value: res.type },
+                { name: "Detail", value: res.detail },
+                { name: "By admin", value: adminTag(admin) },
+            ]);
+            return c.json({ ok: true, ...res });
+        } catch (e) {
+            const code = e instanceof RevertError ? e.code : "error";
+            return c.json({ error: code }, 400);
+        }
+    })
+
     /** Sets a pass's level + xp absolutely, then grants the corresponding unlocks. */
     .post(
         "/api/account/set-xp",
@@ -1304,38 +2731,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
             });
             if (!user) return c.json({ error: "account_not_found" }, 404);
 
-            // Derive the level from the (total) xp using the pass curve, so setting
-            // xp also sets the matching level.
-            const level = PassDefs[passType] ? getPassLevelAndXp(passType, xp).level : 0;
-
-            // Anchor the reconcile job at this admin value + time, so it won't
-            // re-count old matches but keeps accruing XP from new ones.
-            const now = new Date();
-            await db
-                .insert(userXpTable)
-                .values({
-                    userId: user.id,
-                    passType,
-                    level,
-                    xp: String(xp),
-                    reconcileBaseXp: String(xp),
-                    reconcileFrom: now,
-                })
-                .onConflictDoUpdate({
-                    target: [userXpTable.userId, userXpTable.passType],
-                    set: {
-                        level,
-                        xp: String(xp),
-                        reconcileBaseXp: String(xp),
-                        reconcileFrom: now,
-                        lastUpdated: now,
-                    },
-                });
-
-            // Bring owned pass items exactly in line with the derived level:
-            // grant everything up to it, take back anything above it.
-            const granted = await grantPassItems(user.id, passType, level);
-            const revoked = await revokePassItemsAbove(user.id, passType, level);
+            // One shared cascade: sets xp + derived level, anchors the reconcile so
+            // the value sticks, and lines up owned cosmetics AND Golden Fries.
+            const { level, granted, revoked, friesGranted, friesRevoked } =
+                await setPassXp(user.id, passType, xp);
 
             void logModerationAction(
                 "⭐ XP set",
@@ -1344,12 +2743,20 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     { name: "Pass", value: passType },
                     { name: "Level / XP", value: `${level} / ${xp}` },
                     { name: "Items +/-", value: `+${granted} / -${revoked}` },
+                    { name: "Fries +/-", value: `+${friesGranted} / -${friesRevoked}` },
                     { name: "By admin", value: adminTag(admin) },
                 ],
                 0x3355ee,
             );
 
-            return c.json({ ok: true, level, granted, revoked });
+            return c.json({
+                ok: true,
+                level,
+                granted,
+                revoked,
+                friesGranted,
+                friesRevoked,
+            });
         },
     )
 

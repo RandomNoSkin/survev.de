@@ -172,6 +172,16 @@ function generateDailyOffers(userId: string, day: string): ShopOffer[] {
     return offers;
 }
 
+/**
+ * The cosmetic types a given (user, day, slot) shop offer grants. Deterministic, so
+ * the moderation revert can identify which item instances a shop purchase created
+ * (they carry `source: "shop:<day>"`). Empty if the slot has no offer.
+ */
+export function shopOfferItemTypes(userId: string, day: string, slot: number): string[] {
+    const offer = generateDailyOffers(userId, day).find((o) => o.slot === slot);
+    return offer ? offer.items.map((it) => it.type) : [];
+}
+
 /** Today's shop for a user: offers (with `purchased` flags) + current balance. */
 export async function getShopForUser(userId: string): Promise<ShopResponse> {
     const day = serverDay();

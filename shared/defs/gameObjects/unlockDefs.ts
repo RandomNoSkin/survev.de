@@ -24,6 +24,9 @@ export const _allowedMeleeSkins = [
     "bayonet",
     "bayonet_rugged",
     "bayonet_woodland",
+    "wakizashi",
+    "wakizashi_rust",
+    "wakizashi_ninja",
     "bayonet_glow",
     "huntsman",
     "huntsman_rugged",
@@ -320,6 +323,14 @@ export const _allowedEmotes = [
     "emote_palm",
     "emote_smh",
     "emote_dove",
+    // pass_survivr3 space-themed emotes
+    "emote_saturn",
+    "emote_rocket",
+    "emote_ufo",
+    "emote_comet",
+    "emote_astrohelmet",
+    "emote_shootingstar",
+    "emote_blackhole",
 ];
 
 export interface UnlockDef {
@@ -501,6 +512,7 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "death_none",
             "death_basic"
 
+            
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,

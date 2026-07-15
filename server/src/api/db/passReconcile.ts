@@ -7,6 +7,37 @@ import { db } from "./index";
 import { grantPassItems } from "./passGrants";
 import { matchDataTable, userXpTable } from "./schema";
 
+/** map_id → MapDefs key (name), used to resolve boost events by map type. */
+const MAP_ID_TO_TYPE_NAME: Record<number, string> = Object.fromEntries(
+    Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
+);
+
+/**
+ * XP boost multiplier active for a given pass / map / time, or 1 if none applies.
+ * Single source of truth for the boost lookup, shared by the reconcile job and the
+ * moderation bott/un-bott revoke so the numbers match exactly.
+ */
+export function matchBoostMultiplier(
+    passType: string,
+    mapId: number,
+    createdAt: Date | string,
+): number {
+    const boostEvents = (GameConfig.serverSettings as any).xpBoostEvents?.[passType];
+    if (!boostEvents) return 1;
+    const mapTypeName = MAP_ID_TO_TYPE_NAME[mapId] ?? "";
+    const t = createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime();
+    for (const event of Object.values(boostEvents) as any[]) {
+        if (
+            t >= new Date(event.start).getTime() &&
+            t <= new Date(event.end).getTime() &&
+            event.maps.includes(mapTypeName)
+        ) {
+            return event.boost;
+        }
+    }
+    return 1;
+}
+
 /**
  * Full pass reconcile for ALL users across ALL passes: recomputes XP from match
  * data, grants any missing item unlocks, and backfills owed Golden Fries.
@@ -25,9 +56,6 @@ export async function reconcileAllPasses(): Promise<{
         string,
         { passMaxLevel: number; seasonStart: string; seasonEnd: string }
     >;
-    const mapIdToName = Object.fromEntries(
-        Object.entries(MapDefs).map(([name, def]) => [def.mapId, name]),
-    ) as Record<number, string>;
 
     let usersReconciled = 0;
     let totalXpAdded = 0;
@@ -74,6 +102,9 @@ export async function reconcileAllPasses(): Promise<{
                         eq(matchDataTable.userId, record.userId),
                         gte(matchDataTable.createdAt, windowStart),
                         lte(matchDataTable.createdAt, seasonEnd),
+                        // Exclude games a moderator voided (botted) so revoked XP
+                        // never re-accrues on reconcile.
+                        eq(matchDataTable.voided, false),
                     ),
                 )
                 .groupBy(matchDataTable.gameId)
@@ -81,40 +112,8 @@ export async function reconcileAllPasses(): Promise<{
 
             let correctXp = Number(record.reconcileBaseXp);
             for (const stat of stats) {
-                const mapDef = getMapDefById(stat.mapId);
-                const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
-                    kill: 0,
-                    damage: 0,
-                    win: 0,
-                    timeSurvived: 0,
-                };
-                const mapTypeName = mapIdToName[stat.mapId] ?? "";
-                const boostEvents = (GameConfig.serverSettings as any).xpBoostEvents?.[
-                    passType
-                ];
-                let boost = 1;
-                if (boostEvents) {
-                    const t =
-                        stat.createdAt instanceof Date
-                            ? stat.createdAt.getTime()
-                            : new Date(stat.createdAt).getTime();
-                    for (const event of Object.values(boostEvents) as any[]) {
-                        if (
-                            t >= new Date(event.start).getTime() &&
-                            t <= new Date(event.end).getTime() &&
-                            event.maps.includes(mapTypeName)
-                        ) {
-                            boost = event.boost;
-                            break;
-                        }
-                    }
-                }
-                let matchXp = 0;
-                matchXp += stat.kills * xpMultiplier.kill;
-                matchXp += stat.damage * xpMultiplier.damage;
-                matchXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
-                matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
-                correctXp += matchXp * boost;
+                const boost = matchBoostMultiplier(passType, stat.mapId, stat.createdAt);
+                correctXp += computeMatchXp(stat) * boost;
             }
             correctXp = Math.round(correctXp * 1e5) / 1e5;
 
@@ -171,6 +170,37 @@ function getPassLevelXp(passType: string, level: number): number {
     return levelIdx < passDef.xp.length
         ? passDef.xp[levelIdx]
         : passDef.xp[passDef.xp.length - 1];
+}
+
+/** Per-match XP stats, as aggregated (one row per game) from `match_data`. */
+export interface MatchXpStat {
+    kills: number;
+    damage: number;
+    timeAlive: number;
+    rank: number;
+    mapId: number;
+}
+
+/**
+ * Base XP a single match is worth, using the map's gameMode XP multipliers
+ * (kill / damage / win / timeSurvived). Boost events are intentionally NOT applied
+ * here — this is the deterministic, pass-independent intrinsic value of the match,
+ * used both by the full reconcile and by the moderation XP-gain report.
+ */
+export function computeMatchXp(stat: MatchXpStat): number {
+    const mapDef = getMapDefById(stat.mapId);
+    const xpMultiplier = mapDef?.gameMode?.xpMultiplier || {
+        kill: 0,
+        damage: 0,
+        win: 0,
+        timeSurvived: 0,
+    };
+    let matchXp = 0;
+    matchXp += stat.kills * xpMultiplier.kill;
+    matchXp += stat.damage * xpMultiplier.damage;
+    matchXp += (stat.rank === 1 ? 1 : 0) * xpMultiplier.win;
+    matchXp += stat.timeAlive * xpMultiplier.timeSurvived;
+    return matchXp;
 }
 
 export function getPassLevelAndXp(passType: string, passXp: number, passMaxLevel?: number) {

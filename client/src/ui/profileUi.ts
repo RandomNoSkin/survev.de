@@ -8,10 +8,23 @@ import { device } from "../device";
 import { helpers } from "../helpers";
 import { proxy } from "../proxy";
 import { SDK } from "../sdk/sdk";
+import { util } from "../../../shared/utils/util";
 import { playGoldenFriesUnlock } from "./goldenFriesFx";
 import type { LoadoutMenu } from "./loadoutMenu";
 import type { Localization } from "./localization";
 import { MenuModal } from "./menuModal";
+
+/**
+ * Builds the "remaining time" suffix shown under a ban notice. Returns a permanent
+ * hint when the ban never expires (expiresAt === null), a `Xd Yh Zm` countdown for a
+ * time-limited ban, or an empty string when no expiry info is available.
+ */
+function formatBanExpiry(expiresAt?: number | null): string {
+    if (expiresAt === null) return "<br/>This ban is permanent.";
+    if (typeof expiresAt !== "number") return "";
+    const remaining = util.msToShortDuration(expiresAt - Date.now());
+    return remaining ? `<br/>Time remaining: ${remaining}` : "";
+}
 
 function createLoginOptions(
     parentElem: JQuery<HTMLElement>,
@@ -373,7 +386,7 @@ export class ProfileUi {
         $(".account-block").toggle(loginSupported);
     }
 
-    onError(type: string, data?: string) {
+    onError(type: string, data?: string, expiresAt?: number | null) {
         const typeText = {
             server_error: "Operation failed, please try again later.",
             facebook_account_in_use:
@@ -384,7 +397,7 @@ export class ProfileUi {
                 "Failed linking Twitch account.<br/>Account already in use!",
             discord_account_in_use:
                 "Failed linking Discord account.<br/>Account already in use!",
-            account_banned: `Account banned: ${data}`,
+            account_banned: `Account banned: ${data}${formatBanExpiry(expiresAt)}`,
             login_failed: "Login failed.",
         };
         const text = typeText[type as keyof typeof typeText];

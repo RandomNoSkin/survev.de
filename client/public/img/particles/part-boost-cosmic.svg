@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 34 34" version="1.1">
+  <!-- Cosmic sparkle: black outline + shaded rim (grey) with a bright core (white).
+       Runtime tint (see ParticleDefs.boost_cosmic) multiplies the fill to an indigo/violet;
+       the black outline survives tinting, the grey rim reads as shading. -->
+  <path
+     d="M 17,2 L 19.47,14.53 L 32,17 L 19.47,19.47 L 17,32 L 14.53,19.47 L 2,17 L 14.53,14.53 Z"
+     fill="#c7c7cf"
+     stroke="#111114"
+     stroke-width="1.5"
+     stroke-linejoin="round" />
+  <path
+     d="M 17,6.5 L 18.73,15.27 L 27.5,17 L 18.73,18.73 L 17,27.5 L 15.27,18.73 L 6.5,17 L 15.27,15.27 Z"
+     fill="#ffffff"
+     stroke="none" />
+</svg>
