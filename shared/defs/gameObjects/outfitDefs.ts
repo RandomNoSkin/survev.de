@@ -1375,7 +1375,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xffffff,
+            tint: 0x000000,
         },
     }),
     outfitGalaxy: defineOutfitSkin("outfitBase", {
@@ -1414,7 +1414,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xffffff,
+            tint: 0xf8c137,
         },
     }),
     outfitRosepetals: defineOutfitSkin("outfitBase", {
@@ -1433,8 +1433,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
-            tint: 0xe78e8b,
+            sprite: "loot-shirt-outfitDiamondy.img",
+            tint: 0xffffff,
         },
     }),
     outfitGreenwheat: defineOutfitSkin("outfitBase", {
@@ -1499,7 +1499,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
     }),
 
-    outfitPurplefade: defineOutfitSkin("outfitBase", {
+    outfitPurplefade: defineOutfitSkin("outfitBase", {  
         noDropOnDeath: true,
         name: "Purple Fade",
         rarity: Rarity.Common,
@@ -1534,8 +1534,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-01.img",
-            tint: 0x929292,
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xbfcee4,
         },
     }),
 
@@ -1593,7 +1593,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0x282828,
+            tint: 0x000000,
         },
     }),
     outfitPanorama: defineOutfitSkin("outfitBase", {
@@ -1612,7 +1612,164 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xa4a4f2,
+            tint: 0x8e8ee8,
+        },
+    }),
+    outfitCrimson: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Crimson-Web",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitCrimson.img",
+            handTint: 0x5e0c0c,
+            handSprite: "player-hands-01.img",
+            footTint: 0x3f0808,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x3f0808,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x5e0c0c,
+        },
+    }),
+    outfitDemon: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Extrem demon ",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitDemon.img",
+            handTint: 0x5e0c0c,
+            handSprite: "player-hands-01.img",
+            footTint: 0x3f0808,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x3f0808,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x5e0c0c,
+        },
+    }),
+
+    outfitPinkwarrior: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xea899a,
+            baseSprite: "player-base-01.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-01.img",
+            footTint: 0xffffff,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xea899a,
+        },
+    }),
+
+    outfitYellowhero: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xf0ff14,
+            baseSprite: "player-base-02.img",
+            handTint: 0x7aff14,
+            handSprite: "player-hands-02.img",
+            footTint: 0xff9914,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0xff9914,
+            backpackSprite: "player-circle-base-02.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xff9914,
+        },
+    }),
+
+    outfitDarkslayed: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0x385b44,
+            baseSprite: "player-base-01.img",
+            handTint: 0x5b384f,
+            handSprite: "player-hands-01.img",
+            footTint: 0x2d4936,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x2d4936,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x5b384f,
+        },
+    }),
+
+    outfitBluebell: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xa49ad6,
+            baseSprite: "player-base-01.img",
+            handTint: 0xccd69a,
+            handSprite: "player-hands-01.img",
+            footTint: 0x796bc2,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x796bc2,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xa49ad6,
+        },
+    }),
+
+    outfitAegis: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0x2e36ce,
+            baseSprite: "player-base-01.img",
+            handTint: 0xcec62e,
+            handSprite: "player-hands-01.img",
+            footTint: 0xcec62e,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xcec62e,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x2e36ce,
+        },
+    }),
+    outfitUmbra: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0x380921,
+            baseSprite: "player-base-01.img",
+            handTint: 0x38090a,
+            handSprite: "player-hands-01.img",
+            footTint: 0x370938,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x370938,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x380921,
         },
     }),
     // Obstacle costumes
