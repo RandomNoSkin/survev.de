@@ -31796,6 +31796,14 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         loot_spawner_02: "loot_tier_scopes_sniper",
         mapDisplayType: "container_01",
     }),
+    container_07: createContainer({ //blitz container 
+        open: false,
+        tint: 0xaf4242,
+        ceilingSprite: "map-building-container-ceiling-01.img",
+        loot_spawner_01: "loot_tier_sv98",
+        loot_spawner_02: "loot_tier_scopes_sniper",
+        mapDisplayType: "container_01",
+    }),
     loot_tier_1: {
         type: "loot_spawner",
         loot: [tierLoot("tier_world", 1, 1)],

@@ -18,6 +18,17 @@ export interface OutfitDef {
         frontSprite?: string;
         frontSpritePos?: { x: number; y: number };
         aboveHand?: boolean;
+        // Vest rendered over skin accessoire, with adjustable transparency. Defaults to 0.5 on skins with frontSprite.
+        // Value between 0.0 and 1.0, where 0.0 is fully transparent and 1.0 is fully opaque.
+        vestOverlayTransparency?: number;
+        // For accessory skins where the vest ring is hard to make out (e.g. the
+        // very dark Village Ninja), list the worn vest levels that should get a
+        // contrasting outline — configured per skin AND per level. The outline
+        // colour is derived from the worn vest: light grey (level 2 colour) around
+        // the dark level 3/4 vests, black (level 3 colour) around the light level
+        // 1/2 vests. Examples: [3, 4] outlines only the dark vests; [2] only the
+        // level 2 vest.
+        chestInnerOutline?: number[];
     };
     lootImg: {
         sprite: string;
@@ -1167,6 +1178,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             footSprite: "player-feet-02.img",
             backpackTint: 0x404042,
             backpackSprite: "player-circle-base-01.img",
+            chestInnerOutline: [2],
         },
         lootImg: {
             sprite: "loot-shirt-outfitOhNah.img",
@@ -1176,7 +1188,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitMarblePink: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Pink",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitMarblePink.img",
@@ -1195,7 +1207,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitMarblegreen: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Green",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitMarbleGreen.img",
@@ -1214,7 +1226,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitMarblered: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Red",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitMarbleRed.img",
@@ -1252,7 +1264,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitAuronV2: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "AuronV2",
-        rarity: Rarity.Uncommon,
+        rarity: Rarity.Rare,
         lore: "The better version of a scraped skin",
         skinImg: {
             baseTint: 0xffffff,
@@ -1311,7 +1323,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitSortablue: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Sorta Blue",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         lore: "Pure and simple.",
         skinImg: {
             baseTint: 0xffffff,
@@ -1350,10 +1362,10 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitYinyang: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Yin & Yang",
-        rarity: Rarity.Common,
+        rarity: Rarity.Rare,
         skinImg: {
             baseTint: 0xffffff,
-            baseSprite: "player-base-outfityinyang.img",
+            baseSprite: "player-base-outfitYinyang.img",
             handTint: 0xffffff,
             handSprite: "player-hands-01.img",
             footTint: 0x000000,
@@ -1363,7 +1375,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xffffff,
+            tint: 0x000000,
         },
     }),
     outfitGalaxy: defineOutfitSkin("outfitBase", {
@@ -1402,7 +1414,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xffffff,
+            tint: 0xf8c137,
         },
     }),
     outfitRosepetals: defineOutfitSkin("outfitBase", {
@@ -1421,8 +1433,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
-            tint: 0xe78e8b,
+            sprite: "loot-shirt-outfitDiamondy.img",
+            tint: 0xffffff,
         },
     }),
     outfitGreenwheat: defineOutfitSkin("outfitBase", {
@@ -1487,10 +1499,10 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
     }),
 
-    outfitPurplefade: defineOutfitSkin("outfitBase", {
+    outfitPurplefade: defineOutfitSkin("outfitBase", {  
         noDropOnDeath: true,
         name: "Purple Fade",
-        rarity: Rarity.Uncommon,
+        rarity: Rarity.Common,
         lore: "The old Twitch skin",
         skinImg: {
             baseTint: 0xffffff,
@@ -1510,7 +1522,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitPandora: defineOutfitSkin("outfitBase", {
         noDrop: true,
         name: "Pandora",
-        rarity: Rarity.Common,
+        rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xbfcee4,
             baseSprite: "player-base-02.img",
@@ -1522,8 +1534,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-01.img",
-            tint: 0x929292,
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xbfcee4,
         },
     }),
 
@@ -1549,7 +1561,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitCrusader: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Crusader",
-        rarity: Rarity.Uncommon,
+        rarity: Rarity.Common,
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitCrusader.img",
@@ -1581,7 +1593,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0x282828,
+            tint: 0x000000,
         },
     }),
     outfitPanorama: defineOutfitSkin("outfitBase", {
@@ -1600,7 +1612,164 @@ const SkinDefs: Record<string, OutfitDef> = {
         },
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
-            tint: 0xa4a4f2,
+            tint: 0x8e8ee8,
+        },
+    }),
+    outfitCrimson: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Crimson-Web",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitCrimson.img",
+            handTint: 0x5e0c0c,
+            handSprite: "player-hands-01.img",
+            footTint: 0x3f0808,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x3f0808,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x5e0c0c,
+        },
+    }),
+    outfitDemon: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Extrem demon ",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitDemon.img",
+            handTint: 0x5e0c0c,
+            handSprite: "player-hands-01.img",
+            footTint: 0x3f0808,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x3f0808,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x5e0c0c,
+        },
+    }),
+
+    outfitPinkwarrior: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xea899a,
+            baseSprite: "player-base-01.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-01.img",
+            footTint: 0xffffff,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xea899a,
+        },
+    }),
+
+    outfitYellowhero: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xf0ff14,
+            baseSprite: "player-base-02.img",
+            handTint: 0x7aff14,
+            handSprite: "player-hands-02.img",
+            footTint: 0xff9914,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0xff9914,
+            backpackSprite: "player-circle-base-02.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xff9914,
+        },
+    }),
+
+    outfitDarkslayed: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0x385b44,
+            baseSprite: "player-base-01.img",
+            handTint: 0x5b384f,
+            handSprite: "player-hands-01.img",
+            footTint: 0x2d4936,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x2d4936,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x5b384f,
+        },
+    }),
+
+    outfitBluebell: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0xa49ad6,
+            baseSprite: "player-base-01.img",
+            handTint: 0xccd69a,
+            handSprite: "player-hands-01.img",
+            footTint: 0x796bc2,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x796bc2,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xa49ad6,
+        },
+    }),
+
+    outfitAegis: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0x2e36ce,
+            baseSprite: "player-base-01.img",
+            handTint: 0xcec62e,
+            handSprite: "player-hands-01.img",
+            footTint: 0xcec62e,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xcec62e,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x2e36ce,
+        },
+    }),
+    outfitUmbra: defineOutfitSkin("outfitBase", {
+        noDrop: true,
+        name: "Pink Warrior",
+        rarity: Rarity.Uncommon,
+        skinImg: {
+            baseTint: 0x380921,
+            baseSprite: "player-base-01.img",
+            handTint: 0x38090a,
+            handSprite: "player-hands-01.img",
+            footTint: 0x370938,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0x370938,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x380921,
         },
     }),
     // Obstacle costumes
@@ -1956,6 +2125,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSpritePos: { x: -2, y: 0 },
             frontSprite: "player-accessory-village-ninja.img",
             aboveHand: false,
+            vestOverlayTransparency: 0.9,
+            chestInnerOutline: [3, 4],
         },
         lootImg: {
             sprite: "loot-village-ninja-outfit.img",
@@ -2378,6 +2549,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-back-camo-deer.img",
             frontSpritePos: { x: 5, y: 0 },
             frontSprite: "player-accessory-camo-deer.img",
+            vestOverlayTransparency: 0.0,
         },
         lootImg: {
             sprite: "loot-camo-deer-outfit.img",
@@ -2447,6 +2619,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSpritePos: { x: 0, y: 0 },
             frontSprite: "player-accessory-meow.img",
             aboveHand: true,
+            vestOverlayTransparency: 0.7,
         },
         lootImg: {
             sprite: "loot-shirt-outfitMeow.img",

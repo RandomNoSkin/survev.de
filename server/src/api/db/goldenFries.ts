@@ -236,6 +236,74 @@ export async function reconcilePassGoldenFries(
     return totalAwarded;
 }
 
+/**
+ * Inverse of {@link reconcilePassGoldenFries}: revokes pass Golden Fries for reward
+ * levels ABOVE `level` (used when a moderator lowers a player's XP, e.g. voiding a
+ * botted game). Deducts the summed amount from the balance AND deletes the per-level
+ * `pass:<pass>:level:<lvl>` ledger rows — the latter is essential so the idempotency
+ * lock is released and a later legitimate re-level (or an un-bott) can pay the fries
+ * out again via {@link reconcilePassGoldenFries}. A single negative audit row records
+ * the deduction. Returns the total revoked (0 if nothing was owed). Balance is clamped
+ * at 0 so a player who already spent the fries can't go negative.
+ */
+export async function revokePassGoldenFriesAbove(
+    userId: string,
+    passType: string,
+    level: number,
+): Promise<number> {
+    const passDef = PassDefs[passType];
+    if (!passDef) return 0;
+
+    const above = passDef.items.filter(
+        (item) => item.item === "golden_fries" && item.level > level,
+    );
+    if (above.length === 0) return 0;
+
+    const reasons = above.map((r) => passFriesReason(passType, r.level));
+
+    return db.transaction(async (tx) => {
+        // Which of these reward levels were actually paid out (have a ledger row)?
+        const existing = await tx
+            .select({ amount: goldenFriesLedgerTable.amount })
+            .from(goldenFriesLedgerTable)
+            .where(
+                and(
+                    eq(goldenFriesLedgerTable.userId, userId),
+                    inArray(goldenFriesLedgerTable.reason, reasons),
+                ),
+            );
+        const total = existing.reduce((sum, e) => sum + e.amount, 0);
+        if (total <= 0) return 0;
+
+        // Drop the per-level markers so the idempotency lock is released.
+        await tx
+            .delete(goldenFriesLedgerTable)
+            .where(
+                and(
+                    eq(goldenFriesLedgerTable.userId, userId),
+                    inArray(goldenFriesLedgerTable.reason, reasons),
+                ),
+            );
+
+        // Deduct from the balance (clamped at 0) and record the revoke for audit.
+        const [row] = await tx
+            .update(usersTable)
+            .set({ goldenFries: sql`GREATEST(0, ${usersTable.goldenFries} - ${total})` })
+            .where(eq(usersTable.id, userId))
+            .returning({ balance: usersTable.goldenFries });
+        const balanceAfter = row?.balance ?? 0;
+
+        await tx.insert(goldenFriesLedgerTable).values({
+            userId,
+            amount: -total,
+            reason: `revoke_pass_fries:${passType}:above:${level}`,
+            balanceAfter,
+        });
+
+        return total;
+    });
+}
+
 /** Idempotently grants the welcome Golden Fries to one user (no-op if already granted or disabled). */
 export async function awardWelcomeGoldenFries(userId: string): Promise<number> {
     if (WELCOME_GOLDEN_FRIES <= 0) return 0;

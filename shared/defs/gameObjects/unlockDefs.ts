@@ -16,16 +16,30 @@ export const _allowedMeleeSkins = [
     "karambit_drowned",
     "karambit_fade",
     "karambit_dotexe",
+    "karambit_woodland",
+    "karambit_rust",
+    "karambit_case_hardened",
+    "karambit_ice",
     "bayonet_fade",
     "bayonet",
     "bayonet_rugged",
     "bayonet_woodland",
+    "wakizashi",
+    "wakizashi_rust",
+    "wakizashi_ninja",
+    "bayonet_glow",
     "huntsman",
     "huntsman_rugged",
     "huntsman_burnished",
+    "huntsman_blackwater",
+    "huntsman_ice",
+    "huntsman_pink",
+    "huntsman_purple",
     "bowie",
     "bowie_vintage",
     "bowie_frontier",
+    "bowie_redtiger",
+    "bowie_ice",
 ];
 export const _allowedOutfits = [
     "outfitBase",
@@ -99,6 +113,15 @@ export const _allowedOutfits = [
     "outfitDiamondred",
     "outfitPanorama",
     "outfitNordCode",
+    "outfitCrimson",
+    "outfitDemon",
+    "outfitPinkwarrior",
+    "outfitYellowhero",
+    "outfitDarkslayed",
+    "outfitBluebell",
+    "outfitAegis",
+    "outfitUmbra",
+
     // resurviv skin accessories
     "outfitSnowman",
     "outfitChewieCheese",
@@ -215,6 +238,7 @@ export const _allowedEmotes = [
     "emote_logoswine",
     "emote_logohydra",
     "emote_logostorm",
+    "emote_logocult",
     "emote_flaghonduras",
     "emote_logocaduceus",
     "emote_impface",
@@ -297,6 +321,16 @@ export const _allowedEmotes = [
     "emote_flamingo",
     "emote_watermelon",
     "emote_palm",
+    "emote_smh",
+    "emote_dove",
+    // pass_survivr3 space-themed emotes
+    "emote_saturn",
+    "emote_rocket",
+    "emote_ufo",
+    "emote_comet",
+    "emote_astrohelmet",
+    "emote_shootingstar",
+    "emote_blackhole",
 ];
 
 export interface UnlockDef {
@@ -478,6 +512,7 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "death_none",
             "death_basic"
 
+            
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,

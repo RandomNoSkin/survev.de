@@ -404,4 +404,22 @@ export const util = {
         const dayInMs = 24 * 60 * 60 * 1000;
         return days * dayInMs;
     },
+
+    /**
+     * Compact "Xd Yh Zm" for a positive millisecond span, keeping only the non-zero
+     * units (minute resolution, rounded up). Returns "" for spans <= 0. Used for the
+     * "time remaining" hints on ban notices.
+     */
+    msToShortDuration(ms: number) {
+        if (ms <= 0) return "";
+        const totalMin = Math.ceil(ms / 60000);
+        const d = Math.floor(totalMin / 1440);
+        const h = Math.floor((totalMin % 1440) / 60);
+        const m = totalMin % 60;
+        const parts: string[] = [];
+        if (d) parts.push(`${d}d`);
+        if (h) parts.push(`${h}h`);
+        if (m) parts.push(`${m}m`);
+        return parts.join(" ");
+    },
 };

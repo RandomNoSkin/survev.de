@@ -242,14 +242,17 @@ export class Account {
             if (err) {
                 errorLogManager.storeGeneric("account", "load_profile_error");
             } else if (data.banned) {
-                this.emit("error", "account_banned", data.reason);
+                this.emit("error", "account_banned", data.reason, data.expiresAt);
             } else if (data.success) {
                 this.loggedIn = true;
                 this.profile = data.profile;
                 this.items = data.items;
                 this.myListings = data.listings ?? [];
                 this.sales = data.sales ?? [];
-                this.loadout = data.loadout;
+                // Validate the server loadout so older accounts (saved before newer
+                // loadout fields like death_effect existed) get the missing fields
+                // filled in — otherwise joining serializes an undefined game type.
+                this.loadout = loadouts.validate(data.loadout);
                 const profile = this.config.get("profile") || { slug: "" };
                 profile.slug = data.profile.slug;
                 this.config.set("profile", profile);
@@ -367,7 +370,10 @@ export class Account {
             // new status and keep re-triggering setItemsAckd/setItemStatus.
             for (const item of this.items) {
                 if (itemTypes.includes(item.type)) {
-                    item.status = Math.max(item.status ?? loadouts.ItemStatus.New, status);
+                    item.status = Math.max(
+                        item.status ?? loadouts.ItemStatus.New,
+                        status,
+                    );
                 }
             }
 
@@ -467,19 +473,15 @@ export class Account {
     }
 
     buyShopOffer(slot: number, cb: (err: unknown, res?: BuyShopResponse) => void) {
-        this.ajaxRequest(
-            "/api/user/shop/buy",
-            { slot },
-            (err, res: BuyShopResponse) => {
-                if (err) {
-                    errorLogManager.storeGeneric("account", "buy_shop_error");
-                } else if (res.success) {
-                    // Refresh balance + inventory after a purchase.
-                    this.loadProfile();
-                }
-                cb(err, res);
-            },
-        );
+        this.ajaxRequest("/api/user/shop/buy", { slot }, (err, res: BuyShopResponse) => {
+            if (err) {
+                errorLogManager.storeGeneric("account", "buy_shop_error");
+            } else if (res.success) {
+                // Refresh balance + inventory after a purchase.
+                this.loadProfile();
+            }
+            cb(err, res);
+        });
     }
 
     //

@@ -200,6 +200,15 @@ export class Player implements AbstractObject {
     steelskinSprite = createSprite();
     helmetSprite = createSprite();
     visorSprite = createSprite();
+    // Halbtransparente Westen-Kopie, die über dem Accessoire (frontSprite) liegt,
+    // damit das Westen-Level an verdeckten Stellen mit 50% durchscheint.
+    chestOverlaySprite = createSprite();
+    // Zwei dünne graue Ring-Kopien (Level-2-Farbe), die knapp innen bzw. außen
+    // hinter der schwarzen Weste liegen und sie so als Rand einfassen. Nur für
+    // sehr dunkle Accessoire-Skins (chestInnerOutline), damit dunkle L3/L4-Westen
+    // erkennbar bleiben.
+    chestOutlineInnerSprite = createSprite();
+    chestOutlineOuterSprite = createSprite();
     backpackSprite = createSprite();
     handLSprite = createSprite();
     handRSprite = createSprite();
@@ -427,6 +436,13 @@ export class Player implements AbstractObject {
         this.bodyContainer.addChild(this.handRContainer);
         this.bodyContainer.addChild(this.visorSprite);
         this.bodyContainer.addChild(this.helmetSprite);
+        // Halbtransparente Westen-Kopie; wird in updateVisuals dynamisch über das
+        // Accessoire, aber unter die Hände einsortiert.
+        this.bodyContainer.addChild(this.chestOverlaySprite);
+        // Graue Westen-Rand-Ringe; werden in updateVisuals direkt unter die
+        // schwarze Westen-Kopie einsortiert, damit sie nur als Rand hervorschauen.
+        this.bodyContainer.addChild(this.chestOutlineOuterSprite);
+        this.bodyContainer.addChild(this.chestOutlineInnerSprite);
 
         this.container.addChild(this.bodyContainer);
 
@@ -1576,6 +1592,9 @@ export class Player implements AbstractObject {
         // Chest
         if (this.m_netData.m_chest == "" || outfitDef.ghillie) {
             this.chestSprite.visible = false;
+            this.chestOverlaySprite.visible = false;
+            this.chestOutlineInnerSprite.visible = false;
+            this.chestOutlineOuterSprite.visible = false;
         } else {
             const chestDef = GameObjectDefs[this.m_netData.m_chest] as ChestDef;
             const chestSkin = chestDef.skinImg;
@@ -1583,6 +1602,58 @@ export class Player implements AbstractObject {
             this.chestSprite.scale.set(0.25, 0.25);
             this.chestSprite.tint = chestSkin.baseTint;
             this.chestSprite.visible = true;
+
+            // Bei Accessoire-Skins verdeckt der frontSprite die Weste. Eine
+            // halbtransparente Kopie über dem Accessoire lässt das Westen-Level
+            // dort durchscheinen; an unverdeckten Stellen liegt sie deckungsgleich
+            // auf der vollen Weste und ändert die Optik nicht.
+            if (outfitImg.frontSprite) {
+                this.chestOverlaySprite.texture = PIXI.Texture.from(chestSkin.baseSprite);
+                this.chestOverlaySprite.scale.set(0.25, 0.25);
+                this.chestOverlaySprite.tint = chestSkin.baseTint;
+                this.chestOverlaySprite.alpha = outfitImg.vestOverlayTransparency ?? 0.5;
+                this.chestOverlaySprite.visible = true;
+            } else {
+                this.chestOverlaySprite.visible = false;
+            }
+
+            // Accessoire-Skins, bei denen der Westen-Ring auf dem dunklen Body
+            // untergeht (z. B. Village Ninja): pro Skin ist per Level-Liste
+            // festgelegt, welche getragene Weste einen Rand bekommt. Zwei dünne
+            // Ringe knapp außerhalb/innerhalb fassen die Weste als schmaler Rand
+            // ein. Die Randfarbe hängt von der getragenen Weste ab: dunkle Westen
+            // (L3/L4) bekommen einen hellen grauen Rand (L2-Farbe), helle Westen
+            // (L1/L2) ihre eigene Westenfarbe um 20 % aufgehellt. Der Ring ist ein
+            // Kreisband, daher braucht es je einen Ring pro Kante.
+            if (outfitImg.chestInnerOutline?.includes(chestDef.level)) {
+                let outlineTint: number;
+                if (chestDef.level >= 3) {
+                    outlineTint = (GameObjectDefs.chest02 as ChestDef).skinImg.baseTint;
+                } else {
+                    // Eigene Westenfarbe pro Kanal um 20 % aufhellen (auf 0–255
+                    // geclamped), damit der Rand die helle Weste abhebt.
+                    const c = util.intToRgb(chestSkin.baseTint);
+                    outlineTint = util.rgbToInt({
+                        r: math.clamp(Math.round(c.r * 2), 0, 255),
+                        g: math.clamp(Math.round(c.g * 2), 0, 255),
+                        b: math.clamp(Math.round(c.b * 2), 0, 255),
+                    });
+                }
+                for (const [sprite, scale] of [
+                    [this.chestOutlineOuterSprite, 0.26],
+                    [this.chestOutlineInnerSprite, 0.24],
+                ] as const) {
+                    sprite.texture = PIXI.Texture.from(chestSkin.baseSprite);
+                    sprite.position.set(0, 0);
+                    sprite.scale.set(scale, scale);
+                    sprite.tint = outlineTint;
+                    sprite.alpha = 1;
+                    sprite.visible = true;
+                }
+            } else {
+                this.chestOutlineInnerSprite.visible = false;
+                this.chestOutlineOuterSprite.visible = false;
+            }
         }
 
         // Steelskin
@@ -1833,15 +1904,62 @@ export class Player implements AbstractObject {
             this.frontSprite.tint = 0xffffff;
             this.frontSprite.visible = true;
 
+            // Wunsch-Position relativ zu den Händen (aboveHand: über, sonst unter).
             const handL = this.bodyContainer.getChildIndex(this.handLContainer);
             const handR = this.bodyContainer.getChildIndex(this.handRContainer);
-            const target = outfitImg.aboveHand
+            const preferred = outfitImg.aboveHand
                 ? math.max(handL, handR) + 1
                 : math.min(handL, handR) - 1;
-            const clamped = math.clamp(target, 0, this.bodyContainer.children.length - 1);
-            this.bodyContainer.setChildIndex(this.frontSprite, clamped);
+
+            // Das Accessoire in ein gültiges Band zwingen: immer über dem Body
+            // (sonst verschwindet es hinter dem Body, wenn die Hände beim Downen
+            // an den Boden des Containers wandern) und immer unter Helm/Visor
+            // (sonst verdeckt ein aboveHand-Accessoire den Helm, sobald eine
+            // Waffe eine Hand über die Kopf-Ebene schiebt).
+            const bodyIdx = this.bodyContainer.getChildIndex(this.bodySprite);
+            const visorIdx = this.bodyContainer.getChildIndex(this.visorSprite);
+            const helmetIdx = this.bodyContainer.getChildIndex(this.helmetSprite);
+            const lowerBound = bodyIdx + 1;
+            const upperBound = math.min(visorIdx, helmetIdx) - 1;
+            const target = math.clamp(
+                preferred,
+                lowerBound,
+                math.max(lowerBound, upperBound),
+            );
+            this.bodyContainer.setChildIndex(this.frontSprite, target);
         } else {
             this.frontSprite.visible = false;
+        }
+
+        // Halbtransparente Westen-Kopie direkt über das Accessoire legen (die
+        // Weste scheint über dem Accessoire durch). Dadurch liegt sie automatisch
+        // über dem Body und unter den Händen – auch im downed-Zustand, in dem die
+        // Hände an den Boden des Containers wandern (erst entfernen, dann den
+        // Accessoire-Index bestimmen, dann direkt darüber einfügen).
+        if (this.chestOverlaySprite.visible && !outfitImg.aboveHand) {
+            this.bodyContainer.removeChild(this.chestOverlaySprite);
+            const frontIdx = this.bodyContainer.getChildIndex(this.frontSprite);
+            this.bodyContainer.addChildAt(this.chestOverlaySprite, frontIdx + 1);
+        }
+
+        // Die Rand-Ringe direkt UNTER die oberste sichtbare Westen-Ebene legen,
+        // damit diese ihre Mitte verdeckt und die Randfarbe nur als schmaler Rand
+        // innen/außen hervorschaut. Bei Accessoire-Skins ist das die Westen-Kopie
+        // über dem Accessoire, bei normalen Skins die echte Weste (chestSprite) —
+        // ohne diese verdeckende Ebene würden sich die zwei Ringe zur vollen
+        // (schwarzen) Weste überlagern.
+        const outlineRef = outfitImg.frontSprite
+            ? this.chestOverlaySprite
+            : this.chestSprite;
+        for (const sprite of [
+            this.chestOutlineOuterSprite,
+            this.chestOutlineInnerSprite,
+        ]) {
+            if (sprite.visible && !outfitImg.aboveHand) {
+                this.bodyContainer.removeChild(sprite);
+                const refIdx = this.bodyContainer.getChildIndex(outlineRef);
+                this.bodyContainer.addChildAt(sprite, refIdx);
+            }
         }
 
         this.bodyContainer.scale.set(bodyScale, bodyScale);

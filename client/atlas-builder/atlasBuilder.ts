@@ -56,8 +56,8 @@ export type ImgCache = Record<
 >;
 
 // increment every time logic that may change the output is done
-// so it invalidates old cache
-const ATLAS_HASH_VERSION = 1;
+// so it invalidates old cache (both the per-image PNG cache and the atlas cache)
+const ATLAS_HASH_VERSION = 2;
 
 export class ImageManager {
     private cache: ImgCache = {};
@@ -238,7 +238,9 @@ export class AtlasManager {
             const data = fs.readFileSync(imagePath);
 
             const scale = scaledSprites[file] ?? 1;
-            const hash = `${hashBuff(data)}-${100 * scale}`;
+            // Include the version so a builder-logic change re-renders every image
+            // (otherwise unchanged source files keep their stale cached PNGs).
+            const hash = `${hashBuff(data)}-${100 * scale}-${ATLAS_HASH_VERSION}`;
 
             if (
                 this.imageCache.get(file)?.hash !== hash ||

@@ -71,16 +71,19 @@ export class GameModeManager {
 
         switch (this.mode) {
             case GameMode.Solo: {
-                return players
-                    .sort((a, b) => {
-                        return b.killedIndex - a.killedIndex;
-                    })
-                    .map((player, idx) => {
-                        return {
-                            player,
-                            rank: player.spectator ? 999 : idx + 1,
-                        };
-                    });
+                // Rank only real participants. Spectators must NOT take up a rank slot:
+                // a mid-game spectator has killedIndex = Infinity, so it sorts to the
+                // front (next to the winner) and would shift every dead player's
+                // placement down by the number of spectators. Rank the participants,
+                // then append spectators with the sentinel 999 (same as team/faction).
+                const ranked = players
+                    .filter((player) => !player.spectator)
+                    .sort((a, b) => b.killedIndex - a.killedIndex)
+                    .map((player, idx) => ({ player, rank: idx + 1 }));
+                for (const player of players) {
+                    if (player.spectator) ranked.push({ player, rank: 999 });
+                }
+                return ranked;
             }
             case GameMode.Team:
             case GameMode.Faction: {

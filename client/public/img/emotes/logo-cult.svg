@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="128" height="128">
+  <!-- black hexagon (flat-top) with white outline -->
+  <polygon points="100,40 300,40 400,200 300,360 100,360 0,200" fill="#0d0d0d" stroke="#ffffff" stroke-width="14" stroke-linejoin="round"/>
+  <!-- white circle in the middle -->
+  <circle cx="200" cy="200" r="120" fill="#ffffff"/>
+  <!-- eye symbol (black) -->
+  <g transform="translate(200,200) scale(0.78)">
+    <g stroke="#0d0d0d" stroke-width="14" stroke-linecap="round" fill="none">
+      <path d="M -95 0 Q 0 -68 95 0 Q 0 68 -95 0 Z"/>
+      <path d="M -95 0 L -125 -28"/>
+      <path d="M -95 0 L -125 28"/>
+      <path d="M 95 0 L 125 -28"/>
+      <path d="M 95 0 L 125 28"/>
+    </g>
+    <circle cx="0" cy="0" r="22" fill="#0d0d0d"/>
+    <circle cx="0" cy="-90" r="13" fill="#0d0d0d"/>
+    <circle cx="0" cy="90" r="13" fill="#0d0d0d"/>
+  </g>
+</svg>
