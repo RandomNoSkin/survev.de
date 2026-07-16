@@ -17,10 +17,10 @@
     <meta name="keywords" content="survev, resurviv, survivio, surviv, 2d battle royale, io, battle royale browser game, 2d battlegrounds, battlegrounds, battleroyale, battle, royale, browser game, br, survival, game, web game, multiplayer">
     <meta property="og:type" content="website">
     <meta property="og:title" content="survev.de">
-    <meta property="og:url" content="http://survev.de/">
+    <meta property="og:url" content="https://survev.de/">
     <meta property="og:site_name" content="survev.de">
     <meta content="https://survev.io/img/survev_title.png" property="og:image">
-    <link rel="canonical" href="http://survev.de" />
+    <link rel="canonical" href="https://survev.de" />
     <link rel="apple-touch-icon-precomposed" href="img/icon_app.png">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
 
@@ -707,7 +707,10 @@
               <div class="golden-fries-icon"></div>
               <span id="golden-fries-amount">0</span>
             </div>
-            <div id="golden-fries-shop-btn" class="golden-fries-shop-btn" style="display:none" title="Shop">Shop</div>
+            <div id="golden-fries-shop-btn" class="golden-fries-shop-btn" style="display:none" title="Shop">
+              <div id="shop-btn-alert" class="account-alert-main account-alert"></div>
+              <span>Shop</span>
+            </div>
             <a id="btn-discord-top-right" style="display: none;" href="https://discord.gg/4mWfwvSKar" target="_blank" class="btn-social btn-darken btn-discord"></a>
           </div>
           <div id="start-top-left-desktop">
@@ -844,6 +847,10 @@
             </div>
             <div class="account-overview">
               <div class="account-details-user account-details-block">
+                <div id="btn-social" class="account-social-btn" style="display:none" title="Social">
+                  <div id="social-alert-main" class="account-alert-main account-alert"></div>
+                  <span data-l10n="index-social">Social</span>
+                </div>
                 <div class="account-details">
                   <div class="account-avatar"></div>
                   <div id="account-login" class="account-player-name account-name account-name-user" data-l10n="index-log-in-desc">Log In / Create Account</div>
@@ -1399,6 +1406,7 @@
         <div id="modal-customize-wrapper" class="modal-close">
           <div id="modal-content-left" class="modal-content-shadow">
             <div id="modal-customize-cat-title"></div>
+            <input id="modal-customize-search" class="customize-search" type="text" placeholder="Search…" autocomplete="off" />
             <div id="modal-customize-sort-wrap">
               <select id="modal-customize-sort">
                 <option id="customize-sort-newest" value="newest" data-l10n="loadout-newest">Newest</option>
@@ -1423,8 +1431,27 @@
                 </div>
               </div>
               <div id="modal-customize-list"></div>
+              <div id="loadout-settings-panel" style="display:none">
+                <div class="loadout-settings-title">Account Settings</div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Disable offers</div>
+                    <div class="loadout-setting-desc">Other players can't make buy-offers on your items.</div>
+                  </div>
+                  <div id="setting-offers-disabled" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Private loadout</div>
+                    <div class="loadout-setting-desc">Hide your loadout on the stats &amp; advanced game stats pages.</div>
+                  </div>
+                  <div id="setting-loadout-private" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div id="loadout-settings-status" class="loadout-settings-status"></div>
+              </div>
             </div>
             <div id="modal-customize-footer" class="modal-footer modal-footer-round">
+              <div id="loadout-value-bar" class="loadout-value-bar"></div>
               <div id="modal-customize-item-source"></div>
               <div id="modal-customize-item-lore"></div>
             </div>
@@ -1461,6 +1488,10 @@
               <div class="detail-section">
                 <div class="detail-label">Acquired</div>
                 <div id="detail-item-source" class="detail-value"></div>
+              </div>
+              <div class="detail-section">
+                <div class="detail-label">Value</div>
+                <div id="detail-item-value" class="detail-value detail-value-worth"></div>
               </div>
               <div class="detail-section">
                 <div class="detail-label">Ownership</div>
@@ -1707,21 +1738,30 @@
             <span class="close close-corner"></span>
           </div>
           <div class="shop-tabs">
-            <div class="shop-tab shop-tab-active" data-shop-tab="daily">Daily</div>
-            <div class="shop-tab" data-shop-tab="market">Market</div>
-            <div id="shop-reset-timer" class="shop-reset-timer">
-              <span class="shop-reset-timer-label">Resets in</span>
-              <span id="shop-reset-timer-value" class="shop-reset-timer-value">--:--:--</span>
-            </div>
+            <div class="shop-tab shop-tab-active" data-shop-tab="daily">Deals<span id="shop-daily-dot" class="tab-dot"></span></div>
+            <div class="shop-tab" data-shop-tab="market">Market<span id="shop-market-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-shop-tab="auction">Auction<span id="shop-auction-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-shop-tab="owners">Owners</div>
           </div>
           <div class="modal-body shop-body">
             <div id="shop-daily-offers" class="shop-offers"></div>
+            <div id="shop-owners" style="display:none">
+              <div class="market-toolbar">
+                <input id="owners-item-search" class="market-search" type="text" placeholder="Pick an item…" autocomplete="off" />
+                <input id="owners-user-search" class="market-search" type="text" placeholder="Filter owners by name" autocomplete="off" />
+              </div>
+              <div id="owners-item-suggestions" class="owners-suggestions" style="display:none"></div>
+              <div id="owners-selected" class="owners-selected" style="display:none"></div>
+              <div id="owners-list" class="shop-offers owners-list"></div>
+              <div id="owners-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
+            </div>
             <div id="shop-market" style="display:none">
               <div class="market-toolbar">
                 <div class="market-subtabs">
                   <div id="market-tab-browse" class="market-subtab market-subtab-active">Browse</div>
-                  <div id="market-tab-private" class="market-subtab">Private</div>
+                  <div id="market-tab-private" class="market-subtab">Private<span id="market-private-badge" class="tab-badge"></span></div>
                   <div id="market-tab-mine" class="market-subtab">My Listings</div>
+                  <div id="market-tab-offers" class="market-subtab">Offers<span id="market-offers-badge" class="tab-badge"></span></div>
                 </div>
                 <input id="market-search" class="market-search" type="text" placeholder="Search name / source / owner" />
                 <select id="market-category-filter" class="market-select">
@@ -1730,6 +1770,7 @@
                   <option value="melee">Melee</option>
                   <option value="emote">Emotes</option>
                   <option value="particle">Particles</option>
+                  <option value="death_effect">Death Effects</option>
                 </select>
                 <select id="market-rarity-filter" class="market-select">
                   <option value="">All rarities</option>
@@ -1743,7 +1784,51 @@
               <div id="market-storefront-banner" class="market-storefront-banner" style="display:none"></div>
               <div id="market-listings" class="shop-offers market-listings"></div>
               <div id="market-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
+              <div id="market-offers" class="market-offers" style="display:none"></div>
             </div>
+            <div id="shop-auction" style="display:none">
+              <div class="market-toolbar">
+                <select id="auction-category-filter" class="market-select">
+                  <option value="">All categories</option>
+                  <option value="outfit">Skins</option>
+                  <option value="melee">Melee</option>
+                  <option value="emote">Emotes</option>
+                  <option value="particle">Particles</option>
+                  <option value="death_effect">Death Effects</option>
+                </select>
+                <select id="auction-rarity-filter" class="market-select">
+                  <option value="">All rarities</option>
+                  <option value="1">Common</option>
+                  <option value="2">Uncommon</option>
+                  <option value="3">Rare</option>
+                  <option value="4">Epic</option>
+                  <option value="5">Mythic</option>
+                </select>
+                <div id="auction-create-btn" class="auction-new-btn menu-option btn-darken">+ New auction</div>
+              </div>
+              <div id="auction-listings" class="shop-offers market-listings"></div>
+              <div id="auction-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="modal-auction-create" class="modal">
+        <div class="modal-content market-sell-content">
+          <div class="modal-header shop-header">
+            <h2>Create auction</h2>
+            <span class="close close-corner"></span>
+          </div>
+          <div class="modal-body market-sell-body">
+            <div id="auction-create-picker" class="auction-picker" style="display:none"></div>
+            <div id="auction-create-name" class="market-sell-name"></div>
+            <div class="market-sell-row">
+              <label for="auction-min-bid">Min bid</label>
+              <input id="auction-min-bid" class="market-sell-price" type="number" min="1" />
+              <div class="shop-fries-icon"></div>
+            </div>
+            <div class="market-sell-hint">Runs up to 24 hours. You can end it early — the highest bidder then wins.</div>
+            <div id="auction-create-error" class="market-sell-error"></div>
+            <div id="auction-create-confirm" class="shop-buy-btn menu-option btn-darken">Start auction</div>
           </div>
         </div>
       </div>
@@ -1769,6 +1854,87 @@
             <div class="market-sell-hint">Leave empty to list publicly for everyone.</div>
             <div id="market-sell-error" class="market-sell-error"></div>
             <div id="market-sell-confirm" class="shop-buy-btn menu-option btn-darken">List for sale</div>
+          </div>
+        </div>
+      </div>
+      <div id="modal-social" class="modal">
+        <div class="modal-content">
+          <div class="modal-header shop-header">
+            <h2>Social</h2>
+            <span class="close close-corner"></span>
+          </div>
+          <div class="shop-tabs social-tabs">
+            <div class="shop-tab shop-tab-active" data-social-tab="gift">Social Hub</div>
+            <div class="shop-tab" data-social-tab="friends">Friends<span id="social-friends-tab-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-social-tab="clans">Clans</div>
+          </div>
+          <div class="modal-body shop-body">
+            <div id="social-gift">
+              <div id="social-search-view">
+                <input id="social-user-search" class="market-search" type="text" placeholder="Search a player…" autocomplete="off" />
+                <div id="social-search-results" class="social-search-results"></div>
+              </div>
+              <div id="social-fries-view" style="display:none">
+                <div class="social-subhead">
+                  <span id="social-fries-back" class="social-back">← Back</span>
+                  <span class="social-subhead-title">Gift Golden Fries to <b id="social-fries-target"></b></span>
+                  <span id="social-fries-balance" class="social-balance"></span>
+                </div>
+                <div class="social-fries-row">
+                  <input id="social-fries-amount" class="market-sell-price" type="number" min="1" placeholder="Amount" />
+                  <div class="shop-fries-icon"></div>
+                  <div id="social-fries-send" class="shop-buy-btn menu-option btn-darken">Send</div>
+                </div>
+                <div id="social-fries-status" class="social-status"></div>
+              </div>
+              <div id="social-cosmetics-view" style="display:none">
+                <div class="social-subhead">
+                  <span id="social-cosmetics-back" class="social-back">← Back</span>
+                  <span class="social-subhead-title">Gift Cosmetics to <b id="social-cosmetics-target"></b></span>
+                </div>
+                <div class="social-cosmetics-toolbar">
+                  <input id="social-cosmetics-search" class="market-search" type="text" placeholder="Search cosmetics…" autocomplete="off" />
+                  <select id="social-cosmetics-category" class="market-select">
+                    <option value="">All types</option>
+                    <option value="outfit">Skins</option>
+                    <option value="melee">Melee</option>
+                    <option value="emote">Emotes</option>
+                    <option value="particle">Particles</option>
+                  </select>
+                  <select id="social-cosmetics-sort" class="market-select">
+                    <option value="rarity">Sort: Rarity</option>
+                    <option value="type">Sort: Type</option>
+                    <option value="name">Sort: Name</option>
+                  </select>
+                </div>
+                <div id="social-gift-items" class="social-gift-items"></div>
+                <div id="social-cosmetics-status" class="social-status"></div>
+              </div>
+            </div>
+            <div id="social-friends" style="display:none">
+              <div id="social-requests-head" class="social-friends-head" style="display:none">Friend requests</div>
+              <div id="social-requests-list" class="social-friends-list"></div>
+              <div id="social-sent-head" class="social-friends-head" style="display:none">Sent requests</div>
+              <div id="social-sent-list" class="social-friends-list"></div>
+              <div class="social-friends-head">Friends</div>
+              <div id="social-friends-list" class="social-friends-list"></div>
+              <div class="social-friends-head">Recently played</div>
+              <div id="social-recent-list" class="social-friends-list"></div>
+              <div id="social-blocked-head" class="social-friends-head" style="display:none">Blocked</div>
+              <div id="social-blocked-list" class="social-friends-list"></div>
+            </div>
+            <div id="social-clans" style="display:none">
+              <div class="shop-status">Clans are coming soon.</div>
+            </div>
+          </div>
+          <div id="social-confirm" class="social-confirm" style="display:none">
+            <div class="social-confirm-box">
+              <div id="social-confirm-msg" class="social-confirm-msg"></div>
+              <div class="social-confirm-actions">
+                <div id="social-confirm-cancel" class="shop-buy-btn social-confirm-cancel">Cancel</div>
+                <div id="social-confirm-ok" class="shop-buy-btn social-confirm-ok">Confirm</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1806,6 +1972,26 @@
             </div>
           </div>
         </div>
+        <div id="modal-gift-notify" class="modal">
+          <div class="modal-content modal-close">
+            <div class="modal-header modal-header-name">
+              <h2>You received a gift!</h2>
+            </div>
+            <div class="modal-body modal-body-name">
+              <div id="modal-gift-notify-image-outer">
+                <div id="modal-gift-notify-image-inner"></div>
+              </div>
+              <div class="modal-settings-item">
+                <p id="modal-gift-notify-name" class="modal-body-text"></p>
+                <p id="modal-gift-notify-detail" class="modal-body-text modal-sale-detail"></p>
+              </div>
+            </div>
+            <div class="modal-footer modal-footer-name modal-footer-round">
+              <h3 class="close close-footer" data-l10n="index-confirm">Confirm</h3>
+              <h3 class='close close-footer' data-l10n='index-confirm-all' data-confirm-all="true">Confirm All</h3>
+            </div>
+          </div>
+        </div>
         <div id="modal-sale-notify" class="modal">
           <div class="modal-content modal-close">
             <div class="modal-header modal-header-name">
@@ -1818,6 +2004,26 @@
               <div class="modal-settings-item">
                 <p id="modal-sale-notify-name" class="modal-body-text"></p>
                 <p id="modal-sale-notify-detail" class="modal-body-text modal-sale-detail"></p>
+              </div>
+            </div>
+            <div class="modal-footer modal-footer-name modal-footer-round">
+              <h3 class="close close-footer" data-l10n="index-confirm">Confirm</h3>
+              <h3 class='close close-footer' data-l10n='index-confirm-all' data-confirm-all="true">Confirm All</h3>
+            </div>
+          </div>
+        </div>
+        <div id="modal-auction-notify" class="modal">
+          <div class="modal-content modal-close">
+            <div class="modal-header modal-header-name">
+              <h2 id="modal-auction-notify-title">Auction</h2>
+            </div>
+            <div class="modal-body modal-body-name">
+              <div id="modal-auction-notify-image-outer">
+                <div id="modal-auction-notify-image-inner"></div>
+              </div>
+              <div class="modal-settings-item">
+                <p id="modal-auction-notify-name" class="modal-body-text"></p>
+                <p id="modal-auction-notify-detail" class="modal-body-text modal-sale-detail"></p>
               </div>
             </div>
             <div class="modal-footer modal-footer-name modal-footer-round">

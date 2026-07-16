@@ -681,6 +681,17 @@ export class Game {
         if (!player) return;
         this.logger.info(`"${player.name}" left`);
         player.disconnected = true;
+
+        // A spectator leaving must not affect the running game (no group check, no kill, no
+        // game-over / "everyone disconnected" reap) — those apply only to the real players.
+        // Otherwise stopping a spectate would kick/reset the players being watched.
+        if (player.spectator) {
+            player.spectating = undefined;
+            player.game.playerBarn.removePlayer(player);
+            player.mapIndicator?.kill();
+            return;
+        }
+
         player.group?.checkPlayers();
         player.spectating = undefined;
         player.dirNew = v2.create(1, 0);
@@ -762,6 +773,7 @@ export class Game {
             assists: p.assists,
             alive: !p.dead,
             isSpectator: p.spectating !== undefined,
+            joinedAsSpectator: p.spectator,
             isAdmin: p.isAdmin,
             disconnected: p.disconnected,
         }));
@@ -989,6 +1001,9 @@ export class Game {
                 region: Config.gameServer.thisRegion,
                 username: player.name,
                 playerId: player.matchDataId,
+                // Snapshot the player's non-default equipped cosmetics for the match, so the
+                // advanced game stats page can show each loadout + its worth.
+                equippedCosmetics: player.equippedCosmetics,
                 teamMode: this.teamMode,
                 teamCount: player.group?.players.length ?? 1,
                 teamTotal: teamTotal,

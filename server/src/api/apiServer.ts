@@ -326,6 +326,55 @@ export class ApiServer {
         return await r.findSpectatorGame(body);
     }
 
+    private livePlayersCache: {
+        at: number;
+        map: Map<string, { region: string; gameId: string }>;
+    } | null = null;
+
+    /**
+     * userId → {region, gameId} for every logged-in player currently in a spectatable live
+     * game, across all regions. Built from the live game list + per-game player lists and
+     * cached briefly (the friends list can hit this often). Best-effort: a region/game that
+     * fails to respond is skipped.
+     */
+    async getLivePlayers(): Promise<Map<string, { region: string; gameId: string }>> {
+        const now = Date.now();
+        if (this.livePlayersCache && now - this.livePlayersCache.at < 10_000) {
+            return this.livePlayersCache.map;
+        }
+        const map = new Map<string, { region: string; gameId: string }>();
+        for (const regionId in this.regions) {
+            const region = this.regions[regionId];
+            try {
+                const infos = await region.collectGameInfos();
+                const games: any[] = (Array.isArray(infos?.data) ? infos.data : []).filter(
+                    (g: any) => g?.id && !g.stopped,
+                );
+                const lists = await Promise.all(
+                    games.map((g) =>
+                        region
+                            .getDashboardGamePlayers(g.id)
+                            .then((players) => ({ gameId: g.id, players }))
+                            .catch(() => ({ gameId: g.id, players: [] as any[] })),
+                    ),
+                );
+                for (const { gameId, players } of lists) {
+                    for (const p of players) {
+                        // Only actual participants — not spectators (a friend watching
+                        // someone else) or players who've already disconnected.
+                        if (p?.userId && !p.isSpectator && !p.disconnected) {
+                            map.set(p.userId, { region: regionId, gameId });
+                        }
+                    }
+                }
+            } catch {
+                // region offline — skip
+            }
+        }
+        this.livePlayersCache = { at: now, map };
+        return map;
+    }
+
     async findGameById(region: string, gameId: string, admin: boolean) {
         const r = this.regions[region];
         if (!r) return { error: "Invalid Region" };

@@ -30,9 +30,11 @@ import {
     getCachedCosmeticStats,
     warmCosmeticStats,
 } from "./cosmeticStats";
+import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { expireOldListings } from "./db/market";
+import { expireOldOffers } from "./db/offers";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
 import type { SessionTableSelect, UsersTableSelect } from "./db/schema";
@@ -430,6 +432,28 @@ setInterval(
                 if (n > 0) server.logger.info(`Expired ${n} stale market listings`);
             })
             .catch((err) => server.logger.error("Failed to expire market listings", err));
+    },
+    10 * 60 * 1000,
+);
+
+// Settle auctions whose 24h has run out: transfer the item to the highest bidder, pay the
+// seller, or close unsold. Runs every minute so outcomes land promptly.
+setInterval(() => {
+    settleEndedAuctions()
+        .then((n) => {
+            if (n > 0) server.logger.info(`Settled ${n} ended auctions`);
+        })
+        .catch((err) => server.logger.error("Failed to settle auctions", err));
+}, 60 * 1000);
+
+// Expire buy-offers no one acted on within their TTL.
+setInterval(
+    () => {
+        expireOldOffers()
+            .then((n) => {
+                if (n > 0) server.logger.info(`Expired ${n} stale offers`);
+            })
+            .catch((err) => server.logger.error("Failed to expire offers", err));
     },
     10 * 60 * 1000,
 );

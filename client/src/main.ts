@@ -29,6 +29,7 @@ import { ReplayPlayer } from "./replay/replayPlayer";
 import { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { SiteInfo } from "./siteInfo";
+import { AuctionUi } from "./ui/auctionUi";
 import { ChatUi } from "./ui/chat";
 import { LoadoutMenu } from "./ui/loadoutMenu";
 import { Localization } from "./ui/localization";
@@ -36,10 +37,12 @@ import { MarketUi } from "./ui/marketUi";
 import Menu from "./ui/menu";
 import { MenuModal } from "./ui/menuModal";
 import { LoadoutDisplay } from "./ui/opponentDisplay";
+import { OwnersUi } from "./ui/ownersUi";
 import { Pass } from "./ui/pass";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
 import { ShopUi } from "./ui/shopUi";
+import { SocialUi } from "./ui/socialUi";
 import { type MatchData, SpectatorMenu } from "./ui/spectatorMenu";
 import { TeamMenu } from "./ui/teamMenu";
 import { loadStaticDomImages } from "./ui/ui2";
@@ -89,6 +92,9 @@ export class Application {
     profileUi!: ProfileUi;
     shopUi!: ShopUi;
     marketUi!: MarketUi;
+    ownersUi!: OwnersUi;
+    auctionUi!: AuctionUi;
+    socialUi!: SocialUi;
 
     pingTest = new PingTest();
     audioManager = new AudioManager();
@@ -148,8 +154,29 @@ export class Application {
         this.shopUi = new ShopUi(this.account, this.localization);
         this.shopUi.marketUi = this.marketUi;
         $("#golden-fries-shop-btn").on("click", () => this.shopUi.open());
-        // Let the loadout menu open the sell dialog for an owned item.
+        // The shop's "Owners" tab (who owns a cosmetic); clicking an owner opens their
+        // storefront on the Market tab.
+        this.ownersUi = new OwnersUi(this.account, this.localization);
+        this.shopUi.ownersUi = this.ownersUi;
+        this.ownersUi.onOpenStorefront = (slug) => {
+            this.shopUi.selectTab("market");
+            this.marketUi.openStorefront(slug);
+        };
+        // The Auction house tab (bid on / put up items).
+        this.auctionUi = new AuctionUi(this.account, this.localization);
+        this.shopUi.auctionUi = this.auctionUi;
+        // The Social panel (gift skins / Golden Fries), opened from the top-right button.
+        this.socialUi = new SocialUi(this.account, this.localization);
+        this.profileUi.socialUi = this.socialUi;
+        // Let the Social panel spectate a friend's current game.
+        this.socialUi.onSpectate = (region, gameId) =>
+            this.spectateFriendGame(region, gameId);
+        // Let the loadout menu open the sell dialog, the Owners view (rarity click), and
+        // the Social gift flow for an owned item.
         this.loadoutMenu.marketUi = this.marketUi;
+        this.loadoutMenu.shopUi = this.shopUi;
+        this.loadoutMenu.socialUi = this.socialUi;
+        this.loadoutMenu.auctionUi = this.auctionUi;
         this.siteInfo = new SiteInfo(this.config, this.localization);
         this.siteInfo.onModesUpdated = () => {
             const modes = this.siteInfo.getModesForSelectedRegion();
@@ -543,6 +570,17 @@ export class Application {
                 const pov = Number(replayParams.get("pov"));
                 history.replaceState(null, "", window.location.pathname);
                 this.startReplay(replayParam, Number.isFinite(pov) ? pov : undefined);
+            }
+
+            // Open a seller's market storefront, e.g. from the stats-page loadout viewer.
+            const storefrontParam = new URLSearchParams(window.location.search).get(
+                "storefront",
+            );
+            if (storefrontParam) {
+                history.replaceState(null, "", window.location.pathname);
+                this.shopUi.open();
+                this.shopUi.selectTab("market");
+                this.marketUi.openStorefront(storefrontParam);
             }
 
             SDK.gameLoadComplete();
@@ -1185,6 +1223,40 @@ export class Application {
         player.load().catch((err) => {
             console.error("Failed to start replay:", err);
             alert("Failed to load replay: " + (err?.message ?? err));
+        });
+    }
+
+    /** Spectates a specific live game (a friend's), resolving its host via the API server.
+     *  Uses find_game_by_id (not find_spectator_game) because only that mints a spectator
+     *  join token — without one the game closes the socket ("host closed"). */
+    spectateFriendGame(region: string, gameId: string) {
+        $.ajax({
+            type: "POST",
+            url: api.resolveUrl("/api/find_game_by_id"),
+            data: JSON.stringify({ region, gameId }),
+            contentType: "application/json; charset=utf-8",
+            timeout: 10 * 1000,
+            success: (data: { err?: string; res?: MatchData[] }) => {
+                const matchData = data?.res?.[0];
+                if (matchData?.hosts?.length) {
+                    this.joinGameAsSpectator(matchData);
+                } else {
+                    console.error(
+                        "spectateFriendGame: no spectatable game returned",
+                        { region, gameId },
+                        data,
+                    );
+                    this.onJoinGameError("join_game_failed");
+                }
+            },
+            error: (xhr) => {
+                console.error(
+                    "spectateFriendGame: request failed",
+                    xhr?.status,
+                    xhr?.responseText,
+                );
+                this.onJoinGameError("join_game_failed");
+            },
         });
     }
 

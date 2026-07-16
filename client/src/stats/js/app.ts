@@ -3,6 +3,7 @@ import $ from "jquery";
 import "bootstrap";
 import slugify from "slugify";
 import { ConfigManager } from "../../config";
+import { loadCosmeticStats } from "../../cosmeticStatsClient";
 import { GameView } from "./gameView";
 import { MainView } from "./mainView";
 import { PlayerView } from "./playerView";
@@ -51,6 +52,11 @@ export class App {
     adManager: Ads;
 
     constructor() {
+        // Load ownership-based cosmetic rarity so item values/prices on the stats page
+        // match the main client (which also fetches these). Without it, getItemRarity
+        // falls back to static def rarity and loadout values come out different.
+        loadCosmeticStats();
+
         this.mainView = new MainView(this);
         this.playerView = new PlayerView(this);
         this.serverStatsView = new ServerStatsView(this);

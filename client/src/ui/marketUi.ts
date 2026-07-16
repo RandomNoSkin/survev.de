@@ -5,6 +5,7 @@ import {
     getItemPrice,
     getItemRarity,
     getMarketTotal,
+    MARKET_LIST_COOLDOWN_MS,
     MARKET_LISTING_TTL_MS,
     type ShopCategory,
 } from "../../../shared/defs/shopConfig";
@@ -12,6 +13,7 @@ import type {
     MarketListing,
     MarketListResponse,
     MyListing,
+    Offer,
 } from "../../../shared/types/user";
 import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { Account } from "../account";
@@ -24,7 +26,7 @@ const RARITY_COLORS = ["#c5c5c5", "#c5c5c5", "#12ff00", "#00deff", "#f600ff", "#
 /** Rarity index → l10n key suffix (loadout-<name>). */
 const RARITY_NAMES = ["stock", "common", "uncommon", "rare", "epic", "mythic"];
 
-type MarketTab = "browse" | "private" | "mine";
+type MarketTab = "browse" | "private" | "mine" | "offers";
 
 /**
  * Player-to-player marketplace UI. Browse tab lists all active listings (filterable by
@@ -60,6 +62,9 @@ export class MarketUi {
 
     /** Ticks the per-listing auto-expiry countdowns while the market is visible. */
     private expiryInterval: ReturnType<typeof setInterval> | null = null;
+    /** Polls the offers list while the Offers sub-tab is open, so an offer withdrawn or
+     *  declined by the other party disappears here without a manual reload. */
+    private offersPoll: ReturnType<typeof setInterval> | null = null;
     /** Debounce handle for the search box. */
     private searchDebounce: ReturnType<typeof setTimeout> | null = null;
     /** Cached [type, lowercased display name] for resolving name-search matches. */
@@ -78,6 +83,15 @@ export class MarketUi {
         $("#market-tab-browse").on("click", () => this.selectTab("browse"));
         $("#market-tab-private").on("click", () => this.selectTab("private"));
         $("#market-tab-mine").on("click", () => this.selectTab("mine"));
+        $("#market-tab-offers").on("click", () => this.selectTab("offers"));
+
+        // Keep the Offers sub-tab in sync whenever the profile reloads (e.g. after an
+        // accept/decline/counter/withdraw): refresh the badge and, if the Offers view is
+        // open, re-render it so a resolved offer disappears immediately.
+        this.account.addEventListener("offers", () => {
+            this.updateOffersBadge();
+            if (this.tab === "offers") this.renderOffers();
+        });
         this.categoryFilter.on("change", () => {
             this.category = (this.categoryFilter.val() as ShopCategory | "") || "";
             this.reload();
@@ -113,6 +127,7 @@ export class MarketUi {
     /** Called by ShopUi when leaving the Market tab / closing the shop. */
     deactivate() {
         this.stopExpiryTimer();
+        this.stopOffersPolling();
         this.resetCardTracking();
         if (this.searchDebounce !== null) {
             clearTimeout(this.searchDebounce);
@@ -227,6 +242,14 @@ export class MarketUi {
         this.rarityFilter.css("display", filterDisplay);
         this.searchInput.css("display", filterDisplay);
         this.storefrontBanner.css("display", "none");
+        // The Offers view has its own container; the listing grid backs every other tab.
+        const offersTab = tab === "offers";
+        $("#market-offers").css("display", offersTab ? "block" : "none");
+        this.body.css("display", offersTab ? "none" : "");
+        this.loadMoreEl.css("display", "none");
+        // Only the Offers view polls for the other party's withdraw/decline.
+        if (offersTab) this.startOffersPolling();
+        else this.stopOffersPolling();
         this.reload();
     }
 
@@ -270,6 +293,10 @@ export class MarketUi {
     private fetch(replace: boolean) {
         if (this.tab === "mine") {
             this.renderMine();
+            return;
+        }
+        if (this.tab === "offers") {
+            this.renderOffers();
             return;
         }
         if (this.loading) return;
@@ -357,6 +384,184 @@ export class MarketUi {
             return;
         }
         for (const l of listings) this.appendCard(this.renderMineCard(l));
+    }
+
+    /** Offers sub-tab badge: incoming offers awaiting a reply + my offers that got countered. */
+    private updateOffersBadge() {
+        const incoming = this.account.offersIncoming.filter(
+            (o) => o.status === "pending",
+        ).length;
+        const counters = this.account.offersOutgoing.filter(
+            (o) => o.status === "countered",
+        ).length;
+        const n = incoming + counters;
+        $("#market-offers-badge")
+            .text(n > 0 ? String(n) : "")
+            .css("display", n > 0 ? "inline-block" : "none");
+    }
+
+    /** Refetches offers every few seconds while the Offers view is open, so an offer the
+     *  other party withdrew/declined vanishes here promptly (there's no server push). */
+    private startOffersPolling() {
+        this.stopOffersPolling();
+        this.offersPoll = setInterval(() => {
+            if (this.tab !== "offers") {
+                this.stopOffersPolling();
+                return;
+            }
+            // Don't refresh mid-counter — it would wipe the input the user is typing.
+            if ($("#market-offers .market-counter-input").length) return;
+            this.account.getOffers((err, res) => {
+                if (err || !res || !res.success) return;
+                this.account.offersIncoming = res.incoming;
+                this.account.offersOutgoing = res.outgoing;
+                // Re-render + refresh every offer badge (sub-tab, Market tab, shop button).
+                this.account.emit("offers", {
+                    incoming: res.incoming,
+                    outgoing: res.outgoing,
+                });
+            });
+        }, 6000);
+    }
+
+    private stopOffersPolling() {
+        if (this.offersPoll !== null) {
+            clearInterval(this.offersPoll);
+            this.offersPoll = null;
+        }
+    }
+
+    /** Renders the caller's incoming (on their items) and outgoing (made) offers. */
+    private renderOffers() {
+        this.balanceEl.text(this.balance());
+        const wrap = $("#market-offers").empty();
+        const incoming = this.account.offersIncoming;
+        const outgoing = this.account.offersOutgoing;
+
+        wrap.append('<div class="market-offers-head">Offers on your items</div>');
+        if (!incoming.length) {
+            wrap.append('<div class="shop-status">No incoming offers</div>');
+        } else {
+            for (const o of incoming) wrap.append(this.renderOfferRow(o, "incoming"));
+        }
+        wrap.append('<div class="market-offers-head">Offers you made</div>');
+        if (!outgoing.length) {
+            wrap.append('<div class="shop-status">No outgoing offers</div>');
+        } else {
+            for (const o of outgoing) wrap.append(this.renderOfferRow(o, "outgoing"));
+        }
+        this.updateOffersBadge();
+    }
+
+    private renderOfferRow(o: Offer, side: "incoming" | "outgoing"): JQuery<HTMLElement> {
+        const rarity = getItemRarity(o.type);
+        const row = $('<div class="market-offer-row"></div>');
+        row.append(
+            $('<div class="market-offer-img"></div>').css({
+                "background-image": `url(${helpers.getSvgFromGameType(o.type)})`,
+                transform: helpers.getCssTransformFromGameType(o.type),
+                "border-color": RARITY_COLORS[rarity] ?? "#c5c5c5",
+            }),
+        );
+
+        const other = side === "incoming" ? o.fromUsername || o.fromSlug : o.toSlug;
+        const price = o.counterAmount ?? o.amount;
+        const priceLabel =
+            o.status === "countered"
+                ? `counter <b>${o.counterAmount}</b> (was ${o.amount})`
+                : `<b>${o.amount}</b>`;
+        row.append(
+            `<div class="market-offer-main">` +
+                `<div class="market-offer-name">${helpers.htmlEscape(this.itemName(o.type))}</div>` +
+                `<div class="market-offer-meta">${side === "incoming" ? "from" : "to"} ${helpers.htmlEscape(other)} · ${priceLabel} 🍟</div>` +
+                `</div>`,
+        );
+
+        const actions = $('<div class="market-offer-actions"></div>');
+        if (side === "incoming") {
+            if (o.status === "pending") {
+                // Owner: accept / counter / decline.
+                this.addOfferBtn(actions, `Accept ${o.amount}`, () =>
+                    this.account.acceptOffer(o.offerId, () => {}),
+                );
+                this.addOfferBtn(actions, "Counter", () => this.startCounter(o, row));
+                this.addOfferBtn(
+                    actions,
+                    "Decline",
+                    () => this.account.offerAction("decline", o.offerId, () => {}),
+                    true,
+                );
+            } else {
+                // Countered by me — waiting on the bidder; I can still retract/decline it.
+                actions.append('<div class="market-offer-status">Countered</div>');
+                this.addOfferBtn(
+                    actions,
+                    "Decline",
+                    () => this.account.offerAction("decline", o.offerId, () => {}),
+                    true,
+                );
+            }
+        } else {
+            if (o.status === "countered") {
+                // Bidder: accept the owner's counter (if affordable) or walk away.
+                const total = getMarketTotal(price);
+                if (this.balance() < total) {
+                    actions.append(
+                        `<div class="market-offer-status market-offer-broke">Need ${total} 🍟 (you have ${this.balance()})</div>`,
+                    );
+                } else {
+                    this.addOfferBtn(actions, `Accept ${price} (${total})`, () =>
+                        this.account.acceptOffer(o.offerId, () => {}),
+                    );
+                }
+            }
+            this.addOfferBtn(
+                actions,
+                "Withdraw",
+                () => this.account.offerAction("withdraw", o.offerId, () => {}),
+                true,
+            );
+        }
+        row.append(actions);
+        return row;
+    }
+
+    private addOfferBtn(
+        parent: JQuery<HTMLElement>,
+        label: string,
+        onClick: () => void,
+        danger = false,
+    ) {
+        const btn = $(
+            `<div class="shop-buy-btn menu-option btn-darken market-offer-btn${
+                danger ? " market-offer-danger" : ""
+            }">${label}</div>`,
+        );
+        btn.on("click", () => {
+            btn.addClass("shop-buy-disabled").text("…");
+            onClick();
+        });
+        parent.append(btn);
+    }
+
+    /** Inline counter-offer input on an incoming offer row. */
+    private startCounter(o: Offer, row: JQuery<HTMLElement>) {
+        if (row.find(".market-counter-input").length) return;
+        const box = $('<div class="market-counter-box"></div>');
+        const input = $(
+            `<input type="number" class="market-counter-input market-sell-price" min="1" value="${o.amount}" />`,
+        );
+        const send = $(
+            '<div class="shop-buy-btn menu-option btn-darken">Send counter</div>',
+        );
+        send.on("click", () => {
+            const amount = parseInt(String(input.val()), 10);
+            if (!Number.isInteger(amount) || amount < 1) return;
+            send.addClass("shop-buy-disabled").text("…");
+            this.account.counterOffer(o.offerId, amount, () => {});
+        });
+        box.append(input).append(send);
+        row.append(box);
     }
 
     /** Item image tile (rarity-bordered), shared by browse/mine/sell cards. */
@@ -505,7 +710,75 @@ export class MarketUi {
             btn.text(`Buy (${listing.total})`).on("click", () => this.buy(listing, btn));
         }
         card.append(btn);
+
+        // Buyers can also propose a lower/different price via an offer (charge-on-accept).
+        if (!mine) {
+            const offerBtn = $(
+                '<div class="shop-buy-btn market-offer-open menu-option btn-darken">Make offer</div>',
+            );
+            offerBtn.on("click", () =>
+                this.startMakeOffer(card, listing.itemId, listing.type, offerBtn),
+            );
+            card.append(offerBtn);
+        }
         return card;
+    }
+
+    /** Inline "make an offer" input on a listing card. */
+    private startMakeOffer(
+        card: JQuery<HTMLElement>,
+        itemId: number,
+        type: string,
+        opener: JQuery<HTMLElement>,
+    ) {
+        if (card.find(".market-makeoffer-box").length) return;
+        opener.css("display", "none");
+        const box = $('<div class="market-makeoffer-box"></div>');
+        const suggested = getItemPrice(type) || 1;
+        const est = getItemPrice(type);
+        const hint = $(
+            `<div class="market-offer-est">Est. value: ${
+                est > 0 ? `${est} 🍟` : "—"
+            }</div>`,
+        );
+        const input = $(
+            `<input type="number" class="market-makeoffer-input market-sell-price" min="1" value="${suggested}" />`,
+        );
+        const send = $(
+            '<div class="shop-buy-btn menu-option btn-darken">Send offer</div>',
+        );
+        const err = $('<div class="market-sell-error"></div>');
+        send.on("click", () => {
+            const amount = parseInt(String(input.val()), 10);
+            if (!Number.isInteger(amount) || amount < 1) {
+                err.text("Enter a whole number of at least 1.");
+                return;
+            }
+            send.addClass("shop-buy-disabled").text("…");
+            this.account.makeOffer(itemId, amount, (e, res) => {
+                if (e || !res || !res.success) {
+                    send.removeClass("shop-buy-disabled").text("Send offer");
+                    err.text(
+                        res?.error === "duplicate"
+                            ? "You already have an offer on this item."
+                            : res?.error === "auctioned"
+                              ? "This item is being auctioned."
+                              : res?.error === "offers_disabled"
+                                ? "This player isn't accepting offers."
+                                : res?.error === "blocked"
+                                  ? "You can't interact with this player."
+                                  : res?.error === "too_many"
+                                    ? "Too many open offers."
+                                    : "Could not send the offer.",
+                    );
+                    return;
+                }
+                box.html('<div class="market-offer-status">Offer sent ✓</div>');
+            });
+        });
+        box.append(hint).append(input).append(send).append(err);
+        card.append(box);
+        input.trigger("focus");
     }
 
     private renderMineCard(listing: MyListing): JQuery<HTMLElement> {
@@ -595,7 +868,9 @@ export class MarketUi {
                 ? `Recommended price: ${recommended} fries (based on rarity). You can set any price, even 0 (free).`
                 : "You can set any price, even 0 (free).",
         );
-        $("#market-sell-confirm").removeClass("shop-buy-disabled market-sell-confirming").text("List for sale");
+        $("#market-sell-confirm")
+            .removeClass("shop-buy-disabled market-sell-confirming")
+            .text("List for sale");
         this.updateSellPreview();
         this.sellModal.show();
     }
@@ -617,7 +892,9 @@ export class MarketUi {
     private resetSellConfirm() {
         if (this.busy || !this.pendingSell) return;
         this.pendingSell = false;
-        $("#market-sell-confirm").removeClass("market-sell-confirming").text("List for sale");
+        $("#market-sell-confirm")
+            .removeClass("market-sell-confirming")
+            .text("List for sale");
     }
 
     private confirmSell() {
@@ -678,17 +955,24 @@ export class MarketUi {
             case "self_buyer":
                 return "You can't make a private listing to yourself.";
             case "rate_limited": {
+                const every = this.formatDuration(MARKET_LIST_COOLDOWN_MS);
                 if (retryAfter && retryAfter > Date.now()) {
-                    const mins = Math.max(
-                        1,
-                        Math.ceil((retryAfter - Date.now()) / 60000),
-                    );
-                    return `You can only list one item per hour. Try again in ${mins} min.`;
+                    const left = this.formatDuration(retryAfter - Date.now());
+                    return `You can only list one item every ${every}. Try again in ${left}.`;
                 }
-                return "You can only list one item per hour.";
+                return `You can only list one item every ${every}.`;
             }
             default:
                 return "Could not list the item.";
         }
+    }
+
+    /** Compact human duration: "10s", "5 min", "2 h" — rounds up to whole units. */
+    private formatDuration(ms: number): string {
+        const s = Math.max(1, Math.ceil(ms / 1000));
+        if (s < 60) return `${s}s`;
+        const m = Math.ceil(s / 60);
+        if (m < 60) return `${m} min`;
+        return `${Math.ceil(m / 60)} h`;
     }
 }

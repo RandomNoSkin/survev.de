@@ -1,35 +1,80 @@
 import { and, eq, gte, inArray, ne, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, _allowedDeathEffects, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
+import { QuestDefs } from "../../../../../shared/defs/gameObjects/questDefs";
 import {
+    _allowedCrosshairs,
+    _allowedDeathEffects,
+    _allowedEmotes,
+    _allowedHealEffects,
+    _allowedMeleeSkins,
+    _allowedOutfits,
+    UnlockDefs,
+} from "../../../../../shared/defs/gameObjects/unlockDefs";
+import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
+import { mapDef } from "../../../../../shared/defs/maps/2v2Defs";
+import { MapId } from "../../../../../shared/defs/types/misc";
+import { ExperienceConverter, GameConfig } from "../../../../../shared/gameConfig";
+import {
+    type AckAuctionsResponse,
+    type AckGiftsResponse,
     type AckSalesResponse,
+    type AuctionListResponse,
     type BuyListingResponse,
     type BuyShopResponse,
     type CancelListingResponse,
+    type CreateAuctionResponse,
+    type EndAuctionResponse,
+    type EquippedInstancesResponse,
+    type FriendActionResponse,
+    type FriendEntry,
+    type FriendsResponse,
     type GetPassResponse,
+    type GiftFriesResponse,
+    type GiftItemResponse,
+    type ItemOwnersResponse,
     type ListItemResponse,
     type LoadoutResponse,
+    type MakeOfferResponse,
     type MarketListResponse,
+    type OfferActionResponse,
+    type OfferListResponse,
+    type PlaceBidResponse,
     type ProfileResponse,
     type RefreshQuestResponse,
     type SetPassUnlockResponse,
-    type EquippedInstancesResponse,
+    type SettingsResponse,
     type ShopResponse,
     type UsernameResponse,
+    type UserSearchResponse,
+    zAckAuctionsRequest,
+    zAckGiftsRequest,
     zAckSalesRequest,
     zBuyListingRequest,
-    zEquippedInstancesRequest,
     zBuyShopRequest,
     zCancelListingRequest,
+    zCounterOfferRequest,
+    zCreateAuctionRequest,
+    zEndAuctionRequest,
+    zEquippedInstancesRequest,
+    zFriendActionRequest,
     zGetPassRequest,
+    zGiftFriesRequest,
+    zGiftItemRequest,
+    zItemOwnersRequest,
     zListItemRequest,
     zLoadoutRequest,
+    zMakeOfferRequest,
     zMarketBrowseRequest,
+    zOfferIdRequest,
+    zPlaceBidRequest,
     zRefreshQuestRequest,
     zSetItemStatusRequest,
     zSetPassUnlockRequest,
+    zSettingsRequest,
     zStorefrontRequest,
     zUsernameRequest,
+    zUserSearchRequest,
 } from "../../../../../shared/types/user";
 import loadout from "../../../../../shared/utils/loadout";
 import { apiPrivateRouter, validateUserName } from "../../../utils/serverHelpers";
@@ -41,9 +86,35 @@ import {
     validateParams,
 } from "../../auth/middleware";
 import { db } from "../../db";
+import {
+    ackAuctions,
+    createAuction,
+    endAuction,
+    getActiveAuctionItemId,
+    getActiveAuctions,
+    getMyAuctionBidCount,
+    getUnackedAuctions,
+    placeBid,
+} from "../../db/auctions";
+import { blockUser, getBlocked, unblockUser } from "../../db/blocks";
+import {
+    acceptFriendRequest,
+    getFriendsDetailed,
+    getIncomingRequests,
+    getOutgoingRequests,
+    getRecentPlayers,
+    removeFriend,
+    sendFriendRequest,
+} from "../../db/friends";
+import {
+    ackGiftNotifications,
+    getGiftNotifications,
+    getItemOwners,
+    giftGoldenFries,
+    giftItem,
+    searchUsers,
+} from "../../db/gifts";
 import { awardNewPassGoldenFries } from "../../db/goldenFries";
-import { grantPassItems } from "../../db/passGrants";
-import { buyShopOffer, getShopForUser } from "../../db/shop";
 import {
     ackSales,
     buyListing,
@@ -55,19 +126,23 @@ import {
     getUserListings,
     listItem,
 } from "../../db/market";
+import {
+    acceptOffer,
+    counterOffer,
+    declineOffer,
+    getOffersForUser,
+    makeOffer,
+    withdrawOffer,
+} from "../../db/offers";
+import { grantPassItems } from "../../db/passGrants";
 import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
+import { buyShopOffer, getShopForUser } from "../../db/shop";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
     logoutUser,
     sanitizeSlug,
 } from "./auth/authUtils";
-import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
-import { ExperienceConverter, GameConfig } from "../../../../../shared/gameConfig";
-import { QuestDefs } from "../../../../../shared/defs/gameObjects/questDefs";
-import { mapDef } from "../../../../../shared/defs/maps/2v2Defs";
-import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
-import { MapId } from "../../../../../shared/defs/types/misc";
 
 export const UserRouter = new Hono<Context>();
 
@@ -123,6 +198,7 @@ UserRouter.post("/profile", async (c) => {
             wins: itemsTable.wins,
             kills: itemsTable.kills,
             damage: itemsTable.damage,
+            pricePaid: itemsTable.pricePaid,
         })
         .from(itemsTable)
         .where(
@@ -147,6 +223,21 @@ UserRouter.post("/profile", async (c) => {
             items: items,
             listings: await getUserListings(user.id),
             sales: await getUnackedSales(user.id),
+            gifts: await getGiftNotifications(user.id),
+            auctions: await getUnackedAuctions(user.id),
+            auctionBids: await getMyAuctionBidCount(user.id),
+            activeAuctionItemId: await getActiveAuctionItemId(user.id),
+            settings: {
+                offersDisabled: user.offersDisabled,
+                loadoutPrivate: user.loadoutPrivate,
+            },
+            ...(await (async () => {
+                const offers = await getOffersForUser(user.id);
+                return {
+                    offersIncoming: offers.incoming,
+                    offersOutgoing: offers.outgoing,
+                };
+            })()),
         },
         200,
     );
@@ -203,6 +294,24 @@ UserRouter.post(
         return c.json<UsernameResponse>({ result: "success" }, 200);
     },
 );
+
+UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
+    const user = c.get("user")!;
+    const { offersDisabled, loadoutPrivate } = c.req.valid("json");
+    const patch: Partial<{ offersDisabled: boolean; loadoutPrivate: boolean }> = {};
+    if (offersDisabled !== undefined) patch.offersDisabled = offersDisabled;
+    if (loadoutPrivate !== undefined) patch.loadoutPrivate = loadoutPrivate;
+    if (Object.keys(patch).length) {
+        await db.update(usersTable).set(patch).where(eq(usersTable.id, user.id));
+    }
+    return c.json<SettingsResponse>({
+        success: true,
+        settings: {
+            offersDisabled: offersDisabled ?? user.offersDisabled,
+            loadoutPrivate: loadoutPrivate ?? user.loadoutPrivate,
+        },
+    });
+});
 
 UserRouter.post("/loadout", validateParams(zLoadoutRequest), async (c) => {
     const user = c.get("user")!;
@@ -345,6 +454,211 @@ UserRouter.post("/market/ack_sales", validateParams(zAckSalesRequest), async (c)
     return c.json<AckSalesResponse>({ success: true }, 200);
 });
 
+//
+// AUCTIONS
+//
+
+UserRouter.post("/auction/create", validateParams(zCreateAuctionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { itemId, minBid } = c.req.valid("json");
+    const result = await createAuction(user.id, itemId, minBid);
+    return c.json<CreateAuctionResponse>(result, 200);
+});
+
+UserRouter.post("/auction/bid", validateParams(zPlaceBidRequest), async (c) => {
+    const user = c.get("user")!;
+    const { auctionId, amount } = c.req.valid("json");
+    const result = await placeBid(user.id, auctionId, amount);
+    return c.json<PlaceBidResponse>(result, 200);
+});
+
+UserRouter.post("/auction/list", validateParams(zMarketBrowseRequest), async (c) => {
+    const user = c.get("user")!;
+    const { category, rarity, page } = c.req.valid("json");
+    const result = await getActiveAuctions(
+        {
+            category: category as "outfit" | "melee" | "emote" | "particle" | undefined,
+            rarity,
+            page,
+        },
+        user.id,
+    );
+    return c.json<AuctionListResponse>(result, 200);
+});
+
+UserRouter.post("/auction/ack", validateParams(zAckAuctionsRequest), async (c) => {
+    const user = c.get("user")!;
+    const { auctionIds } = c.req.valid("json");
+    await ackAuctions(user.id, auctionIds);
+    return c.json<AckAuctionsResponse>({ success: true }, 200);
+});
+
+UserRouter.post("/auction/end", validateParams(zEndAuctionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { auctionId } = c.req.valid("json");
+    const result = await endAuction(user.id, auctionId);
+    return c.json<EndAuctionResponse>(result, 200);
+});
+
+//
+// OFFERS (buy-offers on another player's item)
+//
+
+UserRouter.post("/offer/make", validateParams(zMakeOfferRequest), async (c) => {
+    const user = c.get("user")!;
+    const { itemId, amount } = c.req.valid("json");
+    const result = await makeOffer(user.id, itemId, amount);
+    return c.json<MakeOfferResponse>(result, 200);
+});
+
+UserRouter.post("/offer/accept", validateParams(zOfferIdRequest), async (c) => {
+    const user = c.get("user")!;
+    const { offerId } = c.req.valid("json");
+    const result = await acceptOffer(user.id, offerId);
+    return c.json<OfferActionResponse>(result, 200);
+});
+
+UserRouter.post("/offer/decline", validateParams(zOfferIdRequest), async (c) => {
+    const user = c.get("user")!;
+    const { offerId } = c.req.valid("json");
+    const result = await declineOffer(user.id, offerId);
+    return c.json<OfferActionResponse>(result, 200);
+});
+
+UserRouter.post("/offer/counter", validateParams(zCounterOfferRequest), async (c) => {
+    const user = c.get("user")!;
+    const { offerId, counterAmount } = c.req.valid("json");
+    const result = await counterOffer(user.id, offerId, counterAmount);
+    return c.json<OfferActionResponse>(result, 200);
+});
+
+UserRouter.post("/offer/withdraw", validateParams(zOfferIdRequest), async (c) => {
+    const user = c.get("user")!;
+    const { offerId } = c.req.valid("json");
+    const result = await withdrawOffer(user.id, offerId);
+    return c.json<OfferActionResponse>(result, 200);
+});
+
+UserRouter.post("/offer/list", async (c) => {
+    const user = c.get("user")!;
+    const result = await getOffersForUser(user.id);
+    return c.json<OfferListResponse>(result, 200);
+});
+
+//
+// SOCIAL (public item ownership + player-to-player gifting)
+//
+
+// Public "who owns this cosmetic" view (admins excluded). Auth'd like everything else on
+// this router, but returns only public display data (username + slug + copy count).
+UserRouter.post("/item_owners", validateParams(zItemOwnersRequest), async (c) => {
+    const { type, page, search } = c.req.valid("json");
+    const result = await getItemOwners(type, page ?? 0, search);
+    return c.json<ItemOwnersResponse>(result, 200);
+});
+
+// Username search for the gift-recipient picker.
+UserRouter.post("/search", validateParams(zUserSearchRequest), async (c) => {
+    const user = c.get("user")!;
+    const { query, limit } = c.req.valid("json");
+    const users = await searchUsers(user.id, query, limit);
+    return c.json<UserSearchResponse>({ success: true, users }, 200);
+});
+
+// Gift an owned item instance to another player (instant, free transfer).
+UserRouter.post("/gift/item", validateParams(zGiftItemRequest), async (c) => {
+    const user = c.get("user")!;
+    const { itemId, recipientSlug } = c.req.valid("json");
+    const result = await giftItem(
+        user.id,
+        user.slug,
+        user.username,
+        itemId,
+        recipientSlug,
+    );
+    return c.json<GiftItemResponse>(result, 200);
+});
+
+// Gift Golden Fries to another player.
+UserRouter.post("/gift/fries", validateParams(zGiftFriesRequest), async (c) => {
+    const user = c.get("user")!;
+    const { recipientSlug, amount } = c.req.valid("json");
+    const result = await giftGoldenFries(
+        user.id,
+        user.slug,
+        user.username,
+        recipientSlug,
+        amount,
+    );
+    return c.json<GiftFriesResponse>(result, 200);
+});
+
+// Acknowledge received-gift notifications so their popups won't fire again.
+UserRouter.post("/gifts/ack", validateParams(zAckGiftsRequest), async (c) => {
+    const user = c.get("user")!;
+    const { ids } = c.req.valid("json");
+    await ackGiftNotifications(user.id, ids);
+    return c.json<AckGiftsResponse>({ success: true }, 200);
+});
+
+// Friends, incoming/outgoing requests, and recently-played players (with/against).
+UserRouter.post("/friends/list", async (c) => {
+    const user = c.get("user")!;
+    const [detailed, incoming, outgoing, recent, blocked, liveMap] = await Promise.all([
+        getFriendsDetailed(user.id),
+        getIncomingRequests(user.id),
+        getOutgoingRequests(user.id),
+        getRecentPlayers(user.id),
+        getBlocked(user.id),
+        server.getLivePlayers(),
+    ]);
+    const friends: FriendEntry[] = detailed.map((f) => ({
+        slug: f.slug,
+        username: f.username,
+        lastGame: f.lastGame,
+        live: liveMap.get(f.userId) ?? null,
+    }));
+    return c.json<FriendsResponse>(
+        { success: true, friends, incoming, outgoing, recent, blocked },
+        200,
+    );
+});
+
+UserRouter.post("/friends/block", validateParams(zFriendActionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug } = c.req.valid("json");
+    const result = await blockUser(user.id, slug);
+    return c.json<FriendActionResponse>(result, 200);
+});
+
+UserRouter.post("/friends/unblock", validateParams(zFriendActionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug } = c.req.valid("json");
+    const result = await unblockUser(user.id, slug);
+    return c.json<FriendActionResponse>(result, 200);
+});
+
+// Send a friend request (auto-accepts if the other side already requested you).
+UserRouter.post("/friends/request", validateParams(zFriendActionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug } = c.req.valid("json");
+    return c.json<FriendActionResponse>(await sendFriendRequest(user.id, slug), 200);
+});
+
+// Accept a request you received.
+UserRouter.post("/friends/accept", validateParams(zFriendActionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug } = c.req.valid("json");
+    return c.json<FriendActionResponse>(await acceptFriendRequest(user.id, slug), 200);
+});
+
+// Remove a friend, decline an incoming request, or cancel an outgoing one.
+UserRouter.post("/friends/remove", validateParams(zFriendActionRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug } = c.req.valid("json");
+    return c.json<FriendActionResponse>(await removeFriend(user.id, slug), 200);
+});
+
 // Reported by the client on game join: the owned instance ids it currently has equipped.
 // Stored as a per-game snapshot so cosmetic match stats attach to the exact copy the
 // player selected (see attributeCosmeticStats). Only the caller's own items can ever be
@@ -389,9 +703,10 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
         where: and(eq(userXpTable.userId, user.id), eq(userXpTable.passType, passType)),
     });
     const seasonStart = new Date(GameConfig.serverSettings.seasonStart);
-    const lastUpdated = userXpRecord && userXpRecord.lastUpdated > seasonStart
-    ? userXpRecord.lastUpdated
-    : seasonStart;
+    const lastUpdated =
+        userXpRecord && userXpRecord.lastUpdated > seasonStart
+            ? userXpRecord.lastUpdated
+            : seasonStart;
 
     const currentXp = userXpRecord ? Number(userXpRecord.xp) : 0;
     const stats = await db
@@ -426,7 +741,10 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
     function getXpBoost(mapTypeName: string, matchTime: Date): number {
         const boostEvents = GameConfig.serverSettings.xpBoostEvents?.[passType];
         if (!boostEvents) return 1;
-        const t = matchTime instanceof Date ? matchTime.getTime() : new Date(matchTime).getTime();
+        const t =
+            matchTime instanceof Date
+                ? matchTime.getTime()
+                : new Date(matchTime).getTime();
         for (const event of Object.values(boostEvents)) {
             if (
                 t >= new Date(event.start).getTime() &&
@@ -460,12 +778,13 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
     }
     // round to avoid float drift while preserving fractional XP (smallest multiplier is 0.00025)
     totalXp = Math.round(totalXp * 1e5) / 1e5;
-    console.log(`User ${user.username} earned ${totalXp} XP from ${stats.length} matches since last update`);
+    console.log(
+        `User ${user.username} earned ${totalXp} XP from ${stats.length} matches since last update`,
+    );
 
     const newTotalXp = currentXp + totalXp;
 
     const { level, xp } = getPassLevelAndXp(passType, newTotalXp);
-
 
     // Grant any pass cosmetics the player has reached but not yet been granted
     // (idempotent via pass_item_grants — survives selling the item later).
@@ -481,7 +800,9 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
         oldLevel,
         level,
     );
-    console.log(`User ${user.username} has ${totalXp} XP, level ${level}, ${newUnlocks} new unlocks, golden fries awarded: ${goldenFriesAwarded}`);
+    console.log(
+        `User ${user.username} has ${totalXp} XP, level ${level}, ${newUnlocks} new unlocks, golden fries awarded: ${goldenFriesAwarded}`,
+    );
 
     const pass = {
         type: passType,
@@ -495,7 +816,7 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
     }
 
     // neue xp und level in der user_xp db speichern
-    if(stats.length > 0) {
+    if (stats.length > 0) {
         await db
             .insert(userXpTable)
             .values({
@@ -508,17 +829,17 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
             .onConflictDoUpdate({
                 target: [userXpTable.userId, userXpTable.passType],
                 set: {
-                xp: String(newTotalXp),
-                level,
-                lastUpdated: new Date(),
+                    xp: String(newTotalXp),
+                    level,
+                    lastUpdated: new Date(),
                 },
             });
     }
 
     const quests = Object.keys(QuestDefs).map((questType, idx) => {
-    const questDef = QuestDefs[questType];
+        const questDef = QuestDefs[questType];
 
-            return {
+        return {
             idx,
             type: questType,
             timeAcquired: Date.now(),
@@ -545,7 +866,6 @@ UserRouter.post("/get_pass", validateParams(zGetPassRequest), async (c) => {
 UserRouter.post("/refresh_quest", validateParams(zRefreshQuestRequest), (c) => {
     return c.json<RefreshQuestResponse>({ success: true }, 200);
 });
-
 
 const PASS_MAX_LEVEL = GameConfig.serverSettings.passMaxLevel;
 
