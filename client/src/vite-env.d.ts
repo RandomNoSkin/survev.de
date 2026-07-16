@@ -14,3 +14,10 @@ interface ImportMeta {
 }
 
 declare module "virtual-atlases-*" {}
+
+/** A single atlas' spritesheets — "virtual-atlas-<name>-<res>". */
+declare module "virtual-atlas-*" {
+    import type { ISpritesheetData } from "pixi.js-legacy";
+    const sheets: ISpritesheetData[];
+    export default sheets;
+}

@@ -49,9 +49,9 @@ export const BASE_RARITY: Record<number, number> = {
 /** Category multiplier applied on top of the rarity base price. */
 export const CATEGORY_MULT: Record<ShopCategory, number> = {
     emote: 1,
-    outfit: 2,
+    particle: 2,
     death_effect: 2.5,
-    particle: 3,
+    outfit: 3,
     melee: 4,
 };
 

@@ -5791,21 +5791,33 @@ a:active {
   align-items: flex-start;
 }
 
-/* Market listings: wrap into rows of at most 3 (the max-width caps it at 3 of the
- * fixed-280px cards). Flex-wrap means rows wrap instead of scrolling horizontally.
- * Spacing matches the original single-row shop layout. */
-#market-listings.market-listings {
+/* Market and auction listings: wrap into rows instead of scrolling horizontally.
+ * `flex: 0 0 auto` keeps the cards at their natural 306px (the fixed-280px content
+ * box plus padding and border) rather than letting flex squash them, and the
+ * max-width is what caps how many fit per row. Spacing matches the original
+ * single-row shop layout.
+ *
+ * Overrides the .shop-offers row layout above by source order — both are single
+ * class selectors, so keep this rule after it. */
+.market-listings {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-start;
   gap: 48px 40px;
   padding: 50px 20px;
+  /* 3 cards + 2 gaps = 998px; a 4th (1344px) can't fit. */
   max-width: 1100px;
   margin: 0 auto;
 }
-#market-listings .shop-offer {
+.market-listings .shop-offer {
   flex: 0 0 auto;
+}
+/* Auction cards carry more per card than market ones (bid info, countdown and a
+ * bid button), so give them a row of 2: 2 cards + 1 gap = 652px, while a 3rd
+ * (998px) can't fit. */
+#auction-listings.market-listings {
+  max-width: 660px;
 }
 .shop-status {
   color: #ddd;

@@ -21,7 +21,12 @@ import { api } from "../../api";
 import { device } from "../../device";
 import { helpers } from "../../helpers";
 import type { App } from "./app";
-import { DEFAULT_UNLOCKED, LOADOUT_MODAL_CSS } from "./loadoutModal";
+import {
+    DEFAULT_UNLOCKED,
+    imgHtml,
+    LOADOUT_MODAL_CSS,
+    upgradeSkinImages,
+} from "./loadoutModal";
 import loading from "./templates/loading.ejs";
 import matchData from "./templates/matchData.ejs";
 import matchHistory from "./templates/matchHistory.ejs";
@@ -550,11 +555,6 @@ export class PlayerView {
             for (const e of loadout.emotes) if (e) equipped.add(e);
         }
 
-        // Stats page is served from /stats/; helper returns root-relative "img/..." paths.
-        const svgFor = (type: string) => {
-            const s = helpers.getSvgFromGameType(type);
-            return s.startsWith("img/") ? `/${s}` : s;
-        };
         const nameFor = (type: string) =>
             (GameObjectDefs[type] as { name?: string } | undefined)?.name || type;
         const catOf = (type: string) => {
@@ -587,7 +587,7 @@ export class PlayerView {
                 : "";
             return `<div class="ld-tile${onMarket ? " ld-tile-market" : ""}">
                 <div class="ld-badges">${badges}</div>
-                <div class="ld-img" style="background-image:url('${svgFor(type)}')"></div>
+                ${imgHtml(type)}
                 <div class="ld-name" title="${name}">${name}</div>
                 <div class="ld-rarity" style="color:${rarityColors[r] ?? "#c5c5c5"}">${rarityNames[r] ?? "Common"}</div>
                 ${market}
@@ -681,6 +681,7 @@ export class PlayerView {
             }
         });
         $("body").append($modal);
+        upgradeSkinImages($modal);
     }
 
     /** Opens an in-app dialog to enter a Golden Fries amount and send a buy-offer. */
