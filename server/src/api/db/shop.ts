@@ -1,7 +1,8 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
+    BUNDLE_DEATH_EFFECT_CHANCE,
     BUNDLE_DISCOUNT,
     getItemCategory,
     getItemPrice,
@@ -98,6 +99,52 @@ function nextServerMidnight(): number {
     ).getTime();
 }
 
+//
+// Weekly rotation. A shop week runs Monday 00:00 → Sunday 23:59:59 (server-local), so it
+// rolls at a midnight the daily rotation rolls at too.
+//
+
+/** Slots 2 and 3 belong to the weekly rotation; 0 and 1 to the daily one. The slot id is
+ *  what decides which period a purchase is keyed by, so these ids must stay stable. */
+export function isWeeklySlot(slot: number): boolean {
+    return slot === 2 || slot === 3;
+}
+
+/** Epoch ms of the Monday 00:00 (server-local) starting the week that contains `t`. */
+function startOfServerWeek(t: number): number {
+    const d = new Date(t);
+    const daysSinceMonday = (d.getDay() + 6) % 7; // getDay(): 0=Sun … 6=Sat
+    return new Date(
+        d.getFullYear(),
+        d.getMonth(),
+        d.getDate() - daysSinceMonday,
+    ).getTime();
+}
+
+/**
+ * Key of the current shop week: "w" + the date of its Monday, e.g. "w2026-07-13". The
+ * prefix keeps week keys from ever colliding with day keys — both share the purchases
+ * table, the ledger reason (`shop:<key>:<slot>`) and the item source (`shop:<key>`).
+ */
+function serverWeek(): string {
+    const d = new Date(startOfServerWeek(Date.now()));
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `w${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Epoch ms of the start (Monday 00:00 server-local) of a "wYYYY-MM-DD" shop week. */
+function startOfWeekKey(week: string): number {
+    return startOfServerDay(week.replace(/^w/, ""));
+}
+
+/** Epoch ms when the weekly shop rolls: the midnight right after Sunday 23:59:59. Steps
+ *  by calendar days rather than 7×24h so a DST switch can't shift the reset by an hour. */
+function nextWeekReset(): number {
+    const d = new Date(startOfServerWeek(Date.now()));
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7).getTime();
+}
+
 function hashSeed(str: string): number {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) {
@@ -138,31 +185,50 @@ function toItem(type: string) {
     return { type, price: getItemPrice(type) };
 }
 
-/** Builds today's two offers for a user (deterministic; `purchased` filled later). */
-function generateDailyOffers(userId: string, day: string): ShopOffer[] {
-    // SHARED_SHOP → seed by day only, so every player sees the same offers today.
-    const seedKey = SHARED_SHOP ? day : `${userId}:${day}`;
-    const rng = mulberry32(hashSeed(seedKey));
+/**
+ * Builds one period's two offers (a single cosmetic + a four-item bundle) from a seeded
+ * `rng`. Shared by the daily and the weekly rotation, which differ only in seed, pool and
+ * slot ids.
+ *
+ * The order of `rng` draws is load-bearing: `shopOfferItemTypes` replays the generators for
+ * a PAST period to work out which items a purchase granted (moderation revert). Existing
+ * draws must keep their position in the stream — anything new is appended at the end,
+ * never spliced in between.
+ */
+function buildOffers(
+    rng: () => number,
+    pool: string[],
+    singleSlot: number,
+    bundleSlot: number,
+): ShopOffer[] {
     const offers: ShopOffer[] = [];
-    const passItems = completedPassItems(startOfServerDay(day));
 
-    // Slot 0 — single random completed-pass cosmetic.
-    const single = pick(rng, [...passItems, ...SHOP_POOL]);
+    // A single random cosmetic.
+    const single = pick(rng, pool);
     if (single) {
         const item = toItem(single);
-        offers.push({ slot: 0, items: [item], price: item.price, purchased: false });
+        offers.push({ slot: singleSlot, items: [item], price: item.price, purchased: false });
     }
 
-    // Slot 1 — bundle: one item per category (skin/melee/emote/particle).
-    const bundleItems = BUNDLE_CATEGORIES.map((cat) =>
-        pick(rng, poolForCategory(cat, [...passItems, ...SHOP_POOL])),
-    )
-        .filter((t): t is string => !!t)
-        .map(toItem);
-    if (bundleItems.length > 0) {
+    // Bundle: one item per category (skin/melee/emote/particle).
+    const bundleTypes = BUNDLE_CATEGORIES.map((cat) =>
+        pick(rng, poolForCategory(cat, pool)),
+    ).filter((t): t is string => !!t);
+
+    // A death effect may take the place of one of those four, keeping the bundle at four
+    // items. Dormant while no ended pass holds a death effect — which is also what keeps
+    // pre-existing days resolving exactly as they did before the swap existed.
+    const deathPool = poolForCategory("death_effect", pool);
+    if (bundleTypes.length && deathPool.length && rng() < BUNDLE_DEATH_EFFECT_CHANCE) {
+        const death = pick(rng, deathPool);
+        if (death) bundleTypes[Math.floor(rng() * bundleTypes.length)] = death;
+    }
+
+    if (bundleTypes.length > 0) {
+        const bundleItems = bundleTypes.map(toItem);
         const sum = bundleItems.reduce((acc, it) => acc + it.price, 0);
         offers.push({
-            slot: 1,
+            slot: bundleSlot,
             items: bundleItems,
             price: Math.round(sum * BUNDLE_DISCOUNT),
             purchased: false,
@@ -172,34 +238,78 @@ function generateDailyOffers(userId: string, day: string): ShopOffer[] {
     return offers;
 }
 
+/** Today's offers for a user — slot 0 single, slot 1 bundle (`purchased` filled later). */
+export function generateDailyOffers(userId: string, day: string): ShopOffer[] {
+    // SHARED_SHOP → seed by day only, so every player sees the same offers today.
+    const seedKey = SHARED_SHOP ? day : `${userId}:${day}`;
+    const rng = mulberry32(hashSeed(seedKey));
+    const pool = [...completedPassItems(startOfServerDay(day)), ...SHOP_POOL];
+    return buildOffers(rng, pool, 0, 1);
+}
+
 /**
- * The cosmetic types a given (user, day, slot) shop offer grants. Deterministic, so
- * the moderation revert can identify which item instances a shop purchase created
- * (they carry `source: "shop:<day>"`). Empty if the slot has no offer.
+ * This week's offers for a user — slot 2 single, slot 3 bundle. Same shape as the daily
+ * rotation but seeded by the week key, so it holds still from Monday 00:00 until the
+ * Sunday-23:59:59 reset. The pass pool is frozen at the start of the week, mirroring how
+ * the daily pool never shifts mid-day.
  */
-export function shopOfferItemTypes(userId: string, day: string, slot: number): string[] {
-    const offer = generateDailyOffers(userId, day).find((o) => o.slot === slot);
+export function generateWeeklyOffers(userId: string, week: string): ShopOffer[] {
+    const seedKey = SHARED_SHOP ? week : `${userId}:${week}`;
+    const rng = mulberry32(hashSeed(seedKey));
+    const pool = [...completedPassItems(startOfWeekKey(week)), ...SHOP_POOL];
+    return buildOffers(rng, pool, 2, 3);
+}
+
+/**
+ * The cosmetic types a given (user, period key, slot) shop offer grants. Deterministic, so
+ * the moderation revert can identify which item instances a shop purchase created (they
+ * carry `source: "shop:<key>"`). The slot decides whether `key` is a day or a week key.
+ * Empty if the slot has no offer.
+ */
+export function shopOfferItemTypes(userId: string, key: string, slot: number): string[] {
+    const offers = isWeeklySlot(slot)
+        ? generateWeeklyOffers(userId, key)
+        : generateDailyOffers(userId, key);
+    const offer = offers.find((o) => o.slot === slot);
     return offer ? offer.items.map((it) => it.type) : [];
 }
 
-/** Today's shop for a user: offers (with `purchased` flags) + current balance. */
+/** The shop for a user: today's + this week's offers (with `purchased` flags) + balance. */
 export async function getShopForUser(userId: string): Promise<ShopResponse> {
     const day = serverDay();
-    const offers = generateDailyOffers(userId, day);
+    const week = serverWeek();
+    const offers = [
+        ...generateDailyOffers(userId, day),
+        ...generateWeeklyOffers(userId, week),
+    ];
 
     const [purchased, balance] = await Promise.all([
         db
-            .select({ slot: shopPurchasesTable.slot })
+            .select({ day: shopPurchasesTable.day, slot: shopPurchasesTable.slot })
             .from(shopPurchasesTable)
             .where(
-                and(eq(shopPurchasesTable.userId, userId), eq(shopPurchasesTable.day, day)),
+                and(
+                    eq(shopPurchasesTable.userId, userId),
+                    inArray(shopPurchasesTable.day, [day, week]),
+                ),
             ),
         getGoldenFries(userId),
     ]);
-    const boughtSlots = new Set(purchased.map((p) => p.slot));
-    for (const offer of offers) offer.purchased = boughtSlots.has(offer.slot);
+    const bought = new Set(purchased.map((p) => `${p.day}:${p.slot}`));
+    for (const offer of offers) {
+        const key = isWeeklySlot(offer.slot) ? week : day;
+        offer.purchased = bought.has(`${key}:${offer.slot}`);
+    }
 
-    return { success: true, day, resetTime: nextServerMidnight(), balance, offers };
+    return {
+        success: true,
+        day,
+        week,
+        resetTime: nextServerMidnight(),
+        weeklyResetTime: nextWeekReset(),
+        balance,
+        offers,
+    };
 }
 
 class ShopError extends Error {
@@ -209,18 +319,26 @@ class ShopError extends Error {
 }
 
 /**
- * Buys a daily shop offer: regenerates the offer server-side (never trusts the
- * client), then atomically records the purchase, deducts Golden Fries (+ledger),
- * and adds the item instance(s) with source `shop:<day>`. Idempotent per slot/day.
+ * Buys a shop offer: regenerates the offer server-side (never trusts the client), then
+ * atomically records the purchase, deducts Golden Fries (+ledger), and adds the item
+ * instance(s) with source `shop:<key>`. The slot picks the rotation — daily (slots 0/1,
+ * keyed by the day) or weekly (slots 2/3, keyed by the week). Idempotent per key/slot.
  */
 export async function buyShopOffer(
     userId: string,
     slot: number,
 ): Promise<BuyShopResponse> {
-    const day = serverDay();
-    const offer = generateDailyOffers(userId, day).find((o) => o.slot === slot);
+    const weekly = isWeeklySlot(slot);
+    const key = weekly ? serverWeek() : serverDay();
+    const offer = (
+        weekly ? generateWeeklyOffers(userId, key) : generateDailyOffers(userId, key)
+    ).find((o) => o.slot === slot);
     if (!offer || offer.items.length === 0) {
-        return { success: false, error: "invalid_slot", balance: await getGoldenFries(userId) };
+        return {
+            success: false,
+            error: "invalid_slot",
+            balance: await getGoldenFries(userId),
+        };
     }
 
     try {
@@ -228,7 +346,7 @@ export async function buyShopOffer(
             // Reject double-buy: PK (userId, day, slot) makes this insert the lock.
             const [purchase] = await tx
                 .insert(shopPurchasesTable)
-                .values({ userId, day, slot })
+                .values({ userId, day: key, slot })
                 .onConflictDoNothing()
                 .returning({ slot: shopPurchasesTable.slot });
             if (!purchase) throw new ShopError("already_purchased");
@@ -238,7 +356,10 @@ export async function buyShopOffer(
                 .update(usersTable)
                 .set({ goldenFries: sql`${usersTable.goldenFries} - ${offer.price}` })
                 .where(
-                    and(eq(usersTable.id, userId), gte(usersTable.goldenFries, offer.price)),
+                    and(
+                        eq(usersTable.id, userId),
+                        gte(usersTable.goldenFries, offer.price),
+                    ),
                 )
                 .returning({ balance: usersTable.goldenFries });
             if (!bal) throw new ShopError("insufficient_funds");
@@ -246,17 +367,21 @@ export async function buyShopOffer(
             await tx.insert(goldenFriesLedgerTable).values({
                 userId,
                 amount: -offer.price,
-                reason: `shop:${day}:${slot}`,
+                reason: `shop:${key}:${slot}`,
                 balanceAfter: bal.balance,
             });
 
             const now = Date.now();
+            // Split the offer's actual (possibly bundle-discounted) price across its items
+            // by relative shop value, so each instance records what was paid for it.
+            const priceSum = offer.items.reduce((s, it) => s + it.price, 0) || 1;
             await tx.insert(itemsTable).values(
                 offer.items.map((it) => ({
                     userId,
                     type: it.type,
-                    source: `shop:${day}`,
+                    source: `shop:${key}`,
                     timeAcquired: now,
+                    pricePaid: Math.round((offer.price * it.price) / priceSum),
                 })),
             );
 

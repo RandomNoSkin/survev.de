@@ -8,10 +8,12 @@ import {
     type ParsedTracks,
     parseTracks,
 } from "../../../../shared/net/replay";
+import type { MatchDataRequest, MatchDataResponse } from "../../../../shared/types/stats";
 import { api } from "../../api";
 import { helpers } from "../../helpers";
 import { type GodViewPlayer, ReplayGodView } from "../../replay/godView";
 import type { App } from "./app";
+import { showMatchLoadout } from "./loadoutModal";
 
 /** Decompresses gzip bytes using the browser's native DecompressionStream. */
 async function gunzip(buf: ArrayBuffer): Promise<Uint8Array> {
@@ -79,6 +81,8 @@ export class GameView {
     private events: GameDamageEvent[] = [];
     private stats: GamePlayerStats[] = [];
     private map: GameMapFile | null = null;
+    /** Cosmetics each player had equipped in this match, keyed by name (see `fetchLoadouts`). */
+    private loadouts = new Map<string, string[]>();
     private meta = new Map<number, PlayerMeta>();
     private paths = new Map<number, PathPoint[]>();
     private deaths = new Map<number, PathPoint>();
@@ -118,7 +122,11 @@ export class GameView {
             return;
         }
 
-        Promise.all([this.fetchTracks(region, gameId), this.fetchMeta(region, gameId)])
+        Promise.all([
+            this.fetchTracks(region, gameId),
+            this.fetchMeta(region, gameId),
+            this.fetchLoadouts(gameId),
+        ])
             .then(() => this.build())
             .catch((err) => {
                 console.error("Game view load failed:", err);
@@ -155,6 +163,33 @@ export class GameView {
             }
         } catch {
             /* meta is optional — paths still work without it */
+        }
+    }
+
+    /**
+     * Per-player match loadouts, from the DB rather than the replay side-files. The damage
+     * file numbers players by `__id` and match_data by `matchDataId`, so the two rosters are
+     * joined by name — the same key the subject lookup uses. A name that isn't unique within
+     * the match is dropped rather than risk attributing the wrong loadout to a player.
+     * Loadouts of accounts marked private come back empty and simply show no button.
+     */
+    private async fetchLoadouts(gameId: string) {
+        try {
+            const res = await fetch(api.resolveUrl("/api/match_data"), {
+                method: "POST",
+                headers: { "Content-Type": "application/json; charset=utf-8" },
+                body: JSON.stringify({ gameId } satisfies MatchDataRequest),
+            });
+            if (!res.ok) return;
+            const rows: MatchDataResponse = await res.json();
+            const ambiguous = new Set<string>();
+            for (const r of rows) {
+                if (this.loadouts.has(r.username)) ambiguous.add(r.username);
+                this.loadouts.set(r.username, r.equipped_cosmetics ?? []);
+            }
+            for (const name of ambiguous) this.loadouts.delete(name);
+        } catch {
+            /* loadouts are optional — the rest of the view works without them */
         }
     }
 
@@ -502,12 +537,19 @@ export class GameView {
 
     private endStatsHtml(): string {
         if (!this.stats.length) return '<div class="gv-empty">No stats</div>';
+        // Older matches predate loadout recording — drop the column entirely for them.
+        const anyLoadout = [...this.loadouts.values()].some((c) => c.length);
         const rows = [...this.stats]
             .sort((a, b) => (a.rank || 999) - (b.rank || 999))
             .map((p) => {
                 const acc =
                     p.shots > 0 ? `${Math.round((p.hits / p.shots) * 100)}%` : "—";
                 const hl = this.subjectId === p.id ? " gv-stats-you" : "";
+                const loadout = !anyLoadout
+                    ? ""
+                    : this.loadouts.get(p.name)?.length
+                      ? `<td><span class="gv-loadout-btn" data-pid="${p.id}">View</span></td>`
+                      : `<td class="gv-loadout-none">—</td>`;
                 return `<tr class="${hl}">
                     <td>#${p.rank || "—"}</td>
                     <td class="gv-stats-name">${esc(p.name)}</td>
@@ -518,11 +560,12 @@ export class GameView {
                     <td>${p.shots}</td>
                     <td>${p.hits}</td>
                     <td>${acc}</td>
+                    ${loadout}
                 </tr>`;
             })
             .join("");
         return `<table class="gv-stats-table"><thead><tr>
-            <th>#</th><th>Player</th><th>K</th><th>Dmg</th><th>Took</th><th>Alive</th><th>Shots</th><th>Hits</th><th>Acc</th>
+            <th>#</th><th>Player</th><th>K</th><th>Dmg</th><th>Took</th><th>Alive</th><th>Shots</th><th>Hits</th><th>Acc</th>${anyLoadout ? "<th>Loadout</th>" : ""}
         </tr></thead><tbody>${rows}</tbody></table>`;
     }
 
@@ -618,6 +661,13 @@ export class GameView {
             this.el.find("#gv-play").text("▶");
             this.draw();
         });
+        // "View" in the End stats table — the cosmetics that player wore in this match.
+        this.el.find(".gv-loadout-btn").on("click", (e) => {
+            const pid = Number($(e.currentTarget).attr("data-pid"));
+            const name = this.meta.get(pid)?.name ?? "";
+            showMatchLoadout(name, this.loadouts.get(name) ?? []);
+        });
+
         this.el.find(".gv-legend-row").on("click", (e) => {
             const pid = Number($(e.currentTarget).attr("data-pid"));
             this.focusId = this.focusId === pid ? null : pid;

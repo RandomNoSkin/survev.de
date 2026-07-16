@@ -20,6 +20,8 @@ export type Item = {
     wins?: number;
     kills?: number;
     damage?: number;
+    /** Golden Fries the current owner paid to acquire this instance (null = unknown). */
+    pricePaid?: number | null;
 };
 
 export const loadoutSchema = z.object({

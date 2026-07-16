@@ -1,18 +1,23 @@
 import $ from "jquery";
-import loadout from "../../../shared/utils/loadout";
-import type { Account } from "../account";
-import type { SaleNotification } from "../../../shared/types/user";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import type {
+    AuctionNotification,
+    GiftNotification,
+    SaleNotification,
+} from "../../../shared/types/user";
+import loadout from "../../../shared/utils/loadout";
+import { util } from "../../../shared/utils/util";
+import type { Account } from "../account";
 import { api } from "../api";
 import { device } from "../device";
 import { helpers } from "../helpers";
 import { proxy } from "../proxy";
 import { SDK } from "../sdk/sdk";
-import { util } from "../../../shared/utils/util";
 import { playGoldenFriesUnlock } from "./goldenFriesFx";
 import type { LoadoutMenu } from "./loadoutMenu";
 import type { Localization } from "./localization";
 import { MenuModal } from "./menuModal";
+import type { SocialUi } from "./socialUi";
 
 /**
  * Builds the "remaining time" suffix shown under a ban notice. Returns a permanent
@@ -123,6 +128,9 @@ export class ProfileUi {
     // True while the Golden Fries unlock animation owns the counter element.
     friesAnimating = false;
 
+    /** Set by main.ts so the top-right Social button can open the gift panel. */
+    socialUi: SocialUi | null = null;
+
     // "Your item sold" popup (mirrors the new-item confirm flow).
     saleNotifyModal: MenuModal | null = null;
     /** Sales still queued to be shown one at a time. */
@@ -130,6 +138,18 @@ export class ProfileUi {
     /** All listing ids in the batch currently being shown (acked when dismissed). */
     saleBatchIds: number[] = [];
     showingSales = false;
+
+    // "You received a gift" popup (same one-at-a-time queue as the sold popup).
+    giftNotifyModal: MenuModal | null = null;
+    pendingGifts: GiftNotification[] = [];
+    giftBatchIds: number[] = [];
+    showingGifts = false;
+
+    // Auction outcome popup (won / your item sold / ended unsold) — same queue pattern.
+    auctionNotifyModal: MenuModal | null = null;
+    pendingAuctions: AuctionNotification[] = [];
+    auctionBatchIds: number[] = [];
+    showingAuctions = false;
 
     constructor(
         public account: Account,
@@ -148,6 +168,8 @@ export class ProfileUi {
         account.addEventListener("items", this.onItemsUpdated.bind(this));
         account.addEventListener("request", this.render.bind(this));
         account.addEventListener("sales", this.maybeShowSales.bind(this));
+        account.addEventListener("gifts", this.maybeShowGifts.bind(this));
+        account.addEventListener("auctions", this.maybeShowAuctions.bind(this));
         this.initUi();
         this.render();
     }
@@ -159,6 +181,22 @@ export class ProfileUi {
         this.saleNotifyModal.onHide((e) => {
             if (e?.target?.dataset?.confirmAll) this.pendingSales = [];
             this.showNextSale();
+        });
+
+        // "You received a gift" popup — same one-at-a-time flow as the sold popup.
+        this.giftNotifyModal = new MenuModal($("#modal-gift-notify"));
+        this.giftNotifyModal.onShow(() => $("#modal-screen-block").fadeIn(200));
+        this.giftNotifyModal.onHide((e) => {
+            if (e?.target?.dataset?.confirmAll) this.pendingGifts = [];
+            this.showNextGift();
+        });
+
+        // Auction outcome popup — same one-at-a-time flow, chained after gifts.
+        this.auctionNotifyModal = new MenuModal($("#modal-auction-notify"));
+        this.auctionNotifyModal.onShow(() => $("#modal-screen-block").fadeIn(200));
+        this.auctionNotifyModal.onHide((e) => {
+            if (e?.target?.dataset?.confirmAll) this.pendingAuctions = [];
+            this.showNextAuction();
         });
 
         // Set username
@@ -315,6 +353,16 @@ export class ProfileUi {
         });
         $(".account-loadout-link, #btn-customize").on("click", () => {
             this.loadoutMenu.show();
+            return false;
+        });
+        $("#btn-social").on("click", () => {
+            this.waitOnLogin(() => {
+                if (this.account.loggedIn) {
+                    this.socialUi?.open();
+                } else {
+                    this.showLoginMenu({ modal: true });
+                }
+            });
             return false;
         });
         $(".account-details-user").on("click", () => {
@@ -501,6 +549,8 @@ export class ProfileUi {
             this.account.loggedIn ? "block" : "none",
         );
         $("#account-login").css("display", this.account.loggedIn ? "none" : "block");
+        // Social button (next to the username), only shown while logged in.
+        $("#btn-social").css("display", this.account.loggedIn ? "flex" : "none");
 
         // Golden Fries balance (top-left HUD), only shown while logged in
         this.renderGoldenFries();
@@ -583,14 +633,14 @@ export class ProfileUi {
             this.account.ackSales(this.saleBatchIds);
             this.account.sales = [];
             this.saleBatchIds = [];
+            // Chain into any received-gift popups so the two never overlap.
+            this.maybeShowGifts();
             return;
         }
 
         const objDef = GameObjectDefs[sale.type] as { rarity?: number; name?: string };
         const name =
-            this.localization.translate(`game-${sale.type}`) ||
-            objDef?.name ||
-            sale.type;
+            this.localization.translate(`game-${sale.type}`) || objDef?.name || sale.type;
         const svg = helpers.getSvgFromGameType(sale.type);
         const transform = helpers.getCssTransformFromGameType(sale.type);
 
@@ -605,5 +655,120 @@ export class ProfileUi {
         });
         // Re-open after a tick so the fadeOut from the previous card can settle.
         setTimeout(() => this.saleNotifyModal?.show(), 200);
+    }
+
+    /**
+     * Starts the "you received a gift" popup queue. Guarded against the sold-popup so the
+     * two never overlap — if a sale batch is showing, this runs when that batch finishes.
+     */
+    maybeShowGifts() {
+        if (this.showingGifts || this.showingSales || !this.account.loggedIn) return;
+        const gifts = this.account.gifts;
+        if (!gifts.length) return;
+
+        this.showingGifts = true;
+        this.pendingGifts = [...gifts];
+        this.giftBatchIds = gifts.map((g) => g.id);
+        this.showNextGift();
+    }
+
+    /** Shows the next queued gift, or finishes the batch (ack + hide) when empty. */
+    private showNextGift() {
+        const gift = this.pendingGifts.shift();
+        if (!gift) {
+            this.showingGifts = false;
+            this.giftNotifyModal?.hide();
+            $("#modal-screen-block").fadeOut(300);
+            this.account.ackGifts(this.giftBatchIds);
+            this.account.gifts = [];
+            this.giftBatchIds = [];
+            // Chain into any auction-outcome popups so they never overlap.
+            this.maybeShowAuctions();
+            return;
+        }
+
+        const img = $("#modal-gift-notify-image-inner");
+        if (gift.kind === "item") {
+            const objDef = GameObjectDefs[gift.itemType] as { name?: string };
+            const name =
+                this.localization.translate(`game-${gift.itemType}`) ||
+                objDef?.name ||
+                gift.itemType;
+            img.text("").css({
+                "background-image": `url(${helpers.getSvgFromGameType(gift.itemType)})`,
+                transform: helpers.getCssTransformFromGameType(gift.itemType),
+            });
+            $("#modal-gift-notify-name").html(helpers.htmlEscape(name));
+        } else {
+            img.css({ "background-image": "none", transform: "none" }).text("🍟");
+            $("#modal-gift-notify-name").html(`${gift.amount} Golden Fries`);
+        }
+        $("#modal-gift-notify-detail").html(
+            `from <b>${helpers.htmlEscape(gift.fromName)}</b>`,
+        );
+        // Re-open after a tick so the fadeOut from the previous card can settle.
+        setTimeout(() => this.giftNotifyModal?.show(), 200);
+    }
+
+    /**
+     * Starts the auction-outcome popup queue (items you won, your items that sold, or your
+     * auctions that ended unsold). Guarded against the sale/gift popups so none overlap.
+     */
+    maybeShowAuctions() {
+        if (
+            this.showingAuctions ||
+            this.showingSales ||
+            this.showingGifts ||
+            !this.account.loggedIn
+        ) {
+            return;
+        }
+        const auctions = this.account.auctions;
+        if (!auctions.length) return;
+
+        this.showingAuctions = true;
+        this.pendingAuctions = [...auctions];
+        this.auctionBatchIds = auctions.map((a) => a.auctionId);
+        this.showNextAuction();
+    }
+
+    /** Shows the next queued auction outcome, or finishes the batch (ack + hide). */
+    private showNextAuction() {
+        const a = this.pendingAuctions.shift();
+        if (!a) {
+            this.showingAuctions = false;
+            this.auctionNotifyModal?.hide();
+            $("#modal-screen-block").fadeOut(300);
+            this.account.ackAuctions(this.auctionBatchIds);
+            this.account.auctions = [];
+            this.auctionBatchIds = [];
+            return;
+        }
+
+        const objDef = GameObjectDefs[a.type] as { name?: string } | undefined;
+        const name =
+            this.localization.translate(`game-${a.type}`) || objDef?.name || a.type;
+        $("#modal-auction-notify-image-inner").css({
+            "background-image": `url(${helpers.getSvgFromGameType(a.type)})`,
+            transform: helpers.getCssTransformFromGameType(a.type),
+        });
+        $("#modal-auction-notify-name").html(helpers.htmlEscape(name));
+
+        let title = "Auction ended";
+        let detail = "";
+        if (a.kind === "won") {
+            title = "You won an auction!";
+            detail = `Won for <b>${a.amount}</b> 🍟 from ${helpers.htmlEscape(a.otherName)}`;
+        } else if (a.kind === "sold") {
+            title = "Your auction sold!";
+            detail = `Sold for <b>${a.amount}</b> 🍟 to ${helpers.htmlEscape(a.otherName)}`;
+        } else {
+            title = "Auction ended";
+            detail = "No bids — the item stays in your inventory.";
+        }
+        $("#modal-auction-notify-title").text(title);
+        $("#modal-auction-notify-detail").html(detail);
+
+        setTimeout(() => this.auctionNotifyModal?.show(), 200);
     }
 }

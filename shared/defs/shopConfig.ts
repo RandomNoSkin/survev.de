@@ -34,28 +34,36 @@ export function isAllowedItem(type: string): boolean {
  * levels of Golden Fries), scaling up from there.
  */
 
-export type ShopCategory = "emote" | "outfit" | "particle" | "melee";
+export type ShopCategory = "emote" | "outfit" | "particle" | "melee" | "death_effect";
 
 /** Base price per rarity (emote-level). */
 export const BASE_RARITY: Record<number, number> = {
-    [Rarity.Stock]: 10,
-    [Rarity.Common]: 25,
-    [Rarity.Uncommon]: 50,
-    [Rarity.Rare]: 100,
-    [Rarity.Epic]: 180,
-    [Rarity.Mythic]: 300,
+    [Rarity.Stock]: 20,
+    [Rarity.Common]: 50,
+    [Rarity.Uncommon]: 100,
+    [Rarity.Rare]: 200,
+    [Rarity.Epic]: 360,
+    [Rarity.Mythic]: 600,
 };
 
 /** Category multiplier applied on top of the rarity base price. */
 export const CATEGORY_MULT: Record<ShopCategory, number> = {
     emote: 1,
     outfit: 2,
+    death_effect: 2.5,
     particle: 3,
     melee: 4,
 };
 
 /** Bundle (daily shop slot 1) gets 10% off the summed item prices. */
-export const BUNDLE_DISCOUNT = 0.8;
+export const BUNDLE_DISCOUNT = 0.9;
+
+/**
+ * Chance that a death effect takes the place of one of the bundle's four items (so the
+ * bundle always holds exactly four). Only bites once a pass containing death effects has
+ * ended — until then no death effect is shoppable and the bundle is unaffected.
+ */
+export const BUNDLE_DEATH_EFFECT_CHANCE = 0.25;
 
 /** When true, the daily shop is the SAME for every player (offers seeded by the day
  *  only). When false, each player gets their own deterministic daily shop. */
@@ -78,10 +86,22 @@ export const MARKET_MAX_PRICE = 1_000_000_000;
 export const MARKET_MAX_LISTINGS = 20;
 
 /** A player may only create one listing per this interval (anti-spam throttle). */
-export const MARKET_LIST_COOLDOWN_MS = 30 * 60 * 1000;
+export const MARKET_LIST_COOLDOWN_MS = 30 * 1000;
 
 /** A listing is automatically taken back (expired) this long after it was created. */
 export const MARKET_LISTING_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** How long an auction runs before it is settled. Cannot be cancelled early. */
+export const AUCTION_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/** A new bid must beat the current highest bid by at least this many Golden Fries. */
+export const AUCTION_MIN_INCREMENT = 1;
+
+/** A buy-offer auto-expires this long after it was made if not acted upon. */
+export const OFFER_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** Max simultaneous pending buy-offers a single player may have outstanding. */
+export const OFFER_MAX_OUTSTANDING = 10;
 
 /**
  * Allowed ask-price range for listing `type` on the player marketplace, anchored to
@@ -121,6 +141,8 @@ export function getItemCategory(type: string): ShopCategory | null {
         case "heal_effect":
         case "boost_effect":
             return "particle";
+        case "death_effect":
+            return "death_effect";
         default:
             return null;
     }

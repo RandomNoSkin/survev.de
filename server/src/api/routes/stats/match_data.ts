@@ -23,7 +23,7 @@ matchDataRouter.post(
     async (c) => {
         const { gameId } = c.req.valid("json");
 
-        const result = await db
+        const rows = await db
             .select({
                 slug: usersTable.slug,
                 username: matchDataTable.username,
@@ -37,11 +37,19 @@ matchDataRouter.post(
                 damage_taken: matchDataTable.damageTaken,
                 killer_id: matchDataTable.killerId,
                 killed_ids: matchDataTable.killedIds,
+                equipped_cosmetics: matchDataTable.equippedCosmetics,
+                loadout_private: usersTable.loadoutPrivate,
             })
             .from(matchDataTable)
             .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
             .orderBy(asc(matchDataTable.rank))
             .where(eq(matchDataTable.gameId, gameId));
+
+        // Hide the loadout for accounts that marked it private.
+        const result: MatchDataResponse = rows.map(({ loadout_private, ...r }) => ({
+            ...r,
+            equipped_cosmetics: loadout_private ? [] : (r.equipped_cosmetics ?? []),
+        }));
 
         return c.json<MatchDataResponse>(result);
     },

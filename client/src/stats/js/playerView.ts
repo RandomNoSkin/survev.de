@@ -1,5 +1,7 @@
 import $ from "jquery";
+import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
 import { EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs";
+import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig";
 import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
 import type { TeamMode } from "../../../../shared/gameConfig";
 import {
@@ -19,6 +21,7 @@ import { api } from "../../api";
 import { device } from "../../device";
 import { helpers } from "../../helpers";
 import type { App } from "./app";
+import { DEFAULT_UNLOCKED, LOADOUT_MODAL_CSS } from "./loadoutModal";
 import loading from "./templates/loading.ejs";
 import matchData from "./templates/matchData.ejs";
 import matchHistory from "./templates/matchHistory.ejs";
@@ -32,6 +35,16 @@ const templates = {
     player,
     playerCards,
 };
+
+/** One owned cosmetic (deduped per type) as returned by /api/user_loadout. */
+interface OwnedItem {
+    type: string;
+    count: number;
+    /** A representative owned instance id (for making a buy-offer). */
+    itemId: number;
+    onMarket: boolean;
+    price: number | null;
+}
 
 /** Same "1h 2m 3s" formatting the in-game end-of-match stats download uses. */
 function humanizeTime(time: number): string {
@@ -190,9 +203,7 @@ function getPlayerCardData(
         error: error,
         teamModes: teamModes,
         teamModeFilter: teamModeFilter,
-        gameModes: helpers
-                            .getGameModes()
-                            .filter((m) => PLAYER_MAP_IDS.includes(m.mapId)),
+        gameModes: helpers.getGameModes().filter((m) => PLAYER_MAP_IDS.includes(m.mapId)),
     };
 }
 
@@ -264,7 +275,7 @@ export class PlayerView {
     el = $(
         templates.player({
             phoneDetected: device.mobile && !device.tablet,
-            }),
+        }),
     );
     constructor(readonly app: App) {}
     getUrlParams() {
@@ -448,6 +459,321 @@ export class PlayerView {
             params.mapId,
         );
     }
+
+    /** Fetch and display a read-only viewer of the given player's equipped loadout. */
+    showLoadoutModal(slug: string) {
+        $.ajax({
+            url: api.resolveUrl("/api/user_loadout"),
+            type: "POST",
+            data: JSON.stringify({ slug }),
+            contentType: "application/json; charset=utf-8",
+            timeout: 10 * 1000,
+            success: (data: {
+                found?: boolean;
+                private?: boolean;
+                username?: string;
+                slug?: string;
+                loadout?: Record<string, string | string[]>;
+                items?: OwnedItem[];
+            }) => {
+                if (data?.private) {
+                    this.showLoadoutPrivate(data.username || "");
+                    return;
+                }
+                if (data?.found) {
+                    this.renderLoadoutModal(
+                        data.username || "",
+                        data.slug || slug,
+                        data.loadout || {},
+                        data.items || [],
+                    );
+                }
+            },
+        });
+    }
+
+    /** Shown instead of the collection when the player marked their loadout private. */
+    showLoadoutPrivate(username: string) {
+        $(".loadout-modal-overlay").remove();
+        const $modal = $(
+            `<div class="loadout-modal-overlay">` +
+                `<style>${LOADOUT_MODAL_CSS}</style>` +
+                `<div class="loadout-modal">` +
+                `<div class="ld-header"><span>Collection — ${helpers.htmlEscape(username)}</span><span class="ld-close">✕</span></div>` +
+                `<div class="ld-body"><div class="ld-empty">This player's loadout is private.</div></div>` +
+                `</div></div>`,
+        );
+        $modal.on("click", (e) => {
+            if (
+                $(e.target).is(".loadout-modal-overlay") ||
+                $(e.target).closest(".ld-close").length
+            ) {
+                $modal.remove();
+            }
+        });
+        $("body").append($modal);
+    }
+
+    renderLoadoutModal(
+        username: string,
+        slug: string,
+        loadout: Record<string, string | string[]>,
+        items: OwnedItem[],
+    ) {
+        $(".loadout-modal-overlay").remove();
+
+        const rarityColors = [
+            "#c5c5c5",
+            "#c5c5c5",
+            "#12ff00",
+            "#00deff",
+            "#f600ff",
+            "#d96100",
+        ];
+        const rarityNames = ["Stock", "Common", "Uncommon", "Rare", "Epic", "Mythic"];
+
+        // Types currently equipped by the player — flagged with an "Equipped" badge.
+        const equipped = new Set<string>();
+        for (const key of [
+            "outfit",
+            "melee",
+            "heal",
+            "boost",
+            "death_effect",
+            "player_icon",
+            "crosshair",
+        ]) {
+            const v = loadout[key];
+            if (typeof v === "string" && v) equipped.add(v);
+        }
+        if (Array.isArray(loadout.emotes)) {
+            for (const e of loadout.emotes) if (e) equipped.add(e);
+        }
+
+        // Stats page is served from /stats/; helper returns root-relative "img/..." paths.
+        const svgFor = (type: string) => {
+            const s = helpers.getSvgFromGameType(type);
+            return s.startsWith("img/") ? `/${s}` : s;
+        };
+        const nameFor = (type: string) =>
+            (GameObjectDefs[type] as { name?: string } | undefined)?.name || type;
+        const catOf = (type: string) => {
+            const t = (GameObjectDefs[type] as { type?: string } | undefined)?.type;
+            switch (t) {
+                case "outfit":
+                case "melee":
+                case "emote":
+                case "heal_effect":
+                case "boost_effect":
+                case "death_effect":
+                case "crosshair":
+                    return t;
+                default:
+                    return "other";
+            }
+        };
+
+        const tile = (item: OwnedItem) => {
+            const { type, count, onMarket, price } = item;
+            const r = getItemRarity(type);
+            const name = helpers.htmlEscape(nameFor(type));
+            const badges =
+                (equipped.has(type)
+                    ? `<div class="ld-badge ld-badge-eq">Equipped</div>`
+                    : "") +
+                (count > 1 ? `<div class="ld-badge ld-badge-count">x${count}</div>` : "");
+            const market = onMarket
+                ? `<div class="ld-market">On market${price != null ? ` · ${price}` : ""} ›</div>`
+                : "";
+            return `<div class="ld-tile${onMarket ? " ld-tile-market" : ""}">
+                <div class="ld-badges">${badges}</div>
+                <div class="ld-img" style="background-image:url('${svgFor(type)}')"></div>
+                <div class="ld-name" title="${name}">${name}</div>
+                <div class="ld-rarity" style="color:${rarityColors[r] ?? "#c5c5c5"}">${rarityNames[r] ?? "Common"}</div>
+                ${market}
+                <div class="ld-offer-btn" data-item-id="${item.itemId}" data-type="${type}">Make offer</div>
+            </div>`;
+        };
+
+        // Owned, non-default, known cosmetics grouped by category.
+        const shown = items.filter(
+            (it) => !DEFAULT_UNLOCKED.has(it.type) && !!GameObjectDefs[it.type],
+        );
+
+        // Total inventory worth in Golden Fries (shop value × copies).
+        const totalValue = shown.reduce(
+            (sum, it) => sum + getItemPrice(it.type) * it.count,
+            0,
+        );
+        const groups = new Map<string, OwnedItem[]>();
+        for (const it of shown) {
+            const cat = catOf(it.type);
+            const arr = groups.get(cat);
+            if (arr) arr.push(it);
+            else groups.set(cat, [it]);
+        }
+        const sortItems = (arr: OwnedItem[]) =>
+            arr.sort((a, b) => {
+                if (a.onMarket !== b.onMarket) return a.onMarket ? -1 : 1;
+                const rd = getItemRarity(b.type) - getItemRarity(a.type);
+                if (rd) return rd;
+                return nameFor(a.type).localeCompare(nameFor(b.type));
+            });
+
+        const groupOrder: { key: string; label: string }[] = [
+            { key: "outfit", label: "Outfits" },
+            { key: "melee", label: "Melee" },
+            { key: "emote", label: "Emotes" },
+            { key: "heal_effect", label: "Heal Effects" },
+            { key: "boost_effect", label: "Boost Effects" },
+            { key: "death_effect", label: "Death Effects" },
+            { key: "crosshair", label: "Crosshairs" },
+            { key: "other", label: "Other" },
+        ];
+
+        let body = "";
+        for (const g of groupOrder) {
+            const arr = groups.get(g.key);
+            if (!arr || !arr.length) continue;
+            sortItems(arr);
+            body +=
+                `<div class="ld-section">${g.label} <span class="ld-count">${arr.length}</span></div>` +
+                `<div class="ld-grid">${arr.map(tile).join("")}</div>`;
+        }
+        if (!body) {
+            body = `<div class="ld-empty">This player only owns default cosmetics.</div>`;
+        }
+
+        const html =
+            `<div class="loadout-modal-overlay">` +
+            `<style>${LOADOUT_MODAL_CSS}</style>` +
+            `<div class="loadout-modal">` +
+            `<div class="ld-header"><span>Collection — ${helpers.htmlEscape(username)}</span><span class="ld-close">✕</span></div>` +
+            (shown.length
+                ? `<div class="ld-valuebar">Inventory value <span class="ld-value-num">${totalValue.toLocaleString("en-US")}</span><span class="ld-fries"></span></div>`
+                : "") +
+            `<div class="ld-body">${body}</div>` +
+            `</div></div>`;
+
+        const $modal = $(html);
+        $modal.on("click", (e) => {
+            const $target = $(e.target);
+            if (
+                $target.is(".loadout-modal-overlay") ||
+                $target.closest(".ld-close").length
+            ) {
+                $modal.remove();
+                return;
+            }
+            // "Make offer" — takes precedence over the market redirect on the same tile.
+            const $offer = $target.closest(".ld-offer-btn");
+            if ($offer.length) {
+                e.stopPropagation();
+                this.makeStatsOffer(
+                    Number($offer.attr("data-item-id")),
+                    String($offer.attr("data-type")),
+                );
+                return;
+            }
+            // Clicking an on-market item jumps to the seller's storefront in the main menu.
+            if ($target.closest(".ld-tile-market").length) {
+                window.location.href = `/?storefront=${encodeURIComponent(slug)}`;
+            }
+        });
+        $("body").append($modal);
+    }
+
+    /** Opens an in-app dialog to enter a Golden Fries amount and send a buy-offer. */
+    makeStatsOffer(itemId: number, type: string) {
+        if (!Number.isFinite(itemId)) return;
+        const name = helpers.htmlEscape(
+            (GameObjectDefs[type] as { name?: string } | undefined)?.name || type,
+        );
+        const est = getItemPrice(type);
+        $(".ld-offer-overlay").remove();
+        const $ov = $(
+            `<div class="ld-offer-overlay">
+                <div class="ld-offer-dialog">
+                    <div class="ld-offer-title">Make an offer for ${name}</div>
+                    <div class="ld-offer-est">Estimated value: ${est > 0 ? `${est.toLocaleString("en-US")} 🍟` : "—"}</div>
+                    <input type="number" class="ld-offer-input" min="1" placeholder="Golden Fries amount" />
+                    <div class="ld-offer-msg"></div>
+                    <div class="ld-offer-actions">
+                        <div class="ld-offer-cancel">Cancel</div>
+                        <div class="ld-offer-send">Send offer</div>
+                    </div>
+                </div>
+            </div>`,
+        );
+        const $input = $ov.find(".ld-offer-input");
+        const $msg = $ov.find(".ld-offer-msg");
+        const $send = $ov.find(".ld-offer-send");
+        const close = () => $ov.remove();
+
+        $ov.on("click", (e) => {
+            if (
+                $(e.target).is(".ld-offer-overlay") ||
+                $(e.target).is(".ld-offer-cancel")
+            ) {
+                close();
+            }
+        });
+
+        const submit = () => {
+            const amount = parseInt(String($input.val()), 10);
+            if (!Number.isInteger(amount) || amount < 1) {
+                $msg.css("color", "#ff8a8a").text("Enter a whole number of at least 1.");
+                return;
+            }
+            $send.addClass("ld-offer-disabled").text("…");
+            $.ajax({
+                url: api.resolveUrl("/api/user/offer/make"),
+                type: "POST",
+                data: JSON.stringify({ itemId, amount }),
+                contentType: "application/json; charset=utf-8",
+                timeout: 10 * 1000,
+                success: (res: { success?: boolean; error?: string }) => {
+                    if (res?.success) {
+                        $msg.css("color", "#8fce6a").text(
+                            "Offer sent! The owner can accept, decline, or counter it.",
+                        );
+                        setTimeout(close, 1400);
+                        return;
+                    }
+                    $send.removeClass("ld-offer-disabled").text("Send offer");
+                    const msg =
+                        res?.error === "self_offer"
+                            ? "You can't make an offer on your own item."
+                            : res?.error === "duplicate"
+                              ? "You already have an active offer on this item."
+                              : res?.error === "auctioned"
+                                ? "This item is currently being auctioned."
+                                : res?.error === "offers_disabled"
+                                  ? "This player isn't accepting offers."
+                                  : res?.error === "blocked"
+                                    ? "You can't interact with this player."
+                                    : "Could not send the offer.";
+                    $msg.css("color", "#ff8a8a").text(msg);
+                },
+                error: (xhr) => {
+                    $send.removeClass("ld-offer-disabled").text("Send offer");
+                    $msg.css("color", "#ff8a8a").text(
+                        xhr.status === 401 || xhr.status === 403
+                            ? "Log in on the main page first to make offers."
+                            : "Could not send the offer.",
+                    );
+                },
+            });
+        };
+
+        $send.on("click", submit);
+        $input.on("keydown", (e) => {
+            if (e.key === "Enter") submit();
+        });
+        $("body").append($ov);
+        $input.trigger("focus");
+    }
+
     render() {
         const params = this.getUrlParams();
 
@@ -466,6 +792,18 @@ export class PlayerView {
             content = templates.playerCards(cardData);
         }
         this.el.find(".content").html(content);
+
+        const loadoutBtn = this.el.find(".view-loadout-btn");
+        loadoutBtn.on("click", () => {
+            this.showLoadoutModal(params.slug);
+        });
+        // Match the main-menu button's hover feedback (.btn-darken:hover).
+        loadoutBtn.on("mouseenter", function () {
+            $(this).css("filter", "brightness(85%)");
+        });
+        loadoutBtn.on("mouseleave", function () {
+            $(this).css("filter", "");
+        });
 
         const timeSelector = this.el.find("#player-time");
         if (timeSelector) {

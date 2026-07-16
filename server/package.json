@@ -13,6 +13,7 @@
     "db:generate": "drizzle-kit generate --config=src/api/drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=src/api/drizzle.config.ts",
     "db:seed": "tsx src/api/db/seed.ts",
+    "db:backfill-prices": "tsx src/api/db/pricePaidBackfill.ts",
     "db:studio": "drizzle-kit studio --config=src/api/drizzle.config.ts",
     "db:wipe": "rm -rf src/api/db/drizzle && tsx src/api/db/wipe.ts",
     "stressTest": "tsx src/stressTest.ts",

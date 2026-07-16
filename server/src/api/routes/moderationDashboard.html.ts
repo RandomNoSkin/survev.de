@@ -103,6 +103,11 @@ export const dashboardHtml = `<!DOCTYPE html>
       background: none; color: var(--text-dim); cursor: pointer; font-size: 12px; font-family: inherit;
     }
     .sub-tab-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue-t); }
+    /* XP-Gain exclusion filter panel */
+    .xp-exclude-title { font-size: 10px; font-weight: 700; letter-spacing: .5px; color: var(--text-dim); margin-bottom: 6px; }
+    .xp-exclude-group { display: flex; gap: 12px; flex-wrap: wrap; }
+    .xp-exclude-group label { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+    .xp-exclude-group .empty-note { font-size: 11px; color: var(--text-muted); }
     /* XP-Gain sub-tabs — own class so they don't trip the global .sub-tab-btn handler. */
     .xp-sub-btn { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border2); background: none; color: var(--text-dim); cursor: pointer; font-size: 12px; font-family: inherit; }
     .xp-sub-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue-t); }
@@ -118,6 +123,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     @keyframes flashrow { from { background: var(--blue-dim); } to { background: transparent; } }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; letter-spacing: .3px; }
     .badge-admin  { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
+    .badge-mod    { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .badge-self   { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
     .badge-alive  { background: var(--green-dim);  color: var(--green-t);  }
     .badge-dead   { background: var(--red-dim);    color: var(--red-t);    }
@@ -258,6 +264,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="replays">Replays</button>
   <button class="tab-btn"        data-tab="xp">XP Gain</button>
   <button class="tab-btn"        data-tab="games">Games</button>
+  <button class="tab-btn"        data-tab="sus">Sus</button>
   <button class="tab-btn"        data-tab="leaderboard">Leaderboard</button>
   <button class="tab-btn"        data-tab="warnings">Warnings</button>
 </div>
@@ -386,9 +393,29 @@ export const dashboardHtml = `<!DOCTYPE html>
       <select id="xp-games-region" title="Filter by server region" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
         <option value="">All regions</option>
       </select>
+      <button class="btn btn-gray" id="xp-exclude-btn" title="Exclude tags and servers from this view">⊘ Exclude<span id="xp-exclude-count"></span></button>
       <button class="btn btn-gray" id="xp-refresh-btn">↻ Refresh</button>
       <span id="xp-hint" style="font-size:11px;color:var(--text-dim);">Top XP gainers — sudden spikes may indicate account boosting.</span>
     </div>
+
+    <!-- Exclusion filters — applied server-side to BOTH sub-tabs -->
+    <div id="xp-exclude-panel" style="display:none;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;padding:10px 12px;margin-bottom:10px;">
+      <div style="display:flex;gap:28px;flex-wrap:wrap;">
+        <div>
+          <div class="xp-exclude-title">EXCLUDE TAGS</div>
+          <div id="xp-exclude-tags" class="xp-exclude-group"></div>
+        </div>
+        <div>
+          <div class="xp-exclude-title">EXCLUDE SERVERS</div>
+          <div id="xp-exclude-regions" class="xp-exclude-group"></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:9px;">
+        <button class="btn btn-gray btn-sm" id="xp-exclude-clear">Clear all</button>
+        <span style="font-size:11px;color:var(--text-dim);">Excluded rows are dropped before ranking, so totals and the top-N reflect the filter.</span>
+      </div>
+    </div>
+
     <div id="xp-sub-players">
       <div id="xp-container"><div class="loading">Loading…</div></div>
     </div>
@@ -428,7 +455,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <!-- ════════════════ TAB: GAMES ════════════════ -->
   <div id="tab-games" class="tab-pane">
     <div class="toolbar" style="flex-wrap:wrap;">
-      <input id="games-search" type="text" placeholder="Game ID (exact) or player slug…" style="width:280px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+      <input id="games-search" type="text" placeholder="Game ID (exact), in-game name or slug…" title="Paste a game ID for its roster, or type an in-game name (matches part of it, guests included) or an exact account slug" style="width:280px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
       <select id="games-map" title="Map" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;"><option value="">All maps</option></select>
       <select id="games-mode" title="Team mode" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
         <option value="">All modes</option><option value="1">Solo</option><option value="2">Duo</option><option value="4">Squad</option>
@@ -439,9 +466,19 @@ export const dashboardHtml = `<!DOCTYPE html>
       <input id="games-minkills" type="number" min="0" placeholder="min K" title="Min top kills" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
       <input id="games-mindmg" type="number" min="0" placeholder="min Dmg" title="Min top damage" style="width:80px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
       <button class="btn btn-blue" id="games-search-btn">🔍 Search</button>
-      <span style="font-size:11px;color:var(--text-dim);">Paste a game ID to jump straight to its roster; otherwise filter recent games. Expand a game for the full roster + botted/remove/delete.</span>
+      <span style="font-size:11px;color:var(--text-dim);">Paste a game ID to jump straight to its roster; otherwise filter recent games by in-game name (guests included) or account slug. Expand a game for the full roster + botted/remove/delete.</span>
     </div>
     <div id="games-container"><div class="empty">Enter a game ID or set filters, then hit Search.</div></div>
+  </div>
+
+  <!-- ════════════════ TAB: SUS (admin-only review queue) ════════════════ -->
+  <div id="tab-sus" class="tab-pane">
+    <div class="toolbar">
+      <input type="text" id="sus-search" placeholder="Search by player, reason, moderator or game id…" style="max-width:420px">
+      <button class="btn btn-gray" id="sus-refresh-btn">↻ Refresh</button>
+      <span style="font-size:11px;color:var(--text-dim);">Everything staff flagged as suspicious, newest first — with the reason and who raised it.</span>
+    </div>
+    <div id="sus-container"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB: WARNINGS ════════════════ -->
@@ -628,6 +665,30 @@ export const dashboardHtml = `<!DOCTYPE html>
   </div>
 </div>
 
+<!-- ── Generic dialog: replaces window.confirm / window.prompt everywhere ── -->
+<div id="ui-modal" style="display:none;position:fixed;inset:0;background:#00000088;z-index:130;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:20px;width:430px;max-width:100%;display:flex;flex-direction:column;gap:12px;">
+    <div id="ui-modal-title" style="font-weight:700;font-size:14px;"></div>
+    <div id="ui-modal-body" style="font-size:12px;color:var(--text-dim);line-height:1.55;"></div>
+    <div id="ui-modal-field" style="font-size:12px;display:none;">
+      <div id="ui-modal-label" style="color:var(--text-dim);margin-bottom:4px;"></div>
+      <textarea id="ui-modal-textarea" rows="3"
+        style="display:none;width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+      <input id="ui-modal-input" type="text"
+        style="display:none;width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px;color:var(--text);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box;">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+        <span id="ui-modal-hint" style="font-size:11px;color:var(--text-muted);"></span>
+        <span id="ui-modal-count" style="margin-left:auto;font-size:11px;color:var(--text-muted);"></span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+      <span id="ui-modal-keys" style="font-size:10px;color:var(--text-muted);"></span>
+      <button class="btn btn-gray" id="ui-modal-cancel" style="margin-left:auto;">Cancel</button>
+      <button class="btn btn-red"  id="ui-modal-confirm">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Account detail modal ── -->
 <div id="account-modal" style="display:none;position:fixed;inset:0;background:#000000aa;z-index:120;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 12px;">
   <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;width:820px;max-width:100%;padding:18px;display:flex;flex-direction:column;gap:14px;">
@@ -684,6 +745,11 @@ function updateLvlFromXp(pt) {
 // ── State ──────────────────────────────────────────────────────────────────
 let currentAdminId   = '';    // own userId (for "YOU" badge + hide self-buttons)
 let currentAdminSlug = '';    // own slug (shown as sender in announcements)
+// Staff role of the logged-in user. Moderators reach only the Replays + XP Gain tabs
+// and may only mark things "sus" — every XP-moving control is hidden for them. This is
+// UX only: the server independently 403s the routes and statuses they may not use.
+let isAdmin     = false;
+let isModerator = false;
 let activeGameRegion = '';    // region of the selected game
 let activeGameId     = '';    // id of the selected game
 let activeGameVerified = false; // verified-only state of the selected game
@@ -734,6 +800,7 @@ function hLookup(qv)          { return 'view=lookup&q=' + encodeURIComponent(qv)
 function hChatGame(gid, msg)  { return 'view=chatgame&gameId=' + encodeURIComponent(gid) + (msg != null ? '&msg=' + encodeURIComponent(msg) : ''); }
 function hAccount(slug)       { return 'view=account&slug=' + encodeURIComponent(slug); }
 function hReplays(qv)         { return 'view=replays&q=' + encodeURIComponent(qv); }
+function hGame(gid)           { return 'view=game&gameId=' + encodeURIComponent(gid); }
 function hXpUser(userId, win) { return 'view=xpuser&userId=' + encodeURIComponent(userId) + (win ? '&window=' + encodeURIComponent(win) : ''); }
 
 // Inline cross-link (styled span). labelHtml is already-escaped HTML.
@@ -743,6 +810,16 @@ function navLink(hash, labelHtml, opts) {
   const style = opts.style ? ' style="' + opts.style + '"' : '';
   const title = opts.title ? ' title="' + esc(opts.title) + '"' : '';
   return '<span class="' + cls + '" data-nav="' + esc(hash) + '"' + style + title + '>' + labelHtml + '</span>';
+}
+
+// Same deep-link behaviour as navLink (incl. Ctrl/middle-click → new tab), but rendered
+// as a real button — for action columns, where a bare text link next to buttons reads
+// like it does something different. The delegated handler below already treats a button
+// that carries its OWN data-nav as the nav element, so this needs no extra wiring.
+function navButton(hash, labelHtml, opts) {
+  opts = opts || {};
+  const title = opts.title ? ' title="' + esc(opts.title) + '"' : '';
+  return '<button class="btn ' + (opts.cls || 'btn-gray') + ' btn-sm" data-nav="' + esc(hash) + '"' + title + '>' + labelHtml + '</button>';
 }
 
 function navGo(hash, newTab) {
@@ -788,6 +865,17 @@ function routeFromHash(h) {
     const el = document.getElementById('replays-search');
     if (el) el.value = p.get('q') || '';
     switchTab('replays');
+  } else if (view === 'game') {
+    // An exact game id makes loadGamesSearch jump straight to that game's roster.
+    const gid = p.get('gameId');
+    switchTab('games');
+    if (gid) {
+      const el = document.getElementById('games-search');
+      if (el) el.value = gid;
+      loadGamesSearch();
+    }
+  } else if (view === 'sus') {
+    switchTab('sus');
   } else if (view === 'xpuser') {
     const win = p.get('window');
     if (win) { const sel = document.getElementById('xp-window'); if (sel) sel.value = win; }
@@ -797,8 +885,43 @@ function routeFromHash(h) {
   }
 }
 
+// Cross-links into admin-only tabs (lookup, accounts, chat log, games). A moderator can
+// reach neither the tab nor its API, so the link degrades to plain text for them rather
+// than dead-ending on a hidden tab.
+function adminNavLink(hash, labelHtml, opts) {
+  return isAdmin
+    ? navLink(hash, labelHtml, opts)
+    : '<span style="color:var(--text-dim)">' + labelHtml + '</span>';
+}
+
 function ipLink(hash) {
-  return navLink(hLookup(hash), esc(hash.slice(0, 12)) + '…', { cls: 'ip-link', title: hash });
+  const label = esc(hash.slice(0, 12)) + '…';
+  return isAdmin
+    ? navLink(hLookup(hash), label, { cls: 'ip-link', title: hash })
+    : '<span class="ip-link" style="text-decoration:none;cursor:default;color:var(--text-dim)" title="' + esc(hash) + '">' + label + '</span>';
+}
+
+/**
+ * The "player" cell shared by the game roster and the Sus tab.
+ *
+ * Clicking the name lands on the IP they used in THAT game (IP / Player tab) — the usual
+ * next step when reviewing a game, and the only handle on a guest, who has no account.
+ * The account stays one click away via the slug. Ctrl/middle-click opens either in a new
+ * tab, like every other nav link.
+ *
+ * Takes anything with { username, slug, encodedIp } — the roster and Sus rows both match.
+ */
+function playerIpCell(p, fallbackLabel) {
+  const label = esc(p.username || p.slug || fallbackLabel || '(guest)');
+  const name = p.encodedIp
+    ? adminNavLink(hLookup(p.encodedIp), label, { title: 'Look up the IP this player used in this game' })
+    : p.slug
+      ? adminNavLink(hAccount(p.slug), label, { title: 'Open account' })
+      : '<span style="color:var(--text-muted)">' + label + '</span>';
+  const slug = p.slug
+    ? ' ' + adminNavLink(hAccount(p.slug), '(' + esc(p.slug) + ')', { title: 'Open account', style: 'font-size:10px;color:var(--text-muted)' })
+    : '';
+  return name + slug;
 }
 
 function esc(s) {
@@ -903,6 +1026,9 @@ function switchTab(name) {
     refreshXp();
   } else if (name === 'games') {
     closeSSE();
+  } else if (name === 'sus') {
+    closeSSE();
+    loadSus();
   } else if (name === 'leaderboard') {
     closeSSE();
     loadLeaderboard();
@@ -974,8 +1100,9 @@ function renderReplays() {
   const games = [];
   for (const region of replaysData) {
     for (const rec of (region.recordings ?? [])) {
+      // Slugs are shown in the table, so they're searchable too.
       const hay = (rec.gameId + ' ' + rec.mapName + ' ' +
-        (rec.players ?? []).map(p => p.playerName).join(' ')).toLowerCase();
+        (rec.players ?? []).map(p => p.playerName + ' ' + (p.slug || '')).join(' ')).toLowerCase();
       if (q && !hay.includes(q)) continue;
       if (rec.startTs < lo || rec.startTs > hi) continue;
       games.push({ regionId: region.regionId, rec });
@@ -1009,31 +1136,88 @@ function renderReplays() {
     const dur = Math.round((rec.durationMs || 0) / 1000);
     const durStr = dur >= 60 ? (Math.floor(dur / 60) + 'm ' + (dur % 60) + 's') : (dur + 's');
     const fmtAlive = (s) => s == null ? '—' : (s >= 60 ? (Math.floor(s / 60) + 'm ' + (s % 60) + 's') : (s + 's'));
-    const rows = (rec.players ?? []).map(p => \`
+    const rows = (rec.players ?? []).map(p => {
+      // Three states, kept apart: an account, a guest (played without one), and a POV
+      // whose game wrote no match_data at all — where we simply don't know.
+      const slugCell = p.slug
+        ? adminNavLink(hAccount(p.slug), esc(p.slug), { title: 'Open account' })
+        : p.noData
+          ? '<span style="color:var(--text-muted)" title="This game has no match data — nothing to flag">–</span>'
+          : '<span class="badge badge-spec" title="Played without an account">GUEST</span>';
+      const banned = p.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+      return \`
       <tr>
-        <td>\${esc(p.playerName)}</td>
+        <td>\${esc(p.playerName)}\${banned}</td>
+        <td>\${slugCell}</td>
         <td>\${p.kills ?? '—'}</td>
         <td>\${p.damageDealt ?? '—'}</td>
         <td>\${p.damageTaken ?? '—'}</td>
         <td>\${fmtAlive(p.timeAlive)}</td>
         <td style="color:var(--text-dim)">\${(p.bytes / 1024 / 1024).toFixed(1)} MB</td>
-        <td><button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId})">▶ Watch</button></td>
-      </tr>\`).join('');
+        <td><span class="rep-modcell" data-key="\${esc(rec.gameId + '|' + (p.modKey || ''))}">\${modBadge(p.modStatus)}</span></td>
+        <td style="white-space:nowrap">
+          <span style="display:inline-flex;gap:5px;align-items:center;">
+            <button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId})">▶ Watch</button>
+            \${p.modKey
+              ? \`<button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" data-repname="\${esc(p.playerName)}" title="Flag this \${p.guest ? 'guest' : 'player'} in this game as suspicious">⚑ sus</button>\`
+              : ''}
+          </span>
+        </td>
+      </tr>\`;
+    }).join('');
+    // The game id jumps to the Games tab (admins only — moderators have no Games tab,
+    // so it stays plain text for them rather than linking somewhere they can't go).
+    const gidCell = isAdmin
+      ? navLink(hGame(rec.gameId), '<span class="gid">' + esc(rec.gameId) + '</span>', { title: 'Open this game in the Games tab' })
+      : '<span class="gid">' + esc(rec.gameId) + '</span>';
     return \`
       <div class="chat-game-group">
         <div class="chat-game-header">
-          <span class="gid">\${esc(rec.gameId)}</span>
+          \${gidCell}
           <span>\${esc(regionId)}</span>
           <span>\${esc(rec.mapName)} · \${mode}</span>
           <span>\${durStr}</span>
+          <span class="rep-modcell" data-key="\${esc(rec.gameId + '|')}">\${modBadge(rec.gameStatus)}</span>
+          <button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" title="Flag this whole game as suspicious">⚑ sus game</button>
           <span style="margin-left:auto">\${fmtDate(rec.startTs)}</span>
         </div>
         <table class="data-table" style="margin:0">
-          <thead><tr><th>Player POV</th><th>Kills</th><th>Dmg dealt</th><th>Dmg taken</th><th>Alive</th><th>Size</th><th>Action</th></tr></thead>
-          <tbody>\${rows || '<tr><td colspan="7" class="empty">No POVs.</td></tr>'}</tbody>
+          <thead><tr><th>Player POV</th><th>Slug</th><th>Kills</th><th>Dmg dealt</th><th>Dmg taken</th><th>Alive</th><th>Size</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>\${rows || '<tr><td colspan="9" class="empty">No POVs.</td></tr>'}</tbody>
         </table>
       </div>\`;
   }).join('');
+}
+
+// Flags a replayed game (or one POV within it) as suspicious. Without a player name the
+// flag covers the whole game. Delegated, so it also covers re-rendered rows.
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-repsus]');
+  if (!btn) return;
+  markReplaySus(btn.dataset.repsus, btn.dataset.repname || null);
+});
+
+async function markReplaySus(gameId, playerName) {
+  const reason = await askSusReason(susTargetLabel(playerName, gameId));
+  if (reason === null) return;
+  try {
+    const body = { gameId: gameId, reason: reason };
+    if (playerName) body.playerName = playerName;
+    // The server resolves the name to an account or a guest slot and tells us which.
+    const res = await post('/api/replays/sus', body);
+    // Patch the badge in place so the flag is visible without a reload.
+    const key = gameId + '|' + (res.modKey || '');
+    document.querySelectorAll('.rep-modcell').forEach(function (el) {
+      if (el.dataset.key === key) el.innerHTML = modBadge('sus');
+    });
+    toast(!playerName ? 'Flagged game as suspicious'
+      : res.guest ? 'Flagged guest ' + playerName + ' as suspicious'
+      : 'Flagged ' + playerName + ' as suspicious');
+  } catch (e) {
+    toast(/player_not_in_game/.test(e.message)
+      ? 'That POV has no match data — flag the whole game instead'
+      : 'Failed to flag: ' + e.message, true);
+  }
 }
 
 /** Mints a game-scoped replay token and opens the client in replay mode (with an initial POV). */
@@ -1074,8 +1258,9 @@ async function loadXpGain() {
   container.innerHTML = '<div class="loading">Loading…</div>';
   try {
     const win = document.getElementById('xp-window').value;
-    const data = await get('/api/xp-gain?window=' + encodeURIComponent(win));
+    const data = await get('/api/xp-gain?window=' + encodeURIComponent(win) + xpExcludeQuery());
     if (token !== xpLoadToken) return;
+    setXpRegions(data.regions || []);
     renderXpGain(data.users ?? []);
   } catch (e) {
     if (token !== xpLoadToken) return;
@@ -1127,7 +1312,7 @@ function renderXpGain(users) {
     const pct = Math.max(2, (u.xpGained / maxXp) * 100);
     const label = esc(u.username || u.slug || '(guest / unlinked)');
     const nameCell = u.slug
-      ? \`\${navLink(hLookup(u.slug), label, { title: 'Look up account' })} <span style="color:var(--text-muted);font-size:10px;">(\${esc(u.slug)})</span>\`
+      ? \`\${adminNavLink(hLookup(u.slug), label, { title: 'Look up account' })} <span style="color:var(--text-muted);font-size:10px;">(\${esc(u.slug)})</span>\`
       : \`<span style="color:var(--text-muted)">\${label}</span>\`;
     const bannedBadge = u.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
     return \`<tr data-nav="\${esc(hXpUser(u.userId, win))}" style="cursor:pointer" title="Show this player's games">
@@ -1185,7 +1370,7 @@ function renderXpUserDetail(data) {
   const games = data.games ?? [];
   const label = esc(data.username || data.slug || data.userId);
   const banned = data.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
-  const lookup = data.slug ? ' · ' + navLink(hLookup(data.slug), 'look up account', { title: 'Open IP / Player lookup' }) : '';
+  const lookup = data.slug ? ' · ' + adminNavLink(hLookup(data.slug), 'look up account', { title: 'Open IP / Player lookup' }) : '';
   const rows = games.slice().reverse().map(g => {
     const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
     return \`<tr id="xpgame-\${esc(g.gameId)}"\${g.removed ? ' style="opacity:.55"' : ''}>
@@ -1197,7 +1382,7 @@ function renderXpUserDetail(data) {
       <td>\${g.rank}</td>
       <td>\${fmtSecs(g.timeAlive)}</td>
       <td><strong>\${g.xp.toLocaleString()}</strong></td>
-      <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${navLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\'s chat' })}</td>
+      <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${adminNavLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\'s chat' })}</td>
     </tr>\`;
   }).join('');
   container.innerHTML = \`
@@ -1253,7 +1438,9 @@ function switchXpSub(name) {
   if (region) region.style.display = name === 'games' ? '' : 'none';
   const hint = document.getElementById('xp-hint');
   if (hint) hint.textContent = name === 'games'
-    ? 'Each row is one player in one game. Expand a row to see all players and mark them sus or botted.'
+    ? (isAdmin
+        ? 'Each row is one player in one game. Expand a row to see all players and mark them sus or botted.'
+        : 'Each row is one player in one game. Expand a row to see all players and mark them sus.')
     : 'Top XP gainers — sudden spikes may indicate account boosting.';
   refreshXp();
 }
@@ -1271,10 +1458,12 @@ async function loadXpGames() {
   try {
     const win = document.getElementById('xp-window').value;
     const region = document.getElementById('xp-games-region').value;
-    const q = '/api/xp-gain/games?window=' + encodeURIComponent(win) + (region ? '&region=' + encodeURIComponent(region) : '');
+    const q = '/api/xp-gain/games?window=' + encodeURIComponent(win) +
+      (region ? '&region=' + encodeURIComponent(region) : '') + xpExcludeQuery();
     const data = await get(q);
     if (token !== xpLoadToken) return;
     populateXpRegionFilter(data.regions || []);
+    setXpRegions(data.regions || []);
     renderXpGames(data.games || []);
   } catch (e) {
     if (token !== xpLoadToken) return;
@@ -1292,6 +1481,78 @@ function populateXpRegionFilter(regions) {
   sel.value = cur; // keep the current selection if it still exists
 }
 
+// ── XP-Gain exclusion filters ──────────────────────────────────────────────
+// Excluded tags/servers are sent to the server, which drops the matching rows before
+// ranking — so both sub-tabs stay internally consistent (no gaps in the top-N, and
+// totals that match what's listed).
+
+const XP_TAGS = ['sus', 'botted', 'removed', 'banned'];
+const xpExcludedTags    = new Set();
+const xpExcludedRegions = new Set();
+let   xpKnownRegions    = [];
+
+/** Query-string fragment for the current exclusions (empty when nothing is excluded). */
+function xpExcludeQuery() {
+  let q = '';
+  if (xpExcludedTags.size)    q += '&excludeTags=' + encodeURIComponent([...xpExcludedTags].join(','));
+  if (xpExcludedRegions.size) q += '&excludeRegions=' + encodeURIComponent([...xpExcludedRegions].join(','));
+  return q;
+}
+
+function xpCheckbox(group, value, label, checked) {
+  return '<label><input type="checkbox" data-xpex="' + group + '" value="' + esc(value) + '"' +
+    (checked ? ' checked' : '') + '>' + label + '</label>';
+}
+
+function renderXpExcludePanel() {
+  document.getElementById('xp-exclude-tags').innerHTML =
+    XP_TAGS.map(function (t) {
+      return xpCheckbox('tag', t, modBadge(t) || '<span class="badge badge-perm">BANNED</span>', xpExcludedTags.has(t));
+    }).join('');
+
+  document.getElementById('xp-exclude-regions').innerHTML = xpKnownRegions.length
+    ? xpKnownRegions.map(function (r) { return xpCheckbox('region', r, esc(r), xpExcludedRegions.has(r)); }).join('')
+    : '<span class="empty-note">No servers in this window.</span>';
+
+  const n = xpExcludedTags.size + xpExcludedRegions.size;
+  const badge = document.getElementById('xp-exclude-count');
+  badge.textContent = n ? ' (' + n + ')' : '';
+  document.getElementById('xp-exclude-btn').classList.toggle('btn-orange', n > 0);
+}
+
+/** Keeps the known-region list fresh from whichever XP endpoint answered last. */
+function setXpRegions(regions) {
+  const next = regions || [];
+  if (next.join('|') === xpKnownRegions.join('|')) return;
+  xpKnownRegions = next;
+  // Drop exclusions for servers that no longer appear, so a stale filter can't
+  // silently keep hiding rows the moderator can no longer see or untick.
+  for (const r of [...xpExcludedRegions]) if (!next.includes(r)) xpExcludedRegions.delete(r);
+  renderXpExcludePanel();
+}
+
+document.getElementById('xp-exclude-btn').addEventListener('click', function () {
+  const panel = document.getElementById('xp-exclude-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('xp-exclude-panel').addEventListener('change', function (e) {
+  const cb = e.target.closest('[data-xpex]');
+  if (!cb) return;
+  const set = cb.dataset.xpex === 'tag' ? xpExcludedTags : xpExcludedRegions;
+  if (cb.checked) set.add(cb.value); else set.delete(cb.value);
+  renderXpExcludePanel();
+  refreshXp();
+});
+
+document.getElementById('xp-exclude-clear').addEventListener('click', function () {
+  if (!xpExcludedTags.size && !xpExcludedRegions.size) return;
+  xpExcludedTags.clear();
+  xpExcludedRegions.clear();
+  renderXpExcludePanel();
+  refreshXp();
+});
+
 function modBadge(status) {
   if (status === 'botted')  return '<span class="badge badge-botted">BOTTED</span>';
   if (status === 'sus')     return '<span class="badge badge-sus">SUS</span>';
@@ -1300,28 +1561,40 @@ function modBadge(status) {
 }
 
 // The sus / botted / clear buttons for one (game, player). The current status hides
-// the redundant button.
-function modActionsInner(gameId, userId, status) {
+// the redundant button. Moderators get "sus" plus "clear" for a sus label — never
+// "botted", and never a clear that would restore XP from a botted/removed row.
+function modActionsInner(gameId, userId, status, name, guest) {
   if (!userId) return '';
   function btn(label, st, cls) {
-    return '<button class="btn ' + cls + ' btn-sm" data-mod="' + esc(gameId) + '" data-mod-user="' + esc(userId) + '" data-mod-status="' + st + '">' + label + '</button>';
+    return '<button class="btn ' + cls + ' btn-sm" data-mod="' + esc(gameId) + '" data-mod-user="' + esc(userId) + '" data-mod-status="' + st + '"' +
+      (name ? ' data-mod-name="' + esc(name) + '"' : '') + '>' + label + '</button>';
   }
+  // A guest owns no account and earns no XP, so "botted" is meaningless for them —
+  // the server rejects it too. Sus (a label) is all that applies.
+  const isGuest = guest || String(userId).indexOf('guest:') === 0;
   const parts = [];
-  if (status !== 'sus')    parts.push(btn('sus', 'sus', 'btn-orange'));
-  if (status !== 'botted') parts.push(btn('botted', 'botted', 'btn-red'));
-  if (status)              parts.push(btn('clear', 'clear', 'btn-gray'));
+  if (status !== 'sus')                          parts.push(btn('sus', 'sus', 'btn-orange'));
+  if (isAdmin && !isGuest && status !== 'botted') parts.push(btn('botted', 'botted', 'btn-red'));
+  if (status && (isAdmin || status === 'sus'))    parts.push(btn('clear', 'clear', 'btn-gray'));
   return parts.join('');
 }
 
 // Per-player roster actions: a removed player only offers Restore; otherwise the
 // sus/botted/clear controls plus "Remove" (detach from stats + leaderboard).
-function rosterActionsInner(gameId, userId, status, removed) {
+function rosterActionsInner(gameId, userId, status, removed, name, guest) {
   if (!userId) return '';
   if (removed) {
-    return '<button class="btn btn-blue btn-sm" data-restoreuser="' + esc(gameId) + '" data-ruser="' + esc(userId) + '" title="Re-attach this player and restore their XP">↩ Restore</button>';
+    // Restoring re-grants XP — admins only.
+    return isAdmin
+      ? '<button class="btn btn-blue btn-sm" data-restoreuser="' + esc(gameId) + '" data-ruser="' + esc(userId) + '" title="Re-attach this player and restore their XP">↩ Restore</button>'
+      : '';
   }
-  return modActionsInner(gameId, userId, status) +
-    ' <button class="btn btn-orange btn-sm" data-removeuser="' + esc(gameId) + '" data-ruser="' + esc(userId) + '" title="Remove this player from the game — hides it from their stats and the leaderboard and revokes its XP">➖ Remove</button>';
+  const isGuest = guest || String(userId).indexOf('guest:') === 0;
+  return modActionsInner(gameId, userId, status, name, isGuest) +
+    // "Remove" detaches an ACCOUNT from the game; a guest has none to detach.
+    (isAdmin && !isGuest
+      ? ' <button class="btn btn-orange btn-sm" data-removeuser="' + esc(gameId) + '" data-ruser="' + esc(userId) + '" title="Remove this player from the game — hides it from their stats and the leaderboard and revokes its XP">➖ Remove</button>'
+      : '');
 }
 
 // Re-fetches and re-renders one expanded game roster (after a remove/restore).
@@ -1333,11 +1606,19 @@ async function refreshRoster(wrap, gameId) {
 }
 
 async function doRemoveUser(gameId, userId, btn) {
-  if (!confirm('Remove this player from the game?\\n\\nThe game will no longer appear in their stats or the leaderboard, and the XP they gained from it is revoked. The game itself and the other players are kept. This can be undone with Restore.')) return;
+  const ok = await askConfirm({
+    title: '➖ Remove player from game',
+    body: 'The game will no longer appear in their stats or the leaderboard, and the XP they gained from it is revoked. ' +
+      'The game itself and the other players are kept.<br><br>This can be undone with <strong style="color:var(--text)">Restore</strong>.',
+    confirmLabel: '➖ Remove player',
+    confirmClass: 'btn-orange',
+  });
+  if (!ok) return;
   try {
     await post('/api/game/' + encodeURIComponent(gameId) + '/remove-user', { userId: userId });
     toast('Player removed from game — XP revoked');
-    const wrap = btn.closest('.xp-detail-wrap');
+    // btn is null when called from a view with no roster to refresh (e.g. the Sus tab).
+    const wrap = btn && btn.closest('.xp-detail-wrap');
     if (wrap) refreshRoster(wrap, gameId);
   } catch (e) {
     toast('Remove failed: ' + e.message, true);
@@ -1371,7 +1652,7 @@ function xpGameRowHtml(g, i) {
   const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
   const nameLabel = esc(g.username || g.slug || '(guest / unlinked)');
   const nameCell = g.slug
-    ? navLink(hAccount(g.slug), nameLabel, { title: 'Open account' })
+    ? adminNavLink(hAccount(g.slug), nameLabel, { title: 'Open account' })
     : '<span style="color:var(--text-muted)">' + nameLabel + '</span>';
   const banned = g.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
   const key = g.gameId + '|' + g.userId;
@@ -1389,7 +1670,7 @@ function xpGameRowHtml(g, i) {
     '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + modBadge(g.modStatus) + '</span></td>' +
     '<td style="white-space:nowrap;">' +
       navLink(hReplays(g.gameId), '▶ replay', { title: 'Open this game in the Replays tab' }) +
-      '<span class="xp-modacts" data-key="' + esc(key) + '">' + modActionsInner(g.gameId, g.userId, g.modStatus) + '</span>' +
+      '<span class="xp-modacts" data-key="' + esc(key) + '">' + modActionsInner(g.gameId, g.userId, g.modStatus, g.username || g.slug) + '</span>' +
     '</td>' +
   '</tr>';
 }
@@ -1422,20 +1703,21 @@ function renderGameRoster(data) {
     : '';
   const header =
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' + metaHtml +
-    '<button class="btn btn-red btn-sm" data-delgame="' + esc(data.gameId) + '" style="margin-left:auto;" title="Permanently delete this whole game from stats, leaderboard and match history">🗑 Delete game</button>' +
+    (isAdmin
+      ? '<button class="btn btn-red btn-sm" data-delgame="' + esc(data.gameId) + '" style="margin-left:auto;" title="Permanently delete this whole game from stats, leaderboard and match history">🗑 Delete game</button>'
+      : '') +
     '</div>';
   let rows = '';
   for (const p of players) {
-    const nameLabel = esc(p.username || p.slug || '(guest)');
-    const nameCell = p.slug
-      ? navLink(hAccount(p.slug), nameLabel, { title: 'Open account' })
-      : '<span style="color:var(--text-muted)">' + nameLabel + '</span>';
+    const nameCell = playerIpCell(p, '(guest)');
     const banned = p.banned ? ' <span class="badge badge-perm">BAN</span>' : '';
-    const key = data.gameId + '|' + p.userId;
+    // Actions target the mod key, so a guest (no account) can still be flagged.
+    const key = data.gameId + '|' + (p.modKey || p.userId);
     const badge = p.removed ? modBadge('removed') : modBadge(p.modStatus);
     rows +=
       '<tr' + (p.removed ? ' style="opacity:.55"' : '') + '>' +
       '<td>' + nameCell + banned + '</td>' +
+      '<td>' + (p.encodedIp ? ipLink(p.encodedIp) : '<span style="color:var(--text-muted)">–</span>') + '</td>' +
       '<td>' + p.kills + '</td>' +
       '<td>' + p.assists + '</td>' +
       '<td>' + p.damage + '</td>' +
@@ -1444,20 +1726,29 @@ function renderGameRoster(data) {
       '<td>' + fmtSecs(p.timeAlive) + '</td>' +
       '<td><strong>' + p.xp.toLocaleString() + '</strong></td>' +
       '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + badge + '</span></td>' +
-      '<td style="white-space:nowrap;"><span class="xp-modacts" data-key="' + esc(key) + '">' + rosterActionsInner(data.gameId, p.userId, p.modStatus, p.removed) + '</span></td>' +
+      '<td style="white-space:nowrap;"><span class="xp-modacts" data-key="' + esc(key) + '">' + rosterActionsInner(data.gameId, p.modKey || p.userId, p.modStatus, p.removed, p.username || p.slug, p.guest) + '</span></td>' +
       '</tr>';
   }
   return header +
     '<table class="data-table">' +
-    '<thead><tr><th>Player</th><th>K</th><th>A</th><th>Dmg</th><th>Taken</th><th>Rank</th><th>Alive</th><th>XP</th><th>Status</th><th>Actions</th></tr></thead>' +
+    '<thead><tr><th>Player</th><th title="The IP this player used in this game">IP</th><th>K</th><th>A</th><th>Dmg</th><th>Taken</th><th>Rank</th><th>Alive</th><th>XP</th><th>Status</th><th>Actions</th></tr></thead>' +
     '<tbody>' + rows + '</tbody></table>';
 }
 
 // Apply a moderation action, then patch every place that shows this (game, player).
-async function doGameModerate(gameId, userId, status) {
+// A "sus" flag is a note to the rest of the staff, so it always carries a reason —
+// the admin-only Sus tab lists it verbatim next to who raised it.
+async function doGameModerate(gameId, userId, status, label) {
+  let note = '';
+  if (status === 'sus') {
+    // Always a single player here, so fall back to a generic noun rather than letting
+    // an unnamed account read as the whole-game flag.
+    note = await askSusReason(susTargetLabel(label || 'this account', gameId));
+    if (note === null) return;
+  }
   try {
-    const res = await post('/api/game/' + encodeURIComponent(gameId) + '/moderate', { userId: userId, status: status });
-    updateModUI(gameId, userId, res.status || null);
+    const res = await post('/api/game/' + encodeURIComponent(gameId) + '/moderate', { userId: userId, status: status, note: note });
+    updateModUI(gameId, userId, res.status || null, label);
     toast(status === 'botted' ? 'Player botted — XP, cosmetics and fries revoked'
         : status === 'clear'  ? 'Cleared — XP, cosmetics and fries restored'
         : 'Marked as suspicious');
@@ -1466,10 +1757,167 @@ async function doGameModerate(gameId, userId, status) {
   }
 }
 
-function updateModUI(gameId, userId, status) {
+// ── Generic dialog ─────────────────────────────────────────────────────────
+// The dashboard's replacement for window.confirm / window.prompt. Only one dialog can
+// be open at a time, so a single element + one pending resolver is enough.
+//
+// uiDialog() is the core; askConfirm() and askInput() are the two shapes callers use.
+// It resolves with the field's value ('' when there is no field) on confirm, or null on
+// cancel — so "cancelled" is always distinguishable from "confirmed with empty input".
+
+const uiModal = document.getElementById('ui-modal');
+let uiModalResolve = null;
+let uiModalOpts = null;
+
+/**
+ * opts: { title, body?, confirmLabel?, confirmClass?, field?, requireText? }
+ *   body        already-escaped HTML shown above the field
+ *   field       { multiline?, type?, value?, placeholder?, maxlength?, hint?,
+ *                 required?, requiredMsg? }
+ *   requireText confirm stays disabled until the field matches this exactly
+ * Resolves: string (field value, '' if no field) on confirm | null on cancel.
+ */
+function uiDialog(opts) {
+  // A second call while one is open would strand the first promise — resolve it first.
+  if (uiModalResolve) closeUiModal(null);
+  uiModalOpts = opts || {};
+  const field = uiModalOpts.field;
+
+  document.getElementById('ui-modal-title').innerHTML = uiModalOpts.title || '';
+  const bodyEl = document.getElementById('ui-modal-body');
+  bodyEl.innerHTML = uiModalOpts.body || '';
+  bodyEl.style.display = uiModalOpts.body ? '' : 'none';
+
+  const confirmBtn = document.getElementById('ui-modal-confirm');
+  confirmBtn.textContent = uiModalOpts.confirmLabel || 'OK';
+  confirmBtn.className = 'btn ' + (uiModalOpts.confirmClass || 'btn-red');
+
+  const wrap = document.getElementById('ui-modal-field');
+  const ta = document.getElementById('ui-modal-textarea');
+  const input = document.getElementById('ui-modal-input');
+  wrap.style.display = field ? '' : 'none';
+  ta.style.display = 'none';
+  input.style.display = 'none';
+
+  let active = null;
+  if (field) {
+    active = field.multiline ? ta : input;
+    active.style.display = '';
+    active.value = field.value != null ? String(field.value) : '';
+    active.placeholder = field.placeholder || '';
+    if (!field.multiline) active.type = field.type || 'text';
+    if (field.maxlength) active.setAttribute('maxlength', String(field.maxlength));
+    else active.removeAttribute('maxlength');
+    document.getElementById('ui-modal-label').textContent = field.label || '';
+    document.getElementById('ui-modal-hint').textContent = field.hint || '';
+  }
+  uiModalOpts._active = active;
+
+  document.getElementById('ui-modal-keys').textContent = field && field.multiline
+    ? 'Enter to confirm · Shift+Enter for a new line · Esc to cancel'
+    : 'Enter to confirm · Esc to cancel';
+
+  syncUiModalField();
+  uiModal.style.display = 'flex';
+  (active || confirmBtn).focus();
+  return new Promise(function (resolve) { uiModalResolve = resolve; });
+}
+
+/** Keeps the char counter and the requireText gate in sync with the field. */
+function syncUiModalField() {
+  const opts = uiModalOpts || {};
+  const active = opts._active;
+  const count = document.getElementById('ui-modal-count');
+  const confirmBtn = document.getElementById('ui-modal-confirm');
+
+  count.textContent = active && opts.field && opts.field.maxlength
+    ? active.value.length + '/' + opts.field.maxlength
+    : '';
+
+  // A destructive action gated on typing an exact string (e.g. an account slug).
+  const locked = !!opts.requireText && (!active || active.value.trim() !== opts.requireText);
+  confirmBtn.style.opacity = locked ? '.45' : '';
+  confirmBtn.style.pointerEvents = locked ? 'none' : '';
+}
+
+function closeUiModal(result) {
+  uiModal.style.display = 'none';
+  const resolve = uiModalResolve;
+  uiModalResolve = null;
+  uiModalOpts = null;
+  if (resolve) resolve(result);
+}
+
+function submitUiModal() {
+  const opts = uiModalOpts || {};
+  const active = opts._active;
+  if (!active) { closeUiModal(''); return; }
+
+  const value = active.value.trim();
+  if (opts.requireText && value !== opts.requireText) {
+    toast(opts.requireMsg || 'Confirmation text does not match', true);
+    return;
+  }
+  if (opts.field && opts.field.required && !value) {
+    toast(opts.field.requiredMsg || 'This field is required', true);
+    return;
+  }
+  closeUiModal(value);
+}
+
+document.getElementById('ui-modal-textarea').addEventListener('input', syncUiModalField);
+document.getElementById('ui-modal-input').addEventListener('input', syncUiModalField);
+document.getElementById('ui-modal-cancel').addEventListener('click', function () { closeUiModal(null); });
+document.getElementById('ui-modal-confirm').addEventListener('click', submitUiModal);
+// Dismiss by clicking the backdrop itself (not the dialog inside it).
+uiModal.addEventListener('mousedown', function (e) { if (e.target === uiModal) closeUiModal(null); });
+// Enter confirms (Shift+Enter keeps the newline in a textarea); Esc cancels.
+uiModal.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') { e.preventDefault(); closeUiModal(null); }
+  else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitUiModal(); }
+});
+
+/** Yes/no dialog. Resolves true when confirmed. Replaces window.confirm. */
+async function askConfirm(opts) {
+  return (await uiDialog(opts)) !== null;
+}
+
+/** Single-field dialog. Resolves the trimmed value, or null. Replaces window.prompt. */
+function askInput(opts) {
+  return uiDialog(opts);
+}
+
+/** Asks for a sus reason. Resolves with the trimmed reason, or null when cancelled. */
+function askSusReason(targetLabel) {
+  return askInput({
+    title: '⚑ Mark as suspicious',
+    body: targetLabel,
+    confirmLabel: '⚑ Mark sus',
+    confirmClass: 'btn-orange',
+    field: {
+      label: 'Reason',
+      multiline: true,
+      maxlength: 500, // matches the server's z.string().max(500)
+      placeholder: 'What looks wrong? e.g. aimbot-like snaps at 0:42',
+      hint: 'Shown in the Sus tab next to your name.',
+      required: true,
+      requiredMsg: 'A reason is required to mark something suspicious',
+    },
+  });
+}
+
+/** Builds the "Flagging …" line for the sus dialog. All interpolations are escaped. */
+function susTargetLabel(name, gameId) {
+  const who = name
+    ? 'player <strong style="color:var(--text)">' + esc(name) + '</strong>'
+    : '<strong style="color:var(--text)">the whole game</strong>';
+  return 'Flagging ' + who + ' · <span style="font-family:monospace;font-size:11px;">' + esc(gameId) + '</span>';
+}
+
+function updateModUI(gameId, userId, status, name) {
   const key = gameId + '|' + userId;
   document.querySelectorAll('.xp-modcell').forEach(function (el) { if (el.dataset.key === key) el.innerHTML = modBadge(status); });
-  document.querySelectorAll('.xp-modacts').forEach(function (el) { if (el.dataset.key === key) el.innerHTML = modActionsInner(gameId, userId, status); });
+  document.querySelectorAll('.xp-modacts').forEach(function (el) { if (el.dataset.key === key) el.innerHTML = modActionsInner(gameId, userId, status, name); });
 }
 
 // Removes every list row (and its expanded detail) for a game after it is deleted.
@@ -1484,7 +1932,15 @@ function removeGameFromList(gameId) {
 
 // Permanently deletes a game (revokes its XP too). Reviewed from the expanded roster.
 async function doDeleteGame(gameId) {
-  if (!confirm('Permanently DELETE this game?\\n\\nAll its match rows are removed from the leaderboard, stats and match history, and the XP (plus cosmetics and fries) every player gained from it is revoked. This cannot be undone.')) return;
+  const ok = await askConfirm({
+    title: '🗑 Permanently delete this game',
+    body: 'All its match rows are removed from the leaderboard, stats and match history, and the XP ' +
+      '(plus cosmetics and fries) every player gained from it is revoked.<br><br>' +
+      '<strong style="color:var(--red-t)">This cannot be undone.</strong>',
+    confirmLabel: '🗑 Delete game',
+    confirmClass: 'btn-red',
+  });
+  if (!ok) return;
   try {
     const res = await post('/api/game/' + encodeURIComponent(gameId) + '/delete', {});
     toast('Game deleted — ' + res.rowsDeleted + ' rows, ' + res.xpRemoved + ' XP revoked from ' + res.players + ' player(s)');
@@ -1521,7 +1977,7 @@ document.addEventListener('click', function (e) {
   const modBtn = e.target.closest('[data-mod]');
   if (modBtn) {
     e.stopPropagation();
-    doGameModerate(modBtn.dataset.mod, modBtn.dataset.modUser, modBtn.dataset.modStatus);
+    doGameModerate(modBtn.dataset.mod, modBtn.dataset.modUser, modBtn.dataset.modStatus, modBtn.dataset.modName);
     return;
   }
   const row = e.target.closest('.xp-game-row');
@@ -1743,7 +2199,7 @@ async function loadGamesSearch() {
     return;
   }
 
-  // Otherwise: filtered list of recent games (raw, if any, is a player slug).
+  // Otherwise: filtered list of recent games (raw, if any, is an in-game name or slug).
   cont.innerHTML = '<div class="loading">Searching…</div>';
   const p = new URLSearchParams();
   if (raw) p.set('player', raw);
@@ -1755,7 +2211,9 @@ async function loadGamesSearch() {
   try {
     const data = await get('/api/games/search?' + p.toString());
     populateGamesMaps(data.maps || []);
-    if (data.unknownPlayer) { cont.innerHTML = '<div class="empty">No account found with that slug.</div>'; return; }
+    // Now that the box also matches in-game names, "not found" means no games matched
+    // the term at all — not that the slug is unknown.
+    if (data.unknownPlayer) { cont.innerHTML = '<div class="empty">No games found for that in-game name or slug in this window.</div>'; return; }
     renderGamesList(data.games || []);
   } catch (e) { cont.innerHTML = '<div class="empty">Search failed.</div>'; }
 }
@@ -1767,6 +2225,158 @@ document.getElementById('games-search').addEventListener('keydown', function (e)
 ['games-map', 'games-mode', 'games-window'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', loadGamesSearch);
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – SUS (admin-only queue of everything staff flagged as suspicious)
+// Unlike Warnings (heuristics), every row here was raised by hand — from the Replays
+// tab, the XP Gain tab or a game roster — and carries a reason plus its author.
+// ═══════════════════════════════════════════════════════════════════════════
+
+let susData = [];
+
+async function loadSus() {
+  const container = document.getElementById('sus-container');
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const data = await get('/api/sus');
+    susData = data.entries ?? [];
+    renderSus();
+  } catch (e) {
+    container.innerHTML = '<div class="empty">Failed to load sus flags.</div>';
+  }
+}
+
+function renderSus() {
+  const container = document.getElementById('sus-container');
+  const q = document.getElementById('sus-search').value.trim().toLowerCase();
+  const entries = q
+    ? susData.filter(function (e) {
+        const hay = [e.username, e.slug, e.reason, e.markedByName, e.markedBy, e.gameId, e.region]
+          .filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      })
+    : susData;
+
+  if (!entries.length) {
+    container.innerHTML = susData.length
+      ? '<div class="empty">No flags match.</div>'
+      : '<div class="empty">Nothing is flagged as suspicious.</div>';
+    return;
+  }
+
+  const rows = entries.map(function (e) {
+    const scopeBadge = e.scope === 'game'
+      ? '<span class="badge badge-spec">WHOLE GAME</span>'
+      : e.scope === 'guest'
+        ? '<span class="badge badge-spec">GUEST</span>'
+        : '<span class="badge badge-sus">PLAYER</span>';
+    // Same cell as the game roster: the name goes to the IP this player used in the
+    // flagged game, the slug to their account. A game-wide flag names no player.
+    const who = e.scope === 'game'
+      ? '<span style="color:var(--text-muted)">— whole game —</span>'
+      : playerIpCell(e, e.userId || '(unknown)');
+    const banned = e.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+    const roleBadge = e.markedByRole === 'admin'
+      ? ' <span class="badge badge-admin">ADMIN</span>'
+      : e.markedByRole === 'moderator' ? ' <span class="badge badge-mod">MOD</span>' : '';
+    const meta = e.mapName
+      ? esc(e.mapName) + ' · ' + (TEAM_MODE_LABEL[e.teamMode] || ('Mode ' + e.teamMode))
+      : '<span style="color:var(--text-muted)">— game deleted —</span>';
+    return '<tr>' +
+      '<td style="font-size:11px;white-space:nowrap;">' + fmtDate(e.markedAt) + '</td>' +
+      '<td>' + scopeBadge + '</td>' +
+      '<td>' + who + banned + '</td>' +
+      '<td style="max-width:320px;">' + esc(e.reason || '–') + '</td>' +
+      '<td style="white-space:nowrap;">' + esc(e.markedByName) + roleBadge + '</td>' +
+      '<td>' + meta + '</td>' +
+      '<td>' + esc(e.region || '–') + '</td>' +
+      '<td style="font-size:11px;white-space:nowrap;color:var(--text-muted);">' + (e.playedAt ? fmtDate(e.playedAt) : '–') + '</td>' +
+      '<td>' +
+        '<span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;">' +
+          navButton(hGame(e.gameId), '🎮 game', { cls: 'btn-blue', title: 'Open this game in the Games tab (Ctrl+click for a new tab)' }) +
+          navButton(hReplays(e.gameId), '▶ replay', { cls: 'btn-blue', title: 'Find this game in the Replays tab (Ctrl+click for a new tab)' }) +
+          susRowActions(e) +
+          '<button class="btn btn-gray btn-sm" data-susclear="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId || '') + '" title="Remove this sus flag">clear</button>' +
+        '</span>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  container.innerHTML =
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + entries.length + ' flag(s)' + (q ? ' of ' + susData.length : '') + '.</div>' +
+    '<table class="data-table"><thead><tr><th>Flagged</th><th>Scope</th><th>Player</th><th>Reason</th><th>By</th><th>Map · Mode</th><th>Region</th><th>Played</th><th>Actions</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+/**
+ * The enforcement actions available on one sus row. What a flag is about decides what
+ * can be done to it, so each button only appears where it actually works:
+ *   player → botted + remove (both move XP) + account ban + IP ban
+ *   guest  → IP ban only (no account exists to bott, remove or ban)
+ *   game   → none of them (the flag names no single player)
+ */
+function susRowActions(e) {
+  const parts = [];
+  if (e.scope === 'player') {
+    parts.push('<button class="btn btn-red btn-sm" data-susact="botted" data-susgame="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId) + '" title="Void this player\\'s game — revokes its XP, cosmetics and fries">botted</button>');
+    parts.push('<button class="btn btn-orange btn-sm" data-susact="remove" data-susgame="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId) + '" title="Remove this player from the game — hides it from their stats and the leaderboard and revokes its XP">➖ remove</button>');
+    if (e.slug) {
+      parts.push('<button class="btn btn-red btn-sm" data-susact="banacc" data-susslug="' + esc(e.slug) + '" data-susreason="' + esc(e.reason || '') + '" title="Ban this account">🔨 ban acc</button>');
+    }
+  }
+  // A guest has no account, but they do have the IP they played this game from.
+  if (e.encodedIp && (e.scope === 'player' || e.scope === 'guest')) {
+    parts.push('<button class="btn btn-red btn-sm" data-susact="banip" data-susip="' + esc(e.encodedIp) + '" data-susreason="' + esc(e.reason || '') + '" title="Ban the IP this player used in this game">🔨 ban IP</button>');
+  }
+  return parts.join('');
+}
+
+document.addEventListener('click', function (e) {
+  const clr = e.target.closest('[data-susclear]');
+  if (clr) { clearSusFlag(clr.dataset.susclear, clr.dataset.sususer || ''); return; }
+  const act = e.target.closest('[data-susact]');
+  if (act) { runSusAction(act.dataset); }
+});
+
+/**
+ * Runs an enforcement action from the Sus tab. Reuses the same endpoints and dialogs
+ * the Games/XP tabs use, so the rules (and their confirmations) stay in one place.
+ *
+ * Bans open the prefilled ban modal — which is its own flow — so they don't reload the
+ * list; the two game actions do, since they change or remove the flag shown here.
+ */
+async function runSusAction(d) {
+  if (d.susact === 'banacc') {
+    openBanModal({ type: 'account', target: d.susslug, reason: d.susreason || '' });
+    return;
+  }
+  if (d.susact === 'banip') {
+    openBanModal({ type: 'ip', target: d.susip, reason: d.susreason || '' });
+    return;
+  }
+  if (d.susact === 'botted') {
+    // Marking botted replaces the sus flag, so the row leaves this list.
+    await doGameModerate(d.susgame, d.sususer, 'botted');
+    await loadSus();
+    return;
+  }
+  if (d.susact === 'remove') {
+    await doRemoveUser(d.susgame, d.sususer, null);
+    await loadSus();
+  }
+}
+
+async function clearSusFlag(gameId, userId) {
+  try {
+    await post('/api/game/' + encodeURIComponent(gameId) + '/moderate', { userId: userId, status: 'clear', note: '' });
+    susData = susData.filter(function (e) { return !(e.gameId === gameId && (e.userId || '') === userId); });
+    renderSus();
+    toast('Sus flag cleared');
+  } catch (e) { toast('Failed to clear: ' + e.message, true); }
+}
+
+document.getElementById('sus-refresh-btn').addEventListener('click', loadSus);
+document.getElementById('sus-search').addEventListener('input', renderSus);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB – WARNINGS (heuristic suspicious-behaviour feed)
@@ -2061,21 +2671,30 @@ function syncBanDurationInputs() {
 
 const banModal = document.getElementById('ban-modal');
 
-document.getElementById('ban-new-btn').addEventListener('click', () => {
-  // Reset form on open (no kick target)
+/**
+ * Opens the ban modal, reset to a known state and prefilled for the given target.
+ * opts: { type: 'ip'|'account'|'chat', target?, reason?, kickTarget? }
+ *   kickTarget — a player name; makes the confirm handler ALSO ban that account and
+ *                kick them from the running game (used by the live-server quick ban).
+ */
+function openBanModal(opts) {
+  opts = opts || {};
   delete banModal.dataset.kickTarget;
-  document.getElementById('modal-ban-target').value = '';
-  document.getElementById('modal-ban-reason').value = '';
+  if (opts.kickTarget) banModal.dataset.kickTarget = opts.kickTarget;
+  document.getElementById('modal-ban-target').value = opts.target || '';
+  document.getElementById('modal-ban-reason').value = opts.reason || '';
   document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-unit').value    = 'days';
+  document.getElementById('modal-ban-unit').value   = 'days';
   document.getElementById('modal-ban-until').value  = '';
   document.getElementById('modal-ban-perm').checked = false;
   document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
   syncBanDurationInputs();
-  document.getElementById('modal-ban-type').value   = 'ip';
+  document.getElementById('modal-ban-type').value   = opts.type || 'ip';
   onBanTypeChange();
   banModal.style.display = 'flex';
-});
+}
+
+document.getElementById('ban-new-btn').addEventListener('click', () => openBanModal({ type: 'ip' }));
 
 document.getElementById('modal-cancel-btn').addEventListener('click', () => { banModal.style.display = 'none'; });
 
@@ -2481,18 +3100,7 @@ function quickBanIp(hash) {
 
 function quickBanChat(hash) {
   // Pre-fill the ban modal as a chat ban (reason/duration editable before confirm).
-  delete banModal.dataset.kickTarget;
-  document.getElementById('modal-ban-type').value   = 'chat';
-  document.getElementById('modal-ban-target').value = hash;
-  document.getElementById('modal-ban-reason').value = '';
-  document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-unit').value    = 'days';
-  document.getElementById('modal-ban-until').value  = '';
-  document.getElementById('modal-ban-perm').checked = false;
-  document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
-  syncBanDurationInputs();
-  onBanTypeChange();
-  banModal.style.display = 'flex';
+  openBanModal({ type: 'chat', target: hash });
 }
 
 document.getElementById('lookup-btn').addEventListener('click', () => {
@@ -2583,7 +3191,13 @@ async function spectateGame(region, gameId) {
 
 /** Force-stops a running game immediately (private games that are empty/stuck). */
 async function killGame(region, gameId) {
-  if (!confirm('Force-stop this game?')) return;
+  const ok = await askConfirm({
+    title: '⏹ Force-stop this game',
+    body: 'Every player still in <span style="font-family:monospace;font-size:11px;">' + esc(gameId) + '</span> is dropped immediately.',
+    confirmLabel: '⏹ Force-stop',
+    confirmClass: 'btn-red',
+  });
+  if (!ok) return;
   try {
     await post('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/cmd', { action: 'stop' });
     toast('Game stopped');
@@ -2658,16 +3272,19 @@ function renderPlayers() {
 
   const tbody = document.getElementById('player-tbody');
   tbody.innerHTML = visiblePlayers.length ? visiblePlayers.map(p => {
-    // Status badges: alive/dead + spectator (can be combined); disconnected overrides
+    // Status badges: alive/dead + spectator (combined for a player who died and is now
+    // spectating); disconnected overrides both. A player who JOINED as a spectator is
+    // killed server-side on their first tick, so suppress the meaningless DEAD for them.
     const aliveBadge = p.disconnected
       ? '<span class="badge badge-disc">DISCONNECTED</span>'
-      : p.isSpectator
+      : p.joinedAsSpectator
         ? ''
         : p.alive
           ? '<span class="badge badge-alive">ALIVE</span>'
           : '<span class="badge badge-dead">DEAD</span>';
     const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
-    const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>' : '';
+    const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>'
+      : p.isModerator ? '<span class="badge badge-mod">MODERATOR</span>' : '';
     const isSelf     = p.userId === currentAdminId;
     const selfBadge  = isSelf ? '<span class="badge badge-self">YOU</span>' : '';
     // No kick/ban buttons for self or already-disconnected players
@@ -2783,19 +3400,8 @@ document.getElementById('msg-input').addEventListener('keydown', e => { if (e.ke
 
 /** Ban a player from the live game view: opens the modal pre-filled, kicks after confirm. */
 function quickBanPlayer(name, hash) {
-  document.getElementById('modal-ban-type').value   = 'ip';
-  document.getElementById('modal-ban-target').value = hash;
-  document.getElementById('modal-ban-reason').value = '';
-  document.getElementById('modal-ban-days').value   = '7';
-  document.getElementById('modal-ban-unit').value    = 'days';
-  document.getElementById('modal-ban-until').value  = '';
-  document.getElementById('modal-ban-perm').checked = false;
-  document.querySelector('input[name="modal-ban-mode"][value="duration"]').checked = true;
-  syncBanDurationInputs();
-  onBanTypeChange();
-  // Store the player name so the confirm handler can also ban the account + kick
-  banModal.dataset.kickTarget = name;
-  banModal.style.display = 'flex';
+  // Passing kickTarget makes the confirm handler also ban the account + kick them.
+  openBanModal({ type: 'ip', target: hash, kickTarget: name });
 }
 
 document.getElementById('gd-close-btn').addEventListener('click', () => {
@@ -2912,6 +3518,7 @@ function renderAccounts() {
       <td style="font-size:11px;font-family:monospace;">\${a.lastIp ? ipLink(a.lastIp) : '–'}</td>
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
+        \${a.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
       </td>
       <td style="text-align:center;white-space:nowrap;">
@@ -2925,7 +3532,20 @@ function renderAccounts() {
 
 
 async function giveGoldenFries(slug, current) {
-  const input = prompt('Golden Fries für ' + slug + ' (aktuell ' + current + ').\\nBetrag (negativ zum Abziehen):', '100');
+  const input = await askInput({
+    title: '🍟 Golden Fries',
+    body: 'Account <strong style="color:var(--text)">' + esc(slug) + '</strong> · aktuell <strong style="color:var(--text)">' + (current ?? 0) + '</strong> 🍟',
+    confirmLabel: 'Übertragen',
+    confirmClass: 'btn-orange',
+    field: {
+      label: 'Betrag',
+      type: 'number',
+      value: '100',
+      hint: 'Negativer Betrag zieht ab.',
+      required: true,
+      requiredMsg: 'Bitte einen Betrag angeben',
+    },
+  });
   if (input === null) return;
   const amount = parseInt(input, 10);
   if (!Number.isFinite(amount) || amount === 0) { toast('Ungültiger Betrag', true); return; }
@@ -2988,7 +3608,7 @@ function renderAccountDetail(data) {
   const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
   const flags = [
     u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
-    u.moderator ? '<span class="badge badge-admin">MODERATOR</span>' : '',
+    u.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : '',
     u.banned ? '<span class="badge badge-perm">BANNED</span>'  : '',
   ].join(' ');
 
@@ -3141,6 +3761,40 @@ function gpReason(e) {
       ? 'Bought ' + item + ' <span style="color:var(--text-muted)">from</span> ' + who
       : 'Sold ' + item + ' <span style="color:var(--text-muted)">to</span> ' + who;
   }
+  // Auction rows: the sale shows the winner; bid/refund are escrow moves.
+  const au = e.auction;
+  if (au && au.item) {
+    const item = esc(cosmeticName(au.item) || au.item);
+    if (au.kind === 'sell') {
+      const who = au.winnerSlug
+        ? navLink(hAccount(au.winnerSlug), esc(au.winnerName || au.winnerSlug), { title: 'Open account' })
+        : esc(au.winnerName || 'winner');
+      return '🔨 Auction — sold ' + item + ' <span style="color:var(--text-muted)">to</span> ' + who;
+    }
+    if (au.kind === 'bid') return '🔨 Auction bid <span style="color:var(--text-muted)">on</span> ' + item + ' <span style="color:var(--text-muted)">(escrow)</span>';
+    return '🔨 Auction refund <span style="color:var(--text-muted)">· outbid on</span> ' + item;
+  }
+  // Buy-offer rows: like a market trade but via an accepted offer.
+  const of = e.offer;
+  if (of && of.item) {
+    const item = esc(cosmeticName(of.item) || of.item);
+    const who = of.counterpartySlug
+      ? navLink(hAccount(of.counterpartySlug), esc(of.counterpartyName || of.counterpartySlug), { title: 'Open account' })
+      : esc(of.counterpartyName || 'unknown');
+    return of.direction === 'buy'
+      ? '💰 Offer — bought ' + item + ' <span style="color:var(--text-muted)">from</span> ' + who
+      : '💰 Offer — sold ' + item + ' <span style="color:var(--text-muted)">to</span> ' + who;
+  }
+  // Golden Fries gift (no item).
+  const gf = e.gift;
+  if (gf) {
+    const who = gf.counterpartySlug
+      ? navLink(hAccount(gf.counterpartySlug), esc(gf.counterpartyName || gf.counterpartySlug), { title: 'Open account' })
+      : esc(gf.counterpartyName || 'unknown');
+    return gf.direction === 'send'
+      ? '🎁 Gifted fries <span style="color:var(--text-muted)">to</span> ' + who
+      : '🎁 Received fries <span style="color:var(--text-muted)">from</span> ' + who;
+  }
   // Market row whose listing no longer exists: it is cascade-deleted when the traded
   // item or the counterparty's account is deleted, so the partner can't be recovered.
   const gone = /^market:(buy|sell):(\d+)$/.exec(e.reason || '');
@@ -3196,12 +3850,23 @@ function renderAccountGp(data) {
 // server does the type-specific rollback; a blocked revert (e.g. item since traded
 // away) surfaces its reason as a toast.
 async function doRevertGp(id) {
-  if (!confirm('Revert this Golden Fries transaction?\\n\\n' +
-      '• Pass reward: fries removed, and NOT re-grantable via reconcile.\\n' +
-      '• Shop buy: fries refunded, item removed, slot freed.\\n' +
-      '• Market trade: buyer refunded, seller charged, item returned to seller.\\n' +
-      '• Admin grant: the granted amount is simply reversed.\\n\\n' +
-      'Blocked if the item has since been traded/sold away.')) return;
+  const ok = await askConfirm({
+    title: '↩ Revert Golden Fries transaction',
+    body: 'What happens depends on the entry type:' +
+      '<ul style="margin:6px 0 0;padding-left:18px;">' +
+        '<li><strong style="color:var(--text)">Pass reward</strong>: fries removed, and NOT re-grantable via reconcile.</li>' +
+        '<li><strong style="color:var(--text)">Shop buy</strong>: fries refunded, item removed, slot freed.</li>' +
+        '<li><strong style="color:var(--text)">Market trade</strong>: buyer refunded, seller charged, item returned to seller.</li>' +
+        '<li><strong style="color:var(--text)">Auction (sale row)</strong>: winner refunded, seller charged, item returned to seller.</li>' +
+        '<li><strong style="color:var(--text)">Offer</strong>: buyer refunded, seller charged, item returned to seller.</li>' +
+        '<li><strong style="color:var(--text)">Fries gift</strong>: sender refunded, recipient charged.</li>' +
+        '<li><strong style="color:var(--text)">Admin grant</strong>: the granted amount is simply reversed.</li>' +
+      '</ul>' +
+      '<div style="margin-top:8px;">Blocked if the item has since been traded/sold away.</div>',
+    confirmLabel: '↩ Revert',
+    confirmClass: 'btn-orange',
+  });
+  if (!ok) return;
   try {
     const r = await post('/api/account/gp/' + id + '/revert', {});
     toast('Reverted (' + r.type + ') — ' + r.detail);
@@ -3249,7 +3914,14 @@ async function accRemoveItem(item) {
 }
 
 async function accRemoveSource(source) {
-  if (!confirm('Remove ALL items with source "' + source + '"?')) return;
+  const ok = await askConfirm({
+    title: '🗑 Remove item group',
+    body: 'Removes <strong style="color:var(--text)">all</strong> items with source ' +
+      '<strong style="color:var(--text)">' + esc(source) + '</strong> from this account.',
+    confirmLabel: '🗑 Remove all',
+    confirmClass: 'btn-red',
+  });
+  if (!ok) return;
   try {
     const r = await post('/api/account/remove-item-source', { slug: currentAccountSlug, source });
     toast('Removed ' + (r.removed ?? 0) + ' items (' + source + ')');
@@ -3259,11 +3931,22 @@ async function accRemoveSource(source) {
 
 async function accDeleteAccount() {
   const slug = currentAccountSlug;
-  const typed = prompt('⚠️ Permanently DELETE account "' + slug + '"?\\n' +
-    'This removes the user, their items, XP, passes, golden fries and sessions ' +
-    '(match history is anonymized). This cannot be undone.\\n\\nType the slug to confirm:');
+  const typed = await askInput({
+    title: '⚠️ Permanently delete account',
+    body: 'This removes <strong style="color:var(--text)">' + esc(slug) + '</strong> — the user, their items, XP, passes, golden fries and sessions. ' +
+      'Match history is anonymized. <strong style="color:var(--red-t)">This cannot be undone.</strong>',
+    confirmLabel: '🗑 Delete account',
+    confirmClass: 'btn-red',
+    // Confirm stays locked until the slug is typed exactly.
+    requireText: slug,
+    requireMsg: 'Slug mismatch — deletion aborted',
+    field: {
+      label: 'Type the slug to confirm',
+      placeholder: slug,
+      hint: 'Must match exactly.',
+    },
+  });
   if (typed === null) return;
-  if (typed !== slug) { toast('Slug mismatch — deletion aborted', true); return; }
   try {
     await post('/api/account/delete', { slug });
     toast('Account "' + slug + '" deleted');
@@ -3342,21 +4025,28 @@ document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Tabs a moderator (non-admin) may open. Everything else is hidden for them. */
+const MODERATOR_TABS = ['replays', 'xp'];
+
 (async () => {
-  let moderatorOnly = false;
   try {
     const me = await get('/api/me');
     currentAdminId   = me.id;
     currentAdminSlug = me.slug;
-    moderatorOnly = !!me.moderator && !me.admin;
+    isAdmin     = !!me.admin;
+    isModerator = !!me.moderator && !me.admin;
     document.getElementById('topbar-user').textContent =
-      'Logged in as ' + (me.username || me.slug) + (moderatorOnly ? ' · moderator (replays only)' : '');
+      'Logged in as ' + (me.username || me.slug) + (isModerator ? ' · moderator (replays + XP gain)' : '');
   } catch { /* already redirected by server */ }
 
-  if (moderatorOnly) {
-    // Moderators may only use the Replays tab — hide every other tab and land there.
-    // (The server also 403s non-replay routes for them, so this is just UX.)
-    document.querySelectorAll('.tab-btn').forEach(b => { if (b.dataset.tab !== 'replays') b.style.display = 'none'; });
+  renderXpExcludePanel();
+
+  if (isModerator) {
+    // Moderators get Replays + XP Gain, and may only mark things sus. Hiding the rest
+    // is UX only — the server independently 403s every route they may not reach.
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      if (!MODERATOR_TABS.includes(b.dataset.tab)) b.style.display = 'none';
+    });
     switchTab('replays');
     return;
   }

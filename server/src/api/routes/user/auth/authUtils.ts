@@ -53,8 +53,7 @@ export async function setSessionTokenCookie(userId: string, c: Context) {
 
     setCookie(c, "session", sessionToken, {
         httpOnly: true,
-        //secure: process.env.NODE_ENV === "production",
-        secure: false,
+        secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
         expires: session.expiresAt,
@@ -72,8 +71,7 @@ export async function logoutUser(c: Context, sessionId: string) {
 export function deleteSessionTokenCookie(c: Context) {
     setCookie(c, "session", "", {
         httpOnly: true,
-        //secure: process.env.NODE_ENV === "production",
-        secure: false,
+        secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
         maxAge: 0,
