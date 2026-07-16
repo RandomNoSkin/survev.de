@@ -38,6 +38,7 @@ import {
     goldenFriesLedgerTable,
     itemsTable,
     marketListingsTable,
+    offersTable,
     usersTable,
 } from "./schema";
 
@@ -299,6 +300,23 @@ export async function buyListing(
                 )
                 .returning({ id: itemsTable.id });
             if (!moved) throw new MarketError("error");
+
+            // The item just changed hands, so every live buy-offer on it is void: they
+            // were made to the seller, who no longer owns it. acceptOffer would refuse
+            // them anyway (its ownership guard), but leaving them "pending" would keep a
+            // dead offer in both users' lists for the whole TTL, burn one of the bidder's
+            // outstanding slots, and — if the item ever returned to the seller (bought
+            // back, or an admin revert) — silently become acceptable again at the old
+            // price without the bidder confirming. Same reasoning as createAuction.
+            await tx
+                .update(offersTable)
+                .set({ status: "expired", updatedAt: new Date() })
+                .where(
+                    and(
+                        eq(offersTable.itemId, listing.itemId),
+                        inArray(offersTable.status, ["pending", "countered"]),
+                    ),
+                );
 
             await tx.insert(goldenFriesLedgerTable).values([
                 {
