@@ -114,7 +114,6 @@ export const _allowedOutfits = [
     "outfitPanorama",
     "outfitNordCode",
     "outfitCrimson",
-    "outfitDemon",
     "outfitPinkwarrior",
     "outfitYellowhero",
     "outfitDarkslayed",

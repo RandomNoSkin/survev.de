@@ -1634,25 +1634,6 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0x5e0c0c,
         },
     }),
-    outfitDemon: defineOutfitSkin("outfitBase", {
-        noDropOnDeath: true,
-        name: "Extrem demon ",
-        rarity: Rarity.Uncommon,
-        skinImg: {
-            baseTint: 0xffffff,
-            baseSprite: "player-base-outfitDemon.img",
-            handTint: 0x5e0c0c,
-            handSprite: "player-hands-01.img",
-            footTint: 0x3f0808,
-            footSprite: "player-feet-01.img",
-            backpackTint: 0x3f0808,
-            backpackSprite: "player-circle-base-01.img",
-        },
-        lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
-            tint: 0x5e0c0c,
-        },
-    }),
 
     outfitPinkwarrior: defineOutfitSkin("outfitBase", {
         noDrop: true,
