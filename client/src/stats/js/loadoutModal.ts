@@ -3,6 +3,7 @@ import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig";
 import { helpers } from "../../helpers";
+import { loadSkinsAtlas } from "../../ui/skinsAtlas";
 
 /** Scoped styles for the read-only loadout viewer modal (self-contained, injected once). */
 export const LOADOUT_MODAL_CSS = `
@@ -67,6 +68,39 @@ export function svgFor(type: string): string {
     return s.startsWith("img/") ? `/${s}` : s;
 }
 
+/**
+ * Markup for a cosmetic's image. Tagged with its type so the skin art can be
+ * swapped in once the atlas loads — see `upgradeSkinImages`.
+ */
+export function imgHtml(type: string): string {
+    return `<div class="ld-img" data-type="${type}" style="background-image:url('${svgFor(type)}')"></div>`;
+}
+
+/**
+ * Skins render through `helpers.getSvgFromGameType`, which composes a character
+ * preview only once the player sprites are in PIXI's texture cache. The stats
+ * page loads no map, so the first paint always falls back to a flat tinted
+ * shirt; fetch the sprites and repaint the outfits with the real preview.
+ *
+ * Fire-and-forget: on failure the fallback art simply stays.
+ */
+export function upgradeSkinImages($root: JQuery<HTMLElement>): void {
+    loadSkinsAtlas("/")
+        .then(() => {
+            $root.find(".ld-img[data-type]").each((_i, el) => {
+                const type = el.dataset.type!;
+                if (
+                    (GameObjectDefs[type] as { type?: string } | undefined)?.type !==
+                    "outfit"
+                ) {
+                    return;
+                }
+                el.style.backgroundImage = `url('${svgFor(type)}')`;
+            });
+        })
+        .catch(() => {});
+}
+
 export function nameFor(type: string): string {
     return (GameObjectDefs[type] as { name?: string } | undefined)?.name || type;
 }
@@ -87,7 +121,7 @@ export function showMatchLoadout(username: string, cosmetics: string[]): void {
             const r = getItemRarity(type);
             const name = helpers.htmlEscape(nameFor(type));
             return `<div class="ld-tile">
-                <div class="ld-img" style="background-image:url('${svgFor(type)}')"></div>
+                ${imgHtml(type)}
                 <div class="ld-name" title="${name}">${name}</div>
                 <div class="ld-rarity" style="color:${RARITY_COLORS[r] ?? "#c5c5c5"}">${RARITY_NAMES[r] ?? "Common"}</div>
             </div>`;
@@ -117,4 +151,5 @@ export function showMatchLoadout(username: string, cosmetics: string[]): void {
         }
     });
     $("body").append($modal);
+    upgradeSkinImages($modal);
 }

@@ -10,6 +10,7 @@ import { MainAtlas } from "./defs/main";
 import { PotatoAtlas } from "./defs/potato";
 import { SavannahAtlas } from "./defs/savannah";
 import { SharedAtlas } from "./defs/shared";
+import { SkinsAtlas } from "./defs/skins";
 import { SnowAtlas } from "./defs/snow";
 import { TurkeyAtlas } from "./defs/turkey";
 import { WoodsAtlas } from "./defs/woods";
@@ -32,6 +33,7 @@ export interface AtlasDef {
 export const Atlases: Record<Atlas, AtlasDef> = {
     gradient: GradientAtlas,
     loadout: LoadoutAtlas,
+    skins: SkinsAtlas,
     shared: SharedAtlas,
     main: MainAtlas,
     desert: DesertAtlas,
