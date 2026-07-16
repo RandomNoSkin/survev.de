@@ -570,6 +570,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     }),
     outfitIslander: defineOutfitSkin("outfitBase", {
         name: "Island Time",
+        shop: true,
         skinImg: {
             baseTint: 0xffc600,
             baseSprite: "player-base-01.img",
@@ -604,6 +605,8 @@ const SkinDefs: Record<string, OutfitDef> = {
     }),
     outfitCoral: defineOutfitSkin("outfitBase", {
         name: "Coral Guise",
+        shop: true,
+        rarity: Rarity.Rare,
         skinImg: {
             baseTint: 0xff5f67,
             baseSprite: "player-base-01.img",
@@ -696,6 +699,8 @@ const SkinDefs: Record<string, OutfitDef> = {
     }),
     outfitPrisoner: defineOutfitSkin("outfitBase", {
         name: "The New Black",
+        shop: true,
+        rarity: Rarity.Rare,
         skinImg: {
             baseTint: 0xff5c22,
             baseSprite: "player-base-01.img",
@@ -713,6 +718,8 @@ const SkinDefs: Record<string, OutfitDef> = {
     }),
     outfitJester: defineOutfitSkin("outfitBase", {
         name: "Jester's Folly",
+        shop: true,
+        rarity: Rarity.Rare,
         skinImg: {
             baseTint: 0x770078,
             baseSprite: "player-base-01.img",
@@ -769,6 +776,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         name: "Key Lime",
         rarity: Rarity.Common,
         lore: "Not for eating.",
+        shop: true,
         skinImg: {
             baseTint: 0xc7ff3f,
             baseSprite: "player-base-01.img",
@@ -807,6 +815,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         name: "Fragtastic",
         rarity: Rarity.Common,
         lore: "Pin not included. Maybe.",
+        shop: true,
         skinImg: {
             baseTint: 0x62591f,
             baseSprite: "player-base-01.img",
@@ -1019,6 +1028,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     outfitBlackIce: defineOutfitSkin("outfitBase", {
         name: "Black Ice",
         rarity: Rarity.Common,
+        shop: true,
         skinImg: {
             baseTint: 0x686d6e,
             baseSprite: "player-base-02.img",
@@ -1055,6 +1065,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         name: "Coconut Frenzy",
         rarity: Rarity.Common,
         lore: "It's the coco fruit!",
+        shop: true,
         skinImg: {
             baseTint: 0x765836,
             baseSprite: "player-base-01.img",
@@ -1523,6 +1534,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDrop: true,
         name: "Pandora",
         rarity: Rarity.Uncommon,
+        shop: true,
         skinImg: {
             baseTint: 0xbfcee4,
             baseSprite: "player-base-02.img",
@@ -1659,6 +1671,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDrop: true,
         name: "Pink Warrior",
         rarity: Rarity.Uncommon,
+        shop: true,
         skinImg: {
             baseTint: 0xf0ff14,
             baseSprite: "player-base-02.img",
@@ -1679,6 +1692,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDrop: true,
         name: "Pink Warrior",
         rarity: Rarity.Uncommon,
+        shop: true,
         skinImg: {
             baseTint: 0x385b44,
             baseSprite: "player-base-01.img",
@@ -1719,6 +1733,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDrop: true,
         name: "Pink Warrior",
         rarity: Rarity.Uncommon,
+        shop: true,
         skinImg: {
             baseTint: 0x2e36ce,
             baseSprite: "player-base-01.img",
@@ -1738,6 +1753,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDrop: true,
         name: "Pink Warrior",
         rarity: Rarity.Uncommon,
+        shop: true,
         skinImg: {
             baseTint: 0x380921,
             baseSprite: "player-base-01.img",
