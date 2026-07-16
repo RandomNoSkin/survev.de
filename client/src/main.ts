@@ -9,6 +9,7 @@ import type {
     FindGameResponse,
 } from "../../shared/types/api";
 import { math } from "../../shared/utils/math";
+import { util } from "../../shared/utils/util";
 import { Account } from "./account";
 import { Ambiance } from "./ambiance";
 import { api } from "./api";
@@ -1271,19 +1272,9 @@ export class Application {
 
         let expiration = "Duration: indefinite";
         if (!ban.permanent) {
-            const expiresIn = new Date(ban.expiresIn);
-            const timeLeft = expiresIn.getTime() - Date.now();
-
-            const daysLeft = Math.round(timeLeft / (1000 * 60 * 60 * 24));
-            const hoursLeft = Math.round(timeLeft / (1000 * 60 * 60));
-
-            if (daysLeft > 1) {
-                expiration = `Expires in: ${daysLeft} days`;
-            } else if (hoursLeft > 1) {
-                expiration = `Expires in: ${hoursLeft} hours`;
-            } else {
-                expiration = `Expires in: less than an hour`;
-            }
+            const timeLeft = new Date(ban.expiresIn).getTime() - Date.now();
+            const remaining = util.msToShortDuration(timeLeft);
+            expiration = `Expires in: ${remaining || "less than a minute"}`;
         }
 
         $("#modal-ip-banned-expiration").text(expiration);

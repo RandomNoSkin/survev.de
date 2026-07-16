@@ -72,8 +72,8 @@ export const Comp: MapDef = {
         xpMultiplier: {
             kill: 0,
             damage: 0.01, // 1 XP per 100 damage
-            win: 1,
-            timeSurvived: 0.005, 
+            win: 2,
+            timeSurvived: 0, 
         },
     },
     /* STRIP_FROM_PROD_CLIENT:START */

@@ -64,9 +64,15 @@ export const SHARED_SHOP = false;
 /** Marketplace fee (Golden Fries sink). The buyer pays this on top of the seller's ask. */
 export const MARKET_FEE = 0.1;
 
-/** Player marketplace: a seller's ask must lie within these multiples of the shop value. */
+/** Player marketplace: multiples of the shop value used only for the *recommended* price. */
 export const MARKET_MIN_MULT = 0.5;
 export const MARKET_MAX_MULT = 5;
+
+/**
+ * Upper bound for a listing price. Sellers may ask anything from 0 (free) up to this;
+ * the cap only keeps price + fee well within the Golden Fries integer range.
+ */
+export const MARKET_MAX_PRICE = 1_000_000_000;
 
 /** Max simultaneous active listings a single player may have. */
 export const MARKET_MAX_LISTINGS = 20;

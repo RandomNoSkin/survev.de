@@ -162,6 +162,7 @@ export enum Input {
     TeamPingSingle,
     JoinChat,
     SwitchAmmo,
+    AdvSpecToggle,
     Count,
 }
 
@@ -170,7 +171,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1021,
+    protocolVersion: 1022,
     Input,
     EmoteSlot,
     WeaponSlot,
@@ -199,11 +200,11 @@ export const GameConfig = {
             pass_survivr2: {
                 passMaxLevel: 99,
                 seasonStart: "2026-05-31T22:00:00Z",
-                seasonEnd: "2026-07-31T23:59:30",
+                seasonEnd: "2026-07-07T23:59:59",
             },
             pass_survivr3: {
                 passMaxLevel: 99,
-                seasonStart: "2026-07-31T23:59:59",
+                seasonStart: "2026-07-08T00:00:00",
                 seasonEnd: "2026-10-31T23:59:30",
             },
         } as Record<
@@ -272,6 +273,38 @@ export const GameConfig = {
                     start: "2026-06-29T00:00:00",
                     end: "2026-07-05T23:59:59",
                     boost: 5,
+                },
+                "ALL THE XP #2": {
+                    maps: ["local", "two_vs_two", "comp"],
+                    start: "2026-06-06T19:00:00Z",
+                    end: "2026-07-07T23:59:59",
+                    boost: 2.5,
+                },
+            },
+            pass_survivr3: {
+                "Happy New Pass!": {
+                    maps: ["local", "two_vs_two", "comp"],
+                    start: "2026-07-08T00:00:00",
+                    end: "2026-07-08T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 1": {
+                    maps: ["comp"],
+                    start: "2026-07-10T00:00:00",
+                    end: "2026-07-12T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 2": {
+                    maps: ["local", "comp"],
+                    start: "2026-07-17T00:00:00",
+                    end: "2026-07-19T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 3": {
+                    maps: ["scrims"],
+                    start: "2026-07-24T00:00:00",
+                    end: "2026-07-26T23:59:59",
+                    boost: 3,
                 },
             },
         } as Record<

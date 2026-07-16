@@ -18,6 +18,17 @@ export interface OutfitDef {
         frontSprite?: string;
         frontSpritePos?: { x: number; y: number };
         aboveHand?: boolean;
+        // Vest rendered over skin accessoire, with adjustable transparency. Defaults to 0.5 on skins with frontSprite.
+        // Value between 0.0 and 1.0, where 0.0 is fully transparent and 1.0 is fully opaque.
+        vestOverlayTransparency?: number;
+        // For accessory skins where the vest ring is hard to make out (e.g. the
+        // very dark Village Ninja), list the worn vest levels that should get a
+        // contrasting outline — configured per skin AND per level. The outline
+        // colour is derived from the worn vest: light grey (level 2 colour) around
+        // the dark level 3/4 vests, black (level 3 colour) around the light level
+        // 1/2 vests. Examples: [3, 4] outlines only the dark vests; [2] only the
+        // level 2 vest.
+        chestInnerOutline?: number[];
     };
     lootImg: {
         sprite: string;
@@ -1167,6 +1178,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             footSprite: "player-feet-02.img",
             backpackTint: 0x404042,
             backpackSprite: "player-circle-base-01.img",
+            chestInnerOutline: [2],
         },
         lootImg: {
             sprite: "loot-shirt-outfitOhNah.img",
@@ -2113,6 +2125,8 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSpritePos: { x: -2, y: 0 },
             frontSprite: "player-accessory-village-ninja.img",
             aboveHand: false,
+            vestOverlayTransparency: 0.9,
+            chestInnerOutline: [3, 4],
         },
         lootImg: {
             sprite: "loot-village-ninja-outfit.img",
@@ -2535,6 +2549,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-back-camo-deer.img",
             frontSpritePos: { x: 5, y: 0 },
             frontSprite: "player-accessory-camo-deer.img",
+            vestOverlayTransparency: 0.0,
         },
         lootImg: {
             sprite: "loot-camo-deer-outfit.img",
@@ -2604,6 +2619,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSpritePos: { x: 0, y: 0 },
             frontSprite: "player-accessory-meow.img",
             aboveHand: true,
+            vestOverlayTransparency: 0.7,
         },
         lootImg: {
             sprite: "loot-shirt-outfitMeow.img",

@@ -814,10 +814,8 @@ export class Player extends BaseGameObject {
     announcedEnemies: boolean = false;
 
     //
-    // Advanced spectator mode. Driven by SpectatorAdvancedMsg. Only honored for
-    // spectators that are admins — or for ANY spectator when the debug editor is
-    // enabled (Config.debug.allowEditMsg, dev-only), so the feature can be tested
-    // locally before being pushed to prod.
+    // Advanced spectator mode. Driven by SpectatorAdvancedMsg. Honored for any
+    // player that joined as a spectator (never for players actively in the game).
     //
     advSpecEnabled = false;
     advSpecFreecam = false;
@@ -826,12 +824,12 @@ export class Player extends BaseGameObject {
 
     /**
      * Whether this receiver is allowed to use advanced spectator at all. Single
-     * security chokepoint: admins always, plus any spectator when the debug editor
-     * is enabled. `allowEditMsg` defaults to off in production and already gates the
-     * (dev-only) building editor, so this can't be opened by accident via NODE_ENV.
+     * security chokepoint: only players that joined as a spectator (`this.spectator`,
+     * set exclusively in PlayerBarn.addSpectator). Spectators are never added to
+     * `livingPlayers`, so this can never be true for a player actively in the game.
      */
     get advSpecAllowed(): boolean {
-        return (this.isAdmin || Config.debug.allowEditMsg) && this.spectator;
+        return this.spectator;
     }
 
     /** True when this receiver should get the extended (full map + health) stream. */
@@ -3116,9 +3114,9 @@ export class Player extends BaseGameObject {
             joinedMsg.teamMode = game.teamMode;
             joinedMsg.emotes = this.loadout.emotes;
             joinedMsg.isAdmin = this.isAdmin;
-            // Authoritative gate for the client's advanced-spectator button: only
-            // spectators, and only admins (or anyone when the dev debug editor is
-            // enabled). Purely cosmetic — the server re-checks advSpecAllowed.
+            // Authoritative gate for the client's advanced-spectator button: any
+            // player that joined as a spectator. Purely cosmetic — the server
+            // re-checks advSpecAllowed before honoring SpectatorAdvancedMsg.
             joinedMsg.advancedSpectator = this.advSpecAllowed;
             this.sendMsg(net.MsgType.Joined, joinedMsg);
 
@@ -3255,7 +3253,7 @@ export class Player extends BaseGameObject {
         updateMsg.deletedPlayerIds = playerBarn.deletedPlayers;
 
         if (playerBarn.playerStatusTicker > playerBarn.playerStatusRate) {
-            // Build statuses relative to the receiver (this) when it's an admin
+            // Build statuses relative to the receiver (this) when it's an advanced
             // spectator, so getPlayerStatus() returns every player + health/boost.
             let statuses = this.advSpecActive
                 ? this.getPlayerStatus()
@@ -3413,9 +3411,8 @@ export class Player extends BaseGameObject {
     }
 
     handleSpectatorAdvanced(msg: net.SpectatorAdvancedMsg): void {
-        // Admins only (or any spectator when the dev debug editor is enabled):
-        // silently ignore everyone else so a tampered client can't gain extra
-        // vision in a real game.
+        // Spectators only: silently ignore anyone actively in the game so a tampered
+        // client can't gain extra vision while playing.
         if (!this.advSpecAllowed) return;
 
         this.advSpecEnabled = msg.enabled;
@@ -4868,8 +4865,8 @@ export class Player extends BaseGameObject {
     }
 
     getPlayerStatus() {
-        // Admin spectators in advanced mode see every player (incl. health/boost)
-        // regardless of game mode, powering the minimap / ESP / enemy labels.
+        // Advanced spectators see every player (incl. health/boost) regardless of
+        // game mode, powering the minimap / ESP / enemy labels.
         if (this.advSpecActive) {
             // Include every player so the index lines up with the client's full
             // playerIds list. The spectator itself is sent with hasData:false so
