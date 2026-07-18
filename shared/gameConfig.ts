@@ -184,6 +184,13 @@ export const GameConfig = {
     HasteType,
     gas: {
         damageTickRate: 2,
+        damageRampDuration: 90,
+        damageRampStartMultiplier: 0.5,
+        damageRampEndMultiplier: 2,
+        selfMoveEnabled: true,
+        selfMoveStartCircle: 3,
+        selfMoveBaseFraction: 0.8,
+        selfMoveIncreasePerCircle: 1.5,
     },
     map: {
         gridSize: 16,

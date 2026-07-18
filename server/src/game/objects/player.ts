@@ -57,6 +57,7 @@ import { InventoryManager } from "../inventoryManager";
 import { WeaponManager } from "../weaponManager";
 import type { Building } from "./building";
 import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject";
+import { getGasDamageMultiplier } from "./gas";
 import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
@@ -806,6 +807,7 @@ export class Player extends BaseGameObject {
     flareTimer = 0;
 
     chatCooldown = 0;
+    gasExposureTime = 0;
 
     sendDeathEmoteTicker = 0;
     sentDeathEmote = false;
@@ -2358,9 +2360,20 @@ export class Player extends BaseGameObject {
             );
         }
 
-        if (this.game.gas.doDamage && this.game.gas.isInGas(this.pos)) {
+        const inGas = this.game.gas.isInGas(this.pos);
+        if (inGas) {
+            this.gasExposureTime += dt;
+        } else {
+            this.gasExposureTime = 0;
+        }
+
+        if (this.game.gas.doDamage && inGas) {
+            const damageAmount = this.disconnected
+                ? 22
+                : this.game.gas.damage * getGasDamageMultiplier(this.gasExposureTime);
+
             this.damage({
-                amount: this.disconnected ? 22 : this.game.gas.damage,
+                amount: damageAmount,
                 damageType: GameConfig.DamageType.Gas,
                 killCreditSource: this.lastDamagedBy,
                 dir: this.dir,
