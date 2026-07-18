@@ -1,3 +1,4 @@
+import { table } from "node:console";
 import { sql } from "drizzle-orm";
 import {
     bigint,
@@ -17,7 +18,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { TeamMode } from "../../../../shared/gameConfig";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout";
-import { table } from "node:console";
 
 export const sessionTable = pgTable("session", {
     id: text("id").primaryKey(),
@@ -59,6 +59,11 @@ export const usersTable = pgTable("users", {
         .default(loadout.validate({} as Loadout))
         .$type<Loadout>(),
     goldenFries: integer("golden_fries").notNull().default(0),
+    // Account settings (Loadout menu → Settings):
+    // when true, other players can't make buy-offers on this user's items.
+    offersDisabled: boolean("offers_disabled").notNull().default(false),
+    // when true, this user's loadout is hidden on the stats + advanced-game-stats pages.
+    loadoutPrivate: boolean("loadout_private").notNull().default(false),
     // Instance ids the player had selected/equipped at their last game join, so match
     // stats can attach to the exact owned copy (snapshot per game; falls back to the
     // oldest instance of a type when absent). The client reports these on join.
@@ -86,6 +91,9 @@ export const itemsTable = pgTable(
         type: text("type").notNull(),
         timeAcquired: bigint("time_acquired", { mode: "number" }).notNull(),
         source: text("source").notNull().default("unlock_new_account"),
+        // Golden Fries the current owner paid to acquire this instance (shop/market/
+        // auction/offer). null = never bought (pass/unlock), 0 = received free (gift).
+        pricePaid: bigint("price_paid", { mode: "number" }),
         status: integer("status").notNull().default(ItemStatus.New),
         // Ownership history (slugs), appended each time the instance is traded.
         previousOwners: json("previous_owners").$type<string[]>().notNull().default([]),
@@ -196,6 +204,103 @@ export const marketListingsTable = pgTable(
 
 export type MarketListingSelect = typeof marketListingsTable.$inferSelect;
 
+// Player auctions: an owner puts up one item instance with a minimum bid; bidders
+// escrow their bid (charged immediately, refunded when outbid). Runs 24h, cannot be
+// cancelled, and is settled by a periodic sweep once `endsAt` passes.
+export const auctionsTable = pgTable(
+    "auctions",
+    {
+        id: serial("id").primaryKey(),
+        itemId: integer("item_id")
+            .notNull()
+            .references(() => itemsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        sellerId: text("seller_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        sellerSlug: text("seller_slug").notNull(),
+        type: text("type").notNull(),
+        category: text("category").notNull(),
+        rarity: integer("rarity").notNull().default(0),
+        minBid: integer("min_bid").notNull(),
+        // Highest bid so far and who holds it (their fries are escrowed). null = no bids.
+        currentBid: integer("current_bid"),
+        currentBidderId: text("current_bidder_id").references(() => usersTable.id, {
+            onDelete: "set null",
+            onUpdate: "cascade",
+        }),
+        currentBidderSlug: text("current_bidder_slug"),
+        endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+        status: text("status").notNull().default("active"), // active | settled | no_bids
+        sellerAcked: boolean("seller_acked").notNull().default(false),
+        winnerAcked: boolean("winner_acked").notNull().default(false),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        // One active auction per item instance (anti-double-list lock).
+        uniqueIndex("auction_active_item_idx")
+            .on(table.itemId)
+            .where(sql`${table.status} = 'active'`),
+        index("auction_status_ends_idx").on(table.status, table.endsAt),
+        index("auction_seller_status_idx").on(table.sellerId, table.status),
+        index("auction_bidder_status_idx").on(table.currentBidderId, table.status),
+    ],
+);
+
+export type AuctionSelect = typeof auctionsTable.$inferSelect;
+
+// Buy-offers: a bidder proposes a price for another player's specific item instance.
+// The owner may accept (fries move then, charge-on-accept), decline, or counter. Offers
+// carry no escrow; a periodic sweep expires stale ones.
+export const offersTable = pgTable(
+    "offers",
+    {
+        id: serial("id").primaryKey(),
+        itemId: integer("item_id")
+            .notNull()
+            .references(() => itemsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        type: text("type").notNull(),
+        fromUserId: text("from_user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        fromSlug: text("from_slug").notNull(),
+        toUserId: text("to_user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        toSlug: text("to_slug").notNull(),
+        amount: integer("amount").notNull(),
+        // Owner's counter-proposal; when set, status = "countered" and the bidder decides.
+        counterAmount: integer("counter_amount"),
+        // pending | countered | accepted | declined | withdrawn | expired
+        status: text("status").notNull().default("pending"),
+        fromAcked: boolean("from_acked").notNull().default(false),
+        toAcked: boolean("to_acked").notNull().default(false),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        index("offers_to_status_idx").on(table.toUserId, table.status),
+        index("offers_from_status_idx").on(table.fromUserId, table.status),
+        index("offers_item_status_idx").on(table.itemId, table.status),
+    ],
+);
+
+export type OfferSelect = typeof offersTable.$inferSelect;
+
 export const matchDataTable = pgTable(
     "match_data",
     {
@@ -208,6 +313,13 @@ export const matchDataTable = pgTable(
         mapSeed: bigint("map_seed", { mode: "number" }).notNull(),
         username: text("username").notNull(),
         playerId: integer("player_id").notNull(),
+        // Non-default cosmetic types this player had equipped for the match (snapshot),
+        // shown on the advanced game stats page (with total worth). Hidden there when the
+        // owning account has loadout_private set.
+        equippedCosmetics: json("equipped_cosmetics")
+            .$type<string[]>()
+            .notNull()
+            .default([]),
         teamMode: integer("team_mode").$type<TeamMode>().notNull(),
         teamCount: integer("team_count").notNull(),
         teamTotal: integer("team_total").notNull(),
@@ -340,7 +452,11 @@ export const banCommentsTable = pgTable(
         createdBy: text("created_by").notNull(),
     },
     (table) => [
-        index("ban_comments_target_idx").on(table.banType, table.banTarget, table.createdAt),
+        index("ban_comments_target_idx").on(
+            table.banType,
+            table.banTarget,
+            table.createdAt,
+        ),
     ],
 );
 
@@ -368,7 +484,11 @@ export const banHistoryTable = pgTable(
         unbannedBy: text("unbanned_by"), // null = still active
     },
     (table) => [
-        index("ban_history_target_idx").on(table.banType, table.banTarget, table.bannedAt),
+        index("ban_history_target_idx").on(
+            table.banType,
+            table.banTarget,
+            table.bannedAt,
+        ),
     ],
 );
 
@@ -409,27 +529,32 @@ export const gameModerationTable = pgTable(
 
 export type GameModerationTable = typeof gameModerationTable.$inferSelect;
 
-export const userXpTable = pgTable("user_xp", {
-    userId: text("user_id").notNull()
-    .references(() => usersTable.id, {
-            onDelete: "cascade",
-            onUpdate: "cascade",
-        }),
-    passType: text("pass_type").notNull(),
-    level: integer("level").notNull(),
-    xp: numeric("xp").notNull(),
-    lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
-    // Deprecated/unused — kept only to avoid a destructive migration; superseded by
-    // the reconcile anchor below.
-    manualOverride: boolean("manual_override").notNull().default(false),
-    // Reconcile anchor for admin XP edits: when an admin sets the XP, we store that
-    // value as `reconcileBaseXp` and the time as `reconcileFrom`. The reconcile job
-    // then computes XP as `reconcileBaseXp + matches after reconcileFrom`, so the
-    // admin value sticks (old matches aren't re-counted) while new matches still
-    // accrue. `reconcileFrom = null` ⇒ no override (count the whole season).
-    reconcileBaseXp: numeric("reconcile_base_xp").notNull().default("0"),
-    reconcileFrom: timestamp("reconcile_from", { withTimezone: true }),
-},
+export const userXpTable = pgTable(
+    "user_xp",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        passType: text("pass_type").notNull(),
+        level: integer("level").notNull(),
+        xp: numeric("xp").notNull(),
+        lastUpdated: timestamp("last_updated", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        // Deprecated/unused — kept only to avoid a destructive migration; superseded by
+        // the reconcile anchor below.
+        manualOverride: boolean("manual_override").notNull().default(false),
+        // Reconcile anchor for admin XP edits: when an admin sets the XP, we store that
+        // value as `reconcileBaseXp` and the time as `reconcileFrom`. The reconcile job
+        // then computes XP as `reconcileBaseXp + matches after reconcileFrom`, so the
+        // admin value sticks (old matches aren't re-counted) while new matches still
+        // accrue. `reconcileFrom = null` ⇒ no override (count the whole season).
+        reconcileBaseXp: numeric("reconcile_base_xp").notNull().default("0"),
+        reconcileFrom: timestamp("reconcile_from", { withTimezone: true }),
+    },
     (table) => ({
         pk: primaryKey({ columns: [table.userId, table.passType] }),
     }),
@@ -467,3 +592,93 @@ export const goldenFriesLedgerTable = pgTable(
 );
 
 export type GoldenFriesLedgerTable = typeof goldenFriesLedgerTable.$inferSelect;
+
+// Player-to-player gift notifications: one row per gift, shown to the recipient as a
+// popup on their next profile load (mirrors the market "sold" popup), then acked.
+export const giftNotificationsTable = pgTable(
+    "gift_notifications",
+    {
+        id: serial("id").primaryKey(),
+        recipientId: text("recipient_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        fromSlug: text("from_slug").notNull(),
+        fromName: text("from_name").notNull().default(""),
+        // "fries" | "item"
+        kind: text("kind").notNull(),
+        // Golden Fries amount (for kind = "fries").
+        amount: integer("amount").notNull().default(0),
+        // Cosmetic type (for kind = "item").
+        itemType: text("item_type").notNull().default(""),
+        acked: boolean("acked").notNull().default(false),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        index("gift_notifications_recipient_idx").on(table.recipientId, table.acked),
+    ],
+);
+
+export type GiftNotificationsTable = typeof giftNotificationsTable.$inferSelect;
+
+// Friends with a request/accept flow. A pending request is a single row
+// (userId = requester, friendId = addressee, status = "pending"). On accept it becomes
+// "accepted" and a reciprocal accepted row is added, so an accepted friendship is two rows
+// (one per direction). Removing/declining/cancelling deletes the relevant row(s).
+export const friendsTable = pgTable(
+    "friends",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        friendId: text("friend_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        // "pending" | "accepted"
+        status: text("status").notNull().default("pending"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        primaryKey({ columns: [table.userId, table.friendId] }),
+        index("friends_user_idx").on(table.userId),
+        index("friends_friend_idx").on(table.friendId),
+    ],
+);
+
+export type FriendsTable = typeof friendsTable.$inferSelect;
+
+// One row per block: `userId` has blocked `blockedId`. A block in EITHER direction stops
+// interaction between the two (friend requests, buy-offers, gifts).
+export const blocksTable = pgTable(
+    "blocks",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        blockedId: text("blocked_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        primaryKey({ columns: [table.userId, table.blockedId] }),
+        index("blocks_user_idx").on(table.userId),
+        index("blocks_blocked_idx").on(table.blockedId),
+    ],
+);
+
+export type BlocksTable = typeof blocksTable.$inferSelect;

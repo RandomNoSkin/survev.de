@@ -235,7 +235,16 @@ export interface DashboardPlayer {
     assists: number;
     alive: boolean;
     isSpectator: boolean;
+    /**
+     * True only for players that joined the game as a spectator. Those are killed on
+     * their first tick (DamageType.Spectator), so `alive` is false for them as an
+     * implementation detail — this flag lets the dashboard tell them apart from a real
+     * player who died and is now spectating.
+     */
+    joinedAsSpectator: boolean;
     isAdmin: boolean;
+    /** Staff flags, resolved from the accounts DB by the API server (not the game). */
+    isModerator?: boolean;
     disconnected: boolean;
 }
 

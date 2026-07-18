@@ -532,20 +532,24 @@ export class PlayerBarn {
 
         player.obstacleOutfit?.destroy();
 
-        const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
+        // A spectator being removed must NOT touch the running game — otherwise leaving a
+        // spectate would reset/stop the game or trigger game-over for the actual players.
+        if (!player.spectator) {
+            const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
 
-        if (this.game.startedTime <= GameConfig.player.minActiveTime) {
-            if (this.game.aliveCount === 1 || this.getAliveGroups().length === 1) {
-                if (this.game.startedTime < freezeTime) {
-                    this.game.started = false;
-                    this.game.startedTime = 0;
-                    this.game.gas.reset();
-                } else {
-                    this.game.stop();
+            if (this.game.startedTime <= GameConfig.player.minActiveTime) {
+                if (this.game.aliveCount === 1 || this.getAliveGroups().length === 1) {
+                    if (this.game.startedTime < freezeTime) {
+                        this.game.started = false;
+                        this.game.startedTime = 0;
+                        this.game.gas.reset();
+                    } else {
+                        this.game.stop();
+                    }
                 }
             }
+            this.game.checkGameOver();
         }
-        this.game.checkGameOver();
 
         this.game.updateData();
     }

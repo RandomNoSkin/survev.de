@@ -3,8 +3,9 @@ import $ from "jquery";
 import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
 import { EmoteCategory, type EmoteDef } from "../../../shared/defs/gameObjects/emoteDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
-import type { UnlockDef } from "../../../shared/defs/gameObjects/unlockDefs";
+import { type UnlockDef, UnlockDefs } from "../../../shared/defs/gameObjects/unlockDefs";
 import {
+    getItemPrice,
     getItemRarity,
     getMarketPriceBounds,
     MARKET_LISTING_TTL_MS,
@@ -18,10 +19,19 @@ import type { Account } from "../account";
 import { crosshair } from "../crosshair";
 import { device } from "../device";
 import { helpers } from "../helpers";
+import type { AuctionUi } from "./auctionUi";
 import type { Localization } from "./localization";
 import type { MarketUi } from "./marketUi";
 import { MenuModal } from "./menuModal";
 import type { LoadoutDisplay } from "./opponentDisplay";
+import type { ShopUi } from "./shopUi";
+import type { SocialUi } from "./socialUi";
+
+/** Free cosmetics everyone owns by default — counted as 0 worth in the value bar. */
+const DEFAULT_UNLOCKED = new Set<string>([
+    ...UnlockDefs.unlock_default.unlocks,
+    ...UnlockDefs.unlock_new_account.unlocks,
+]);
 
 function emoteSlotToDomElem(e: Exclude<EmoteSlot, EmoteSlot.Count>) {
     const emoteSlotToDomId = {
@@ -121,6 +131,8 @@ export interface Item {
     wins?: number;
     kills?: number;
     damage?: number;
+    /** Golden Fries paid to acquire this instance (null = unknown). */
+    pricePaid?: number | null;
 }
 interface ItemInfo {
     /** Inventory instance id, so duplicate copies of a type can be told apart. */
@@ -132,6 +144,8 @@ interface ItemInfo {
     wins?: number;
     kills?: number;
     damage?: number;
+    /** Golden Fries paid to acquire this instance (null = unknown). */
+    pricePaid?: number | null;
     type: string;
     loadoutType: string;
     rarity: number;
@@ -152,6 +166,7 @@ interface EquippedItem {
     wins?: number;
     kills?: number;
     damage?: number;
+    pricePaid?: number | null;
     loadoutType: string;
     type: string;
     rarity: number;
@@ -168,6 +183,14 @@ export class LoadoutMenu {
     loadoutDisplay: LoadoutDisplay | null = null;
     /** Set by main.ts so the item detail panel can open the marketplace sell dialog. */
     marketUi: MarketUi | null = null;
+    /** Set by main.ts so clicking an item's rarity opens the shop's "Owners" view. */
+    shopUi: ShopUi | null = null;
+    /** Set by main.ts so the detail panel can open the Social gift flow for an item. */
+    socialUi: SocialUi | null = null;
+    /** Set by main.ts so the detail panel can put an item up for auction. */
+    auctionUi: AuctionUi | null = null;
+    /** True while the Settings tab is showing (its panel replaces the item list). */
+    private settingsOpen = false;
     /** When true, the right side shows the item detail panel instead of the equip UI. */
     detailMode = false;
     loadout = loadout.defaultLoadout();
@@ -218,6 +241,7 @@ export class LoadoutMenu {
         wins?: number;
         kills?: number;
         damage?: number;
+        pricePaid?: number | null;
         type: string;
         rarity?: number;
         displayName?: string;
@@ -314,9 +338,6 @@ export class LoadoutMenu {
                     class: "modal-customize-cat",
                     "data-idx": i,
                 });
-                if (i == this.categories.length - 1) {
-                    r.attr("id", "modal-customize-cat-standalone");
-                }
                 r.append(
                     $("<div/>", {
                         class: "modal-customize-cat-image",
@@ -345,15 +366,60 @@ export class LoadoutMenu {
             this.selectableCats.on("mouseup", (e) => {
                 const selector = $(e.currentTarget);
                 const newCategoryIdx = selector.data("idx");
-                if (this.selectedCatIdx != newCategoryIdx) {
+                // Also switch when leaving the Settings tab, even if this category was the
+                // last-selected one (its index still equals selectedCatIdx).
+                if (this.settingsOpen || this.selectedCatIdx != newCategoryIdx) {
                     this.selectCat(newCategoryIdx);
                 }
             });
+
+            // Account settings tab — a sibling of the cosmetic category icons that shows
+            // the settings panel instead of an item list. It carries the standalone
+            // separator ("|") and is inserted right after it, before the player-icon tab,
+            // so the meta tabs sit together on the right. Added after the category set is
+            // captured so it isn't treated as a selectable cosmetic category.
+            const settingsTab = $("<div/>", {
+                id: "modal-customize-cat-standalone",
+                class: "modal-customize-cat modal-customize-settings-tab",
+                title: "Account settings",
+            });
+            settingsTab.append(
+                $("<div/>", {
+                    class: "modal-customize-cat-image modal-customize-settings-icon",
+                    html: "⚙",
+                }),
+            );
+            settingsTab.append($("<div/>", { class: "modal-customize-cat-connect" }));
+            // Insert before the last cosmetic tab (the player-icon), right after the "|".
+            $("#modal-customize-header .modal-customize-cat").last().before(settingsTab);
+            settingsTab.on("mouseup", () => this.openSettingsTab());
             this.itemSort = $("#modal-customize-sort");
             this.itemSort.on("change", (e) => {
                 this.sortItems(e.target.value);
             });
+            // Search box filters the current category's item list by name.
+            $("#modal-customize-search").on("input", () =>
+                this.selectCat(this.selectedCatIdx),
+            );
             $("#modal-customize-info-toggle").on("click", () => this.toggleDetailMode());
+            // Account settings toggles (offers / loadout privacy).
+            $("#setting-offers-disabled").on("click", () =>
+                this.toggleSetting("offersDisabled", "#setting-offers-disabled"),
+            );
+            $("#setting-loadout-private").on("click", () =>
+                this.toggleSetting("loadoutPrivate", "#setting-loadout-private"),
+            );
+            // Clicking an item's rarity jumps to the shop's "Owners" view for that item.
+            const openOwners = () => {
+                const type = this.selectedItem?.type;
+                if (!type || !this.shopUi) return;
+                this.hide();
+                this.shopUi.openOwners(type);
+            };
+            this.modalCustomizeItemRarity
+                .addClass("clickable-rarity")
+                .on("click", openOwners);
+            $("#detail-item-rarity").addClass("clickable-rarity").on("click", openOwners);
             this.modalCustomizeItemName.on("click", () => {
                 const elements = document.getElementsByClassName(
                     "customize-list-item-selected",
@@ -429,8 +495,10 @@ export class LoadoutMenu {
                 this.localAckItems.push(item);
             }
         }
+        $("#modal-customize-search").val("");
         this.selectCat(0);
         this.tryBeginConfirmingItems();
+        this.updateLoadoutValue();
         $("#start-bottom-right, #start-main").fadeOut(200);
         $("#background").hide();
     }
@@ -767,6 +835,115 @@ export class LoadoutMenu {
         if (this.selectedItem.loadoutType == "crosshair") {
             this.setSelectedCrosshair();
         }
+        this.updateLoadoutValue();
+    }
+
+    /** Refresh the "Loadout: N · Equipped: M" Golden-Fries value bar (footer). */
+    updateLoadoutValue() {
+        // Free default-unlock cosmetics have no tradeable worth.
+        const worthOf = (type: string) =>
+            DEFAULT_UNLOCKED.has(type) ? 0 : getItemPrice(type);
+
+        // Total worth of the instances the player actually owns (id present).
+        const total = this.items
+            .filter((it) => it.id != null)
+            .reduce((s, it) => s + worthOf(it.type), 0);
+
+        const l = this.loadout;
+        const equippedTypes = [
+            l.outfit,
+            l.melee,
+            l.heal,
+            l.boost,
+            l.death_effect,
+            l.player_icon,
+            l.crosshair?.type,
+            ...(l.emotes ?? []),
+        ].filter((t): t is string => typeof t === "string" && t.length > 0);
+        const equipped = equippedTypes.reduce((s, t) => s + worthOf(t), 0);
+
+        $("#loadout-value-bar").html(
+            `Loadout <b>${total.toLocaleString("en-US")} 🍟</b> · ` +
+                `Equipped <b>${equipped.toLocaleString("en-US")} 🍟</b>`,
+        );
+    }
+
+    /** Selects the Settings tab: highlights it, titles the panel, and shows the settings. */
+    private openSettingsTab() {
+        this.settingsOpen = true;
+        // Deselect the cosmetic category tabs, select the settings tab.
+        this.selectableCats.removeClass("modal-customize-cat-selected");
+        this.selectableCatConnects.removeClass("modal-customize-cat-connect-selected");
+        this.selectableCatImages.removeClass("modal-customize-cat-image-selected");
+        const tab = $(".modal-customize-settings-tab");
+        tab.addClass("modal-customize-cat-selected");
+        tab.find(".modal-customize-cat-connect").addClass(
+            "modal-customize-cat-connect-selected",
+        );
+        tab.find(".modal-customize-cat-image").addClass(
+            "modal-customize-cat-image-selected",
+        );
+        $("#modal-customize-cat-title").html("SETTINGS");
+
+        // Swap the item list out for the settings content (search/sort don't apply here).
+        $("#modal-customize-list").css("display", "none");
+        $("#modal-customize-item-header").css("display", "none");
+        $("#modal-customize-search").css("display", "none");
+        $("#modal-customize-sort-wrap").css("display", "none");
+        $("#modal-content-right-emote, #customize-emote-parent").css("display", "none");
+        $("#modal-content-right-crosshair, #customize-crosshair-parent").css(
+            "display",
+            "none",
+        );
+        $("#modal-content-right-detail").css("display", "none");
+        // Clear the per-item footer text (the account value bar stays relevant).
+        this.modalCustomizeItemSource.html("");
+        this.modalCustomizeItemLore.html("");
+
+        // Sync toggles to current values, then show the settings content.
+        $("#setting-offers-disabled").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.offersDisabled,
+        );
+        $("#setting-loadout-private").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.loadoutPrivate,
+        );
+        $("#loadout-settings-status").text("");
+        $("#loadout-settings-panel").css("display", "block");
+    }
+
+    /** Restores the item list + deselects the Settings tab (when switching to a cosmetic tab). */
+    private closeSettingsTab() {
+        this.settingsOpen = false;
+        const tab = $(".modal-customize-settings-tab");
+        tab.removeClass("modal-customize-cat-selected");
+        tab.find(".modal-customize-cat-connect").removeClass(
+            "modal-customize-cat-connect-selected",
+        );
+        tab.find(".modal-customize-cat-image").removeClass(
+            "modal-customize-cat-image-selected",
+        );
+        $("#loadout-settings-panel").css("display", "none");
+        $("#modal-customize-list").css("display", "");
+        $("#modal-customize-item-header").css("display", "");
+        $("#modal-customize-search").css("display", "");
+        $("#modal-customize-sort-wrap").css("display", "");
+    }
+
+    /** Flips one setting, updates its toggle optimistically, and persists it. */
+    private toggleSetting(key: "offersDisabled" | "loadoutPrivate", sel: string) {
+        const next = !this.account.settings[key];
+        $(sel).toggleClass("loadout-toggle-on", next);
+        $("#loadout-settings-status").text("Saving…");
+        this.account.saveSettings({ [key]: next }, (err, res) => {
+            if (err || !res?.success) {
+                $(sel).toggleClass("loadout-toggle-on", !next); // revert
+                $("#loadout-settings-status").text("Failed to save");
+                return;
+            }
+            $("#loadout-settings-status").text("Saved ✓");
+        });
     }
 
     selectItem(selector: JQuery<HTMLElement>, deselect = true) {
@@ -810,6 +987,7 @@ export class LoadoutMenu {
             wins: selectedItem.wins,
             kills: selectedItem.kills,
             damage: selectedItem.damage,
+            pricePaid: selectedItem.pricePaid,
             type: selectedItem.type,
             rarity: selectedItem.rarity,
             displayName: selectedItem.displayName || "",
@@ -986,6 +1164,18 @@ export class LoadoutMenu {
                 : "Default",
         );
 
+        // Paid (what this owner spent) vs. current shop worth.
+        const worth = getItemPrice(item.type);
+        const paidTxt =
+            item.pricePaid != null
+                ? `${item.pricePaid.toLocaleString("en-US")} 🍟`
+                : owned
+                  ? "—"
+                  : "Free";
+        $("#detail-item-value").html(
+            `Paid <b>${paidTxt}</b> · Worth <b>${worth.toLocaleString("en-US")} 🍟</b>`,
+        );
+
         const owners = item.previousOwners ?? [];
         $("#detail-item-owners").text(
             owners.length ? owners.join("  →  ") : "Original owner",
@@ -1050,9 +1240,54 @@ export class LoadoutMenu {
             });
             el.append(btn);
         } else if (getMarketPriceBounds(item.type)) {
-            const btn = $('<div class="shop-buy-btn menu-option btn-darken">Sell</div>');
-            btn.on("click", () => this.marketUi?.openSellDialog(item.id!, item.type));
-            el.append(btn);
+            // This exact instance is up for auction: it's committed, so every action on it
+            // is disabled until the auction ends.
+            const auctionedNow = item.id === this.account.activeAuctionItemId;
+            // A player may only run one auction at a time, so the Auction button is disabled
+            // on every item while one is live.
+            const hasAuction = this.account.activeAuctionItemId != null;
+
+            if (auctionedNow) {
+                el.append('<div class="detail-listed">🔨 In auction</div>');
+            }
+
+            const sellBtn = $(
+                '<div class="shop-buy-btn menu-option btn-darken">Sell</div>',
+            );
+            if (auctionedNow) sellBtn.addClass("shop-buy-disabled");
+            else
+                sellBtn.on("click", () =>
+                    this.marketUi?.openSellDialog(item.id!, item.type),
+                );
+            el.append(sellBtn);
+
+            const auctionBtn = $(
+                '<div class="shop-buy-btn detail-auction-btn menu-option btn-darken">🔨 Auction</div>',
+            );
+            if (auctionedNow || hasAuction) {
+                auctionBtn
+                    .addClass("shop-buy-disabled")
+                    .attr(
+                        "title",
+                        auctionedNow
+                            ? "This item is in an auction."
+                            : "You already have an item in an auction.",
+                    );
+            } else {
+                auctionBtn.on("click", () => {
+                    this.shopUi?.open();
+                    this.shopUi?.selectTab("auction");
+                    this.auctionUi?.openCreate(item.id!, item.type);
+                });
+            }
+            el.append(auctionBtn);
+
+            const giftBtn = $(
+                '<div class="shop-buy-btn detail-gift-btn menu-option btn-darken">🎁 Gift</div>',
+            );
+            if (auctionedNow) giftBtn.addClass("shop-buy-disabled");
+            else giftBtn.on("click", () => this.socialUi?.openWithItem(item));
+            el.append(giftBtn);
         }
     }
 
@@ -1128,9 +1363,26 @@ export class LoadoutMenu {
         }
         const category = this.categories[this.selectedCatIdx];
 
+        const searchQ = String($("#modal-customize-search").val() ?? "")
+            .trim()
+            .toLowerCase();
         const loadoutItems = this.items.filter((x) => {
-            const gameTypeDef = GameObjectDefs[x.type];
-            return gameTypeDef && gameTypeDef.type == category.gameType;
+            const gameTypeDef = GameObjectDefs[x.type] as {
+                type?: string;
+                name?: string;
+            };
+            if (!gameTypeDef || gameTypeDef.type != category.gameType) return false;
+            if (searchQ) {
+                const name = (
+                    this.localization.translate(`game-${x.type}`) ||
+                    gameTypeDef.name ||
+                    x.type
+                ).toLowerCase();
+                if (!name.includes(searchQ) && !x.type.toLowerCase().includes(searchQ)) {
+                    return false;
+                }
+            }
+            return true;
         });
 
         // Sort items based on currently selected sort
@@ -1152,6 +1404,9 @@ export class LoadoutMenu {
         const draggable = category.loadoutType == "emote";
 
         this.loadoutDisplay?.setView(category.loadoutType);
+
+        // Leaving the Settings tab for a cosmetic category.
+        this.closeSettingsTab();
 
         const _ = $(`.modal-customize-cat[data-idx='${this.selectedCatIdx}']`);
         this.selectableCats.removeClass("modal-customize-cat-selected");
@@ -1223,6 +1478,7 @@ export class LoadoutMenu {
                 wins: item.wins,
                 kills: item.kills,
                 damage: item.damage,
+                pricePaid: item.pricePaid,
                 loadoutType: category.loadoutType,
                 type: item.type,
                 rarity: getItemRarity(item.type),
@@ -1278,6 +1534,12 @@ export class LoadoutMenu {
                 this.account.myListings.some((l) => l.itemId === item.id)
             ) {
                 outerDiv.append('<div class="customize-listed-badge">Listed</div>');
+            }
+            // Marker for the instance that's currently up for auction.
+            if (item.id != null && item.id === this.account.activeAuctionItemId) {
+                outerDiv.append(
+                    '<div class="customize-listed-badge customize-auction-badge">Auction</div>',
+                );
             }
 
             // Crosshair specific styling

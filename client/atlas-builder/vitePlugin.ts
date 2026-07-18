@@ -6,7 +6,7 @@ import type { Plugin } from "vite";
 import type { Atlas } from "../../shared/defs/mapDefs";
 import { assert } from "../../shared/utils/util";
 import { AtlasManager, atlasLogger, imageFolder } from "./atlasBuilder";
-import { type AtlasRes, AtlasResolutions } from "./atlasDefs";
+import { Atlases, type AtlasRes, AtlasResolutions } from "./atlasDefs";
 
 export function atlasBuilderPlugin(): Plugin[] {
     const atlasManager = new AtlasManager();
@@ -19,25 +19,57 @@ export function atlasBuilderPlugin(): Plugin[] {
 
     let buildPromise: Promise<void> | undefined = undefined;
 
-    const resolveId = async (source: string) => {
-        if (!source.startsWith("virtual-atlases")) return;
-        if (buildPromise) await buildPromise;
+    // "virtual-atlases-<res>" exports every atlas; "virtual-atlas-<name>-<res>"
+    // exports just one, so a page that needs a single atlas (the stats page needs
+    // "skins") doesn't bundle the frame data of all the others.
+    const ALL_PREFIX = "virtual-atlases-";
+    const ONE_PREFIX = "virtual-atlas-";
 
-        const res = source.split("-").at(-1)! as AtlasRes;
+    /** Splits "<name>-<res>" — atlas names never contain a dash. */
+    const splitOne = (rest: string) => {
+        const idx = rest.lastIndexOf("-");
+        const name = rest.slice(0, idx) as Atlas;
+        const res = rest.slice(idx + 1) as AtlasRes;
         assert(res in AtlasResolutions, `invalid atlas res ${res}`);
+        return { name, res };
+    };
 
-        return `atlases-${res}`;
+    const resolveId = async (source: string) => {
+        if (source.startsWith(ALL_PREFIX)) {
+            if (buildPromise) await buildPromise;
+
+            const res = source.slice(ALL_PREFIX.length) as AtlasRes;
+            assert(res in AtlasResolutions, `invalid atlas res ${res}`);
+
+            return `atlases-${res}`;
+        }
+        if (source.startsWith(ONE_PREFIX)) {
+            if (buildPromise) await buildPromise;
+
+            const { name, res } = splitOne(source.slice(ONE_PREFIX.length));
+            return `atlas-${name}-${res}`;
+        }
+        return;
     };
 
     const load = async (id: string) => {
-        if (!id.startsWith("atlases-")) return;
-        if (buildPromise) await buildPromise;
+        if (id.startsWith("atlases-")) {
+            if (buildPromise) await buildPromise;
 
-        const res = id.split("-").at(-1)! as AtlasRes;
-        assert(res in AtlasResolutions, `invalid atlas res ${res}`);
+            const res = id.slice("atlases-".length) as AtlasRes;
+            assert(res in AtlasResolutions, `invalid atlas res ${res}`);
 
-        const json = atlasesJson[res];
-        return `export default JSON.parse('${JSON.stringify(json)}');`;
+            const json = atlasesJson[res];
+            return `export default JSON.parse('${JSON.stringify(json)}');`;
+        }
+        if (id.startsWith("atlas-")) {
+            if (buildPromise) await buildPromise;
+
+            const { name, res } = splitOne(id.slice("atlas-".length));
+            const json = atlasesJson[res][name] ?? [];
+            return `export default JSON.parse('${JSON.stringify(json)}');`;
+        }
+        return;
     };
 
     const buildAtlases = async () => {
@@ -140,9 +172,14 @@ export function atlasBuilderPlugin(): Plugin[] {
                     }
 
                     for (const res in AtlasResolutions) {
-                        const moduleId = `atlases-${res}`;
-                        const module = server.moduleGraph.getModuleById(moduleId);
-                        if (module !== undefined) void server.reloadModule(module);
+                        const moduleIds = [
+                            `atlases-${res}`,
+                            ...Object.keys(Atlases).map((name) => `atlas-${name}-${res}`),
+                        ];
+                        for (const moduleId of moduleIds) {
+                            const module = server.moduleGraph.getModuleById(moduleId);
+                            if (module !== undefined) void server.reloadModule(module);
+                        }
                     }
                 };
 

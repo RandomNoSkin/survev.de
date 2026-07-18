@@ -30,6 +30,8 @@ import type { MapId } from "./types/misc";
 export type Atlas =
     | "gradient"
     | "loadout"
+    /** Player sprites for composing outfit previews off the map (stats page). Never listed in a map's assets. */
+    | "skins"
     | "shared"
     | "main"
     | "desert"

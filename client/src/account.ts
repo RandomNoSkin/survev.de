@@ -1,14 +1,30 @@
 import $ from "jquery";
 import type {
+    AccountSettings,
+    AuctionListResponse,
+    AuctionNotification,
     BuyListingResponse,
     BuyShopResponse,
     CancelListingResponse,
+    CreateAuctionResponse,
+    EndAuctionResponse,
+    FriendActionResponse,
+    FriendsResponse,
+    GiftFriesResponse,
+    GiftItemResponse,
+    GiftNotification,
+    ItemOwnersResponse,
     ListItemResponse,
     LoadoutRequest,
     LoadoutResponse,
+    MakeOfferResponse,
     MarketBrowseRequest,
     MarketListResponse,
     MyListing,
+    Offer,
+    OfferActionResponse,
+    OfferListResponse,
+    PlaceBidResponse,
     ProfileResponse,
     RefreshQuestRequest,
     RefreshQuestResponse,
@@ -17,9 +33,11 @@ import type {
     SetPassUnlockRequest,
     SetPassUnlockResponse,
     SetQuestRequest,
+    SettingsResponse,
     ShopResponse,
     UsernameRequest,
     UsernameResponse,
+    UserSearchResponse,
 } from "../../shared/types/user";
 import type { ItemStatus } from "../../shared/utils/loadout";
 import { type Loadout, loadout as loadouts } from "../../shared/utils/loadout";
@@ -110,6 +128,20 @@ export class Account {
     myListings: MyListing[] = [];
     /** Marketplace sales the seller hasn't acknowledged yet (drives the sold popup). */
     sales: SaleNotification[] = [];
+    /** Gifts received but not yet acknowledged (drives the "you got a gift" popup). */
+    gifts: GiftNotification[] = [];
+    /** Auction outcomes not yet acknowledged (won / sold / unsold popups). */
+    auctions: AuctionNotification[] = [];
+    /** Buy-offers on the caller's items (to accept/decline/counter). */
+    offersIncoming: Offer[] = [];
+    /** Buy-offers the caller has made (to track / withdraw). */
+    offersOutgoing: Offer[] = [];
+    /** Count of the caller's active auctions that currently have a bid (tab badge). */
+    auctionBids = 0;
+    /** The item instance the caller currently has up for auction, or null (one at a time). */
+    activeAuctionItemId: number | null = null;
+    /** Account settings (offers/loadout privacy), from the profile response. */
+    settings: AccountSettings = { offersDisabled: false, loadoutPrivate: false };
     quests: Quest[] = [];
     questPriv = "";
     pass: Record<string, PassType> = {};
@@ -239,6 +271,12 @@ export class Account {
             this.items = [];
             this.myListings = [];
             this.sales = [];
+            this.gifts = [];
+            this.auctions = [];
+            this.offersIncoming = [];
+            this.offersOutgoing = [];
+            this.auctionBids = 0;
+            this.activeAuctionItemId = null;
             if (err) {
                 errorLogManager.storeGeneric("account", "load_profile_error");
             } else if (data.banned) {
@@ -249,6 +287,16 @@ export class Account {
                 this.items = data.items;
                 this.myListings = data.listings ?? [];
                 this.sales = data.sales ?? [];
+                this.gifts = data.gifts ?? [];
+                this.auctions = data.auctions ?? [];
+                this.offersIncoming = data.offersIncoming ?? [];
+                this.offersOutgoing = data.offersOutgoing ?? [];
+                this.auctionBids = data.auctionBids ?? 0;
+                this.activeAuctionItemId = data.activeAuctionItemId ?? null;
+                this.settings = data.settings ?? {
+                    offersDisabled: false,
+                    loadoutPrivate: false,
+                };
                 // Validate the server loadout so older accounts (saved before newer
                 // loadout fields like death_effect existed) get the missing fields
                 // filled in — otherwise joining serializes an undefined game type.
@@ -266,6 +314,12 @@ export class Account {
             this.emit("items", this.items);
             this.emit("loadout", this.loadout);
             this.emit("sales", this.sales);
+            this.emit("gifts", this.gifts);
+            this.emit("auctions", this.auctions);
+            this.emit("offers", {
+                incoming: this.offersIncoming,
+                outgoing: this.offersOutgoing,
+            });
         });
     }
 
@@ -292,6 +346,17 @@ export class Account {
         }
         this.ajaxRequest("/api/user/market/ack_sales", { listingIds }, (err) => {
             if (err) errorLogManager.storeGeneric("account", "ack_sales_error");
+            cb?.(err);
+        });
+    }
+
+    ackGifts(ids: number[], cb?: (err: unknown) => void) {
+        if (!ids.length) {
+            cb?.(null);
+            return;
+        }
+        this.ajaxRequest("/api/user/gifts/ack", { ids }, (err) => {
+            if (err) errorLogManager.storeGeneric("account", "ack_gifts_error");
             cb?.(err);
         });
     }
@@ -561,6 +626,314 @@ export class Account {
                 } else if (res.success) {
                     this.loadProfile();
                 }
+                cb(err, res);
+            },
+        );
+    }
+
+    //
+    // AUCTIONS
+    //
+
+    getAuctions(
+        filters: MarketBrowseRequest,
+        cb: (err: unknown, res?: AuctionListResponse) => void,
+    ) {
+        this.ajaxRequest("/api/user/auction/list", filters, (err, res) => {
+            if (err) errorLogManager.storeGeneric("account", "get_auctions_error");
+            cb(err, res);
+        });
+    }
+
+    createAuction(
+        itemId: number,
+        minBid: number,
+        cb: (err: unknown, res?: CreateAuctionResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/auction/create",
+            { itemId, minBid },
+            (err, res: CreateAuctionResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "create_auction_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    placeBid(
+        auctionId: number,
+        amount: number,
+        cb: (err: unknown, res?: PlaceBidResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/auction/bid",
+            { auctionId, amount },
+            (err, res: PlaceBidResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "place_bid_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    ackAuctions(auctionIds: number[], cb?: (err: unknown) => void) {
+        this.ajaxRequest("/api/user/auction/ack", { auctionIds }, (err) => cb?.(err));
+    }
+
+    /** Updates account settings (offers/loadout privacy); reflects the result locally. */
+    saveSettings(
+        patch: Partial<AccountSettings>,
+        cb?: (err: unknown, res?: SettingsResponse) => void,
+    ) {
+        this.ajaxRequest("/api/user/settings", patch, (err, res: SettingsResponse) => {
+            if (err) {
+                errorLogManager.storeGeneric("account", "save_settings_error");
+            } else if (res?.success) {
+                this.settings = res.settings;
+            }
+            cb?.(err, res);
+        });
+    }
+
+    endAuction(auctionId: number, cb: (err: unknown, res?: EndAuctionResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/auction/end",
+            { auctionId },
+            (err, res: EndAuctionResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "end_auction_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    //
+    // OFFERS (buy-offers on another player's item)
+    //
+
+    getOffers(cb: (err: unknown, res?: OfferListResponse) => void) {
+        this.ajaxRequest("/api/user/offer/list", {}, (err, res) => {
+            if (err) errorLogManager.storeGeneric("account", "get_offers_error");
+            cb(err, res);
+        });
+    }
+
+    makeOffer(
+        itemId: number,
+        amount: number,
+        cb: (err: unknown, res?: MakeOfferResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/offer/make",
+            { itemId, amount },
+            (err, res: MakeOfferResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "make_offer_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    /** Owner accepts a pending offer, or bidder accepts a counter — either way, `offerId`. */
+    acceptOffer(offerId: number, cb: (err: unknown, res?: OfferActionResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/offer/accept",
+            { offerId },
+            (err, res: OfferActionResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "accept_offer_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    offerAction(
+        action: "decline" | "withdraw",
+        offerId: number,
+        cb: (err: unknown, res?: OfferActionResponse) => void,
+    ) {
+        this.ajaxRequest(
+            `/api/user/offer/${action}`,
+            { offerId },
+            (err, res: OfferActionResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", `${action}_offer_error`);
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    counterOffer(
+        offerId: number,
+        counterAmount: number,
+        cb: (err: unknown, res?: OfferActionResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/offer/counter",
+            { offerId, counterAmount },
+            (err, res: OfferActionResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "counter_offer_error");
+                } else if (res.success) {
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    //
+    // SOCIAL (public item ownership + player-to-player gifting)
+    //
+
+    /** Lists which users own a given cosmetic `type` (admins excluded). */
+    getItemOwners(
+        type: string,
+        page: number,
+        search: string | undefined,
+        cb: (err: unknown, res?: ItemOwnersResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/item_owners",
+            search ? { type, page, search } : { type, page },
+            (err, res: ItemOwnersResponse) => {
+                if (err) errorLogManager.storeGeneric("account", "item_owners_error");
+                cb(err, res);
+            },
+        );
+    }
+
+    /** Searches users by name for the gift-recipient picker. */
+    searchUsers(query: string, cb: (err: unknown, res?: UserSearchResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/search",
+            { query },
+            (err, res: UserSearchResponse) => {
+                if (err) errorLogManager.storeGeneric("account", "user_search_error");
+                cb(err, res);
+            },
+        );
+    }
+
+    /** Gifts an owned item instance to another player (instant, free transfer). */
+    giftItem(
+        itemId: number,
+        recipientSlug: string,
+        cb: (err: unknown, res?: GiftItemResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/gift/item",
+            { itemId, recipientSlug },
+            (err, res: GiftItemResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "gift_item_error");
+                } else if (res.success) {
+                    // Refresh inventory after gifting an item away.
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    /** Gifts Golden Fries to another player. */
+    giftFries(
+        recipientSlug: string,
+        amount: number,
+        cb: (err: unknown, res?: GiftFriesResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/gift/fries",
+            { recipientSlug, amount },
+            (err, res: GiftFriesResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "gift_fries_error");
+                } else if (res.success) {
+                    // Refresh balance after gifting fries away.
+                    this.loadProfile();
+                }
+                cb(err, res);
+            },
+        );
+    }
+
+    //
+    // FRIENDS + recently-played players
+    //
+
+    /** Loads the friends list and recently-played players (with/against). */
+    getFriends(cb: (err: unknown, res?: FriendsResponse) => void) {
+        this.ajaxRequest("/api/user/friends/list", {}, (err, res: FriendsResponse) => {
+            if (err) errorLogManager.storeGeneric("account", "friends_list_error");
+            cb(err, res);
+        });
+    }
+
+    /** Sends a friend request (auto-accepts if the other side already requested you). */
+    requestFriend(slug: string, cb: (err: unknown, res?: FriendActionResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/friends/request",
+            { slug },
+            (err, res: FriendActionResponse) => {
+                if (err) errorLogManager.storeGeneric("account", "friend_request_error");
+                cb(err, res);
+            },
+        );
+    }
+
+    /** Blocks (`block`) or unblocks (`unblock`) a player — blocks cut interaction both ways. */
+    blockAction(
+        action: "block" | "unblock",
+        slug: string,
+        cb: (err: unknown, res?: FriendActionResponse) => void,
+    ) {
+        this.ajaxRequest(
+            `/api/user/friends/${action}`,
+            { slug },
+            (err, res: FriendActionResponse) => {
+                if (err) errorLogManager.storeGeneric("account", `${action}_user_error`);
+                cb(err, res);
+            },
+        );
+    }
+
+    /** Accepts a friend request you received. */
+    acceptFriend(slug: string, cb: (err: unknown, res?: FriendActionResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/friends/accept",
+            { slug },
+            (err, res: FriendActionResponse) => {
+                if (err) errorLogManager.storeGeneric("account", "friend_accept_error");
+                cb(err, res);
+            },
+        );
+    }
+
+    removeFriend(slug: string, cb: (err: unknown, res?: FriendActionResponse) => void) {
+        this.ajaxRequest(
+            "/api/user/friends/remove",
+            { slug },
+            (err, res: FriendActionResponse) => {
+                if (err) errorLogManager.storeGeneric("account", "friend_remove_error");
                 cb(err, res);
             },
         );

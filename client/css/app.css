@@ -3120,7 +3120,8 @@ a:active {
 }
 
 /* "Your item sold" popup — same layout as the new-item confirm, gold-themed. */
-#modal-sale-notify .modal-content {
+#modal-sale-notify .modal-content,
+#modal-auction-notify .modal-content {
   animation-name: fadeIn;
   animation-duration: 0.2s;
   left: 50%;
@@ -3129,21 +3130,26 @@ a:active {
   transform: translate(-50%, -50%);
 }
 @media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
-  #modal-sale-notify .modal-content {
+  #modal-sale-notify .modal-content,
+  #modal-auction-notify .modal-content {
     transform: translate(-50%, -50%) scale(0.8);
   }
 }
-#modal-sale-notify .modal-header {
+#modal-sale-notify .modal-header,
+#modal-auction-notify .modal-header {
   background-color: #4a3a0c;
 }
-#modal-sale-notify .modal-header > h2 {
+#modal-sale-notify .modal-header > h2,
+#modal-auction-notify .modal-header > h2 {
   font-size: 24px;
   text-align: center;
 }
-#modal-sale-notify .modal-body {
+#modal-sale-notify .modal-body,
+#modal-auction-notify .modal-body {
   background-color: #6b540f;
 }
-#modal-sale-notify .modal-body p {
+#modal-sale-notify .modal-body p,
+#modal-auction-notify .modal-body p {
   bottom: initial;
   font-size: 20px;
   line-height: 18px;
@@ -3153,21 +3159,27 @@ a:active {
   top: 4px;
   width: 100%;
 }
-#modal-sale-notify .modal-footer {
+#modal-sale-notify .modal-footer,
+#modal-auction-notify .modal-footer {
   background-color: #4a3a0c;
 }
-#modal-sale-notify .modal-footer > .close-footer {
+#modal-sale-notify .modal-footer > .close-footer,
+#modal-auction-notify .modal-footer > .close-footer {
   color: #fff;
   font-size: 24px;
   text-align: center;
 }
 #modal-sale-notify .modal-footer > .close-footer:hover,
-#modal-sale-notify .modal-footer > .close-footer:focus {
+#modal-sale-notify .modal-footer > .close-footer:focus,
+#modal-auction-notify .modal-footer > .close-footer:hover,
+#modal-auction-notify .modal-footer > .close-footer:focus {
   color: #ffdb7b;
   cursor: pointer;
   text-decoration: none;
 }
-#modal-sale-notify-image-outer {
+#modal-sale-notify-image-outer,
+#modal-gift-notify-image-outer,
+#modal-auction-notify-image-outer {
   background-color: rgba(0, 0, 0, 0.35);
   border: 6px solid #f2d63b;
   box-sizing: content-box;
@@ -3175,12 +3187,68 @@ a:active {
   height: 160px;
   width: 160px;
 }
-#modal-sale-notify-image-inner {
+#modal-sale-notify-image-inner,
+#modal-gift-notify-image-inner,
+#modal-auction-notify-image-inner {
   background-position: center;
   background-repeat: no-repeat;
   background-size: 132px;
   height: 100%;
   width: 100%;
+}
+#modal-gift-notify-image-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 96px;
+}
+/* "You received a gift" popup — same centered, gold-themed layout as the sold popup. */
+#modal-gift-notify .modal-content {
+  animation-name: fadeIn;
+  animation-duration: 0.2s;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-decoration: none;
+}
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #modal-gift-notify .modal-content {
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+}
+#modal-gift-notify .modal-header {
+  background-color: #4a3a0c;
+}
+#modal-gift-notify .modal-header > h2 {
+  font-size: 24px;
+  text-align: center;
+}
+#modal-gift-notify .modal-body {
+  background-color: #6b540f;
+}
+#modal-gift-notify .modal-body p {
+  bottom: initial;
+  font-size: 20px;
+  line-height: 18px;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 1px 1px 1px #000;
+  top: 4px;
+  width: 100%;
+}
+#modal-gift-notify .modal-footer {
+  background-color: #4a3a0c;
+}
+#modal-gift-notify .modal-footer > .close-footer {
+  color: #fff;
+  font-size: 24px;
+  text-align: center;
+}
+#modal-gift-notify .modal-footer > .close-footer:hover,
+#modal-gift-notify .modal-footer > .close-footer:focus {
+  color: #ffdb7b;
+  cursor: pointer;
+  text-decoration: none;
 }
 .modal-sale-detail {
   color: #ffdb7b;
@@ -5589,15 +5657,30 @@ a:active {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 50%;
-  max-width: 92vw;
-  max-height: 88vh;
+  width: 62%;
+  min-width: min(720px, 92vw);
+  max-width: min(1120px, 92vw);
+  /* Fixed height (like the social modal) so the modal never resizes between tabs; the body
+     scrolls inside it instead of the whole frame growing/shrinking. */
+  height: 80vh;
   display: flex;
   flex-direction: column;
   background: #34401f;
   border: 2px solid #f5d840;
   border-radius: 10px;
   overflow: hidden;
+}
+#modal-shop .shop-body {
+  flex: 1;
+  min-height: 0;
+  /* overflow-y:auto (below) would otherwise force the x-axis to auto too → sideways scroll
+     (e.g. on the Owners tab). Pin it hidden so content wraps/clips instead. */
+  overflow-x: hidden;
+}
+#modal-shop .market-search,
+#modal-shop .market-select,
+#modal-shop .shop-status {
+  box-sizing: border-box;
 }
 .shop-header {
   display: flex;
@@ -5654,21 +5737,6 @@ a:active {
   color: #f2d63b;
   border-bottom-color: #f5d840;
 }
-.shop-reset-timer {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
-  font-weight: 700;
-  font-size: 14px;
-  color: #ccc;
-  white-space: nowrap;
-}
-.shop-reset-timer-value {
-  color: #f2d63b;
-  font-variant-numeric: tabular-nums;
-}
 .shop-body {
   overflow-y: auto;
   padding: 16px;
@@ -5681,21 +5749,75 @@ a:active {
   padding-bottom: 50px;
   justify-content: center;
 }
-/* Market listings: wrap into rows of at most 3 (the max-width caps it at 3 of the
- * fixed-280px cards). Flex-wrap means rows wrap instead of scrolling horizontally.
- * Spacing matches the original single-row shop layout. */
-#market-listings.market-listings {
+/* The Deals tab stacks its two rotations (Daily above Weekly) instead of laying the cards
+ * out in one row. Scoped by id — .shop-offers is shared with the market/auction/owners
+ * lists, which keep the row layout above. */
+#shop-daily-offers.shop-offers {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 26px;
+  padding-top: 24px;
+}
+.shop-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.shop-section-label {
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.shop-section-reset {
+  color: #9a9a9a;
+  font-size: 12px;
+}
+.shop-daily-timer,
+.shop-weekly-timer {
+  font-weight: 700;
+  color: #f2d63b;
+  /* Fixed-width digits so the ticking countdown doesn't jitter the heading. */
+  font-variant-numeric: tabular-nums;
+}
+/* The cards of one rotation, side by side (the old single-row shop layout). */
+.shop-offers-row {
+  display: flex;
+  gap: 10%;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Market and auction listings: wrap into rows instead of scrolling horizontally.
+ * `flex: 0 0 auto` keeps the cards at their natural 306px (the fixed-280px content
+ * box plus padding and border) rather than letting flex squash them, and the
+ * max-width is what caps how many fit per row. Spacing matches the original
+ * single-row shop layout.
+ *
+ * Overrides the .shop-offers row layout above by source order — both are single
+ * class selectors, so keep this rule after it. */
+.market-listings {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-start;
   gap: 48px 40px;
   padding: 50px 20px;
+  /* 3 cards + 2 gaps = 998px; a 4th (1344px) can't fit. */
   max-width: 1100px;
   margin: 0 auto;
 }
-#market-listings .shop-offer {
+.market-listings .shop-offer {
   flex: 0 0 auto;
+}
+/* Auction cards carry more per card than market ones (bid info, countdown and a
+ * bid button), so give them a row of 2: 2 cards + 1 gap = 652px, while a 3rd
+ * (998px) can't fit. */
+#auction-listings.market-listings {
+  max-width: 660px;
 }
 .shop-status {
   color: #ddd;
@@ -5782,11 +5904,13 @@ a:active {
 
 /* ---- Player marketplace (rendered inside the shop modal's Market tab) ---- */
 /* The sell dialog floats above everything (loadout modal is z-index 4). */
-#modal-market-sell {
+#modal-market-sell,
+#modal-auction-create {
   background-color: rgba(0, 0, 0, 0.6);
   z-index: 100002;
 }
-#modal-market-sell .modal-content {
+#modal-market-sell .modal-content,
+#modal-auction-create .modal-content {
   position: fixed;
   left: 50%;
   top: 50%;
@@ -5816,6 +5940,7 @@ a:active {
   font-weight: 700;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
 }
 .market-subtab-active {
   color: #1d1808;
@@ -5832,7 +5957,9 @@ a:active {
 }
 .market-search {
   align-self: center;
-  min-width: 180px;
+  /* Shrinkable so the sub-tabs + filters always stay on one row. */
+  flex: 1 1 120px;
+  min-width: 90px;
   background: #1d1808;
   color: #f2d63b;
   border: 1px solid rgba(245, 216, 64, 0.35);
@@ -6011,6 +6138,11 @@ a:active {
   border-radius: 3px;
   pointer-events: none;
 }
+/* An item up for auction (distinct from a market "Listed" badge). */
+.customize-auction-badge {
+  background: rgba(178, 58, 46, 0.9);
+  color: #fff;
+}
 /* Right-side item detail panel (skins/melee/heal/boost): info + ownership + sell. */
 .detail-card {
   display: flex;
@@ -6053,6 +6185,22 @@ a:active {
   font-size: 15px;
   color: #ffdb7b;
   word-break: break-word;
+}
+.detail-value-worth b {
+  color: #ffdb7b;
+}
+.loadout-value-bar {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.4);
+}
+.loadout-value-bar b {
+  color: #f2d63b;
+  font-weight: 700;
 }
 .detail-stats {
   display: grid;
@@ -6098,6 +6246,15 @@ a:active {
   background: #50afab;
   border-bottom: 2px solid #387c79;
   box-shadow: inset 0 -2px #387c79;
+}
+/* Disabled detail button: grey the whole button, not just the text. Uses a 3-class
+   selector so it beats the coloured .detail-market .shop-buy-btn / .detail-gift-btn rules
+   regardless of source order. */
+.detail-market .shop-buy-btn.shop-buy-disabled {
+  background: #555;
+  border-bottom-color: #3a3a3a;
+  box-shadow: inset 0 -2px #3a3a3a;
+  color: #aaa;
 }
 
 .detail-market .market-cancel-btn {
@@ -6787,7 +6944,10 @@ input [type="image"]:focus {
 #modal-customize-body {
   background-color: #83af50;
   color: #000;
-  height: auto;
+  /* Fixed so the modal never resizes between tabs (item list / settings / with or without
+     a selected item's header). Content fits/scrolls inside. */
+  height: 420px;
+  overflow: hidden;
 }
 
 #modal-customize-item-header {
@@ -7313,11 +7473,36 @@ input [type="image"]:focus {
   top: 10px;
 }
 
+/* Search box that filters the current category's items — sits left of the sort dropdown. */
+.customize-search {
+  position: absolute;
+  top: 12px;
+  right: 170px;
+  width: 150px;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 2px 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+  color: #fff;
+  font-size: 14px;
+  z-index: 2;
+}
+.customize-search::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 @media (max-height: 768px) {
   #modal-customize-sort-wrap {
     bottom: 50px;
     display: block;
     position: absolute;
+  }
+  .customize-search {
+    top: auto;
+    bottom: 48px;
+    right: 170px;
   }
 }
 
@@ -7400,7 +7585,7 @@ input [type="image"]:focus {
 }
 
 #modal-customize-cat-standalone {
-  margin-left: 30px;
+  margin-left: 16px;
 }
 
 #modal-customize-cat-standalone:before {
@@ -7416,11 +7601,16 @@ input [type="image"]:focus {
   background: rgba(0, 0, 0, 0.5);
   cursor: pointer;
   display: inline-block;
+  /* top-align so the text-based Settings gear tab doesn't drop below the icon tabs
+     (inline-block baseline differs between a text glyph and a background image). */
+  vertical-align: top;
   height: 72px;
   margin-left: 4px;
   margin-top: 44px;
   position: relative;
-  width: 70px;
+  /* Slightly narrower than before so all cosmetic tabs + the Settings tab fit one row
+     without widening the panel (which is anchored inside a fixed-width wrapper). */
+  width: 64px;
 }
 
 .modal-customize-cat-image {
@@ -7464,7 +7654,11 @@ input [type="image"]:focus {
 #modal-customize-footer {
   background-color: #547033;
   color: #fff;
-  height: 56px;
+  /* Fixed height (not min-height) so a long/short item lore never resizes the modal. */
+  height: 104px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 9px 18px 11px;
 }
 
 #modal-customize-item-source {
@@ -7478,7 +7672,7 @@ input [type="image"]:focus {
   color: #d2ff7b;
   font-size: 18px;
   font-style: italic;
-  line-height: 28px;
+  line-height: 26px;
 }
 
 #modal-customize-item-source {
@@ -9178,4 +9372,819 @@ input [type="image"]:focus {
     height: 280px;
     top: 310px;
   }
+}
+
+/* ── Clickable rarity (loadout → shop "Owners" view) ─────────────────────── */
+.clickable-rarity {
+  cursor: pointer;
+}
+.clickable-rarity:hover {
+  text-decoration: underline;
+}
+
+/* ── Shop "Owners" tab (who owns a cosmetic) ─────────────────────────────── */
+#shop-owners .market-toolbar {
+  flex-wrap: wrap;
+}
+.owners-suggestions {
+  max-height: 240px;
+  overflow-y: auto;
+  background: #1d1808;
+  border: 1px solid rgba(245, 216, 64, 0.35);
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+.owners-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: #f2d63b;
+}
+.owners-suggestion:hover {
+  background: rgba(245, 216, 64, 0.12);
+}
+.owners-suggestion-img {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #c5c5c5;
+  border-radius: 4px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  flex-shrink: 0;
+}
+.owners-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 12px;
+}
+.owners-selected-img {
+  width: 44px;
+  height: 44px;
+  border: 2px solid #c5c5c5;
+  border-radius: 6px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  flex-shrink: 0;
+}
+.owners-selected-name {
+  font-weight: 700;
+  color: #fff;
+}
+.owners-selected-rarity {
+  font-size: 12px;
+}
+.owners-selected-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: #ddd;
+}
+.owners-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.owners-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.owners-name {
+  color: #f2d63b;
+  cursor: pointer;
+}
+.owners-name:hover {
+  text-decoration: underline;
+}
+.owners-copies {
+  margin-left: auto;
+  font-size: 12px;
+  color: #aaa;
+}
+
+/* ── Social panel (gift skins / Golden Fries) ────────────────────────────── */
+/* Social modal: centre it on screen, styled like the shop modal (reuses shop classes). */
+#modal-social {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+#modal-social .modal-content {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  /* Constant size regardless of content/tab — the body scrolls inside, the box never
+     grows or shrinks (e.g. the empty Friends/Clans tabs keep the same size as Gift). */
+  width: 780px;
+  max-width: 80vw;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: #2a1b26;
+  border: 2px solid #b83268;
+  border-radius: 10px;
+  overflow: hidden;
+}
+/* Body fills the fixed-height box and scrolls vertically only (no sideways scroll: the
+   reused .shop-body's overflow-y:auto would otherwise force the x-axis to auto too). */
+#modal-social .shop-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+}
+/* Keep padded content inside the modal width (otherwise the search input overflows to the
+   right and the centred status text is pushed off-centre by its own padding). */
+#modal-social .market-search,
+#modal-social .shop-status {
+  box-sizing: border-box;
+}
+/* Social button: a matte dark-pink button sitting just LEFT of (beside, not inside) the
+   username box. Anchored to the box's left edge so it tracks any username width. Sized
+   close to the shop button, with the flat/matte look of the other account buttons. */
+#btn-social.account-social-btn {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 24px;
+  height: 50px;
+  background: #bd3a70;
+  border-bottom: 3px solid #822548;
+  box-shadow: inset 0 -3px #822548;
+  color: #fff;
+  font-weight: 700;
+  font-size: 23px;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+#btn-social.account-social-btn:hover {
+  filter: brightness(1.08);
+}
+/* Pending-friend-request indicator, sitting on the top-right corner of the pill. */
+#social-alert-main {
+  right: -6px;
+  top: -6px;
+  width: 18px;
+  height: 18px;
+}
+/* Small notification badges on tabs: a red count pill, or a plain dot. */
+.tab-badge {
+  display: none;
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 6px;
+  border-radius: 8px;
+  background: #ff4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+.tab-dot {
+  display: none;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #ff4444;
+  vertical-align: middle;
+}
+.detail-market .detail-gift-btn {
+  background: #d96100;
+  border-bottom: 2px solid #9c4600;
+  box-shadow: inset 0 -2px #9c4600;
+  margin-top: 6px;
+}
+#social-search-view .market-search {
+  width: 100%;
+}
+.social-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.social-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+.social-player-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.social-name-link {
+  cursor: pointer;
+}
+.social-name-link:hover {
+  color: #f2d63b;
+  text-decoration: underline;
+}
+/* Action buttons always stay in one row after the name (name ellipsizes if tight). */
+.social-player-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  align-items: center;
+}
+/* Force vertical centering of the name + buttons in both tabs (id-scoped so it wins over
+   anything else and any cached rule). */
+#modal-social .social-player-row,
+#modal-social .social-friend-row {
+  align-items: center;
+}
+.social-action-fries,
+.social-action-cosmetics,
+.social-action-add {
+  padding: 6px 14px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.social-action-fries {
+  background: #e0a23c;
+  border-bottom: 2px solid #a9761f;
+  box-shadow: inset 0 -2px #a9761f;
+}
+.social-action-add {
+  background: #4a8f3c;
+  border-bottom: 2px solid #2f6325;
+  box-shadow: inset 0 -2px #2f6325;
+}
+.social-action-cosmetics {
+  background: #bd3a70;
+  border-bottom: 2px solid #822548;
+  box-shadow: inset 0 -2px #822548;
+}
+.social-subhead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.social-back {
+  cursor: pointer;
+  color: #f2d63b;
+  font-weight: 700;
+}
+.social-back:hover {
+  text-decoration: underline;
+}
+.social-subhead-title {
+  font-weight: 700;
+  color: #fff;
+}
+.social-balance {
+  margin-left: auto;
+  font-size: 13px;
+  color: #e0a23c;
+  font-weight: 700;
+}
+.social-fries-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.social-fries-row .market-sell-price {
+  width: 140px;
+}
+.social-cosmetics-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.social-cosmetics-toolbar .market-search {
+  flex: 1;
+  min-width: 140px;
+}
+.social-gift-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.social-gift-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  min-width: 0;
+}
+.social-gift-item[data-pending="1"] {
+  background: rgba(245, 216, 64, 0.14);
+  outline: 1px solid rgba(245, 216, 64, 0.4);
+}
+.social-gift-img {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #c5c5c5;
+  border-radius: 4px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  flex-shrink: 0;
+}
+.social-gift-name {
+  color: #eee;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.social-gift-btn {
+  margin-left: auto;
+  padding: 4px 14px;
+}
+.social-status {
+  min-height: 18px;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.social-recent-head {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #aaa;
+  font-weight: 700;
+  margin: 8px 2px 4px;
+}
+.social-recent-clear {
+  margin-left: auto;
+  cursor: pointer;
+  color: #f2d63b;
+  font-weight: 400;
+}
+.social-recent-clear:hover {
+  text-decoration: underline;
+}
+/* In-app confirm dialog, overlaid on the social modal. */
+.social-confirm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 5;
+}
+.social-confirm-box {
+  max-width: 80%;
+  padding: 22px 24px;
+  background: #2a1b26;
+  border: 2px solid #b83268;
+  border-radius: 10px;
+  text-align: center;
+}
+.social-confirm-msg {
+  margin-bottom: 18px;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.4;
+}
+.social-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.social-confirm-cancel {
+  background: #6a6a6a;
+  border-bottom: 2px solid #3e3e3e;
+  box-shadow: inset 0 -2px #3e3e3e;
+}
+.social-confirm-ok {
+  background: #bd3a70;
+  border-bottom: 2px solid #822548;
+  box-shadow: inset 0 -2px #822548;
+}
+/* Friends tab: friends list + recently-played players. */
+.social-friends-head {
+  margin: 6px 2px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+.social-friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.social-friend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+.social-relation {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.social-relation-with {
+  background: rgba(70, 200, 90, 0.2);
+  color: #7ee38a;
+}
+.social-relation-against {
+  background: rgba(230, 80, 80, 0.2);
+  color: #ff8a8a;
+}
+.social-friend-add {
+  padding: 5px 12px;
+  font-size: 13px;
+  background: #4a8f3c;
+  border-bottom: 2px solid #2f6325;
+  box-shadow: inset 0 -2px #2f6325;
+}
+.social-friend-remove {
+  padding: 5px 12px;
+  font-size: 13px;
+  background: #8a3a3a;
+  border-bottom: 2px solid #5e2626;
+  box-shadow: inset 0 -2px #5e2626;
+}
+/* All three action buttons share one fixed height (border-box) so they line up exactly,
+   whatever their border/padding rules elsewhere say. The friend button additionally gets a
+   fixed min-width so "+ Add" and "✓ Friend" are always the same size. Scoped with the modal
+   id so it beats the base .shop-buy-btn sizing. */
+#modal-social .social-action-fries,
+#modal-social .social-action-cosmetics,
+#modal-social .social-action-add,
+#modal-social .social-action-accept,
+#modal-social .social-action-spectate,
+#modal-social .social-action-block,
+#modal-social .social-action-unblock,
+#modal-social .social-friend-added,
+#modal-social .social-friend-pending,
+#modal-social .social-friend-remove {
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 14px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+/* Block = destructive; Unblock = neutral (lifting it is harmless). */
+.social-action-block {
+  background: #b23a2e;
+  border-bottom: 2px solid #7d271f;
+  box-shadow: inset 0 -2px #7d271f;
+}
+.social-action-unblock {
+  background: #5a5a5a;
+  border-bottom: 2px solid #3a3a3a;
+  box-shadow: inset 0 -2px #3a3a3a;
+}
+.social-blocked-tag {
+  display: flex;
+  align-items: center;
+  color: #ff8a7a;
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.social-action-spectate {
+  background: #3aa0d6;
+  border-bottom: 2px solid #2a7aa5;
+  box-shadow: inset 0 -2px #2a7aa5;
+}
+/* Friend rows: name shrinks, the last-played / "in game" text fills, actions pin right. */
+#modal-social .social-friend-row .social-player-name {
+  flex: 0 1 auto;
+}
+.social-friend-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #aaa;
+}
+.social-live-meta {
+  color: #7ee38a;
+  font-weight: 700;
+}
+#modal-social .social-action-add,
+#modal-social .social-action-accept,
+#modal-social .social-friend-added,
+#modal-social .social-friend-pending {
+  min-width: 92px;
+}
+.social-action-accept {
+  background: #4a8f3c;
+  border-bottom: 2px solid #2f6325;
+  box-shadow: inset 0 -2px #2f6325;
+}
+.social-friend-pending {
+  background: #6a6a6a;
+  border-bottom: 2px solid #454545;
+  box-shadow: inset 0 -2px #454545;
+  color: #ddd;
+}
+/* "✓ Friend" matches the gift buttons' matte 3D look + height (they have a bottom border,
+   the disabled base doesn't — without this it renders flat and 2px shorter). */
+.social-friend-added {
+  background: #5a5a5a;
+  border-bottom: 2px solid #3a3a3a;
+  box-shadow: inset 0 -2px #3a3a3a;
+  color: #ddd;
+}
+
+/* ---- Auctions + buy-offers ---------------------------------------------- */
+
+/* Auction cards reuse .shop-offer / .market-listing; these add the auction bits. */
+.auction-bid-info {
+  font-size: 13px;
+  color: #ffdb7b;
+  margin-top: 4px;
+}
+.auction-countdown {
+  font-size: 12px;
+  color: #c5c5c5;
+  margin: 2px 0 6px;
+}
+.auction-action {
+  margin-top: auto;
+}
+.auction-your {
+  text-align: center;
+  color: #c5c5c5;
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.auction-bid-row,
+.market-counter-box,
+.market-makeoffer-box {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.auction-bid-input,
+.market-counter-input,
+.market-makeoffer-input {
+  width: 90px;
+  box-sizing: border-box;
+}
+.auction-bid-err {
+  margin-top: 4px;
+}
+
+/* "New auction" item picker inside the create dialog. */
+.auction-picker {
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.auction-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.auction-pick-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.auction-pick-selected {
+  background: rgba(30, 144, 255, 0.2);
+}
+.auction-pick-img {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #c5c5c5;
+  border-radius: 4px;
+  background-size: 26px;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex: 0 0 auto;
+}
+.auction-pick-name {
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Offers sub-tab. */
+.market-offers {
+  padding: 4px 2px;
+}
+.market-offers-head {
+  font-weight: 700;
+  color: #f2d63b;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  margin: 10px 4px 6px;
+}
+.market-offer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.market-offer-img {
+  width: 44px;
+  height: 44px;
+  border: 1px solid #c5c5c5;
+  border-radius: 5px;
+  background-size: 34px;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex: 0 0 auto;
+}
+.market-offer-main {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.market-offer-name {
+  font-weight: 700;
+  color: #fff;
+}
+.market-offer-meta {
+  font-size: 12px;
+  color: #c5c5c5;
+}
+.market-offer-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.market-offer-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.market-offer-danger {
+  background: #b23a2e;
+}
+.market-offer-danger:hover {
+  background: #c8422f;
+}
+.market-offer-status {
+  color: #8fce6a;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+.market-offer-broke {
+  color: #ff8a7a;
+}
+.market-offer-est {
+  font-size: 12px;
+  color: #c5c5c5;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
+/* Detail-panel Auction button matches the Sell/Gift buttons. */
+.detail-auction-btn {
+  margin-top: 4px;
+}
+
+/* "+ New auction" sits at the right of the auction toolbar (not the load-more style). */
+.auction-new-btn {
+  /* Override .menu-option's width:100%/display:block + its 38px line-height so the label
+     sits centred in the padded box (flex centres it both ways). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  line-height: 1;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: #2a230a;
+  color: #f2d63b;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.auction-new-btn:hover {
+  background: #3a300f;
+}
+
+/* ---- Loadout menu: account settings tab -------------------------------- */
+/* The gear tab reuses .modal-customize-cat styling; this centres its glyph. */
+.modal-customize-settings-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  line-height: 1;
+  background-image: none !important;
+}
+#loadout-settings-panel {
+  /* Replaces the item list in the body flow while the Settings tab is active; fills the
+     fixed body height so the modal stays the same size as the item-list view. */
+  box-sizing: border-box;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  overflow-y: auto;
+}
+.loadout-settings-title {
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.loadout-setting-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.loadout-setting-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.loadout-setting-name {
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.loadout-setting-desc {
+  color: #c5c5c5;
+  font-size: 13px;
+  margin-top: 3px;
+}
+.loadout-toggle {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.loadout-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ccc;
+  transition: left 0.15s;
+}
+.loadout-toggle-on {
+  background: #83af50;
+  border-color: #83af50;
+}
+.loadout-toggle-on .loadout-toggle-knob {
+  left: 24px;
+  background: #fff;
+}
+.loadout-settings-status {
+  margin-top: 16px;
+  color: #8fce6a;
+  font-weight: 700;
+  min-height: 18px;
 }

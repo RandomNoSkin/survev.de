@@ -34,9 +34,11 @@ import type {
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import {
+    auctionsTable,
     goldenFriesLedgerTable,
     itemsTable,
     marketListingsTable,
+    offersTable,
     usersTable,
 } from "./schema";
 
@@ -114,6 +116,18 @@ export async function listItem(
             if (!Number.isInteger(price) || price < 0 || price > MARKET_MAX_PRICE) {
                 throw new MarketError("bad_price");
             }
+
+            // Can't list an item that's currently up for auction.
+            const [auction] = await tx
+                .select({ id: auctionsTable.id })
+                .from(auctionsTable)
+                .where(
+                    and(
+                        eq(auctionsTable.itemId, itemId),
+                        eq(auctionsTable.status, "active"),
+                    ),
+                );
+            if (auction) throw new MarketError("auctioned");
 
             const active = await tx
                 .select({ id: marketListingsTable.id })
@@ -240,7 +254,9 @@ export async function buyListing(
             const [buyerBal] = await tx
                 .update(usersTable)
                 .set({ goldenFries: sql`${usersTable.goldenFries} - ${total}` })
-                .where(and(eq(usersTable.id, buyerId), gte(usersTable.goldenFries, total)))
+                .where(
+                    and(eq(usersTable.id, buyerId), gte(usersTable.goldenFries, total)),
+                )
                 .returning({ balance: usersTable.goldenFries });
             if (!buyerBal) throw new MarketError("insufficient_funds");
 
@@ -273,6 +289,8 @@ export async function buyListing(
                     status: 0,
                     timeAcquired: Date.now(),
                     previousOwners: newOwners,
+                    // What the buyer actually paid out of pocket (ask + fee).
+                    pricePaid: total,
                 })
                 .where(
                     and(
@@ -282,6 +300,23 @@ export async function buyListing(
                 )
                 .returning({ id: itemsTable.id });
             if (!moved) throw new MarketError("error");
+
+            // The item just changed hands, so every live buy-offer on it is void: they
+            // were made to the seller, who no longer owns it. acceptOffer would refuse
+            // them anyway (its ownership guard), but leaving them "pending" would keep a
+            // dead offer in both users' lists for the whole TTL, burn one of the bidder's
+            // outstanding slots, and — if the item ever returned to the seller (bought
+            // back, or an admin revert) — silently become acceptable again at the old
+            // price without the bidder confirming. Same reasoning as createAuction.
+            await tx
+                .update(offersTable)
+                .set({ status: "expired", updatedAt: new Date() })
+                .where(
+                    and(
+                        eq(offersTable.itemId, listing.itemId),
+                        inArray(offersTable.status, ["pending", "countered"]),
+                    ),
+                );
 
             await tx.insert(goldenFriesLedgerTable).values([
                 {

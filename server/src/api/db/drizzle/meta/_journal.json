@@ -120,6 +120,48 @@
       "when": 1783680807076,
       "tag": "0016_thick_thunderbird",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783805457428,
+      "tag": "0017_blushing_rick_jones",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783855542658,
+      "tag": "0018_familiar_swarm",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783887287702,
+      "tag": "0019_freezing_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784056625885,
+      "tag": "0020_clammy_daredevil",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784124333432,
+      "tag": "0021_blushing_the_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784191597241,
+      "tag": "0022_nebulous_clint_barton",
+      "breakpoints": true
     }
   ]
 }

@@ -64,6 +64,8 @@ export type MatchData = {
     damage_taken: number;
     killer_id: number;
     killed_ids: number[];
+    /** Non-default cosmetics this player had equipped for the match ([] when private). */
+    equipped_cosmetics: string[];
 };
 
 //
