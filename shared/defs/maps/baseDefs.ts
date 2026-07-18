@@ -162,7 +162,7 @@ export const Main: MapDef = {
             { name: "frag", count: 2, weight: 1 }, // !
             { name: "smoke", count: 1, weight: 1 },
             { name: "mirv", count: 2, weight: 0.05 },
-            { name: "impact", count: 1, weight: 0.1 },
+            { name: "dynamite", count: 1, weight: 0.1 },
             { name: "mine", count: 1, weight: 0.05 },
         ],
         tier_ammo: [
@@ -606,7 +606,7 @@ export const Main: MapDef = {
         tier_airdrop_throwables: [
             { name: "frag", count: 2, weight: 1 },
             { name: "mirv", count: 2, weight: 0.5 },
-            { name: "impact", count: 2, weight: 0.5 },
+            { name: "dynamite", count: 2, weight: 0.5 },
             { name: "mine", count: 1, weight: 0.3 },
         ],
         tier_airdrop_melee: [

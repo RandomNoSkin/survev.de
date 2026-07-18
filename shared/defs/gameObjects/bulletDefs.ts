@@ -1240,7 +1240,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerWidth: 0.1,
         tracerLength: 0.5,
     },
-    shrapnel_impact: {
+    shrapnel_dynamite: {
         type: "bullet",
         damage: 10,
         obstacleDamage: 2,

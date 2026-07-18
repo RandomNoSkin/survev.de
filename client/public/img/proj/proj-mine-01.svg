@@ -1,6 +1,63 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" style="isolation:isolate">
-  <circle cx="64" cy="64" r="46" fill="#3a3f44" stroke="#1a1d20" stroke-width="10"/>
-  <circle cx="64" cy="64" r="30" fill="#23272b" stroke="#15181b" stroke-width="6"/>
-  <circle cx="64" cy="64" r="11" fill="#e23b2e"/>
-  <circle cx="64" cy="64" r="4" fill="#ffd0cb"/>
-</svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="26.987501mm"
+   height="26.987469mm"
+   viewBox="0 0 26.987501 26.987469"
+   version="1.1"
+   id="svg5"
+   xml:space="preserve"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+     id="defs2" /><g
+     id="layer1"
+     transform="translate(-162.78554,-396.28022)"><g
+       id="g1"
+       transform="matrix(1.0008374,0,0,1.0008374,-0.13749454,-0.33302304)"
+       style="stroke-width:0.999163"><g
+         id="g6"><circle
+           cx="-165.10565"
+           cy="-414.38791"
+           r="11.90625"
+           fill="#3a3f44"
+           stroke="#1a1d20"
+           stroke-width="10"
+           id="circle1"
+           style="isolation:isolate;fill:#47572b;fill-opacity:1;stroke-width:3.17234;stroke-dasharray:none"
+           transform="matrix(0.70710678,-0.70710678,-0.70710678,-0.70710678,0,0)" /><ellipse
+           style="fill:#5c7038;fill-opacity:1;stroke:#1a1d20;stroke-width:1.44467;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+           id="path1782-6-8-2"
+           cx="-165.10565"
+           cy="-414.38791"
+           rx="7.2317643"
+           ry="7.2317719"
+           transform="matrix(0.70710678,-0.70710678,-0.70710678,-0.70710678,0,0)" /><path
+           id="path4"
+           style="fill:#526332;fill-opacity:1;stroke:#1a1d20;stroke-width:1.58617;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+           d="m 166.17211,399.66972 a 12.60968,12.500121 44.997329 0 0 -1.97511,2.59543 l 7.35642,4.27174 a 4.093455,4.0578887 44.997329 0 1 0.64146,-0.84485 4.093455,4.0578887 44.997329 0 1 0.83945,-0.64146 l -4.26924,-7.36378 a 12.60968,12.500121 44.997329 0 0 -2.59318,1.98219 z" /><path
+           id="path5"
+           style="fill:#526332;fill-opacity:1;stroke:#1a1d20;stroke-width:1.58617;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+           d="m 186.36329,399.67958 a 12.500121,12.60968 44.997329 0 0 -2.59543,-1.97511 l -4.27174,7.35642 a 4.0578887,4.093455 44.997329 0 1 0.84485,0.64146 4.0578887,4.093455 44.997329 0 1 0.64146,0.83945 l 7.36378,-4.26924 a 12.500121,12.60968 44.997329 0 0 -1.98219,-2.59318 z" /><path
+           id="path6"
+           style="fill:#526332;fill-opacity:1;stroke:#1a1d20;stroke-width:1.58617;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+           d="m 186.35342,419.87076 a 12.60968,12.500121 44.997329 0 0 1.97511,-2.59543 l -7.35642,-4.27174 a 4.093455,4.0578887 44.997329 0 1 -0.64146,0.84485 4.093455,4.0578887 44.997329 0 1 -0.83945,0.64146 l 4.26924,7.36378 a 12.60968,12.500121 44.997329 0 0 2.59318,-1.98219 z" /><path
+           id="path14"
+           style="fill:#526332;fill-opacity:1;stroke:#1a1d20;stroke-width:1.58617;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+           d="m 166.17506,419.86088 a 12.500121,12.60968 44.997329 0 0 2.59543,1.97511 l 4.27174,-7.35642 a 4.0578887,4.093455 44.997329 0 1 -0.84485,-0.64146 4.0578887,4.093455 44.997329 0 1 -0.64146,-0.83945 l -7.36378,4.26924 a 12.500121,12.60968 44.997329 0 0 1.98219,2.59318 z" /><ellipse
+           cx="-165.10565"
+           cy="-414.38791"
+           fill="#e23b2e"
+           id="circle3-6-8"
+           style="isolation:isolate;stroke-width:0.264362"
+           rx="3.1151557"
+           ry="3.1151559"
+           transform="matrix(0.70710678,-0.70710678,-0.70710678,-0.70710678,0,0)" /><ellipse
+           cx="-165.10565"
+           cy="-414.38791"
+           fill="#ffd0cb"
+           id="circle4-1-4"
+           style="isolation:isolate;stroke-width:0.264362"
+           rx="1.1327839"
+           ry="1.132784"
+           transform="matrix(0.70710678,-0.70710678,-0.70710678,-0.70710678,0,0)" /></g></g></g></svg>

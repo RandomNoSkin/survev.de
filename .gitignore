@@ -75,3 +75,4 @@ server/*-audit.json
 server/logs
 *.gz
 server/recordings/*
+server/logs/*
