@@ -1669,7 +1669,7 @@ const SkinDefs: Record<string, OutfitDef> = {
 
     outfitYellowhero: defineOutfitSkin("outfitBase", {
         noDrop: true,
-        name: "Pink Warrior",
+        name: "THE ONE AND ONLY YELLOW HERO",
         rarity: Rarity.Uncommon,
         shop: true,
         skinImg: {
@@ -1690,7 +1690,7 @@ const SkinDefs: Record<string, OutfitDef> = {
 
     outfitDarkslayed: defineOutfitSkin("outfitBase", {
         noDrop: true,
-        name: "Pink Warrior",
+        name: "Dark Slayed",
         rarity: Rarity.Uncommon,
         shop: true,
         skinImg: {
@@ -1711,7 +1711,7 @@ const SkinDefs: Record<string, OutfitDef> = {
 
     outfitBluebell: defineOutfitSkin("outfitBase", {
         noDrop: true,
-        name: "Pink Warrior",
+        name: "Bluebell",
         rarity: Rarity.Uncommon,
         skinImg: {
             baseTint: 0xa49ad6,
@@ -1731,7 +1731,7 @@ const SkinDefs: Record<string, OutfitDef> = {
 
     outfitAegis: defineOutfitSkin("outfitBase", {
         noDrop: true,
-        name: "Pink Warrior",
+        name: "Aegis",
         rarity: Rarity.Uncommon,
         shop: true,
         skinImg: {
@@ -1751,7 +1751,7 @@ const SkinDefs: Record<string, OutfitDef> = {
     }),
     outfitUmbra: defineOutfitSkin("outfitBase", {
         noDrop: true,
-        name: "Pink Warrior",
+        name: "Umbra",
         rarity: Rarity.Uncommon,
         shop: true,
         skinImg: {
@@ -1767,7 +1767,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         lootImg: {
             sprite: "loot-shirt-outfitBase.img",
             tint: 0x380921,
-        },
+        }, 
     }),
     // Obstacle costumes
     outfitBarrel: defineOutfitSkin("outfitBase", {
