@@ -1433,7 +1433,7 @@ export class WeaponManager {
             case "mine": fuseTime = throwableDef.fuseTime; break;
             case "strobe": fuseTime = throwableDef.fuseTime / 2; break;
             case "frag": multiplier = 0.65; break;
-            case "impact": multiplier = 0.5; break;
+            case "dynamite": multiplier = 0.5; break;
             case "mirv": multiplier = 0.3; break;
         }
 

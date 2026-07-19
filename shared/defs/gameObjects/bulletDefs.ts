@@ -23,6 +23,8 @@ export interface BulletDef {
     maxFlareScale?: number;
     skipCollision?: boolean;
     onHit?: string;
+    freezeAmount?: number;
+    freezeDuration?: number;
     noDistAdj?: boolean;
     useExplosiveRoundsAlt?: boolean;
     projType?: string;
@@ -335,7 +337,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         type: "bullet",
         damage: 12.5,
         obstacleDamage: 1,
-        falloff: 0.5,
+        falloff: 0.4,
         speed: 77,
         distance: 27,
         variance: 0,
@@ -422,7 +424,9 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerColor: "12gauge",
         tracerWidth: 0.075,
         tracerLength: 0.5,
-        onHit: "explosion_snowball"
+        onHit: "explosion_snowball",
+        freezeAmount: 3,
+        freezeDuration: 0.5,
     },
     bullet_frag: {
         type: "bullet",
@@ -453,9 +457,9 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 0.5,
         onHit: "explosion_usas",
         noDistAdj: true,
-        projType: "mirv_mini_saiga",
+        projType: "mirv_mini_usas",
         projCount: 3,
-        projSpread: 1.4,
+        projSpread: 0.8,
     },
     bullet_slug: {
         type: "bullet",
@@ -487,7 +491,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         type: "bullet",
         damage: 5.5,
         obstacleDamage: 1,
-        falloff: 0.25,
+        falloff: 0.7,
         speed: 66,
         distance: 25,
         variance: 0,
@@ -565,7 +569,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_ots38: {
         type: "bullet",
-        damage: 32,
+        damage: 33,
         obstacleDamage: 1,
         falloff: 0.92,
         speed: 140,
@@ -614,7 +618,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         shrapnel: false,
         tracerColor: "45acp",
         tracerWidth: 0.1,
-        tracerLength: 0.7,
+        tracerLength: 4,
     },
     bullet_mkg45: {
         type: "bullet",
@@ -677,6 +681,8 @@ export const BaseDefs: Record<string, BulletDef> = {
         speed: 50,
         variance: 0,
         shrapnel: false,
+        freezeAmount: 4,
+        freezeDuration: 1.4,
         accelerating: 0.05,
         tracerColor: "9mm",
         tracerWidth: 0.1,
@@ -804,7 +810,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_bar_modified: {
         type: "bullet",
-        damage: 27,
+        damage: 26,
         obstacleDamage: 3,
         falloff: 0.9,
         distance: 275,
@@ -817,7 +823,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_bar_extra_modified: {
         type: "bullet",
-        damage: 27,
+        damage: 26,
         obstacleDamage: 3,
         falloff: 0.9,
         distance: 275,
@@ -861,16 +867,16 @@ export const BaseDefs: Record<string, BulletDef> = {
         obstacleDamage: 2.5,
         falloff: 0.9,
         distance: 200,
-        speed: 135,
+        speed: 145,
         variance: 0,
         shrapnel: false,
         tracerColor: "762mm",
-        tracerWidth: 0.13,
+        tracerWidth: 0.14,
         tracerLength: 0.9,
     },
     bullet_m134: {
         type: "bullet",
-        damage: 10.5,
+        damage: 11,
         obstacleDamage: 3.5,
         falloff: 0.8,
         distance: 200,
@@ -896,7 +902,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_famas: {
         type: "bullet",
-        damage: 24,
+        damage: 23,
         obstacleDamage: 1,
         falloff: 0.8,
         distance: 150,
@@ -909,7 +915,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_famas_modified: {
         type: "bullet",
-        damage: 36,
+        damage: 34.5,
         obstacleDamage: 3,
         falloff: 0.8,
         distance: 150,
@@ -962,11 +968,11 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_m4a1_modified: {
         type: "bullet",
-        damage: 6,
+        damage: 2,
         obstacleDamage: 1,
         falloff: 0.9,
         distance: 20,
-        speed: 120,
+        speed: 85,
         variance: 0,
         shrapnel: false,
         suppressed: true,
@@ -975,15 +981,15 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 0.9,
         spawnBulletType: "bullet_m4a1_mini",
         spawnBulletCount: 2,
-        spawnBulletSpread: 0.25,
+        spawnBulletSpread: 0.35,
     },
     bullet_m4a1_mini: {
         type: "bullet",
-        damage: 12,
+        damage: 11,
         obstacleDamage: 1,
         falloff: 0.9,
         distance: 30,
-        speed: 120,
+        speed: 200,
         variance: 0,
         shrapnel: false,
         suppressed: true,
@@ -1240,7 +1246,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerWidth: 0.1,
         tracerLength: 0.5,
     },
-    shrapnel_impact: {
+    shrapnel_dynamite: {
         type: "bullet",
         damage: 10,
         obstacleDamage: 2,

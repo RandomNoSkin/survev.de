@@ -57,6 +57,7 @@ import { InventoryManager } from "../inventoryManager";
 import { WeaponManager } from "../weaponManager";
 import type { Building } from "./building";
 import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject";
+import { getGasDamageMultiplier } from "./gas";
 import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
@@ -806,6 +807,7 @@ export class Player extends BaseGameObject {
     flareTimer = 0;
 
     chatCooldown = 0;
+    gasExposureTime = 0;
 
     sendDeathEmoteTicker = 0;
     sentDeathEmote = false;
@@ -1086,6 +1088,7 @@ export class Player extends BaseGameObject {
     frozenTicker = 0;
     frozen = false;
     frozenOri = 0;
+    frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
 
     private _hasteTicker = 0;
     hasteType: HasteType = GameConfig.HasteType.None;
@@ -2358,9 +2361,20 @@ export class Player extends BaseGameObject {
             );
         }
 
-        if (this.game.gas.doDamage && this.game.gas.isInGas(this.pos)) {
+        const inGas = this.game.gas.isInGas(this.pos);
+        if (inGas) {
+            this.gasExposureTime += dt;
+        } else {
+            this.gasExposureTime = 0;
+        }
+
+        if (this.game.gas.doDamage && inGas) {
+            const damageAmount = this.disconnected
+                ? 22
+                : this.game.gas.damage * getGasDamageMultiplier(this.gasExposureTime);
+
             this.damage({
-                amount: this.disconnected ? 22 : this.game.gas.damage,
+                amount: damageAmount,
                 damageType: GameConfig.DamageType.Gas,
                 killCreditSource: this.lastDamagedBy,
                 dir: this.dir,
@@ -2492,6 +2506,7 @@ export class Player extends BaseGameObject {
             if (this.frozenTicker <= 0) {
                 this.frozenTicker = 0;
                 this.frozen = false;
+                this.frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
                 this.setDirty();
             }
         }
@@ -5833,10 +5848,15 @@ export class Player extends BaseGameObject {
         this.setDirty();
     }
 
-    freeze(frozenOri: number, duration: number): void {
+    freeze(
+        frozenOri: number,
+        duration: number,
+        freezeAmount: number = GameConfig.player.frozenSpeedPenalty,
+    ): void {
         this.frozenTicker = duration;
         this.frozen = true;
         this.frozenOri = frozenOri;
+        this.frozenSpeedPenalty = freezeAmount;
         this.setDirty();
     }
 
@@ -6045,7 +6065,7 @@ export class Player extends BaseGameObject {
         }
 
         if (this.frozen) {
-            this.speed -= GameConfig.player.frozenSpeedPenalty;
+            this.speed -= this.frozenSpeedPenalty;
         }
 
         const hasFieldMedic = this.hasPerk("field_medic");

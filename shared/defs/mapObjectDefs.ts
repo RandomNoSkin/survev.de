@@ -10456,6 +10456,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             tierLoot("tier_pirate_melee", 1, 1),
             autoLoot("outfitRoyalFortune", 1),
             tierLoot("tier_river_pirate", 1, 1),
+            tierLoot("tier_river_pirate_melee", 1, 1),
         ],
     }),
     chest_01cb: createChest({
@@ -12367,7 +12368,7 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
         },
     }),
     stone_07: createStone({
-        scale: { createMin: 1, createMax: 1, destroy: 0.8 },
+        scale: { createMin: 0.8, createMax: 0.8, destroy: 0.65 },
         collision: collider.createCircle(v2.create(0, 0), 7.75),
         health: 1000,
         map: { display: true, color: 0x978c84, scale: 1 },
@@ -16237,6 +16238,12 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
                 pos: v2.create(37, -30),
                 scale: 1,
                 ori: 0,
+            },
+            {
+                type: "vending_01",
+                pos: v2.create(37, -23.2),
+                scale: 1,
+                ori: 2,
             },
             {
                 type: "sandbags_01",
@@ -20887,9 +20894,9 @@ export const MapObjectDefs: Record<string, MapObjectDef> = {
             },
             {
                 type: randomObstacleType({
-                    case_01: 1,
-                    case_02: 0.1,
-                    chest_02: 1,
+                    case_01: 1.6,
+                    case_02: 0.15,
+                    chest_02: 0.4,
                 }),
                 pos: v2.create(2.5, 0),
                 scale: 1,
