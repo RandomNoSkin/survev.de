@@ -221,6 +221,8 @@ export const Comp: MapDef = {
             { name: "frag", count: 3, weight: 0.6 }, // !
             { name: "smoke", count: 2, weight: 0.2 },
             { name: "mirv", count: 2, weight: 1 },
+            { name: "dynamite", count: 3, weight: 0.8 },
+            { name: "mine", count: 1, weight: 0.4 },
         ],
         tier_ammo: [
             { name: "9mm", count: 90, weight: 0.25 },
@@ -855,8 +857,9 @@ export const Comp: MapDef = {
             { name: "outfitGhillie", count: 1, weight: 0.5 },
         ],
         tier_airdrop_throwables: [
-            { name: "frag", count: 2, weight: 1 },
+            { name: "dynamite", count: 3, weight: 1 },
             { name: "mirv", count: 2, weight: 0.5 },
+            { name: "mine", count: 1, weight: 0.5 },
         ],
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 19 },
