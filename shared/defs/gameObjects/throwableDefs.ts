@@ -225,13 +225,13 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
         explodeOnImpact: false,
         playerCollision: false,
         proximityMine: { armTime: 3, triggerRad: 6, triggerDelay: 0.7 },
-        fuseTime: 300, // self-destruct upper bound so stale mines get cleaned up
+        fuseTime: 420, 
         aimDistance: 0,
         rad: 1,
         throwPhysics: {
             playerVelMult: 0,
             velZ: 4,
-            speed: 14, // low speed: mines are placed near the thrower
+            speed: 14,
             spinVel: 4 * Math.PI,
             spinDrag: 1,
             randomizeSpinDir: true,
