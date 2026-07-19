@@ -1088,6 +1088,7 @@ export class Player extends BaseGameObject {
     frozenTicker = 0;
     frozen = false;
     frozenOri = 0;
+    frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
 
     private _hasteTicker = 0;
     hasteType: HasteType = GameConfig.HasteType.None;
@@ -2505,6 +2506,7 @@ export class Player extends BaseGameObject {
             if (this.frozenTicker <= 0) {
                 this.frozenTicker = 0;
                 this.frozen = false;
+                this.frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
                 this.setDirty();
             }
         }
@@ -5846,10 +5848,15 @@ export class Player extends BaseGameObject {
         this.setDirty();
     }
 
-    freeze(frozenOri: number, duration: number): void {
+    freeze(
+        frozenOri: number,
+        duration: number,
+        freezeAmount: number = GameConfig.player.frozenSpeedPenalty,
+    ): void {
         this.frozenTicker = duration;
         this.frozen = true;
         this.frozenOri = frozenOri;
+        this.frozenSpeedPenalty = freezeAmount;
         this.setDirty();
     }
 
@@ -6058,7 +6065,7 @@ export class Player extends BaseGameObject {
         }
 
         if (this.frozen) {
-            this.speed -= GameConfig.player.frozenSpeedPenalty;
+            this.speed -= this.frozenSpeedPenalty;
         }
 
         const hasFieldMedic = this.hasPerk("field_medic");

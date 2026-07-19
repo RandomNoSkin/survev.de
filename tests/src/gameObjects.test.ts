@@ -39,6 +39,12 @@ describe.for(Object.entries(BulletDefs))("Bullet $0", ([, def]) => {
     });
 });
 
+test("Special bullet freeze config is available", () => {
+    const special = BulletDefs.bullet_special;
+    expect(special.freezeDuration).toBeDefined();
+    expect(special.freezeAmount).toBeDefined();
+});
+
 describe.for(Object.entries(BulletDefs))("Bullet $0", ([, def]) => {
     if (def.onHit) {
         test("On Hit", () => {

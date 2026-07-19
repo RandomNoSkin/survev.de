@@ -1150,7 +1150,7 @@ export const mapDef: PartialMapDef = {
         },
         densitySpawns: [
             {
-                stone_01: 610,
+                stone_01: 710,
                 barrel_01: 76,
                 silo_01: 8,
                 crate_01: 50,
@@ -1158,7 +1158,7 @@ export const mapDef: PartialMapDef = {
                 crate_03: 12, //grenade crates
                 bush_01: 78,
                 cache_06: 12,
-                tree_01: 710,
+                tree_01: 600,
                 tree_13: 36,
                 sandbags_01: 18,
                 sandbags_02: 18,

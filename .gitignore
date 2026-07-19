@@ -70,9 +70,7 @@ Temporary Items
 # Log files
 todo.md
 *.log
-server/logs/*
+server/logs/
 server/*-audit.json
-server/logs
 *.gz
 server/recordings/*
-server/logs/*

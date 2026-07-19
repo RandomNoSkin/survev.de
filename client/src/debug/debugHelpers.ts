@@ -16,7 +16,12 @@ import { debugLines } from "./debugLines";
 
 export function renderMapBuildingBounds(mapObj: Building | Structure) {
     const def = MapObjectDefs[mapObj.type] as BuildingDef;
-    const boundScale = def.type == "building" || def.type == "structure" ? 1.15 : 1.0;
+    const boundScale =
+        def.type == "building" || def.type == "structure"
+            ? mapObj.type === "warehouse_complex_01"
+                ? 1.01
+                : 1.12
+            : 1.0;
     const bounds = [
         collider.transform(
             mapHelpers.getBoundingCollider(mapObj.type),

@@ -184,7 +184,7 @@ export class ExplosionBarn {
                     const ori =
                         (math.radToOri(playerRot) + math.radToOri(collRot) + 2) % 4;
 
-                    obj.freeze(ori, def.freezeDuration);
+                    obj.freeze(ori, def.freezeDuration, def.freezeAmount);
                 }
                 if (def.dropRandomLoot) {
                     for (let i = 0; i < def.dropRandomLoot; i++) {

@@ -46,7 +46,7 @@ function getBuildingBounds(type: string, layer = 0, pos: Vec2, rot: number) {
 
     const bounds: Array<{ layer: number; collision: Collider }> = [];
 
-    const scale = 1.15; // building bounds have 15% more size to make buildings not spawn near each other
+    const scale = type === "warehouse_complex_01" ? 1.01 : 1.12;
 
     bounds.push({
         layer,
@@ -2239,7 +2239,7 @@ export class GameMap {
         // building and structure specific code
         // to add the building bounds
 
-        const boundScale = def.type == "building" || def.type == "structure" ? 1.15 : 1.0;
+        const boundScale = def.type == "building" || def.type == "structure" ? 1.12 : 1.0;
         const bounds = [
             collider.transform(
                 mapHelpers.getBoundingCollider(mapObj.type),
