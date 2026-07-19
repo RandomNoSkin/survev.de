@@ -290,8 +290,8 @@ export const Comp: MapDef = {
             { name: "colt45", count: 1, weight: 0.15 },
         ],
         tier_crab: [
-            { name: "model94", count: 1, weight: 0.6 },
-            { name: "", count: 1, weight: 0.4 },
+            { name: "model94", count: 1, weight: 0.7 },
+            { name: "", count: 1, weight: 0.3 },
         ],
         tier_spas_hut: [
             { name: "spas12", count: 1, weight: 0.66 },
