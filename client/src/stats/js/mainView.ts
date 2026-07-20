@@ -1,11 +1,11 @@
 import $ from "jquery";
-import { MinGames } from "../../../../shared/constants";
-import { MapId } from "../../../../shared/defs/types/misc";
-import type { LeaderboardRequest } from "../../../../shared/types/stats";
-import { api } from "../../api";
-import { device } from "../../device";
-import { helpers } from "../../helpers";
-import type { App } from "./app";
+import { MinGames } from "../../../../shared/constants.ts";
+import { MapId } from "../../../../shared/gameConfig.ts";
+import type { LeaderboardRequest } from "../../../../shared/types/stats.ts";
+import { api } from "../../api.ts";
+import { device } from "../../device.ts";
+import { helpers } from "../../helpers.ts";
+import type { App } from "./app.ts";
 import leaderboard from "./templates/leaderboard.ejs";
 import leaderboardError from "./templates/leaderboardError.ejs";
 import loading from "./templates/loading.ejs";
@@ -56,8 +56,6 @@ export class MainView {
     );
 
     constructor(readonly app: App) {
-        this.app = app;
-
         this.el.find(".leaderboard-opt").change(() => {
             this.onChangedParams();
         });
@@ -71,11 +69,9 @@ export class MainView {
         //   interval: daily, weekly, alltime
         //   teamMode: solo, duo, squad
         //   maxCount: 10, 100
-        let type =
-            helpers.getParameterByName<LeaderboardRequest["type"]>("type") ||
-            "most_kills";
-        const interval =
-            helpers.getParameterByName<LeaderboardRequest["interval"]>("t") || "daily";
+        let type = helpers.getParameterByName<LeaderboardRequest["type"]>("type")
+            || "most_kills";
+        const interval = helpers.getParameterByName<LeaderboardRequest["interval"]>("t") || "daily";
         const teamMode = helpers.getParameterByName("team") || "solo";
         let mapId = helpers.getParameterByName("mapId") || DEFAULT_MAP_ID;
         // Fall back to the first allowed map if the URL points at a now-hidden one.
@@ -146,18 +142,11 @@ export class MainView {
         } else if (this.error || !this.data.data) {
             content = templates.leaderboardError({});
         } else {
-            const statName =
-                TypeToString[this.data.type as keyof typeof TypeToString] || "";
-            let minGames = MinGames[this.data.type as keyof typeof MinGames]
-                ? // @ts-expect-error go away
-                  MinGames[this.data.type][this.data.interval]
-                : 1;
-            minGames = minGames || 1;
+            const statName = TypeToString[this.data.type as keyof typeof TypeToString] || "";
 
             content = templates.leaderboard({
                 ...this.data,
                 statName: statName,
-                minGames: minGames,
             });
 
             // Set the select options
@@ -169,12 +158,12 @@ export class MainView {
             // Disable most kills option if 50v50 selected
             const factionMode = Number(this.data.mapId) == 3;
             if (factionMode) {
-                $('#leaderboard-type option[value="most_kills"]').attr(
+                $("#leaderboard-type option[value=\"most_kills\"]").attr(
                     "disabled",
                     "disabled",
                 );
             } else {
-                $('#leaderboard-type option[value="most_kills"]').removeAttr("disabled");
+                $("#leaderboard-type option[value=\"most_kills\"]").removeAttr("disabled");
             }
         }
 

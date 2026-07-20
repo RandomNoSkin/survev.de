@@ -1,5 +1,5 @@
 import { count, eq } from "drizzle-orm";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { UnlockDefs } from "../../../shared/defs/gameObjects/unlockDefs";
 import {
     type CosmeticStat,
@@ -44,7 +44,7 @@ export function getCachedCosmeticStats() {
 function allCosmeticTypes(): string[] {
     const out: string[] = [];
     for (const type in GameObjectDefs) {
-        const def = GameObjectDefs[type] as { type?: string };
+        const def = GameObjectDefs.typeToDefSafe(type) as { type?: string };
         if (def?.type && COSMETIC_TYPES.has(def.type)) out.push(type);
     }
     return out;

@@ -1,5 +1,5 @@
-import { math } from "../../shared/utils/math";
-import { type Vec2, v2 } from "../../shared/utils/v2";
+import { math } from "../../shared/utils/math.ts";
+import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 
 export default class Camera {
     m_pos = v2.create(0, 0);
@@ -64,7 +64,7 @@ export default class Camera {
 
     m_applyShake() {
         if (this.m_shakeEnabled) {
-            this.m_pos = v2.add(this.m_pos, v2.mul(v2.randomUnit(), this.m_shakeInt));
+            this.m_pos = v2.add(this.m_pos, v2.randomUnit(this.m_shakeInt));
         }
         this.m_shakeInt = 0;
     }

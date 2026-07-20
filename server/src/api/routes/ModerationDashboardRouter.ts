@@ -57,7 +57,7 @@ import {
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
-import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
+import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";

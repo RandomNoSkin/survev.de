@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import {
     type BulletDef,
     BulletDefs,
@@ -122,7 +122,7 @@ export class BulletBarn {
 
         this.newBullets.push(bullet);
 
-        const bulletDef = GameObjectDefs[params.bulletType] as BulletDef;
+        const bulletDef = GameObjectDefs.typeToDefSafe(params.bulletType) as BulletDef;
         if (bulletDef.addFlare) {
             this.game.planeBarn.addAirdrop(params.pos, true);
         }
@@ -201,7 +201,7 @@ export class Bullet {
         this.sentToClient = false;
         // this.serialized = false; // TODO: cache bullet serialization?
 
-        const bulletDef = GameObjectDefs[params.bulletType] as BulletDef;
+        const bulletDef = GameObjectDefs.typeToDefSafe(params.bulletType) as BulletDef;
 
         const variance = 1 + (params.varianceT ?? 1) * bulletDef.variance;
 
@@ -405,11 +405,11 @@ export class Bullet {
         }
 
         if (!this.alive && !this.reflected) {
-            const def = GameObjectDefs[this.bulletType] as BulletDef;
+            const def = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
 
             // Spawn projectiles if defined
             if (def.projType) {
-                const projDef = GameObjectDefs[def.projType] as ThrowableDef;
+                const projDef = GameObjectDefs.typeToDefSafe(def.projType) as ThrowableDef;
                 assert(
                     projDef.type === "throwable",
                     `Invalid projectile type: ${def.projType}`,
@@ -440,7 +440,7 @@ export class Bullet {
             }
 
             if (def.spawnBulletType) {
-                const spawnDef = GameObjectDefs[def.spawnBulletType] as BulletDef;
+                const spawnDef = GameObjectDefs.typeToDefSafe(def.spawnBulletType) as BulletDef;
                 assert(
                     spawnDef.type === "bullet",
                     `Invalid spawned bullet type: ${def.spawnBulletType}`,
@@ -660,7 +660,7 @@ export class Bullet {
                     break;
                 }
             } else if (obj.__type === ObjectType.Projectile) {
-                const projDef = GameObjectDefs[obj.type] as ThrowableDef;
+                const projDef = GameObjectDefs.typeToDefSafe(obj.type) as ThrowableDef;
                 if (
                     projDef?.proximityMine &&
                     obj.mineArmed &&
@@ -730,7 +730,7 @@ export class Bullet {
                 const obstacle = col.obj! as Obstacle;
                 const mapDef = MapObjectDefs[col.obstacleType!] as ObstacleDef;
 
-                const def = GameObjectDefs[this.bulletType] as BulletDef;
+                const def = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
                 // AP Obstacle Multiplier Buff
                 let obstacleMult = def.obstacleDamage;
                 if (this.apRounds) {
@@ -749,7 +749,7 @@ export class Bullet {
                 });
 
                 if (this.piercing && col.collidable && obstacle.destructible && !mapDef.reflectBullets) {
-                    const def = GameObjectDefs[this.bulletType] as BulletDef;
+                    const def = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
                     const pierceDamageMult = def.pierceDamageMult ?? 0.5;
                     const pierceDistanceMult = def.pierceDistanceMult ?? 0.5;
                     const remainingDistance = this.distance - this.distanceTraveled;
@@ -807,7 +807,7 @@ export class Bullet {
                         multiplier *= 1.25;
                     }
 
-                    const bulletDef = GameObjectDefs[this.bulletType] as BulletDef;
+                    const bulletDef = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
                     const isSourceTeammate =
                         !!player && player.teamId === col.player!.teamId;
 

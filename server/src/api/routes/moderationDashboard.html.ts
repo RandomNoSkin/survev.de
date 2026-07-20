@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
     _allowedCrosshairs,
@@ -31,7 +31,7 @@ const COSMETIC_CATALOG = {
 const COSMETIC_NAMES: Record<string, string> = {};
 for (const types of Object.values(COSMETIC_CATALOG)) {
     for (const t of types) {
-        COSMETIC_NAMES[t] = (GameObjectDefs[t] as { name?: string })?.name || t;
+        COSMETIC_NAMES[t] = (GameObjectDefs.typeToDefSafe(t) as { name?: string })?.name || t;
     }
 }
 

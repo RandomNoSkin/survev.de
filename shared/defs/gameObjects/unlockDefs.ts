@@ -1,6 +1,6 @@
-import { CrosshairDefs } from "./crosshairDefs";
-import { DeathEffectDefs } from "./deathEffectDefs";
-import { HealEffectDefs } from "./healEffectDefs";
+import { CrosshairDefs } from "./crosshairDefs.ts";
+import { DeathEffectDefs } from "./deathEffectDefs.ts";
+import { HealEffectDefs } from "./healEffectDefs.ts";
 
 export const _allowedHealEffects = Object.keys(HealEffectDefs);
 export const _allowedCrosshairs = Object.keys(CrosshairDefs);
@@ -171,6 +171,7 @@ export const _allowedEmotes = [
     "emote_thumbsup",
     "emote_sadface",
     "emote_happyface",
+    "emote_boffy",
     "emote_surviv",
     "emote_gg",
     "emote_question",
@@ -246,6 +247,7 @@ export const _allowedEmotes = [
     "emote_sunglassface",
     "emote_headshotface",
     "emote_potato",
+    "emote_tomato",
     "emote_leek",
     "emote_eggplant",
     "emote_baguette",
@@ -263,6 +265,9 @@ export const _allowedEmotes = [
     "emote_flagtrinidad",
     "emote_flaguruguay",
     "emote_flagpalestine",
+    "emote_flagiran",
+    "emote_flaglebanon",
+    "emote_flagyemen",
     "emote_logoconch",
     "emote_pineapple",
     "emote_coconut",
@@ -282,6 +287,7 @@ export const _allowedEmotes = [
     "emote_donut",
     "emote_logohatchet",
     "emote_acorn",
+    "emote_leaf",
     "emote_trunk",
     "emote_forest",
     "emote_pumpkin",
@@ -384,6 +390,7 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_thumbsup",
             "emote_sadface",
             "emote_happyface",
+            "emote_boffy",
             "emote_surviv",
             "emote_gg",
             "emote_question",
@@ -458,6 +465,7 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_sunglassface",
             "emote_headshotface",
             "emote_potato",
+            "emote_tomato",
             "emote_leek",
             "emote_eggplant",
             "emote_baguette",
@@ -493,6 +501,7 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_donut",
             "emote_logohatchet",
             "emote_acorn",
+            "emote_leaf",
             "emote_trunk",
             "emote_forest",
             "emote_pumpkin",
@@ -515,20 +524,22 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_flaguae",
             "emote_flagdominicanrepublic",
             "emote_flagpalestine",
+            "emote_flagiran",
+            "emote_flaglebanon",
+            "emote_flagyemen",
             "emote_flagtransgender",
             "emote_flagpride",
             "emote_flaglesbian",
             "emote_flaggay",
             "emote_flagasexual",
             "emote_flagnonbinary",
+            "emote_flagbisexual",
             "emote_flaglibya",
             "emote_flagbosnia",
             "emote_logocloud",
             "emote_logotwins",
             "death_none",
-            "death_basic"
-
-            
+            "death_basic",
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,

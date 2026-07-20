@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ExplosionDef } from "../../../../shared/defs/gameObjects/explosionsDefs";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
@@ -31,7 +31,7 @@ export class ExplosionBarn {
     }
 
     explode(explosion: Explosion) {
-        const def = GameObjectDefs[explosion.type] as ExplosionDef;
+        const def = GameObjectDefs.typeToDefSafe(explosion.type) as ExplosionDef;
 
         if (def.decalType) {
             this.game.decalBarn.addDecal(
@@ -109,7 +109,7 @@ export class ExplosionBarn {
             }
         }
 
-        const bulletDef = GameObjectDefs[def.shrapnelType];
+        const bulletDef = GameObjectDefs.typeToDefSafe(def.shrapnelType);
         if (bulletDef && bulletDef.type === "bullet") {
             for (let i = 0, count = def.shrapnelCount ?? 0; i < count; i++) {
                 this.game.bulletBarn.fireBullet({
@@ -132,7 +132,7 @@ export class ExplosionBarn {
         for (const proj of this.game.projectileBarn.projectiles) {
             if (proj.dead || proj.mineTriggered || !proj.mineArmed) continue;
             if (!util.sameLayer(proj.layer, explosion.layer)) continue;
-            const projDef = GameObjectDefs[proj.type] as ThrowableDef;
+            const projDef = GameObjectDefs.typeToDefSafe(proj.type) as ThrowableDef;
             if (!projDef.proximityMine) continue;
             if (v2.distance(explosion.pos, proj.pos) <= projDef.proximityMine.triggerRad) {
                 proj.triggerMine();
@@ -143,7 +143,7 @@ export class ExplosionBarn {
     damageObject(explosion: Explosion, collision: LineCollision) {
         const dist = collision.distance;
         const obj = collision.obj;
-        const def = GameObjectDefs[explosion.type] as ExplosionDef;
+        const def = GameObjectDefs.typeToDefSafe(explosion.type) as ExplosionDef;
 
         if (obj.__type === ObjectType.Loot) {
             obj.push(
@@ -222,7 +222,7 @@ export class ExplosionBarn {
         damageParams: Omit<DamageParams, "damage" | "dir">,
         ignoreObstacleId?: number,
     ) {
-        const def = GameObjectDefs[type];
+        const def = GameObjectDefs.typeToDefSafe(type);
         assert(def.type === "explosion", `Invalid explosion with type ${type}`);
 
         const explosion: Explosion = {

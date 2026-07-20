@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { MapDefs } from "../defs/mapDefs";
-import type { TeamMode } from "../gameConfig";
+import type { MapDefKey } from "../defs/mapDefs.ts";
+import type { TeamMode } from "../gameConfig.ts";
 
 export const zFindGameBody = z.object({
     region: z.string(),
@@ -25,12 +25,26 @@ export interface FindGameMatchData {
     spectator?: boolean;
 }
 
+export const loadoutSchema = z.object({
+    outfit: z.string(),
+    melee: z.string(),
+    heal: z.string(),
+    boost: z.string(),
+    player_icon: z.string(),
+    crosshair: z.object({
+        type: z.string(),
+        color: z.number(),
+        size: z.string(),
+        stroke: z.string(),
+    }),
+    emotes: z.array(z.string()).length(6),
+});
+
 export type FindGameError =
     | "invalid_ip"
     | "find_game_failed"
     | "mode_disabled"
     | "invalid_region"
-    | "failed_to_parse_body"
     | "full"
     | "invalid_protocol"
     | "join_game_failed"
@@ -45,26 +59,26 @@ export type FindGameError =
 
 export type FindGameResponse =
     | {
-          res: FindGameMatchData[];
-          error?: undefined;
+        res: FindGameMatchData[];
+        error?: undefined;
 
-          banned?: undefined;
-      }
+        banned?: undefined;
+    }
     | {
-          error: FindGameError;
+        error: FindGameError;
 
-          res?: undefined;
-          banned?: undefined;
-      }
+        res?: undefined;
+        banned?: undefined;
+    }
     | {
-          banned: true;
-          reason: string;
-          permanent: boolean;
-          expiresIn: Date | string;
+        banned: true;
+        reason: string;
+        permanent: boolean;
+        expiresIn: Date | string;
 
-          res?: undefined;
-          error?: undefined;
-      };
+        res?: undefined;
+        error?: undefined;
+    };
 
 export interface SiteInfoRes {
     country: string;
@@ -83,7 +97,7 @@ export interface SiteInfoRes {
             enabled: boolean;
         }>
     >;
-    clientTheme: keyof typeof MapDefs;
+    clientTheme: MapDefKey;
     pops: Record<
         string,
         {

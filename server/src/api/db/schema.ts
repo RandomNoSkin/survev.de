@@ -16,8 +16,8 @@ import {
     uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
-import { TeamMode } from "../../../../shared/gameConfig";
-import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout";
+import { TeamMode } from "../../../../shared/gameConfig.ts";
+import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
 export const sessionTable = pgTable("session", {
     id: text("id").primaryKey(),
@@ -320,6 +320,7 @@ export const matchDataTable = pgTable(
             .$type<string[]>()
             .notNull()
             .default([]),
+        role: text("role").notNull().default(""),
         teamMode: integer("team_mode").$type<TeamMode>().notNull(),
         teamCount: integer("team_count").notNull(),
         teamTotal: integer("team_total").notNull(),

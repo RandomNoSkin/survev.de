@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
     BUNDLE_DEATH_EFFECT_CHANCE,
@@ -31,7 +31,7 @@ import {
 
 /** Every shoppable cosmetic (def.shop === true). Static; used in the bundle pool. */
 const SHOP_POOL: string[] = Object.keys(GameObjectDefs).filter((type) => {
-    const def = GameObjectDefs[type] as { shop?: boolean };
+    const def = GameObjectDefs.typeToDefSafe(type) as { shop?: boolean };
     return def?.shop === true && getItemCategory(type) !== null;
 });
 

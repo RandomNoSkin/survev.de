@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import type { MapDef } from "../../../../shared/defs/mapDefs";
 import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
@@ -957,7 +957,7 @@ class AirStrikePlane extends Plane {
         if (this.bombCount >= config.bombCount) return;
 
         this.bombCount++;
-        const bombDef = GameObjectDefs["bomb_iron"] as ThrowableDef;
+        const bombDef = GameObjectDefs.typeToDefSafe("bomb_iron") as ThrowableDef;
         this.game.projectileBarn.addProjectile(
             this.playerId ?? 0, //0 means the projectile comes from the "game" itself not a player
             "bomb_iron",

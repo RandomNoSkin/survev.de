@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { gameViewRouter } from "./gameView";
-import { leaderboardRouter } from "./leaderboard";
-import { matchDataRouter } from "./match_data";
-import { matchHistoryRouter } from "./match_history";
-import { serverStatsRouter } from "./serverStats";
-import { UserLoadoutRouter } from "./user_loadout";
-import { UserStatsRouter } from "./user_stats";
+import { gameViewRouter } from "./gameView.ts";
+import { leaderboardRouter } from "./leaderboard.ts";
+import { matchDataRouter } from "./match_data.ts";
+import { matchHistoryRouter } from "./match_history.ts";
+import { serverStatsRouter } from "./serverStats.ts";
+import { UserLoadoutRouter } from "./user_loadout.ts";
+import { UserStatsRouter } from "./user_stats.ts";
 
 export const StatsRouter = new Hono();
 

@@ -1,12 +1,9 @@
-import { MapId, TeamModeToString } from "../../../../shared/defs/types/misc";
-import type {
-    LeaderboardRequest,
-    LeaderboardResponse,
-} from "../../../../shared/types/stats";
-import { Config } from "../../config";
-import { server } from "../apiServer";
-import type { MatchDataTable } from "../db/schema";
-import { getRedisClient } from ".";
+import { GameConfig } from "../../../../shared/gameConfig.ts";
+import type { LeaderboardRequest, LeaderboardResponse } from "../../../../shared/types/stats.ts";
+import { Config } from "../../config.ts";
+import { server } from "../apiServer.ts";
+import type { MatchDataTable } from "../db/schema.ts";
+import { getRedisClient } from "./index.ts";
 
 const SIX_MINUTES_CACHE_TTL = 360;
 const ONE_DAY_CACHE_TTL = 86400;
@@ -42,16 +39,17 @@ class LeaderBoardCache {
         const cacheKey = this.getCacheKey("leaderboard", params);
         await client.del(cacheKey);
 
-        if (params.type === "most_damage_dealt" || params.type === "most_kills")
+        if (params.type === "most_damage_dealt" || params.type === "most_kills") {
             await client.del(this.getCacheKey("lowestscore", params));
+        }
 
         return true;
     }
 
     getCacheKey(prefix: Prefix, params: LeaderboardRequest) {
         const { teamMode, mapId, type, interval } = params;
-        const mapName = MapId[mapId].toLowerCase();
-        return `${prefix}:${TeamModeToString[teamMode]}:${mapName}:${type}:${interval}`;
+        const mapName = GameConfig.MapId[mapId].toLowerCase();
+        return `${prefix}:${GameConfig.TeamModeToString[teamMode]}:${mapName}:${type}:${interval}`;
     }
 
     async invalidateCache(matchData: MatchDataTable[]) {
@@ -84,10 +82,11 @@ class LeaderBoardCache {
                 );
 
                 if (
-                    lowestLeaderboardValue == null ||
-                    maxGameValue < parseInt(lowestLeaderboardValue)
-                )
+                    lowestLeaderboardValue == null
+                    || maxGameValue < parseInt(lowestLeaderboardValue)
+                ) {
                     continue;
+                }
 
                 const leaderboardCacheKey = leaderboardCache.getCacheKey(
                     "leaderboard",

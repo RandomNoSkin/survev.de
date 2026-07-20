@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
 import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
@@ -381,7 +381,7 @@ export class Obstacle extends BaseGameObject {
             let stonePiercing = false;
 
             if (params.gameSourceType) {
-                const sourceDef = GameObjectDefs[params.gameSourceType] as
+                const sourceDef = GameObjectDefs.typeToDefSafe(params.gameSourceType) as
                     | {
                           armorPiercing?: boolean;
                           stonePiercing?: boolean;

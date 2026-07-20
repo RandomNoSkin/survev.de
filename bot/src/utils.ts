@@ -8,9 +8,9 @@ import type {
 } from "discord.js";
 import { MessageFlags, PermissionFlagsBits } from "discord.js";
 import { hc } from "hono/client";
-import type { PrivateRouteApp } from "../../server/src/api/routes/private/private";
-import { Logger } from "../../shared/utils/logger";
-import { API_URL, Config, DISCORD_GUILD_ID, DISCORD_ROLE_ID } from "./config";
+import type { PrivateRouteApp } from "../../server/src/api/routes/private/private.ts";
+import { Logger } from "../../shared/utils/logger.ts";
+import { API_URL, Config, DISCORD_GUILD_ID, DISCORD_ROLE_ID } from "./config.ts";
 
 // we love enums
 export const enum Command {
@@ -32,6 +32,10 @@ export const enum Command {
     WhoIs = "who_is",
     ChatBanIp = "chat_ban_ip",
     ChatUnbanIp = "chat_unban_ip",
+    ResetPass = "reset_pass",
+    GiveXp = "give_xp",
+    LogoutFromGame = "logout_from_game",
+    ResetStats = "reset_stats",
 }
 
 export const honoClient = hc<PrivateRouteApp>(API_URL, {

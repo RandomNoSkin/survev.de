@@ -13,7 +13,7 @@ import {
 } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
 import { mapDef } from "../../../../../shared/defs/maps/2v2Defs";
-import { MapId } from "../../../../../shared/defs/types/misc";
+import { MapId } from "../../../../../shared/gameConfig.ts";
 import { ExperienceConverter, GameConfig } from "../../../../../shared/gameConfig";
 import {
     type AckAuctionsResponse,

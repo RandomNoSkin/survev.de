@@ -50,7 +50,7 @@ const svgPaths = Object.keys(MAX_SIZES)
         return !IGNORED_SVGS.some((i) => p.endsWith(i));
     });
 
-function checkNode(path: string, node: svgParser.ElementNode): void {
+function checkNode(node: svgParser.ElementNode): void {
     if (!node) return;
 
     switch (node.tagName) {
@@ -83,14 +83,14 @@ function checkNode(path: string, node: svgParser.ElementNode): void {
     for (const child of node.children) {
         if (typeof child === "string") continue;
         if (child.type === "text") continue;
-        checkNode(path, child);
+        checkNode(child);
     }
 }
 
 test.for(svgPaths)("Testing SVG %s", (path) => {
     const stats = fs.statSync(path);
 
-    const baseDir = path.split("/").at(-2)!;
+    const baseDir = path.split(npath.sep).at(-2)!;
 
     let maxSize = MAX_SIZES[baseDir];
 
@@ -107,6 +107,6 @@ test.for(svgPaths)("Testing SVG %s", (path) => {
     for (const node of rootNode.children) {
         if (typeof node === "string") continue;
         if (node.type === "text") continue;
-        checkNode(path, node);
+        checkNode(node);
     }
 });

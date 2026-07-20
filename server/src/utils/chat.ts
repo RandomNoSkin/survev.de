@@ -7,7 +7,7 @@ import { chatLogger } from "./betterLogger";
 import { apiPrivateRouter, checkForBadWords } from "./serverHelpers";
 import { Config } from "../config";
 import { hashIp, getActiveChatBan } from "../api/routes/private/ModerationRouter";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { db } from "../api/db";
 import { chatLogsTable, usersTable } from "../api/db/schema";
 
@@ -347,7 +347,7 @@ export class Chat{
         give: (args) => {
             const itemName = args[0];
             const amount = Number(args[1]) || 1;
-            if(GameObjectDefs[itemName]){
+            if(GameObjectDefs.typeToDefSafe(itemName)){
                 this.game.lootBarn.addLoot(itemName, this.player.pos, this.player.layer, amount, false, 0);
             }
         },

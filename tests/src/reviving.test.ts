@@ -1,14 +1,15 @@
 import { expect, test } from "vitest";
-import { GameConfig, TeamMode } from "../../shared/gameConfig";
-import { InputMsg } from "../../shared/net/inputMsg";
-import { v2 } from "../../shared/utils/v2";
-import { createGame } from "./gameTestHelpers";
+import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
+import { InputMsg } from "../../shared/net/inputMsg.ts";
+import { v2 } from "../../shared/utils/v2.ts";
+import { createGame } from "./gameTestHelpers.ts";
+import "./testHelpers.ts";
 
 // + 0.1 to account for off by one tick on the timer system lol
 const reviveDur = GameConfig.player.reviveDuration + 0.1;
 
-test("Solo self revive", async () => {
-    const game = await createGame(TeamMode.Solo, "test_normal");
+test("Solo self revive", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
 
     const player = game.playerBarn.addTestPlayer({});
     player.addPerk("self_revive");
@@ -34,8 +35,8 @@ test("Solo self revive", async () => {
 // Normal mode squad tests
 //
 
-test("Normal 2 players successful revive", async () => {
-    const game = await createGame(TeamMode.Squad, "test_normal");
+test("Normal 2 players successful revive", () => {
+    const game = createGame(TeamMode.Squad, "test_normal");
 
     const group = game.playerBarn.addGroup(false);
     const playerA = game.playerBarn.addTestPlayer({ group });
@@ -51,7 +52,7 @@ test("Normal 2 players successful revive", async () => {
     const msg = new InputMsg();
     msg.addInput(GameConfig.Input.Interact);
     playerA.handleInput(msg);
-    expect(playerA.playerBeingRevived).toBe(playerB);
+    expect(playerA.playerBeingRevived).toBeSamePlayer(playerB);
 
     game.step(reviveDur);
 
@@ -59,8 +60,8 @@ test("Normal 2 players successful revive", async () => {
     expect(playerB.dead).toBeFalsy();
 });
 
-test("Normal player bleed out", async () => {
-    const game = await createGame(TeamMode.Squad, "test_normal");
+test("Normal player bleed out", () => {
+    const game = createGame(TeamMode.Squad, "test_normal");
 
     const group = game.playerBarn.addGroup(false);
     game.playerBarn.addTestPlayer({ group });
@@ -80,8 +81,8 @@ test("Normal player bleed out", async () => {
     expect(playerB.dead).toBeTruthy();
 });
 
-test("Normal all teammates should die", async () => {
-    const game = await createGame(TeamMode.Squad, "test_normal");
+test("Normal all teammates should die", () => {
+    const game = createGame(TeamMode.Squad, "test_normal");
 
     const group = game.playerBarn.addGroup(false);
     const playerA = game.playerBarn.addTestPlayer({ group });
@@ -113,8 +114,8 @@ test("Normal all teammates should die", async () => {
     expect(playerC.dead).toBeTruthy();
 });
 
-test("Normal medic reviving multiple players", async () => {
-    const game = await createGame(TeamMode.Squad, "test_normal");
+test("Normal medic reviving multiple players", () => {
+    const game = createGame(TeamMode.Squad, "test_normal");
 
     const group = game.playerBarn.addGroup(false);
     const medic = game.playerBarn.addTestPlayer({ group });
@@ -140,7 +141,7 @@ test("Normal medic reviving multiple players", async () => {
     const msg = new InputMsg();
     msg.addInput(GameConfig.Input.Interact);
     medic.handleInput(msg);
-    expect(medic.playerBeingRevived).toBe(playerB);
+    expect(medic.playerBeingRevived).toBeSamePlayer(playerB);
 
     game.step(reviveDur);
 
@@ -155,8 +156,8 @@ test("Normal medic reviving multiple players", async () => {
 // Faction mode tests
 //
 
-test("Faction 2 players successful revive", async () => {
-    const game = await createGame(TeamMode.Squad, "test_faction");
+test("Faction 2 players successful revive", () => {
+    const game = createGame(TeamMode.Squad, "test_faction");
 
     const team = game.playerBarn.addTeam(1);
     const playerA = game.playerBarn.addTestPlayer({ team });
@@ -172,7 +173,7 @@ test("Faction 2 players successful revive", async () => {
     const msg = new InputMsg();
     msg.addInput(GameConfig.Input.Interact);
     playerA.handleInput(msg);
-    expect(playerA.playerBeingRevived).toBe(playerB);
+    expect(playerA.playerBeingRevived).toBeSamePlayer(playerB);
 
     game.step(reviveDur);
 
@@ -180,8 +181,8 @@ test("Faction 2 players successful revive", async () => {
     expect(playerB.dead).toBeFalsy();
 });
 
-test("Faction player bleed out", async () => {
-    const game = await createGame(TeamMode.Squad, "test_faction");
+test("Faction player bleed out", () => {
+    const game = createGame(TeamMode.Squad, "test_faction");
 
     const team = game.playerBarn.addTeam(1);
     game.playerBarn.addTestPlayer({ team });
@@ -200,8 +201,8 @@ test("Faction player bleed out", async () => {
     expect(playerB.dead).toBeTruthy();
 });
 
-test("Faction all teammates should die", async () => {
-    const game = await createGame(TeamMode.Squad, "test_faction");
+test("Faction all teammates should die", () => {
+    const game = createGame(TeamMode.Squad, "test_faction");
 
     const team = game.playerBarn.addTeam(1);
     const playerA = game.playerBarn.addTestPlayer({ team });
@@ -233,8 +234,8 @@ test("Faction all teammates should die", async () => {
     expect(playerC.dead).toBeTruthy();
 });
 
-test("Faction self revive tests", async () => {
-    const game = await createGame(TeamMode.Squad, "test_faction");
+test("Faction self revive tests", () => {
+    const game = createGame(TeamMode.Squad, "test_faction");
 
     const team = game.playerBarn.addTeam(1);
     const playerA = game.playerBarn.addTestPlayer({ team });
@@ -284,8 +285,8 @@ test("Faction self revive tests", async () => {
     expect(playerC.dead).toBeTruthy();
 });
 
-test("Faction medic reviving multiple players", async () => {
-    const game = await createGame(TeamMode.Squad, "test_faction");
+test("Faction medic reviving multiple players", () => {
+    const game = createGame(TeamMode.Squad, "test_faction");
 
     const team = game.playerBarn.addTeam(1);
     const medic = game.playerBarn.addTestPlayer({ team });
@@ -311,7 +312,7 @@ test("Faction medic reviving multiple players", async () => {
     const msg = new InputMsg();
     msg.addInput(GameConfig.Input.Interact);
     medic.handleInput(msg);
-    expect(medic.playerBeingRevived).toBe(playerB);
+    expect(medic.playerBeingRevived).toBeSamePlayer(playerB);
 
     game.step(reviveDur);
 

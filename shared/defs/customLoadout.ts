@@ -1,5 +1,5 @@
 import { GameConfig, type InventoryItem } from "../gameConfig";
-import { GameObjectDefs } from "./gameObjectDefs";
+import { GameObjectDefs } from "./register.ts";
 import { type GunDef, GunDefs } from "./gameObjects/gunDefs";
 import { MeleeDefs } from "./gameObjects/meleeDefs";
 import { PerkDefs } from "./gameObjects/perkDefs";
@@ -57,10 +57,10 @@ export const DEFAULT_CUSTOM_LOADOUT: CustomLoadoutConfig = {
 };
 
 export const CUSTOM_LOADOUT_GUNS = Object.keys(GunDefs).filter(
-    (k) => GameObjectDefs[k]?.type === "gun",
+    (k) => GameObjectDefs.typeToDefSafe(k)?.type === "gun",
 );
 export const CUSTOM_LOADOUT_MELEES = Object.keys(MeleeDefs).filter(
-    (k) => GameObjectDefs[k]?.type === "melee" && !_allowedMeleeSkins.includes(k),
+    (k) => GameObjectDefs.typeToDefSafe(k)?.type === "melee" && !_allowedMeleeSkins.includes(k),
 );
 export const CUSTOM_LOADOUT_GRENADES = [
     "frag",
@@ -89,7 +89,7 @@ export const CUSTOM_LOADOUT_AMMOS = [
     "flare",
 ] as const;
 export const CUSTOM_LOADOUT_PERKS = Object.keys(PerkDefs).filter(
-    (k) => GameObjectDefs[k]?.type === "perk",
+    (k) => GameObjectDefs.typeToDefSafe(k)?.type === "perk",
 );
 
 const CUSTOM_LOADOUT_INVENTORY_ITEMS: readonly string[] = [
@@ -111,7 +111,7 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
         const type = input.weapons?.[i] ?? "";
         if (!type) return "";
         if (i === 2) return CUSTOM_LOADOUT_MELEES.includes(type) ? type : "";
-        return GameObjectDefs[type]?.type === weaponCategories[i] ? type : "";
+        return GameObjectDefs.typeToDefSafe(type)?.type === weaponCategories[i] ? type : "";
     }) as [string, string, string, string];
 
     const helmet = CUSTOM_LOADOUT_HELMETS.includes(input.helmet ?? "") ? (input.helmet ?? "") : "";

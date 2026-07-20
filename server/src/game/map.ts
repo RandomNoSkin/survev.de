@@ -6,7 +6,7 @@ import type {
     ObstacleDef,
     StructureDef,
 } from "../../../shared/defs/mapObjectsTyping";
-import type { MapId } from "../../../shared/defs/types/misc";
+import type { MapId } from "../../../shared/gameConfig.ts";
 import { GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import { MsgStream, MsgType } from "../../../shared/net/net";

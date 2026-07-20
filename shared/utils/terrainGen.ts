@@ -1,9 +1,9 @@
-import { GameConfig } from "../gameConfig";
-import type { AABB } from "./coldet";
-import { collider } from "./collider";
-import { River } from "./river";
-import { util } from "./util";
-import { type Vec2, v2 } from "./v2";
+import { GameConfig } from "../gameConfig.ts";
+import type { AABB } from "./coldet.ts";
+import { collider } from "./collider.ts";
+import { River } from "./river.ts";
+import { util } from "./util.ts";
+import { v2, type Vec2 } from "./v2.ts";
 
 export interface MapRiverData {
     width: number;
@@ -52,6 +52,25 @@ export function generateJaggedAabbPoints(
         points.push(v2.create(ul.x + rand(-variation, variation), ul.y - spanY * i));
     }
 
+    return points;
+}
+
+export function generateJaggedCirclePoints(
+    center: Vec2,
+    radius: number,
+    divisions: number,
+    variation: number,
+    rand: (typeof util)["random"],
+) {
+    const points: Vec2[] = [];
+    for (let i = 0; i < divisions; i++) {
+        const angle = (i / divisions) * Math.PI * 2;
+        const r = radius + rand(-variation, variation);
+        points.push(v2.create(
+            center.x + Math.cos(angle) * r,
+            center.y + Math.sin(angle) * r,
+        ));
+    }
     return points;
 }
 

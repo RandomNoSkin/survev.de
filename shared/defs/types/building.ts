@@ -1,6 +1,7 @@
-import type { AABB, Collider } from "../../utils/coldet";
-import type { Vec2 } from "../../utils/v2";
-import type { TerrainSpawnDef } from "../mapObjectsTyping";
+import type { FactionTeam } from "../../gameConfig.ts";
+import type { AABB, Collider } from "../../utils/coldet.ts";
+import type { Vec2 } from "../../utils/v2.ts";
+import type { TerrainSpawnDef } from "../mapObjectsTyping.ts";
 
 export interface BuildingDef {
     readonly type: "building";
@@ -61,6 +62,7 @@ export interface BuildingDef {
         ignoreMapSpawnReplacement?: boolean;
         inheritOri?: boolean;
         puzzlePiece?: string;
+        layer?: number;
     }>;
     porch_01?: string;
     stand?: string;
@@ -99,7 +101,7 @@ export interface BuildingDef {
     botRightObs?: string;
     ignoreMapSpawnReplacement?: boolean;
     mapGroundPatches?: Array<{
-        bound: AABB;
+        bound: Collider;
         color: number;
         order?: number;
         roughness?: number;
@@ -161,7 +163,7 @@ export interface BuildingDef {
         alpha: number;
         tint: number;
     }>;
-    group?:{
+    group?: {
         id: number;
         minDistance?: number;
         noSpawnRadius?: number;

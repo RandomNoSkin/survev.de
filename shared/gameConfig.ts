@@ -1,16 +1,22 @@
-export enum TeamMode {
-    Solo = 1,
-    Duo = 2,
-    Squad = 4,
+export enum Action {
+    None,
+    Reload,
+    ReloadAlt,
+    UseItem,
+    Revive,
+    Count,
+    InstantRevive,
+    Modify,
 }
 
-export enum EmoteSlot {
-    Top,
-    Right,
-    Bottom,
-    Left,
-    Win,
-    Death,
+export enum Anim {
+    None,
+    Melee,
+    Cook,
+    Throw,
+    CrawlForward,
+    CrawlBackward,
+    Revive,
     Count,
 }
 
@@ -27,33 +33,16 @@ export enum DamageType {
     Disconnect,
     KillSteal,
     FriendlyKillSteal,
+    SupplyDrop,
 }
 
-export enum Action {
-    None,
-    Reload,
-    ReloadAlt,
-    UseItem,
-    Revive,
-    Count,
-    InstantRevive,
-    Modify,
-}
-
-export enum Rarity {
-    Stock,
-    Common, // 100 - 150
-    Uncommon, // 50 - 100
-    Rare, // 25 - 50
-    Epic, // 10 - 25
-    Mythic, //0-10
-}
-
-export enum WeaponSlot {
-    Primary,
-    Secondary,
-    Melee,
-    Throwable,
+export enum EmoteSlot {
+    Top,
+    Right,
+    Bottom,
+    Left,
+    Win,
+    Death,
     Count,
 }
 
@@ -61,23 +50,6 @@ export enum GasMode {
     Inactive,
     Waiting,
     Moving,
-}
-
-export enum Anim {
-    None,
-    Melee,
-    Cook,
-    Throw,
-    CrawlForward,
-    CrawlBackward,
-    Revive,
-    Count,
-}
-
-export enum Plane {
-    Airdrop,
-    Airstrike,
-    SupplyDrop,
 }
 
 export enum HasteType {
@@ -166,22 +138,86 @@ export enum Input {
     Count,
 }
 
+export enum MapId {
+    Main = 0,
+    Desert = 1,
+    Woods = 2,
+    Faction = 3,
+    Potato = 4,
+    Savannah = 5,
+    Halloween = 6,
+    Cobalt = 7,
+    Birthday = 8,
+    Beach = 9,
+    TwoVsTwo = 10,
+    FourVsFour = 11,
+    Comp = 12,
+    Scrims = 13,
+    CompDuo = 14,
+    CompSolo = 15,
+    Local = 16,
+    Custom = 17,
+}
+
+export enum Plane {
+    Airdrop,
+    Airstrike,
+    SupplyDrop,
+}
+
+export enum WeaponSlot {
+    Primary,
+    Secondary,
+    Melee,
+    Throwable,
+    Count,
+}
+
+export enum Rarity {
+    Stock,
+    Common,
+    Uncommon,
+    Rare,
+    Epic,
+    Mythic,
+}
+
+export enum TeamMode {
+    Solo = 1,
+    Duo = 2,
+    Squad = 4,
+}
+
+export enum FactionTeam {
+    Red = 1,
+    Blue = 2,
+}
+
 export const GameConfig = {
     // started with 1000 to distinguish us from the original surviv protocol
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1023,
-    Input,
-    EmoteSlot,
-    WeaponSlot,
-    WeaponType: ["gun", "gun", "melee", "throwable"] as const,
-    DamageType,
+    protocolVersion: 1024,
     Action,
     Anim,
+    DamageType,
+    EmoteSlot,
     GasMode,
-    Plane,
     HasteType,
+    Input,
+    MapId,
+    Plane,
+    Rarity,
+    TeamMode,
+    TeamModeToString: {
+        [TeamMode.Solo]: "solo",
+        [TeamMode.Duo]: "duo",
+        [TeamMode.Squad]: "squad",
+    },
+    FactionTeam,
+    WeaponSlot,
+    WeaponType: ["gun", "gun", "melee", "throwable"] as const,
     gas: {
         damageTickRate: 2,
         damageRampDuration: 90,
@@ -406,6 +442,7 @@ export const GameConfig = {
                 mirv: 0,
                 snowball: 0,
                 potato: 0,
+                tomato: 0,
                 coconut: 0,
                 dynamite: 0,
                 mine: 0,
@@ -558,7 +595,11 @@ export const GameConfig = {
             chambered: 0x333333,
             apSaturated: 0x333333,
         },
-        shrapnel: { regular: 0x333333, saturated: 0x333333 },
+        shrapnel: {
+            regular: 0x333333,
+            saturated: 0x333333,
+            chambered: 0x660900,
+        },
         frag: { regular: 0xcb0000, saturated: 0xcb0000, apSaturated: 0xcb0000 },
         invis: { regular: 0, saturated: 0, chambered: 0, apSaturated: 0 },
     },
@@ -594,6 +635,7 @@ export const GameConfig = {
         mirv: [2, 4, 6, 8],
         snowball: [10, 20, 30, 40],
         potato: [10, 20, 30, 40],
+        tomato: [10, 20, 30, 40],
         coconut: [3, 6, 9, 12],
         dynamite: [6, 9, 12, 15],
         mine: [2, 3, 4, 5],
@@ -625,3 +667,5 @@ export const GameConfig = {
 };
 
 export type InventoryItem = keyof (typeof GameConfig)["bagSizes"];
+
+export const TeamModeToString = GameConfig.TeamModeToString;

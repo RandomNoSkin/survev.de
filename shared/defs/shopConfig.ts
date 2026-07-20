@@ -1,6 +1,6 @@
 import { Rarity } from "../gameConfig";
 import { cosmeticStats } from "../utils/cosmeticStats";
-import { GameObjectDefs } from "./gameObjectDefs";
+import { GameObjectDefs } from "./register.ts";
 import {
     _allowedCrosshairs,
     _allowedDeathEffects,
@@ -129,7 +129,7 @@ export function getMarketTotal(price: number): number {
 
 /** Maps an item type to its shop category, or null if it isn't a shoppable cosmetic. */
 export function getItemCategory(type: string): ShopCategory | null {
-    const def = GameObjectDefs[type];
+    const def = GameObjectDefs.typeToDefSafe(type);
     if (!def) return null;
     switch (def.type) {
         case "outfit":
@@ -156,7 +156,7 @@ export function getItemCategory(type: string): ShopCategory | null {
 export function getItemRarity(type: string): number {
     const stat = cosmeticStats.get(type);
     if (stat) return stat.rarity;
-    const def = GameObjectDefs[type] as { rarity?: number } | undefined;
+    const def = GameObjectDefs.typeToDefSafe(type) as { rarity?: number } | undefined;
     return def?.rarity ?? Rarity.Common;
 }
 

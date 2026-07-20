@@ -1,24 +1,16 @@
-import assert from "assert";
-import { EmotesDefs } from "../../shared/defs/gameObjects/emoteDefs";
-import { MeleeDefs } from "../../shared/defs/gameObjects/meleeDefs";
-import { OutfitDefs } from "../../shared/defs/gameObjects/outfitDefs";
-import { UnlockDefs } from "../../shared/defs/gameObjects/unlockDefs";
-import { GameConfig, type Input } from "../../shared/gameConfig";
-import * as net from "../../shared/net/net";
-import {
-    type ObjectData,
-    type ObjectsPartialData,
-    ObjectType,
-} from "../../shared/net/objectSerializeFns";
-import type { LocalData } from "../../shared/net/updateMsg";
-import type {
-    FindGameBody,
-    FindGameMatchData,
-    FindGameResponse,
-} from "../../shared/types/api";
-import { util } from "../../shared/utils/util";
-import { v2 } from "../../shared/utils/v2";
-import { Config } from "./config";
+import assert from "node:assert";
+import { EmotesDefs } from "../../shared/defs/gameObjects/emoteDefs.ts";
+import { MeleeDefs } from "../../shared/defs/gameObjects/meleeDefs.ts";
+import { OutfitDefs } from "../../shared/defs/gameObjects/outfitDefs.ts";
+import { UnlockDefs } from "../../shared/defs/gameObjects/unlockDefs.ts";
+import { GameConfig, type Input } from "../../shared/gameConfig.ts";
+import * as net from "../../shared/net/net.ts";
+import { type ObjectData, type ObjectsPartialData, ObjectType } from "../../shared/net/objectSerializeFns.ts";
+import type { LocalData } from "../../shared/net/updateMsg.ts";
+import type { FindGameBody, FindGameMatchData, FindGameResponse } from "../../shared/types/api.ts";
+import { util } from "../../shared/utils/util.ts";
+import { v2 } from "../../shared/utils/v2.ts";
+import { Config } from "./config.ts";
 
 const config = {
     address: Config.gameServer.apiServerUrl,
@@ -156,6 +148,8 @@ class Bot {
 
     weapons: LocalData["weapons"] = [];
 
+    connectPromise: Promise<void>;
+
     constructor(id: number, res: FindGameMatchData) {
         this.id = id;
 
@@ -166,9 +160,20 @@ class Bot {
 
         this.data = res.data;
 
-        this.ws.addEventListener("error", console.error);
-
-        this.ws.addEventListener("open", this.join.bind(this));
+        this.connectPromise = new Promise((resolve) => {
+            this.ws.addEventListener("error", (e) => {
+                console.error(`Bot ${this.id} websocket error:`, e);
+                // we dont actually care if it failed to connect
+                // because we dont want to prevent other bots from joining
+                // and retrying for a single bot feels pointless
+                // so dont reject the promise
+                resolve();
+            });
+            this.ws.addEventListener("open", () => {
+                this.join();
+                resolve();
+            });
+        });
 
         this.ws.addEventListener("close", () => {
             this.disconnect = true;
@@ -177,7 +182,7 @@ class Bot {
 
         this.ws.binaryType = "arraybuffer";
 
-        const emote = (): string => emotes[util.randomInt(0, emotes.length - 1)];
+        const emote = (): string => util.randomItem(emotes);
 
         this.emotes = [emote(), emote(), emote(), emote(), emote(), emote()];
 
@@ -253,11 +258,15 @@ class Bot {
                 const msg = new net.GameOverMsg();
                 msg.deserialize(stream);
                 console.log(
-                    `Bot ${this.id} ${msg.gameOver ? "won" : "died"} | kills: ${msg.playerStats[0].kills} | rank: ${msg.teamRank}`,
+                    `Bot ${this.id} ${msg.gameOver ? "won" : "died"} | kills: ${
+                        msg.playerStats[0].kills
+                    } | rank: ${msg.teamRank}`,
                 );
-                this.disconnect = true;
-                this.connected = false;
-                this.ws.close();
+                if (!msg.gameOver) {
+                    this.disconnect = true;
+                    this.connected = false;
+                    this.ws.close();
+                }
                 break;
             }
             case net.MsgType.Pickup: {
@@ -294,8 +303,8 @@ class Bot {
         joinMsg.protocol = GameConfig.protocolVersion;
 
         joinMsg.loadout = {
-            melee: melees[util.randomInt(0, melees.length - 1)],
-            outfit: outfits[util.randomInt(0, outfits.length - 1)],
+            melee: util.randomItem(melees),
+            outfit: util.randomItem(outfits),
             heal: "heal_basic",
             boost: "boost_basic",
             death_effect: "death_basic",
@@ -345,7 +354,7 @@ class Bot {
 
         if (this.emote) {
             const emoteMsg = new net.EmoteMsg();
-            emoteMsg.type = this.emotes[util.randomInt(0, this.emotes.length - 1)];
+            emoteMsg.type = util.randomItem(this.emotes);
         }
     }
 
@@ -394,7 +403,7 @@ class Bot {
 
         if (Math.random() < 0.1) {
             const weaps = this.weapons.filter((weap) => weap.type !== "");
-            const slot = this.weapons.indexOf(weaps[util.randomInt(0, weaps.length - 1)]);
+            const slot = this.weapons.indexOf(util.randomItem(weaps));
 
             let input = null;
             switch (slot) {
@@ -418,36 +427,6 @@ class Bot {
     }
 }
 
-void (() => {
-    for (let i = 1; i <= config.botCount; i++) {
-        setTimeout(async () => {
-            const response = (await (
-                await fetch(`${config.address}/api/find_game`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        region: config.region,
-                        autoFill: true,
-                        gameModeIdx: config.gameModeIdx,
-                        playerCount: 1,
-                        version: GameConfig.protocolVersion,
-                        zones: [config.region],
-                    } satisfies FindGameBody),
-                })
-            ).json()) as FindGameResponse;
-            if ("error" in response || "banned" in response) {
-                console.log("Failed finding game, error:", response.error);
-                return;
-            }
-
-            bots.add(new Bot(i, response.res[0]));
-            if (i === config.botCount) allBotsJoined = true;
-        }, i * config.joinDelay);
-    }
-})();
-
 setInterval(() => {
     for (const bot of bots) {
         if (Math.random() < 0.02) bot.updateInputs();
@@ -464,3 +443,40 @@ setInterval(() => {
         process.exit();
     }
 }, 30);
+
+for (let i = 1; i <= config.botCount; i++) {
+    const response = (await (
+        await fetch(`${config.address}/api/find_game`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(
+                {
+                    region: config.region,
+                    autoFill: true,
+                    gameModeIdx: config.gameModeIdx,
+                    playerCount: 1,
+                    version: GameConfig.protocolVersion,
+                    zones: [config.region],
+                } satisfies FindGameBody,
+            ),
+        })
+    ).json()) as FindGameResponse;
+    if ("error" in response || "banned" in response) {
+        console.log("Failed finding game, error:", response.error);
+        continue;
+    }
+
+    const bot = new Bot(i, response.res[0]);
+    bots.add(bot);
+
+    await Promise.all([
+        new Promise(resolve => {
+            setTimeout(resolve, config.joinDelay);
+        }),
+        bot.connectPromise,
+    ]);
+}
+
+allBotsJoined = true;

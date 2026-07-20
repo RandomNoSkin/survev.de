@@ -4,7 +4,7 @@ import type { Player } from "../game/objects/player";
 import { ObjectType } from "../../../shared/net/objectSerializeFns";
 import { v2 } from "../../../shared/utils/v2";
 import { collider } from "../../../shared/utils/collider";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 // This whole plugin is for the loot ping showing up in the killfeed
 // Helper: create a simple killfeed segment
 function createSimpleSegment(text: string, color: string) {
@@ -57,7 +57,7 @@ export function attachLootPingNotification(
         }
 
         if (!closestItemType) return;
-        const itemDef = GameObjectDefs[closestItemType];
+        const itemDef = GameObjectDefs.typeToDefSafe(closestItemType);
         const itemName = (itemDef && (itemDef as any).name) ? (itemDef as any).name : closestItemType;
         // Send loot ping notification to all players in the group
         for (const p of plugin.game.playerBarn.players) {

@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import { PerkProperties } from "../../../shared/defs/gameObjects/perkDefs";
@@ -120,7 +120,7 @@ export class WeaponManager {
         if (idx === this._curWeapIdx) return;
         if (this.weapons[idx].type === "") return;
 
-        const curWeaponDef = GameObjectDefs[this.activeWeapon] as
+        const curWeaponDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as
             | GunDef
             | MeleeDef
             | ThrowableDef;
@@ -150,7 +150,7 @@ export class WeaponManager {
 
         if (curWeapon.type && nextWeapon.type && changeCooldown) {
             // ensure that player is still holding both weapons (didnt drop one)
-            const nextWeaponDef = GameObjectDefs[this.weapons[idx].type] as
+            const nextWeaponDef = GameObjectDefs.typeToDefSafe(this.weapons[idx].type) as
                 | GunDef
                 | MeleeDef
                 | ThrowableDef;
@@ -239,7 +239,7 @@ export class WeaponManager {
     }
 
     setWeapon(idx: number, type: string, ammo: number) {
-        const weaponDef = GameObjectDefs[type];
+        const weaponDef = GameObjectDefs.typeToDefSafe(type);
         const isMelee = idx === WeaponSlot.Melee;
 
         // non melee weapons can be set to empty strings to clear the slot
@@ -258,7 +258,7 @@ export class WeaponManager {
         }
 
         const newPerk = weaponDef && "perk" in weaponDef ? weaponDef.perk : "";
-        const oldDef = GameObjectDefs[this.weapons[idx].type];
+        const oldDef = GameObjectDefs.typeToDefSafe(this.weapons[idx].type);
         const oldPerk = oldDef && "perk" in oldDef ? oldDef.perk : "";
 
         if (oldPerk && oldPerk !== newPerk) {
@@ -323,7 +323,7 @@ export class WeaponManager {
             this.tryReload();
         }
 
-        const itemDef = GameObjectDefs[this.activeWeapon];
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
 
         switch (itemDef.type) {
             case "gun": {
@@ -365,7 +365,7 @@ export class WeaponManager {
     }
 
     gunUpdate(dt: number) {
-        const itemDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
         const player = this.player;
         const weapon = this.weapons[this.curWeapIdx];
         const fireMode = itemDef.fireMode;
@@ -421,7 +421,7 @@ export class WeaponManager {
     }
 
     meleeUpdate(dt: number) {
-        const itemDef = GameObjectDefs[this.activeWeapon] as MeleeDef;
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as MeleeDef;
         const player = this.player;
         const attack = itemDef.attack;
         const weapon = this.weapons[this.curWeapIdx];
@@ -498,7 +498,7 @@ export class WeaponManager {
         // Granaten-Launcher (modified_hk416_grenade): lädt die aktuell gewählte
         // Wurfwaffe aus dem Inventar in die Kammer. Muss vor der normalen
         // secondAmmo-Logik stehen, da `ammo` (556mm) hier nicht zutrifft.
-        const launcherDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        const launcherDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
         if (launcherDef.type === "gun" && launcherDef.launchThrowable) {
             if (
                 this.curWeapIdx === WeaponSlot.Melee ||
@@ -536,7 +536,7 @@ export class WeaponManager {
             return;
         }
 
-        let weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        let weaponDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
         //checking if we have ammo if not check if we have secondary ammo then switch gunDef (only backend)
         if (
             this.player.invManager.isValid(weaponDef.ammo) &&
@@ -545,7 +545,7 @@ export class WeaponManager {
             !this.isInfinite(weaponDef)
         ) {
             const secondWeapon = weaponDef.secondAmmo;
-            weaponDef = GameObjectDefs[weaponDef.secondAmmo] as GunDef;
+            weaponDef = GameObjectDefs.typeToDefSafe(weaponDef.secondAmmo) as GunDef;
             if (
                 this.player.invManager.isValid(weaponDef.ammo) &&
                 this.player.invManager.get(weaponDef.ammo) > 0 &&
@@ -616,7 +616,7 @@ export class WeaponManager {
     reload(curWeapIdx = this.curWeapIdx, fullReload = false): void {
         if (!this.weapons[curWeapIdx].type) return; // prevent rare bug
         const weapon = this.weapons[curWeapIdx];
-        const weaponDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        const weaponDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
         const ammoStats = this.getAmmoStats(weaponDef);
         const activeWeaponAmmo = weapon.ammo;
 
@@ -712,7 +712,7 @@ export class WeaponManager {
             const weapon = this.weapons[i];
             if (!weapon?.type) continue;
 
-            const weaponDef = GameObjectDefs[weapon.type] as GunDef;
+            const weaponDef = GameObjectDefs.typeToDefSafe(weapon.type) as GunDef;
             const ammoStats = this.getAmmoStats(weaponDef);
 
             const maxClip = ammoStats.maxClip;
@@ -762,7 +762,7 @@ export class WeaponManager {
     private _dropGun(weapIdx: number): void {
         const weap = this.weapons[weapIdx];
         if (!weap || !weap.type) return;
-        const weaponDef = GameObjectDefs[weap.type] as GunDef;
+        const weaponDef = GameObjectDefs.typeToDefSafe(weap.type) as GunDef;
         if (!weaponDef) return;
         if (weaponDef.noDrop) return;
 
@@ -770,7 +770,7 @@ export class WeaponManager {
         // und gestashtes 556mm-Magazin getrennt ins Inventar zurückgeben statt
         // das geerbte `ammo` (556mm) für den Granaten-Zähler zu verwenden.
         const secondDef = weaponDef.secondAmmo
-            ? (GameObjectDefs[weaponDef.secondAmmo] as GunDef)
+            ? (GameObjectDefs.typeToDefSafe(weaponDef.secondAmmo) as GunDef)
             : undefined;
         if (weaponDef.launchThrowable || secondDef?.launchThrowable) {
             const inGrenadeMode = !!weaponDef.launchThrowable;
@@ -822,7 +822,7 @@ export class WeaponManager {
     }
 
     dropGun(weapIdx: number): void {
-        const def = GameObjectDefs[this.weapons[weapIdx].type] as GunDef | undefined;
+        const def = GameObjectDefs.typeToDefSafe(this.weapons[weapIdx].type) as GunDef | undefined;
         if (def?.noDrop) return;
 
         this._dropGun(weapIdx);
@@ -830,7 +830,7 @@ export class WeaponManager {
     }
 
     replaceGun(idx: number, type: string): void {
-        const oldDef = GameObjectDefs[this.weapons[idx].type] as GunDef | undefined;
+        const oldDef = GameObjectDefs.typeToDefSafe(this.weapons[idx].type) as GunDef | undefined;
         let ammo = 0;
 
         if (oldDef) {
@@ -857,7 +857,7 @@ export class WeaponManager {
      * @param weapIdx The slot index.
      */
     canDropFlare(weapIdx: number): boolean {
-        const def = GameObjectDefs[this.weapons[weapIdx].type] as GunDef;
+        const def = GameObjectDefs.typeToDefSafe(this.weapons[weapIdx].type) as GunDef;
         if (!def) return false;
 
         if (this.player.role !== "leader") return true;
@@ -871,7 +871,7 @@ export class WeaponManager {
     clampGunsAmmo() {
         for (let i = 0; i < this.weapons.length; i++) {
             const weap = this.weapons[i];
-            const def = GameObjectDefs[weap.type];
+            const def = GameObjectDefs.typeToDefSafe(weap.type);
             if (def?.type !== "gun") continue;
 
             const ammo = this.getAmmoStats(def);
@@ -911,7 +911,7 @@ export class WeaponManager {
     }
 
     fireWeapon(offHand: boolean, forceFire?: boolean) {
-        const itemDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
 
         // Granaten-Launcher (modified_hk416_grenade): verschießt die geladene
         // Wurfwaffe cursor-gezielt statt normaler Kugeln.
@@ -1190,7 +1190,7 @@ export class WeaponManager {
             // Shoot a projectile if defined
             let projectile: Projectile | undefined;
             if (itemDef.projType) {
-                const projDef = GameObjectDefs[itemDef.projType];
+                const projDef = GameObjectDefs.typeToDefSafe(itemDef.projType);
                 assert(
                     projDef.type === "throwable",
                     `Invalid projectile type: ${itemDef.projType}`,
@@ -1368,7 +1368,7 @@ export class WeaponManager {
      * Munition kommt aus dem Magazin (Reload zieht aus dem Inventar nach).
      */
     fireThrowableLauncher(_offHand: boolean): void {
-        const itemDef = GameObjectDefs[this.activeWeapon] as GunDef;
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
         const weapon = this.weapons[this.curWeapIdx];
 
         // Kammer leer -> nachladen versuchen, nicht feuern
@@ -1380,7 +1380,7 @@ export class WeaponManager {
         }
 
         const throwableType = weapon.loadedThrowable;
-        const throwableDef = GameObjectDefs[throwableType];
+        const throwableDef = GameObjectDefs.typeToDefSafe(throwableType);
         if (!throwableDef || throwableDef.type !== "throwable") {
             weapon.ammo = 0;
             weapon.loadedThrowable = undefined;
@@ -1480,7 +1480,7 @@ export class WeaponManager {
     }
 
     getMeleeCollider() {
-        const meleeDef = GameObjectDefs[this.player.activeWeapon] as MeleeDef;
+        const meleeDef = GameObjectDefs.typeToDefSafe(this.player.activeWeapon) as MeleeDef;
         const rot = Math.atan2(this.player.dir.y, this.player.dir.x);
 
         const pos = v2.add(
@@ -1493,7 +1493,7 @@ export class WeaponManager {
     }
 
     meleeDamage(): void {
-        const meleeDef = GameObjectDefs[this.activeWeapon] as MeleeDef;
+        const meleeDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as MeleeDef;
 
         const coll = this.getMeleeCollider();
         const lineEnd = coll.rad + v2.length(v2.sub(this.player.pos, coll.pos));
@@ -1642,7 +1642,7 @@ export class WeaponManager {
             return;
         }
         this.player.cancelAction();
-        const itemDef = GameObjectDefs[this.activeWeapon];
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
         assert(
             itemDef.type === "throwable",
             `Invalid projectile type: ${this.activeWeapon}`,
@@ -1688,7 +1688,7 @@ export class WeaponManager {
         );
         for (const obj of objs) {
             if (obj.__type !== ObjectType.Projectile || obj.dead) continue;
-            const def = GameObjectDefs[obj.type] as ThrowableDef;
+            const def = GameObjectDefs.typeToDefSafe(obj.type) as ThrowableDef;
             if (!def.proximityMine) continue;
             if (v2.distance(pos, obj.pos) <= radius) return true;
         }
@@ -1711,14 +1711,14 @@ export class WeaponManager {
         // used to manage inventory since snowball_heavy isnt stored in inventory, when it's thrown you decrement "snowball" from inv
 
         let throwableType = this.weapons[GameConfig.WeaponSlot.Throwable].type;
-        let throwableDef = GameObjectDefs[throwableType];
+        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType);
 
         assert(throwableDef.type === "throwable");
 
         if (throwableDef.heavyType && throwableDef.changeTime) {
             if (this.cookTicker >= throwableDef.changeTime) {
                 throwableType = throwableDef.heavyType;
-                throwableDef = GameObjectDefs[throwableType] as ThrowableDef;
+                throwableDef = GameObjectDefs.typeToDefSafe(throwableType) as ThrowableDef;
             }
         }
         assert(throwableDef.type === "throwable");
@@ -1879,7 +1879,7 @@ export class WeaponManager {
     switchAmmoType(): void {
         const curWeap = this.weapons[this.curWeapIdx];
         if (!curWeap.type) return;
-        const def = GameObjectDefs[curWeap.type];
+        const def = GameObjectDefs.typeToDefSafe(curWeap.type);
         if (def.type !== "gun") return;
         const gunDef = def as GunDef;
         if (!gunDef.secondAmmo) return;
@@ -1890,7 +1890,7 @@ export class WeaponManager {
         const weaponAmmoCount = curWeap.ammo;
 
         // Check if the new weapon should preserve ammo from the previous form
-        const newWeaponDef = GameObjectDefs[newWeaponType] as GunDef;
+        const newWeaponDef = GameObjectDefs.typeToDefSafe(newWeaponType) as GunDef;
 
         // --- Granaten-Launcher (modified_hk416 <-> modified_hk416_grenade) ---
         // Kugel- und Granaten-Modus haben unabhängige Magazine (556mm bzw.
@@ -2076,7 +2076,7 @@ export class WeaponManager {
         const pickupExtraMsg = new net.PickupExtraMsg();
 
         const modifiedWeapon = weapon.upgraded.gun
-        // const modifiedWeapon = (GameObjectDefs[weapon.upgraded.gun] as GunDef).name; //sends the name immediately for header
+        // const modifiedWeapon = (GameObjectDefs.typeToDefSafe(weapon.upgraded.gun) as GunDef).name; //sends the name immediately for header
         pickupExtraMsg.modifiedWeapon = modifiedWeapon;
         this.player.msgsToSend.push({
             type: net.MsgType.PickupExtra,

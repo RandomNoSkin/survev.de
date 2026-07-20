@@ -1,5 +1,5 @@
-import type { AtlasDef } from "../atlasDefs";
-import { BuildingSprites } from "./buildings";
+import type { AtlasDef } from "../atlasDefs.ts";
+import { BuildingSprites } from "./buildings.ts";
 
 export const MainAtlas: AtlasDef = {
     compress: true,
@@ -12,7 +12,6 @@ export const MainAtlas: AtlasDef = {
 
         "map/map-tree-07sp.svg",
         "map/map-tree-08sp.svg",
-        "map/map-tree-13.svg",
         "map/map-bush-01f.svg",
     ],
 };

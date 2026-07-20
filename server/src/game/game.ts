@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
 import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
-import { MapId } from "../../../shared/defs/types/misc";
+import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import type { Loadout } from "../../../shared/utils/loadout";

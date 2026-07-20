@@ -2,7 +2,7 @@ import { GameConfig } from "../../gameConfig";
 import type { DeepPartial } from "../../utils/util";
 import { v2 } from "../../utils/v2";
 import type { MapDef } from "../mapDefs";
-import { MapId } from "../types/misc";
+import { MapId } from "../../gameConfig.ts";
 
 // @NOTE: Entries defined as single-element arrays, like fixedSpawns: [{ }],
 // are done this way so that util.mergeDeep(...) will function as expected

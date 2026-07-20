@@ -1,22 +1,17 @@
 import $ from "jquery";
-import { device } from "../device";
+import { device } from "../device.ts";
 import english from "../en.json";
 
 export function downloadFile(
     file: string,
     onComplete: (err: null | JQuery.jqXHR<any>, data?: Record<string, string>) => void,
 ) {
-    const opts = {
-        url: file,
-        type: "GET",
-    };
-    $.ajax(opts)
-        .done((data) => {
-            onComplete(null, data);
-        })
-        .fail((err) => {
-            onComplete(err);
-        });
+    fetch(file, {
+        method: "GET",
+    })
+        .then(res => res.json())
+        .then((data) => onComplete(null, data))
+        .catch((err) => onComplete(err));
 }
 
 const Locales = {
@@ -82,10 +77,10 @@ export class Localization {
         // Also try spaces as dashes
         const spacedKey = key.replace(" ", "-");
         return (
-            this.translations[this.locale]?.[key] ||
-            this.translations[this.locale]?.[spacedKey] ||
-            this.translations["en"][key] ||
-            ""
+            this.translations[this.locale]?.[key]
+            || this.translations[this.locale]?.[spacedKey]
+            || this.translations["en"][key]
+            || ""
         );
     }
 

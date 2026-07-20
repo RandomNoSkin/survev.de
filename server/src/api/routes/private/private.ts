@@ -2,7 +2,7 @@ import { and, eq, gte, inArray, not, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { saveConfig } from "../../../../../config";
-import { GameObjectDefs } from "../../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../../shared/defs/register.ts";
 import { getMapDefById, MapDefs } from "../../../../../shared/defs/mapDefs";
 import { ExperienceConverter, GameConfig, TeamMode } from "../../../../../shared/gameConfig";
 import {

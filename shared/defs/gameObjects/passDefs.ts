@@ -18,6 +18,7 @@ export interface PassDef {
 export const PassDefs: Record<string, PassDef> = {
     pass_survivr1: {
         type: "pass",
+        // dprint-ignore
         xp: [
             50, 50, 50, 50, 50, 50, 50, 50, 75, 75, 75, 75, 75, 75, 100, 100, 200, 250,
             300, 350, 400, 400, 400,

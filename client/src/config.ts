@@ -1,11 +1,11 @@
-import type { MapDefs } from "../../shared/defs/mapDefs";
-import { GameConfig } from "../../shared/gameConfig";
-import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby";
-import loadout from "../../shared/utils/loadout";
-import { util } from "../../shared/utils/util";
-import { v2 } from "../../shared/utils/v2";
-import type { AdvSpecSettings } from "./ui/advancedSpectator";
-import type { Locale } from "./ui/localization";
+import type { MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
+import { GameConfig } from "../../shared/gameConfig.ts";
+import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby.ts";
+import loadout from "../../shared/utils/loadout.ts";
+import { util } from "../../shared/utils/util.ts";
+import { v2 } from "../../shared/utils/v2.ts";
+import type { AdvSpecSettings } from "./ui/advancedSpectator.ts";
+import type { Locale } from "./ui/localization.ts";
 
 export const debugToolsConfig = {
     enabled: false,
@@ -16,6 +16,9 @@ export const debugToolsConfig = {
     speedEnabled: false,
     speed: GameConfig.player.moveSpeed,
 
+    gameSpeedEnabled: false,
+    gameSpeed: 1,
+
     mapSeed: 0,
 
     loot: "",
@@ -25,6 +28,7 @@ export const debugToolsConfig = {
     godMode: false,
     teleportToPings: false,
     moveObjs: false,
+    preventGameStart: false,
 };
 
 export const debugRenderConfig = {
@@ -41,6 +45,7 @@ export const debugRenderConfig = {
         waterEdge: false,
         ceiling: false,
         floors: false,
+        minimap: false,
     },
     structures: {
         buildingBounds: false,
@@ -48,6 +53,7 @@ export const debugRenderConfig = {
         bridge: false,
         waterEdge: false,
         stairs: false,
+        layerMasks: false,
     },
 };
 
@@ -67,6 +73,10 @@ export const debugHUDConfig = {
         show: false,
         showGraph: false,
     },
+    updateInterval: {
+        show: false,
+        showGraph: false,
+    },
 };
 
 export type DebugRenderOpts = typeof debugRenderConfig;
@@ -75,7 +85,7 @@ export const BuildingEditorConfig = {
     zoom: 1,
     pos: v2.create(0, 0),
     object: "house_red_01",
-    map: "main" as keyof typeof MapDefs,
+    map: "main" as MapDefKey,
     grid: true,
 };
 

@@ -1024,7 +1024,7 @@ export class Player extends BaseGameObject {
     setOutfit(outfit: string) {
         if (this.outfit === outfit) return;
         this.outfit = outfit;
-        const def = GameObjectDefs[outfit] as OutfitDef;
+        const def = GameObjectDefs.typeToDefSafe(outfit) as OutfitDef;
         this.obstacleOutfit?.destroy();
         this.obstacleOutfit = undefined;
 
@@ -1046,7 +1046,7 @@ export class Player extends BaseGameObject {
             // not wearing any armor, level 0
             return 0;
         }
-        return (GameObjectDefs[type] as BackpackDef | HelmetDef | ChestDef).level;
+        return (GameObjectDefs.typeToDefSafe(type) as BackpackDef | HelmetDef | ChestDef).level;
     }
 
     layer: number;
@@ -1122,7 +1122,7 @@ export class Player extends BaseGameObject {
     fatTicker = 0;
 
     promoteToRole(role: string) {
-        const roleDef = GameObjectDefs[role] as RoleDef;
+        const roleDef = GameObjectDefs.typeToDefSafe(role) as RoleDef;
         if (!roleDef || roleDef.type !== "role") {
             this.game.logger.warn(`Invalid role type: ${role}`);
             return;
@@ -1138,9 +1138,9 @@ export class Player extends BaseGameObject {
         // switching from one role to another
         // need to delete any non-droppables so they can be overwritten
         if (this.role) {
-            if (this.helmet && (GameObjectDefs[this.helmet] as HelmetDef).noDrop)
+            if (this.helmet && (GameObjectDefs.typeToDefSafe(this.helmet) as HelmetDef).noDrop)
                 this.helmet = "";
-            if (this.chest && (GameObjectDefs[this.chest] as ChestDef).noDrop)
+            if (this.chest && (GameObjectDefs.typeToDefSafe(this.chest) as ChestDef).noDrop)
                 this.chest = "";
         }
 
@@ -1212,7 +1212,7 @@ export class Player extends BaseGameObject {
             }
 
             // outfit
-            const oldOutfit = GameObjectDefs[this.outfit] as OutfitDef;
+            const oldOutfit = GameObjectDefs.typeToDefSafe(this.outfit) as OutfitDef;
             let newOutfit = roleDef.defaultItems.outfit;
 
             if (newOutfit instanceof Function) {
@@ -1265,7 +1265,7 @@ export class Player extends BaseGameObject {
                         continue;
                     }
 
-                    const curWeapDef = GameObjectDefs[this.weapons[i].type];
+                    const curWeapDef = GameObjectDefs.typeToDefSafe(this.weapons[i].type);
                     if (curWeapDef.type == "gun") {
                         // refills the ammo of the existing weapon
                         this.weaponManager.reload(i, true);
@@ -1273,7 +1273,7 @@ export class Player extends BaseGameObject {
                     continue;
                 }
 
-                const trueWeapDef = GameObjectDefs[trueWeapon.type] as LootDef;
+                const trueWeapDef = GameObjectDefs.typeToDefSafe(trueWeapon.type) as LootDef;
                 if (trueWeapDef && trueWeapDef.type == "gun") {
                     if (this.weapons[i].type) this.weaponManager.dropGun(i);
 
@@ -1284,7 +1284,7 @@ export class Player extends BaseGameObject {
                     }
                 } else if (trueWeapDef && trueWeapDef.type == "melee") {
                     if (this.weapons[i].type) {
-                        const curMelee = GameObjectDefs[this.weapons[i].type] as MeleeDef;
+                        const curMelee = GameObjectDefs.typeToDefSafe(this.weapons[i].type) as MeleeDef;
                         if (!curMelee.noDropOnDeath) {
                             this.weaponManager.dropMelee();
                         }
@@ -1414,7 +1414,7 @@ export class Player extends BaseGameObject {
     }
 
     removeRole(role?: string): void {
-        const def = GameObjectDefs[this.role] as RoleDef;
+        const def = GameObjectDefs.typeToDefSafe(this.role) as RoleDef;
         if (!def) return;
         this.role = "";
         // allow the next role's chest to be applied/dropped correctly again
@@ -1690,7 +1690,7 @@ export class Player extends BaseGameObject {
         switch (type) {
             case "trick_m9": {
                 const ammo = this.weaponManager.getAmmoStats(
-                    GameObjectDefs["m9_cursed"] as GunDef,
+                    GameObjectDefs.typeToDefSafe("m9_cursed") as GunDef,
                 );
                 this.weaponManager.setWeapon(
                     GameConfig.WeaponSlot.Secondary,
@@ -1961,7 +1961,7 @@ export class Player extends BaseGameObject {
 
         function assertType(type: string, category: string, acceptNoItem: boolean) {
             if (!type && acceptNoItem) return;
-            const def = GameObjectDefs[type];
+            const def = GameObjectDefs.typeToDefSafe(type);
             assert(def, `Invalid item type for ${category}: ${type}`);
             assert(
                 def.type === category,
@@ -2406,7 +2406,7 @@ export class Player extends BaseGameObject {
 
             if (this.action.time >= this.action.duration) {
                 if (this.actionType === GameConfig.Action.UseItem) {
-                    const itemDef = GameObjectDefs[this.actionItem] as HealDef | BoostDef;
+                    const itemDef = GameObjectDefs.typeToDefSafe(this.actionItem) as HealDef | BoostDef;
                     if ("heal" in itemDef) {
                         this.applyActionFunc((target: Player) => {
                             target.health += itemDef.heal;
@@ -2554,7 +2554,7 @@ export class Player extends BaseGameObject {
                     bugle.ammo++;
                     if (
                         bugle.ammo <
-                        this.weaponManager.getAmmoStats(GameObjectDefs["bugle"] as GunDef)
+                        this.weaponManager.getAmmoStats(GameObjectDefs.typeToDefSafe("bugle") as GunDef)
                             .maxClip
                     ) {
                         this.bugleTickerActive = true;
@@ -2716,7 +2716,7 @@ export class Player extends BaseGameObject {
             const closestLoot = this.getClosestLoot();
 
             if (closestLoot) {
-                const itemDef = GameObjectDefs[closestLoot.type];
+                const itemDef = GameObjectDefs.typeToDefSafe(closestLoot.type);
                 switch (itemDef.type) {
                     case "gun":
                         const freeSlot = this.getFreeGunSlot(closestLoot);
@@ -3025,7 +3025,7 @@ export class Player extends BaseGameObject {
     setDefaultInv(): void {
         function assertType(type: string, category: string, acceptNoItem: boolean) {
             if (!type && acceptNoItem) return;
-            const def = GameObjectDefs[type];
+            const def = GameObjectDefs.typeToDefSafe(type);
             assert(def, `Invalid item type for ${category}: ${type}`);
             assert(
                 def.type === category,
@@ -3301,7 +3301,7 @@ export class Player extends BaseGameObject {
                 | Player
                 | undefined;
 
-            const emoteDef = GameObjectDefs[emote.type];
+            const emoteDef = GameObjectDefs.typeToDefSafe(emote.type);
 
             if (emotePlayer) {
                 if (!emote.isPing && !player.visibleObjects.has(emotePlayer)) {
@@ -3558,7 +3558,7 @@ export class Player extends BaseGameObject {
         // Accuracy tracking: count a bullet hit on the shooter when a gun's bullet
         // connects with another player (paired with shotsFired in weaponManager).
         if (playerSource && params.source !== this) {
-            if (GameObjectDefs[params.gameSourceType ?? ""]?.type === "gun") {
+            if (GameObjectDefs.typeToDefSafe(params.gameSourceType ?? "")?.type === "gun") {
                 playerSource.bulletHits++;
             }
         }
@@ -3578,7 +3578,7 @@ export class Player extends BaseGameObject {
             params.damageType !== GameConfig.DamageType.Bleeding &&
             params.damageType !== GameConfig.DamageType.Airdrop
         ) {
-            const gameSourceDef = GameObjectDefs[params.gameSourceType ?? ""];
+            const gameSourceDef = GameObjectDefs.typeToDefSafe(params.gameSourceType ?? "");
             /*
             let isHeadShot = false;
 
@@ -3603,12 +3603,12 @@ export class Player extends BaseGameObject {
                 reduceDamage(PerkProperties.steelskin.damageReduction);
             }
 
-            const chest = GameObjectDefs[this.chest] as ChestDef;
+            const chest = GameObjectDefs.typeToDefSafe(this.chest) as ChestDef;
             if (chest /*&& !isHeadShot*/) {
                 reduceDamage(chest.damageReduction);
             }
 
-            const helmet = GameObjectDefs[this.helmet] as HelmetDef;
+            const helmet = GameObjectDefs.typeToDefSafe(this.helmet) as HelmetDef;
             if (helmet) {
                 reduceDamage(helmet.damageReduction * /*isHeadShot ? 1 :*/ 0.6);
             }
@@ -3948,7 +3948,7 @@ export class Player extends BaseGameObject {
                 }
 
                 // Pirate's Bounty (Cutlass-specific)
-                const weaponDef = GameObjectDefs[params.gameSourceType || ""];
+                const weaponDef = GameObjectDefs.typeToDefSafe(params.gameSourceType || "");
                 if (killCreditSource.hasPerk("pirate") && weaponDef?.type == "melee") {
                     const count = util.randomInt(3, 4);
                     for (let i = 0; i < count; i++) {
@@ -3999,7 +3999,7 @@ export class Player extends BaseGameObject {
             this.role == "demo"
         ) {
             const martyrNadeType = "martyr_nade";
-            const throwableDef = GameObjectDefs[martyrNadeType] as ThrowableDef;
+            const throwableDef = GameObjectDefs.typeToDefSafe(martyrNadeType) as ThrowableDef;
             for (let i = 0; i < 12; i++) {
                 const velocity = v2.mul(v2.randomUnit(), util.random(2, 5));
                 this.game.projectileBarn.addProjectile(
@@ -4178,7 +4178,7 @@ export class Player extends BaseGameObject {
             for (let i = 0; i < GameConfig.WeaponSlot.Count; i++) {
                 const weap = this.weapons[i];
                 if (!weap.type) continue;
-                const def = GameObjectDefs[weap.type];
+                const def = GameObjectDefs.typeToDefSafe(weap.type);
                 switch (def.type) {
                     case "gun":
                         this.weaponManager.dropGun(i);
@@ -4198,7 +4198,7 @@ export class Player extends BaseGameObject {
             this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
 
             for (const item of Object.keys(this.invManager.items) as InventoryItem[]) {
-                // const def = GameObjectDefs[item] as AmmoDef | HealDef;
+                // const def = GameObjectDefs.typeToDefSafe(item) as AmmoDef | HealDef;
                 if (item == "1xscope") {
                     continue;
                 }
@@ -4212,14 +4212,14 @@ export class Player extends BaseGameObject {
             for (const item of GEAR_TYPES) {
                 const type = this[item];
                 if (!type) continue;
-                const def = GameObjectDefs[type] as HelmetDef | ChestDef | BackpackDef;
+                const def = GameObjectDefs.typeToDefSafe(type) as HelmetDef | ChestDef | BackpackDef;
                 if (!!(def as ChestDef).noDrop || def.level < 1) continue;
                 this.game.lootBarn.addLoot(type, this.pos, this.layer, 1);
             }
 
             // The loadout skin is never dropped, not even on death.
             if (this.outfit && this.outfit !== this.outfitFromLoadout) {
-                const def = GameObjectDefs[this.outfit] as OutfitDef;
+                const def = GameObjectDefs.typeToDefSafe(this.outfit) as OutfitDef;
                 if (!def.noDropOnDeath && !def.noDrop) {
                     this.game.lootBarn.addLoot(this.outfit, this.pos, this.layer, 1);
                 }
@@ -4270,7 +4270,7 @@ export class Player extends BaseGameObject {
             for (let i = 0; i < GameConfig.WeaponSlot.Count; i++) {
                 const weap = this.weapons[i];
                 if (!weap.type) continue;
-                const def = GameObjectDefs[weap.type];
+                const def = GameObjectDefs.typeToDefSafe(weap.type);
                 switch (def.type) {
                     case "gun":
                         weap.type = "";
@@ -4288,7 +4288,7 @@ export class Player extends BaseGameObject {
             this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
 
             for (const item of Object.keys(this.invManager.items) as InventoryItem[]) {
-                // const def = GameObjectDefs[item] as AmmoDef | HealDef;
+                // const def = GameObjectDefs.typeToDefSafe(item) as AmmoDef | HealDef;
                 if (item == "1xscope") {
                     continue;
                 }
@@ -4470,7 +4470,7 @@ export class Player extends BaseGameObject {
     }
 
     useHealingItem(item: InventoryItem): void {
-        const itemDef = GameObjectDefs[item];
+        const itemDef = GameObjectDefs.typeToDefSafe(item);
         assert(itemDef.type === "heal", `Invalid heal item ${item}`);
 
         const hasAoeHeal = this.hasPerk("aoe_heal");
@@ -4525,7 +4525,7 @@ export class Player extends BaseGameObject {
     }
 
     useBoostItem(item: InventoryItem): void {
-        const itemDef = GameObjectDefs[item];
+        const itemDef = GameObjectDefs.typeToDefSafe(item);
         assert(itemDef.type === "boost", `Invalid boost item ${item}`);
 
         if (
@@ -4794,7 +4794,7 @@ export class Player extends BaseGameObject {
 
         if (!this.invManager.isValid(msg.useItem) || !this.invManager.has(msg.useItem))
             return;
-        const def = GameObjectDefs[msg.useItem];
+        const def = GameObjectDefs.typeToDefSafe(msg.useItem);
         switch (def.type) {
             case "heal":
                 this.useHealingItem(msg.useItem);
@@ -4925,7 +4925,7 @@ export class Player extends BaseGameObject {
 
         // first loop to find dual wieldable guns
         for (const slot of gunSlots) {
-            const slotDef = GameObjectDefs[this.weapons[slot].type] as GunDef | undefined;
+            const slotDef = GameObjectDefs.typeToDefSafe(this.weapons[slot].type) as GunDef | undefined;
 
             if (slotDef?.dualWieldType && obj.type === this.weapons[slot].type) {
                 return {
@@ -4949,7 +4949,7 @@ export class Player extends BaseGameObject {
 
         // if none are found use active weapon if its a gun
         if (GameConfig.WeaponType[this.curWeapIdx] === "gun") {
-            const newGunDef = GameObjectDefs[obj.type] as GunDef;
+            const newGunDef = GameObjectDefs.typeToDefSafe(obj.type) as GunDef;
             return {
                 slot: this.curWeapIdx,
                 isDual: false,
@@ -4977,7 +4977,7 @@ export class Player extends BaseGameObject {
             : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
 
-        const def = GameObjectDefs[obj.type];
+        const def = GameObjectDefs.typeToDefSafe(obj.type);
         if (
             /*(this.actionType == GameConfig.Action.UseItem && def.type != "gun") ||*/
             this.actionType == GameConfig.Action.Revive ||
@@ -5044,7 +5044,7 @@ export class Player extends BaseGameObject {
                         return;
                     }
 
-                    const oldWeapDef = GameObjectDefs[this.weapons[newGunIdx].type] as
+                    const oldWeapDef = GameObjectDefs.typeToDefSafe(this.weapons[newGunIdx].type) as
                         | GunDef
                         | undefined;
                     if (
@@ -5126,7 +5126,7 @@ export class Player extends BaseGameObject {
                 {
                     const objLevel = this.getGearLevel(obj.type);
                     const thisType = this[def.type];
-                    const thisDef = GameObjectDefs[thisType];
+                    const thisDef = GameObjectDefs.typeToDefSafe(thisType);
                     const thisLevel = this.getGearLevel(thisType);
                     amountLeft = 1;
 
@@ -5182,7 +5182,7 @@ export class Player extends BaseGameObject {
                 // the cosmetic skin from their loadout.
                 if (
                     this.onlyGhilliePickup &&
-                    !(GameObjectDefs[obj.type] as OutfitDef).ghillie
+                    !(GameObjectDefs.typeToDefSafe(obj.type) as OutfitDef).ghillie
                 ) {
                     amountLeft = 1;
                     pickupMsg.type = net.PickupMsgType.BetterItemEquipped;
@@ -5190,7 +5190,7 @@ export class Player extends BaseGameObject {
                 }
 
                 if (this.role) {
-                    const roleDef = GameObjectDefs[this.role] as RoleDef;
+                    const roleDef = GameObjectDefs.typeToDefSafe(this.role) as RoleDef;
                     if (roleDef.defaultItems?.noDropOutfit) {
                         amountLeft = 1;
                         pickupMsg.type = net.PickupMsgType.BetterItemEquipped;
@@ -5230,7 +5230,7 @@ export class Player extends BaseGameObject {
                 }
 
                 const emoteType = `emote_${type}`;
-                if (GameObjectDefs[`emote_${type}`]) {
+                if (GameObjectDefs.typeToDefSafe(`emote_${type}`)) {
                     this.game.playerBarn.addEmote(emoteType, this.__id);
                 }
 
@@ -5257,7 +5257,7 @@ export class Player extends BaseGameObject {
                 break;
         }
 
-        const lootToAddDef = GameObjectDefs[lootToAdd] as LootDef;
+        const lootToAddDef = GameObjectDefs.typeToDefSafe(lootToAdd) as LootDef;
         if (
             amountLeft > 0 &&
             lootToAdd !== "" &&
@@ -5310,7 +5310,7 @@ export class Player extends BaseGameObject {
 
         for (const armor of [this.helmet, this.chest] as const) {
             if (!armor) continue;
-            if ((GameObjectDefs[armor] as ChestDef | HelmetDef).noDrop) continue;
+            if ((GameObjectDefs.typeToDefSafe(armor) as ChestDef | HelmetDef).noDrop) continue;
             playerLootTypes.push(armor);
         }
 
@@ -5331,7 +5331,7 @@ export class Player extends BaseGameObject {
         const oldWeapon = params.weaponSourceType || params.gameSourceType;
         if (!oldWeapon) return;
 
-        const oldWeaponDef = GameObjectDefs[oldWeapon] as
+        const oldWeaponDef = GameObjectDefs.typeToDefSafe(oldWeapon) as
             | GunDef
             | ThrowableDef
             | MeleeDef;
@@ -5379,7 +5379,7 @@ export class Player extends BaseGameObject {
             }
         }
 
-        const slotDef = GameObjectDefs[this.weapons[index].type] as
+        const slotDef = GameObjectDefs.typeToDefSafe(this.weapons[index].type) as
             | GunDef
             | MeleeDef
             | ThrowableDef;
@@ -5443,7 +5443,7 @@ export class Player extends BaseGameObject {
     }
 
     dropArmor(item: string): boolean {
-        const armorDef = GameObjectDefs[item];
+        const armorDef = GameObjectDefs.typeToDefSafe(item);
         if (armorDef.type != "chest" && armorDef.type != "helmet") return false;
         if (this[armorDef.type] !== item) return false;
         if (armorDef.noDrop) return false;
@@ -5464,7 +5464,7 @@ export class Player extends BaseGameObject {
     }
 
     dropBackPackCopy(item: string): boolean {
-        const armorDef = GameObjectDefs[item];
+        const armorDef = GameObjectDefs.typeToDefSafe(item);
         if (armorDef.type != "backpack") return false;
         if (this[armorDef.type] !== item) return false;
         if (armorDef.level == 0) return false;
@@ -5492,7 +5492,7 @@ export class Player extends BaseGameObject {
         if (this.game.map.perkMode && !this.role) return;
         if (this.game.map.arenaMode && !this.role) return;
 
-        const itemDef = GameObjectDefs[dropMsg.item] as LootDef;
+        const itemDef = GameObjectDefs.typeToDefSafe(dropMsg.item) as LootDef;
         if (!itemDef) return;
 
         dropMsg.weapIdx = math.clamp(dropMsg.weapIdx, 0, GameConfig.WeaponSlot.Count - 1);
@@ -5537,7 +5537,7 @@ export class Player extends BaseGameObject {
     }
 
     dropInventoryItem(item: InventoryItem) {
-        const itemDef = GameObjectDefs[item];
+        const itemDef = GameObjectDefs.typeToDefSafe(item);
 
         if (!this.invManager.has(item)) return;
         const inventoryCount = this.invManager.get(item);
@@ -5590,7 +5590,7 @@ export class Player extends BaseGameObject {
         const isItemInLoadout = (item: string, category: string) => {
             if (useDefaultUnlocks && !defaltUnlocks.includes(item)) return false;
 
-            const def = GameObjectDefs[item];
+            const def = GameObjectDefs.typeToDefSafe(item);
             if (!def || def.type !== category) return false;
 
             return true;
@@ -5655,7 +5655,7 @@ export class Player extends BaseGameObject {
         const emoteMsg = msg as net.EmoteMsg;
 
         const emoteIdx = this.loadout.emotes.indexOf(emoteMsg.type);
-        const emoteDef = GameObjectDefs[emoteMsg.type];
+        const emoteDef = GameObjectDefs.typeToDefSafe(emoteMsg.type);
 
         if (emoteMsg.isPing) {
             if (this.debug.teleportToPings) {
@@ -5749,7 +5749,7 @@ export class Player extends BaseGameObject {
         this.debug.moveObjMode.enabled = msg.moveObjs;
 
         if (msg.spawnLootType) {
-            const def = GameObjectDefs[msg.spawnLootType];
+            const def = GameObjectDefs.typeToDefSafe(msg.spawnLootType);
             if (def && "lootImg" in def) {
                 let count = 1;
                 if (this.invManager.isValid(msg.spawnLootType)) {
@@ -5768,7 +5768,7 @@ export class Player extends BaseGameObject {
 
         if (msg.promoteToRole) {
             if (msg.promoteToRoleType) {
-                const def = GameObjectDefs[msg.promoteToRoleType];
+                const def = GameObjectDefs.typeToDefSafe(msg.promoteToRoleType);
                 if (def?.type === "role") {
                     this.promoteToRole(msg.promoteToRoleType);
                 }
@@ -6026,7 +6026,7 @@ export class Player extends BaseGameObject {
         }
 
         // if melee is selected increase speed
-        const weaponDef = GameObjectDefs[this.activeWeapon] as
+        const weaponDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as
             | GunDef
             | MeleeDef
             | ThrowableDef;

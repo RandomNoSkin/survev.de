@@ -1,8 +1,8 @@
-import type { MapDefs } from "./shared/defs/mapDefs";
-import type { TeamMode } from "./shared/gameConfig";
-import type { ProxyDef } from "./shared/types/api";
-import type { DeepPartial } from "./shared/utils/util";
-import type { Vec2 } from "./shared/utils/v2";
+import type { MapDefKey } from "./shared/defs/mapDefs.ts";
+import type { TeamMode } from "./shared/gameConfig.ts";
+import type { ProxyDef } from "./shared/types/api.ts";
+import type { DeepPartial } from "./shared/utils/util.ts";
+import type { Vec2 } from "./shared/utils/v2.ts";
 
 /**
  * Common keys used by both API and game server.
@@ -173,7 +173,7 @@ export interface ConfigType {
         /**
          * The ID of the map this mode will be running
          */
-        mapName: keyof typeof MapDefs;
+        mapName: MapDefKey;
         /**
          * The team mode, "Solo", "Duo" or "Squad" are the only supported values
          */
@@ -189,7 +189,12 @@ export interface ConfigType {
      *
      * NOTE: Required at build time, unlike modes it wont update by fetching from the server!
      */
-    clientTheme: keyof typeof MapDefs;
+    clientTheme: MapDefKey;
+
+    /**
+     * The battle pass, set to an empty string to disable it
+     */
+    passType: string;
 
     /**
      * Game tick rate.
@@ -203,15 +208,6 @@ export interface ConfigType {
      * Updates done in the game tick will accumulate to be sent on the next net sync tick.
      */
     netSyncTps: number;
-
-    /**
-     * If games should all run in the same process.
-     * Or spawn a new process for each game.
-     *
-     * Defaults to single in development and multi in production.
-     * Single process mode has faster restarts for development but cant handle many players.
-     */
-    processMode: "single" | "multi";
 
     /**
      * Server logger configuration
@@ -307,14 +303,6 @@ export interface ConfigType {
         SURVEV_API_KEY: string;
 
         /**
-         * Used to encrypt the loadout before sending it to the client, So the game server can read it back.
-         *
-         * Should be 32 bytes base64 string, a default one can be generated when running the setup script.
-         * Can also run `openssl rand -base64 32` to generate one
-         */
-        SURVEV_LOADOUT_SECRET: string;
-
-        /**
          * Used to encode IP addresses on the database
          */
         SURVEV_IP_SECRET: string;
@@ -349,7 +337,6 @@ export interface ConfigType {
 
         /**
          * Enables proxycheck.io to ban VPNs and proxies from connecting.
-         *
          */
         PROXYCHECK_KEY?: string;
 

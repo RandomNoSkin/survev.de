@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { DamageType, GameConfig, type InventoryItem } from "../../../../shared/gameConfig";
 import * as net from "../../../../shared/net/net";
@@ -138,7 +138,7 @@ export class Projectile extends BaseGameObject {
         this.throwDir = throwDir ?? v2.copy(this.dir);
         this.weaponSourceType = weaponSourceType || this.type;
         this.damageMultiplier = damageMultiplier || 1;
-        const def = GameObjectDefs[type] as ThrowableDef;
+        const def = GameObjectDefs.typeToDefSafe(type) as ThrowableDef;
         this.velZ = def.throwPhysics.velZ;
         this.rad = def.rad * 0.5;
         this.bounds = collider.createAabbExtents(
@@ -186,7 +186,7 @@ export class Projectile extends BaseGameObject {
     }
 
     updateMine(dt: number): void {
-        const def = GameObjectDefs[this.type] as ThrowableDef;
+        const def = GameObjectDefs.typeToDefSafe(this.type) as ThrowableDef;
         if (!def.proximityMine) return;
 
         // once it has landed, plant it firmly so it doesn't slide on the ground
@@ -255,7 +255,7 @@ export class Projectile extends BaseGameObject {
         for (const obj of objs) {
             if (obj.__type !== ObjectType.Projectile) continue;
             if (obj.__id === this.__id || obj.dead) continue;
-            const otherDef = GameObjectDefs[obj.type] as ThrowableDef;
+            const otherDef = GameObjectDefs.typeToDefSafe(obj.type) as ThrowableDef;
             if (!otherDef.proximityMine) continue;
             if (v2.distance(this.pos, obj.pos) > radius) continue;
 
@@ -288,7 +288,7 @@ export class Projectile extends BaseGameObject {
             this.updateStrobe(dt);
         }
 
-        const def = GameObjectDefs[this.type] as ThrowableDef;
+        const def = GameObjectDefs.typeToDefSafe(this.type) as ThrowableDef;
         //
         // Velocity
         //
@@ -460,12 +460,12 @@ export class Projectile extends BaseGameObject {
     explode() {
         if (this.dead) return;
         this.dead = true;
-        const def = GameObjectDefs[this.type] as ThrowableDef;
+        const def = GameObjectDefs.typeToDefSafe(this.type) as ThrowableDef;
 
         // courtesy of kaklik
         if (def.splitType && def.numSplit) {
             for (let i = 0; i < def.numSplit; i++) {
-                const splitDef = GameObjectDefs[def.splitType] as ThrowableDef;
+                const splitDef = GameObjectDefs.typeToDefSafe(def.splitType) as ThrowableDef;
                 const velocity = v2.add(this.vel, v2.mul(v2.randomUnit(), 5));
                 this.game.projectileBarn.addProjectile(
                     this.playerId,
