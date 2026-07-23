@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "archive": "node scripts/archiveBuild.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "vite dev",
     "preview": "vite preview",

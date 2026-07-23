@@ -205,12 +205,17 @@ export class AdvancedSpectator {
         }
         this.container.visible = true;
 
-        // Team of the spectated player. Prefer the god-view (server-authoritative and
-        // always present for every player in a replay) so teammates/enemies are
-        // classified correctly even if the POV's recorded playerInfo for the active
-        // player is missing/stale; fall back to playerInfo for live spectate.
-        const activeTeamId =
-            godView?.get(activeId)?.teamId ?? playerBarn.getPlayerInfo(activeId).teamId;
+        // Resolves a player's team. The god-view roster is preferred when it carries a
+        // valid team (server-authoritative), but older/broken track files have an empty
+        // roster (teamId -1 for everyone) — comparing -1 against -1 made every player
+        // read as a teammate (green labels, no ESP lines). Fall back to the playerInfo
+        // stream, which in a replay contains every player in the game.
+        const teamOf = (id: number, gvTeamId?: number): number => {
+            if (gvTeamId !== undefined && gvTeamId > 0) return gvTeamId;
+            return playerBarn.getPlayerInfo(id).teamId;
+        };
+        // Team of the spectated player.
+        const activeTeamId = teamOf(activeId, godView?.get(activeId)?.teamId);
         const centerX = camera.m_screenWidth * 0.5;
         const centerY = camera.m_screenHeight * 0.5;
 
@@ -230,7 +235,7 @@ export class AdvancedSpectator {
             // teammates share a teamId with the spectated player; everyone else
             // is an enemy. We label both, so the spectator also sees the info of
             // the watched player's squad (not just enemies).
-            const isEnemy = (gv?.teamId ?? info.teamId) !== activeTeamId;
+            const isEnemy = teamOf(p.__id, gv?.teamId) !== activeTeamId;
             // Don't double-label the followed player in normal mode — the HUD
             // already shows them. In freecam the camera has left them, so we do
             // want their label.
@@ -272,7 +277,7 @@ export class AdvancedSpectator {
             for (const gp of godView.values()) {
                 if (gp.dead || gp.id === localId || gp.id === activeId) continue;
                 if (localIds.has(gp.id)) continue; // already drawn from the live stream
-                const isEnemy = gp.teamId !== activeTeamId;
+                const isEnemy = teamOf(gp.id, gp.teamId) !== activeTeamId;
                 const screenPos = camera.m_pointToScreen(gp.pos);
 
                 if (this.espLines && isEnemy && !this.freecam) {
@@ -284,7 +289,9 @@ export class AdvancedSpectator {
                     const label = this.getLabel(labelIdx++);
                     label.container.visible = true;
                     label.container.position.set(screenPos.x, screenPos.y);
-                    label.nameText.text = gp.name;
+                    // Empty-roster track files carry no names — playerInfo has them.
+                    label.nameText.text =
+                        gp.name || playerBarn.getPlayerInfo(gp.id).name;
                     label.nameText.tint = isEnemy ? ENEMY_COLOR : SPECTATED_COLOR;
                     label.statsText.text = `HP ${Math.round(gp.health)}  AD ${Math.round(gp.boost)}`;
                 }
