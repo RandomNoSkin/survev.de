@@ -70,4 +70,8 @@ export class SDKManager {
     showLoadoutAd(): void {}
 
     hideLoadoutAd(): void {}
+
+    showStickyAd(): void {}
+
+    hideStickyAd(): void {}
 }

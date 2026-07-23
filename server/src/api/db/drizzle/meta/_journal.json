@@ -176,6 +176,13 @@
       "when": 1779052840753,
       "tag": "0006_hard_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784748593263,
+      "tag": "0023_role_and_user_quest",
+      "breakpoints": true
     }
   ]
 }

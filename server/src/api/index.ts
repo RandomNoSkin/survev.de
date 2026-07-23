@@ -90,6 +90,9 @@ app.route("/api/user/", UserRouter);
 app.route("/api/auth/", AuthRouter);
 app.route("/api/", StatsRouter);
 app.route("/private/", PrivateRouter);
+// The dashboard SPA lives at "/moderation" (no trailing slash); redirect the
+// slashed variant so a hand-typed "/moderation/" doesn't 404.
+app.get("/moderation/", (c) => c.redirect("/moderation"));
 app.route("/moderation", ModerationDashboardRouter);
 
 server.init(app, upgradeWebSocket);

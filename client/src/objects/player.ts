@@ -1106,7 +1106,7 @@ export class Player implements AbstractObject {
         ) {
             const lastWeapIdx = this.lastSwapIdx;
             this.lastSwapIdx = this.m_localData.m_curWeapIdx;
-            const itemDef = GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon) as
+            const itemDef = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as
                 | GunDef
                 | MeleeDef
                 | ThrowableDef;
@@ -1527,7 +1527,11 @@ export class Player implements AbstractObject {
     }
 
     updateVisuals(playerBarn: PlayerBarn, map: Map) {
-        const outfitDef = GameObjectDefs.typeToDef(this.m_netData.m_outfit, "outfit");
+        // An unknown/empty outfit (e.g. a removed skin still stored in a loadout) must
+        // not crash the whole player render (this fork's typeToDef throws), so fall back
+        // to the base outfit.
+        const outfitDef = (GameObjectDefs.typeToDefSafe(this.m_netData.m_outfit) ??
+            GameObjectDefs.typeToDef("outfitBase", "outfit")) as OutfitDef;
         const outfitImg = outfitDef.skinImg;
         const bodyScale = this.m_bodyRad / GameConfig.player.radius;
 
@@ -1667,7 +1671,7 @@ export class Player implements AbstractObject {
             if (outfitImg.chestInnerOutline?.includes(chestDef.level)) {
                 let outlineTint: number;
                 if (chestDef.level >= 3) {
-                    outlineTint = (GameObjectDefs.chest02 as ChestDef).skinImg.baseTint;
+                    outlineTint = (GameObjectDefs.typeToDef("chest02") as ChestDef).skinImg.baseTint;
                 } else {
                     // Eigene Westenfarbe pro Kanal um 20 % aufhellen (auf 0–255
                     // geclamped), damit der Rand die helle Weste abhebt.
@@ -1766,7 +1770,7 @@ export class Player implements AbstractObject {
             this.hipSprite.visible = false;
         }
 
-        const R = GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon) as
+        const R = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as
             | GunDef
             | MeleeDef
             | ThrowableDef;
@@ -2050,7 +2054,7 @@ export class Player implements AbstractObject {
         e(this.handRContainer, this.bones[Bones.HandR]);
         e(this.footLContainer, this.bones[Bones.FootL]);
         e(this.footRContainer, this.bones[Bones.FootR]);
-        const t = GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon) as GunDef;
+        const t = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as GunDef;
         if (!this.downed && this.currentAnim() != Anim.Revive && t.type == "gun") {
             if (t.worldImg.leftHandOffset) {
                 this.handLContainer.position.x += t.worldImg.leftHandOffset.x;
@@ -2105,7 +2109,7 @@ export class Player implements AbstractObject {
                 }
                 break;
             case Action.UseItem: {
-                const actionItemDef = GameObjectDefs.typeToDef(this.m_action.item) as
+                const actionItemDef = GameObjectDefs.typeToDefSafe(this.m_action.item) as
                     | HealDef
                     | BoostDef;
                 if (actionItemDef) {
@@ -3195,7 +3199,7 @@ export class PlayerBarn {
         } else if (target) {
             // Death effect from the dying player's loadout
             const deathEffectType = targetInfo?.loadout?.death_effect || "death_basic";
-            const deathEffectDef = GameObjectDefs[deathEffectType] as
+            const deathEffectDef = GameObjectDefs.typeToDefSafe(deathEffectType) as
                 | DeathEffectDef
                 | undefined;
 

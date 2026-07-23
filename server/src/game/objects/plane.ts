@@ -1,7 +1,7 @@
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import type { MapDef } from "../../../../shared/defs/mapDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameConfig, type Plane as PlaneType } from "../../../../shared/gameConfig";
 import { Constants } from "../../../../shared/net/net";
@@ -391,7 +391,7 @@ export class PlaneBarn {
 
         type ||= util.weightedRandom(this.game.map.mapDef.gameConfig.planes.crates).name;
 
-        const def = MapObjectDefs[type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(type) as ObstacleDef;
         if (!def?.collision) {
             gameLogger.error(`Invalid airdrop type: ${type}`);
             return;
@@ -546,7 +546,7 @@ export class PlaneBarn {
 
         type ||= util.weightedRandom(this.game.map.mapDef.gameConfig.planes.crates).name;
 
-        const def = MapObjectDefs[type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(type) as ObstacleDef;
         if (!def?.collision) {
             gameLogger.error(`Invalid airdrop type: ${type}`);
             return;

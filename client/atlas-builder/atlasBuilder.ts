@@ -127,7 +127,11 @@ export class ImageManager {
             const images = imagesToRender.splice(0, imagesPerThread);
             imagesPerThread = Math.ceil(imagesToRender.length / threadsLeft);
 
-            const proc = cp.fork(Path.resolve(import.meta.dirname, "imageWorker.ts"));
+            const proc = cp.fork(Path.resolve(import.meta.dirname, "imageWorker.ts"), {
+                // Load the .ts worker via tsx so the build also works on Node < 22.18
+                // (older Node can't run .ts child processes natively).
+                execArgv: ["--import", "tsx"],
+            });
 
             const promise = new Promise<void>((resolve, reject) => {
                 proc.on("exit", (code) => {
@@ -308,6 +312,8 @@ export class AtlasManager {
 
             const proc = cp.fork(Path.resolve(import.meta.dirname, "atlasWorker.ts"), {
                 serialization: "advanced",
+                // Load the .ts worker via tsx so the build also works on Node < 22.18.
+                execArgv: ["--import", "tsx"],
             });
 
             const promise = new Promise<void>((resolve, reject) => {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { BuildingDef, ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameConfig } from "../../../../shared/gameConfig";
 import {
@@ -57,7 +57,7 @@ function buildMapShapes(map: Game["map"]): GameMapShape[] {
     }[] = [];
 
     for (const obj of map.msg.objects) {
-        const def = MapObjectDefs[obj.type] as ObstacleDef | BuildingDef | undefined;
+        const def = MapObjectDefs.typeToDef(obj.type) as ObstacleDef | BuildingDef | undefined;
         if (!def) continue;
         const zIdx =
             def.type === "building"

@@ -43,7 +43,7 @@ export function getCachedCosmeticStats() {
 /** All cosmetic-type def keys (the items that get a dynamic rarity). */
 function allCosmeticTypes(): string[] {
     const out: string[] = [];
-    for (const type in GameObjectDefs) {
+    for (const type of GameObjectDefs.getAllTypes()) {
         const def = GameObjectDefs.typeToDefSafe(type) as { type?: string };
         if (def?.type && COSMETIC_TYPES.has(def.type)) out.push(type);
     }

@@ -1193,6 +1193,22 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerLength: 1.2,
         skipCollision: true,
     },
+    // invisible carrier bullet for the PMG-134 (mirrors bullet_potato); the
+    // potato_lmgshot projType does the actual damage on impact
+    bullet_invis: {
+        type: "bullet",
+        damage: 0,
+        obstacleDamage: 1,
+        falloff: 1,
+        distance: 1,
+        speed: 100,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "invis",
+        tracerWidth: 0,
+        tracerLength: 1.2,
+        skipCollision: true,
+    },
     bullet_bugle: {
         type: "bullet",
         damage: 0,

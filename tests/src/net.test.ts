@@ -192,6 +192,8 @@ test("Update Msg", () => {
             return {
                 type: "m9",
                 ammo: util.randomInt(0, 255),
+                secondaryClip: util.randomInt(0, 255),
+                loadedThrowable: "frag",
             };
         }),
         curWeapIdx: 0,

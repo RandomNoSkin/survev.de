@@ -30,7 +30,7 @@ import {
 //
 
 /** Every shoppable cosmetic (def.shop === true). Static; used in the bundle pool. */
-const SHOP_POOL: string[] = Object.keys(GameObjectDefs).filter((type) => {
+const SHOP_POOL: string[] = GameObjectDefs.getAllTypes().filter((type) => {
     const def = GameObjectDefs.typeToDefSafe(type) as { shop?: boolean };
     return def?.shop === true && getItemCategory(type) !== null;
 });

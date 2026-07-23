@@ -245,9 +245,9 @@ export class WeaponManager {
         // non melee weapons can be set to empty strings to clear the slot
         if (!isMelee && type !== "") {
             assert(
-                weaponDef.type === "gun" ||
-                    weaponDef.type === "melee" ||
-                    weaponDef.type === "throwable",
+                weaponDef?.type === "gun" ||
+                    weaponDef?.type === "melee" ||
+                    weaponDef?.type === "throwable",
             );
         }
 
@@ -323,7 +323,7 @@ export class WeaponManager {
             this.tryReload();
         }
 
-        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon)!;
 
         switch (itemDef.type) {
             case "gun": {
@@ -1190,7 +1190,7 @@ export class WeaponManager {
             // Shoot a projectile if defined
             let projectile: Projectile | undefined;
             if (itemDef.projType) {
-                const projDef = GameObjectDefs.typeToDefSafe(itemDef.projType);
+                const projDef = GameObjectDefs.typeToDefSafe(itemDef.projType)!;
                 assert(
                     projDef.type === "throwable",
                     `Invalid projectile type: ${itemDef.projType}`,
@@ -1642,7 +1642,7 @@ export class WeaponManager {
             return;
         }
         this.player.cancelAction();
-        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
+        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon)!;
         assert(
             itemDef.type === "throwable",
             `Invalid projectile type: ${this.activeWeapon}`,
@@ -1711,7 +1711,7 @@ export class WeaponManager {
         // used to manage inventory since snowball_heavy isnt stored in inventory, when it's thrown you decrement "snowball" from inv
 
         let throwableType = this.weapons[GameConfig.WeaponSlot.Throwable].type;
-        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType);
+        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType)!;
 
         assert(throwableDef.type === "throwable");
 
@@ -1879,7 +1879,7 @@ export class WeaponManager {
     switchAmmoType(): void {
         const curWeap = this.weapons[this.curWeapIdx];
         if (!curWeap.type) return;
-        const def = GameObjectDefs.typeToDefSafe(curWeap.type);
+        const def = GameObjectDefs.typeToDefSafe(curWeap.type)!;
         if (def.type !== "gun") return;
         const gunDef = def as GunDef;
         if (!gunDef.secondAmmo) return;

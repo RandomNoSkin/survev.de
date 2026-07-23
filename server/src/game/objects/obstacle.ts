@@ -1,6 +1,6 @@
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { DamageType, GameConfig } from "../../../../shared/gameConfig";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
@@ -137,7 +137,7 @@ export class Obstacle extends BaseGameObject {
 
         this.isPuzzlePiece = !!puzzlePiece;
         this.puzzlePiece = puzzlePiece;
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         this.rot = math.oriToRad(ori);
 
@@ -267,7 +267,7 @@ export class Obstacle extends BaseGameObject {
     }
 
     updateCollider() {
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         this.collider = collider.transform(def.collision, this.pos, this.rot, this.scale);
 
         if (def.aabb) {
@@ -305,7 +305,7 @@ export class Obstacle extends BaseGameObject {
         );
         const objs = this.game.grid.intersectCollider(coll);
 
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         const closedColl = collider.transform(
             def.collision,
             this.door.closedPos,
@@ -349,7 +349,7 @@ export class Obstacle extends BaseGameObject {
         // @hack this door shouldn't switch layers
         if (this.type === "saloon_door_secret" || this.type === "house_door_01") return;
         let newLayer = this.originalLayer;
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         if(!def.door) return;
         const coll = collider.createCircle(this.pos, def.door!.interactionRad + 1);
         const objs = this.game.grid.intersectCollider(coll);
@@ -373,7 +373,7 @@ export class Obstacle extends BaseGameObject {
     damage(params: DamageParams): void {
         if (this.isSkin) return;
 
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         if (this.health === 0 || !this.destructible) return;
 
         if (params.damageType === DamageType.Player) {
@@ -417,7 +417,7 @@ export class Obstacle extends BaseGameObject {
     }
 
     kill(params: DamageParams) {
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         this.health = this.healthT = 0;
         this.dead = true;
         this.setDirty();
@@ -686,7 +686,7 @@ export class Obstacle extends BaseGameObject {
         if (this.button.onOff && this.isPuzzlePiece) {
             this.parentBuilding?.puzzlePieceToggled(this);
         }
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         if (def.button?.destroyOnUse && def.destroyType) {
             this.killTicker = this.button.useDelay;
         }

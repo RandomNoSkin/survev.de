@@ -1,6 +1,6 @@
 import "@taufik-nurrohman/color-picker";
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { EmoteCategory, type EmoteDef } from "../../../shared/defs/gameObjects/emoteDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import { type UnlockDef, UnlockDefs } from "../../../shared/defs/gameObjects/unlockDefs";
@@ -80,8 +80,8 @@ function sortAcquired(a: Item, b: Item) {
 }
 
 function sortAlphabetical(a: Item, b: Item) {
-    const defA = GameObjectDefs[a.type] as EmoteDef;
-    const defB = GameObjectDefs[b.type] as EmoteDef;
+    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef;
+    const defB = GameObjectDefs.typeToDef(b.type) as EmoteDef;
     if (defA.name! < defB.name!) {
         return -1;
     }
@@ -101,8 +101,8 @@ function sortRarity(a: Item, b: Item) {
 }
 
 function sortSubcat(a: Item, b: Item) {
-    const defA = GameObjectDefs[a.type] as EmoteDef;
-    const defB = GameObjectDefs[b.type] as EmoteDef;
+    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef;
+    const defB = GameObjectDefs.typeToDef(b.type) as EmoteDef;
     if (!defA.category || !defB.category || defA.category == defB.category) {
         return sortAlphabetical(a, b);
     }
@@ -633,7 +633,7 @@ export class LoadoutMenu {
         const ackItemTypes = [];
         for (let i = 0; i < this.items.length; i++) {
             const item = this.items[i];
-            const objDef = GameObjectDefs[item.type];
+            const objDef = GameObjectDefs.typeToDefSafe(item.type);
             if (
                 objDef &&
                 objDef.type == category.gameType &&
@@ -666,7 +666,7 @@ export class LoadoutMenu {
         const currentNewItem = this.localPendingConfirm.shift()!;
         if (currentNewItem) {
             this.localConfirmed.push(currentNewItem);
-            const objDef = GameObjectDefs[currentNewItem.type] as EmoteDef;
+            const objDef = GameObjectDefs.typeToDef(currentNewItem.type) as EmoteDef;
             const itemInfo = {
                 type: currentNewItem.type,
                 rarity: getItemRarity(currentNewItem.type),
@@ -1063,7 +1063,7 @@ export class LoadoutMenu {
         }
 
         if (this.selectedItem.loadoutType == "crosshair") {
-            const objDef = GameObjectDefs[this.selectedItem.type];
+            const objDef = GameObjectDefs.typeToDefSafe(this.selectedItem.type);
             if (objDef && objDef.type == "crosshair" && objDef.cursor) {
                 $("#modal-content-right-crosshair").css("display", "none");
             } else {
@@ -1326,7 +1326,7 @@ export class LoadoutMenu {
         const image = parent.find(".customize-emote-slot");
         image.css("background-image", img || "none");
         image.data("img", img || "none");
-        const emoteDef = GameObjectDefs[type] as EmoteDef & { lore: string };
+        const emoteDef = GameObjectDefs.typeToDefSafe(type) as EmoteDef & { lore: string };
         const slotIdx = parent.data("idx") as number;
         if (emoteDef) {
             const itemInfo: EquippedItem = {
@@ -1353,7 +1353,7 @@ export class LoadoutMenu {
             const category = this.categories[r];
             for (let i = this.localAckItems.length - 1; i >= 0; i--) {
                 const s = this.localAckItems[i];
-                const n = GameObjectDefs[s.type];
+                const n = GameObjectDefs.typeToDefSafe(s.type);
                 // Splice out items of the previous category — and any stale entry whose
                 // type no longer has a def, so a bad type can't crash the loop.
                 if (!n || n.type == category.gameType) {
@@ -1367,7 +1367,7 @@ export class LoadoutMenu {
             .trim()
             .toLowerCase();
         const loadoutItems = this.items.filter((x) => {
-            const gameTypeDef = GameObjectDefs[x.type] as {
+            const gameTypeDef = GameObjectDefs.typeToDefSafe(x.type) as {
                 type?: string;
                 name?: string;
             };
@@ -1451,7 +1451,9 @@ export class LoadoutMenu {
             if (source.startsWith("shop:")) {
                 return `Bought on ${source.slice(5)}`;
             }
-            const sourceDef = GameObjectDefs[source] as EmoteDef;
+            // A source can be a non-def string (e.g. "admin_grant", "unlock_default"),
+            // and this fork's typeToDef throws on unknown types — so use the safe lookup.
+            const sourceDef = GameObjectDefs.typeToDefSafe(source) as EmoteDef | undefined;
             if (sourceDef?.name) {
                 return sourceDef.name;
             }
@@ -1469,7 +1471,7 @@ export class LoadoutMenu {
         const listItems = $("<div/>");
         for (let i = 0; i < loadoutItems.length; i++) {
             const item = loadoutItems[i];
-            const objDef = GameObjectDefs[item.type] as MeleeDef;
+            const objDef = GameObjectDefs.typeToDef(item.type) as MeleeDef;
 
             const itemInfo: ItemInfo = {
                 id: item.id,
@@ -1590,7 +1592,7 @@ export class LoadoutMenu {
             for (let T = 0; T < this.loadout.emotes.length; T++) {
                 this.equippedItems.push({} as EquippedItem);
                 const emote = this.loadout.emotes[T];
-                if (GameObjectDefs[emote]) {
+                if (GameObjectDefs.typeToDef(emote)) {
                     const svg = helpers.getSvgFromGameType(emote);
                     const imgCss = `url(${svg})`;
                     const domElem = emoteSlotToDomElem(T);
@@ -1656,7 +1658,7 @@ export class LoadoutMenu {
         for (let i = 0; i < this.categories.length; i++) {
             const category = this.categories[i];
             const unackdItems = this.localAckItems.filter((x) => {
-                const gameTypeDef = GameObjectDefs[x.type];
+                const gameTypeDef = GameObjectDefs.typeToDefSafe(x.type);
                 return gameTypeDef && gameTypeDef.type == category.gameType;
             });
             $(`.modal-customize-cat[data-idx='${i}']`)

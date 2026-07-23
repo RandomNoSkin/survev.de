@@ -18,9 +18,12 @@ describe.for(maps)("Map %s", (map) => {
         ]) => {
             const itemsSet = new Set();
             for (const item of table) {
-                itemsSet.add(item.name);
+                // Key on the full entry: same-name entries with different counts are a
+                // valid weighted-quantity pattern (the game picks one entry by weight),
+                // so only flag exact-duplicate entries (real copy-paste mistakes).
+                itemsSet.add(`${item.name}:${item.count}:${item.weight}`);
                 if (item.name.startsWith("tier_")) {
-                    expect(item.name).toBeValidLootTier();
+                    expect(item.name).toBeValidLootTier(mapDef.lootTable);
                 } else if (item.name !== "") {
                     expect(item.name).toBeValidLoot();
                 }
@@ -29,7 +32,7 @@ describe.for(maps)("Map %s", (map) => {
                 table.length,
             );
 
-            expect(tableId).toBeValidLootTier();
+            expect(tableId).toBeValidLootTier(mapDef.lootTable);
         });
     });
 

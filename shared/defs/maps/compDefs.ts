@@ -1022,7 +1022,7 @@ export const Comp: MapDef = {
             { name: "saw", count: 1, weight: 0.1 },
             { name: "spade", count: 1, weight: 0.25 },
             { name: "kukri_trad", count: 1, weight: 0.25 },
-            { name: "Hook", count: 1, weight: 0.1 },
+            { name: "hook", count: 1, weight: 0.1 },
             { name: "sledgehammer", count: 1, weight: 0.01 },
         ],
         tier_armor_3: [

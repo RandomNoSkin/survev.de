@@ -6,7 +6,6 @@ export const FactionAtlas: AtlasDef = {
     images: [
         "map/map-airdrop-03.svg",
         "map/map-airdrop-04.svg",
-        "map/map-building-bridge-xlg-floor.svg",
 
         ...BuildingSprites.greenhouse,
         ...BuildingSprites.bunker_chrys,

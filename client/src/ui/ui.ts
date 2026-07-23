@@ -1,6 +1,6 @@
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { PingDefs } from "../../../shared/defs/gameObjects/pingDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import type { MapDef } from "../../../shared/defs/mapDefs";
@@ -823,12 +823,12 @@ export class UiManager {
             switch (player.m_action.type) {
                 case Action.Reload:
                 case Action.ReloadAlt:
-                    if (GameObjectDefs[player.m_action.item]) {
+                    if (GameObjectDefs.typeToDef(player.m_action.item)) {
                         actionTxt1 = this.localization.translate("game-reloading");
                     }
                     break;
                 case Action.UseItem:
-                    if (GameObjectDefs[player.m_action.item]) {
+                    if (GameObjectDefs.typeToDef(player.m_action.item)) {
                         actionTxt1 = this.localization.translate("game-using");
                         actionTxt2 = this.localization.translate(
                             `game-${player.m_action.item}`,
@@ -2945,7 +2945,7 @@ export class UiManager {
 
         for (let a = 0; a < roles.length; a++) {
             const role = roles[a];
-            const roleDef = GameObjectDefs[role] as RoleDef;
+            const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
             const roleOption = $("<div/>", {
                 class: "ui-role-option",
                 "data-role": role,
@@ -2974,7 +2974,7 @@ export class UiManager {
 
         for (let a = 0; a < roles.length; a++) {
             const role = roles[a];
-            const roleDef = GameObjectDefs[role] as RoleDef;
+            const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
             const roleOption = $("<div/>", {
                 class: "ui-arena-role-option",
                 "data-role": role,
@@ -2999,7 +2999,7 @@ export class UiManager {
     }
 
     setRoleMenuInfo(role: string) {
-        const roleDef = GameObjectDefs[role] as RoleDef;
+        const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
         $(".ui-role-option").css({
             "background-size": 132,
             opacity: 0.5,
@@ -3067,7 +3067,7 @@ export class UiManager {
     }
 
     setArenaRoleMenuInfo(role: string) {
-        const roleDef = GameObjectDefs[role] as RoleDef;
+        const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
         $(".ui-arena-role-option").css({
             "background-size": 132,
             opacity: 0.5,

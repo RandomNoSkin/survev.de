@@ -1117,7 +1117,7 @@ export class EmoteBarn {
 
                         const equippedWeapon =
                             player.m_localData.m_weapons[player.m_localData.m_curWeapIdx];
-                        const weapDef = GameObjectDefs[equippedWeapon.type] as GunDef;
+                        const weapDef = GameObjectDefs.typeToDefSafe(equippedWeapon.type) as GunDef;
                         let ammoType = "";
                         if (weapDef && weapDef.ammo) {
                             ammoType = weapDef.ammo;

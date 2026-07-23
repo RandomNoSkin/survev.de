@@ -37,6 +37,9 @@ export interface ConfigType {
      */
     apiServer: ServerConfig;
 
+    /** Whether games run in the main process ("single") or forked child processes ("multi"). */
+    processMode: "single" | "multi";
+
     /**
      * Game server configuration.
      */

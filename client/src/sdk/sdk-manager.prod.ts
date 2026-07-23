@@ -480,6 +480,14 @@ export class SDKManager implements BaseSDKManager {
         element.style.display = "none";
     }
 
+    showStickyAd() {
+        this.showLegacyStickyAd();
+    }
+
+    hideStickyAd() {
+        this.hideLegacyStickyAd();
+    }
+
     private showLegacyStickyAd() {
         const sticky = document.querySelector(
             ".publift-widget-sticky_footer-container",

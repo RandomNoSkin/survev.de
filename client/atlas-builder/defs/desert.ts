@@ -14,11 +14,9 @@ export const DesertAtlas: AtlasDef = {
         "map/map-archway-res-01.svg",
 
         "map/map-bush-05.svg",
-        "map/map-bush-07sp.svg",
         "map/map-bush-res-05.svg",
 
         "map/map-decal-camera-01.svg",
-        "map/map-web-01.svg",
 
         "map/map-case-ring-02.svg",
         "map/map-chest-03d.svg",
@@ -48,7 +46,6 @@ export const DesertAtlas: AtlasDef = {
         "map/map-tree-05c.svg",
         "map/map-tree-06.svg",
 
-        "map/map-barrel-05.svg",
 
         "map/map-toilet-05.svg",
         "map/map-toilet-res-03.svg",

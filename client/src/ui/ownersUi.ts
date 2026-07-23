@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { getItemCategory, getItemRarity } from "../../../shared/defs/shopConfig";
 import type { ItemOwner, ItemOwnersResponse } from "../../../shared/types/user";
 import type { Account } from "../account";
@@ -87,14 +87,14 @@ export class OwnersUi {
     }
 
     private itemName(type: string): string {
-        const def = GameObjectDefs[type] as { name?: string } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
         return this.localization.translate(`game-${type}`) || def?.name || type;
     }
 
     private buildCatalog() {
         if (this.catalog) return;
         this.catalog = [];
-        for (const type in GameObjectDefs) {
+        for (const type of GameObjectDefs.getAllTypes()) {
             if (!getItemCategory(type)) continue;
             this.catalog.push({ type, name: this.itemName(type).toLowerCase() });
         }

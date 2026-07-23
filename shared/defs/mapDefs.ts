@@ -45,14 +45,7 @@ export type Atlas =
     | "cobalt"
     | "savannah"
     | "turkey"
-    | "beach"
-    | "comp"
-    | "local"
-    | "scrims"
-    | "two_vs_two"
-    | "four_vs_four"
-    | "comp_solo"
-    | "comp_duo";
+    | "beach";
 
 const _MapDefs = {
     main: Main,

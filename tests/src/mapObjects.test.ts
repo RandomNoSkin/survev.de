@@ -2,10 +2,19 @@ import "./testHelpers.ts";
 import { describe, expect, test } from "vitest";
 
 import type { BuildingDef, LootSpawnerDef, ObstacleDef, StructureDef } from "../../shared/defs/mapObjectsTyping.ts";
+import { MapDefs } from "../../shared/defs/mapDefs.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";
 import { Constants } from "../../shared/net/net.ts";
 
 const mapObjects = MapObjectDefs.getAllTypes();
+
+// A map object def is map-agnostic, but the loot tiers it references are resolved
+// from the lootTable of whichever map it spawns on. A referenced tier is therefore
+// valid when *any* map defines it, so validate against the union of all map tiers.
+const allTiers: Record<string, unknown> = {};
+for (const mapDef of Object.values(MapDefs)) {
+    Object.assign(allTiers, mapDef.lootTable);
+}
 
 const obstacles = mapObjects.filter((type) => {
     return MapObjectDefs.typeToDef(type).type === "obstacle";
@@ -41,7 +50,7 @@ describe.for(obstacles)("Obstacle %s", ([, def]) => {
                 expect(loot.type).toBeValidLoot();
             }
             if (loot.tier) {
-                expect(loot.tier).toBeValidLootTier();
+                expect(loot.tier).toBeValidLootTier(allTiers);
             }
         });
     }
@@ -95,7 +104,7 @@ describe.for(lootSpawners)("Loot Spawner %s", ([, def]) => {
             expect(loot.type).toBeValidLoot();
         }
         if (loot.tier) {
-            expect(loot.tier).toBeValidLootTier();
+            expect(loot.tier).toBeValidLootTier(allTiers);
         }
     });
 });

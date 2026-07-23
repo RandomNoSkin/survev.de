@@ -1,7 +1,6 @@
 import { createCanvas, loadImage } from "canvas";
 import fs from "node:fs";
 import Path from "node:path";
-import { createCanvas, loadImage } from "canvas";
 import sharp from "sharp";
 import { atlasLogger, imageFolder, imagesCacheFolder, type ImgCache } from "./atlasBuilder.ts";
 import { scaledSprites } from "./atlasDefs.ts";

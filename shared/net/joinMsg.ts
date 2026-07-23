@@ -3,6 +3,7 @@ import { type AbstractMsg, type BitStream, Constants } from "./net.ts";
 export class JoinMsg implements AbstractMsg {
     protocol = 0;
     matchPriv = "";
+    questPriv = "";
     name = "";
     useTouch = false;
     isMobile = false;
@@ -23,6 +24,7 @@ export class JoinMsg implements AbstractMsg {
         // PROTOCOL VERSION SHOULD ALWAYS BE THE FIRST WITH THE SAME SIZE TO NOT BREAK OLD CLIENTS!!
         s.writeUint32(this.protocol);
         s.writeString(this.matchPriv);
+        s.writeString(this.questPriv);
 
         s.writeString(this.name, Constants.PlayerNameMaxLen);
         s.writeBoolean(this.useTouch);
@@ -44,6 +46,7 @@ export class JoinMsg implements AbstractMsg {
     deserialize(s: BitStream) {
         this.protocol = s.readUint32();
         this.matchPriv = s.readString();
+        this.questPriv = s.readString();
 
         this.name = s.readString(Constants.PlayerNameMaxLen);
         this.useTouch = s.readBoolean();

@@ -95,7 +95,7 @@ describe.for(Object.entries(ThrowableDefs))("Throwable $0", ([, def]) => {
 describe.for(Object.entries(RoleDefs))("Role $0", ([, def]) => {
     let hasTest = false;
 
-    if (def.perks) {
+    if (def.perks?.length) {
         hasTest = true;
 
         test.for(def.perks)("Perk $0", {

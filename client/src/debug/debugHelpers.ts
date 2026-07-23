@@ -68,7 +68,7 @@ export function renderMapObstacleBounds(mapObj: Obstacle | Building | Structure)
 }
 
 export function renderWaterEdge(mapObj: Structure | Building) {
-    const def = MapObjectDefs.typeToDef(mapObj.type) as StructureDef | BuildingDef;
+    const def = MapObjectDefs.typeToDefSafe(mapObj.type) as StructureDef | BuildingDef;
     if (def.terrain.waterEdge !== undefined) {
         const { waterEdge } = def.terrain;
         const bounds = collider.transform(
@@ -92,7 +92,7 @@ export function renderWaterEdge(mapObj: Structure | Building) {
 }
 
 export function renderBridge(mapObj: Building | Structure) {
-    const def = MapObjectDefs.typeToDef(mapObj.type) as StructureDef | BuildingDef;
+    const def = MapObjectDefs.typeToDefSafe(mapObj.type) as StructureDef | BuildingDef;
     if (def.terrain.bridge !== undefined) {
         const bridgeLandBounds = def.bridgeLandBounds || [];
         for (let i = 0; i < bridgeLandBounds.length; i++) {

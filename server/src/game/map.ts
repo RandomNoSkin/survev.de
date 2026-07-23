@@ -1,6 +1,6 @@
 import { styleText } from "util";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
-import { MapObjectDefs } from "../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../shared/defs/register.ts";
 import type {
     BuildingDef,
     ObstacleDef,
@@ -42,7 +42,7 @@ const SURFACE_CELL_SIZE = 16;
 // most of this logic is based on the `renderMapBuildingBounds` from client debugHelpers
 // which was found on BHA leak
 function getBuildingBounds(type: string, layer = 0, pos: Vec2, rot: number) {
-    const def = MapObjectDefs[type] as BuildingDef | StructureDef;
+    const def = MapObjectDefs.typeToDef(type) as BuildingDef | StructureDef;
 
     const bounds: Array<{ layer: number; collision: Collider }> = [];
 
@@ -84,7 +84,9 @@ function getBuildingBounds(type: string, layer = 0, pos: Vec2, rot: number) {
                 mt = util.weightedRandomObject(mt);
             }
 
-            const childDef = MapObjectDefs[mt];
+            // mt can be "" here (an empty/weighted-optional building slot), and this
+            // fork's typeToDef throws on empty types, so use the safe lookup.
+            const childDef = MapObjectDefs.typeToDefSafe(mt);
             // only add child structures, not child buildings and obstacles
             if (mt && childDef && childDef.type === "structure") {
                 const childRot = math.oriToRad(mapObj.ori);
@@ -671,6 +673,7 @@ export class GameMap {
 
             this.trySpawn(`lake`, () => {
                 const lake = riverCreator.createLake(lakeDef);
+                if (!lake) return false;
 
                 for (const other of this.riverDescs) {
                     if (!other.looped || !other.aabb) continue;
@@ -870,7 +873,7 @@ export class GameMap {
                     count = Math.random() < count.odds ? 1 : 0;
                 }
             }
-            const def = MapObjectDefs[type];
+            const def = MapObjectDefs.typeToDef(type);
 
             if (def.terrain?.bridge || mapGen.importantSpawns.includes(type)) {
                 objsToSpawn.stage1.push({
@@ -1035,7 +1038,7 @@ export class GameMap {
     }
 
     genDensitySpawn(type: string, density: number) {
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         // for objects the spawn only on river shores
         // we need to do a density calculation for each river
@@ -1061,7 +1064,7 @@ export class GameMap {
 
     genFromMapDef(type: string, count: number): void {
         for (let i = 0; i < count; i++) {
-            const def = MapObjectDefs[type];
+            const def = MapObjectDefs.typeToDef(type);
 
             if (def.terrain?.waterEdge) {
                 this.genOnWaterEdge(type);
@@ -1092,7 +1095,7 @@ export class GameMap {
         ignoreMapSpawnReplacement?: boolean,
         hideFromMap?: boolean,
     ) {
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         if (!def) {
             this.game.logger.warn("Invalid map object:", type);
@@ -1188,12 +1191,12 @@ export class GameMap {
      * Checks if a map object can spawn at a given position, orientation and scale
      */
     canSpawn(type: string, pos: Vec2, ori: number, scale = 1): boolean {
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         if (def.type === "building" && def.mapGroundPatches) {
             for (const patch of def.mapGroundPatches) {
-                const min = math.addAdjust(pos, patch.bound.min, ori);
-                const max = math.addAdjust(pos, patch.bound.max, ori);
+                const min = math.addAdjust(pos, (patch.bound as { min: Vec2; max: Vec2 }).min, ori);
+                const max = math.addAdjust(pos, (patch.bound as { min: Vec2; max: Vec2 }).max, ori);
 
                 if (
                     min.x < 0 || min.y < 0 ||
@@ -1455,7 +1458,7 @@ export class GameMap {
             if (!obj.pos) return true;
             if (obj.__type !== ObjectType.Building) return false;
 
-            const def = MapObjectDefs[obj.type] as BuildingDef;
+            const def = MapObjectDefs.typeToDef(obj.type) as BuildingDef;
 
             let radius = def.group?.noSpawnRadius;
             
@@ -1482,7 +1485,7 @@ export class GameMap {
             if (!obj.pos) return false;
 
             // Hole das minDistance der schon existierenden Definition, falls vorhanden
-            const def = MapObjectDefs[obj.type] as BuildingDef;
+            const def = MapObjectDefs.typeToDef(obj.type) as BuildingDef;
             const existingMinDistance = def.group?.minDistance ?? 0;
             //const requiredDistance = Math.max(candidateMinDistance, existingMinDistance);
             const requiredDistance = candidateMinDistance;
@@ -1500,7 +1503,7 @@ export class GameMap {
         const all = this.game.grid.getAllObjects();
         return all.filter(o => {
             if (o.__type !== ObjectType.Building) return false;
-            const def = MapObjectDefs[o.type] as BuildingDef;
+            const def = MapObjectDefs.typeToDef(o.type) as BuildingDef;
             if (!def.group) return false;
             return def.group.id === groupId;
         });
@@ -1510,7 +1513,7 @@ export class GameMap {
         let ori = 0;
         let scale = 1;
 
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
         if (def.type === "building" || def.type === "structure") {
             if ("oris" in def) {
                 ori = def.oris![util.randomInt(0, def.oris!.length - 1)];
@@ -1525,7 +1528,7 @@ export class GameMap {
     }
 
     genOnWaterEdge(type: string): void {
-        const def = MapObjectDefs[type] as BuildingDef | StructureDef;
+        const def = MapObjectDefs.typeToDef(type) as BuildingDef | StructureDef;
         // safety check + makes ts shut up about it being possibly undefined
         const waterEdge = def.terrain.waterEdge;
         if (!waterEdge) return;
@@ -1601,7 +1604,7 @@ export class GameMap {
 
     genOnGrass(type: string) {
         const bounds = collider.toAabb(mapHelpers.getBoundingCollider(type));
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         const getSpawnAabb = (ori: number, scale: number) => {
             const rot = math.oriToRad(ori);
@@ -1785,7 +1788,7 @@ export class GameMap {
         }
         let { ori, scale } = this.getOriAndScale(type);
 
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         let rivers = this.normalRivers;
         if (type === "bunker_structure_05") {
@@ -1875,7 +1878,7 @@ export class GameMap {
         this.trySpawn(type, () => {
             river = river ?? rivers[util.randomInt(0, rivers.length - 1)];
             const t = util.random(0, 1);
-            const def = MapObjectDefs[type];
+            const def = MapObjectDefs.typeToDef(type);
 
             let width = river.getWaterWidth(t);
             if (def.type === "obstacle") {
@@ -1941,7 +1944,7 @@ export class GameMap {
             v2.create(this.width - inset, this.height - inset),
         );
 
-        const def = MapObjectDefs[type] as BuildingDef;
+        const def = MapObjectDefs.typeToDef(type) as BuildingDef;
 
         const bound = mapHelpers.getBoundingCollider(type) as AABB;
         const height = bound.max.y - bound.min.y / 2;
@@ -2020,7 +2023,7 @@ export class GameMap {
         puzzlePiece?: string,
         hideFromMap?: boolean,
     ): Obstacle {
-        const def = MapObjectDefs[type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(type) as ObstacleDef;
 
         scale = scale ?? util.random(def.scale.createMin, def.scale.createMax);
 
@@ -2049,7 +2052,7 @@ export class GameMap {
     }
 
     genOutfitObstacle(type: string, player: Player) {
-        const def = MapObjectDefs[type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(type) as ObstacleDef;
 
         const obstacle = new Obstacle(
             this.game,
@@ -2082,7 +2085,7 @@ export class GameMap {
         hideFromMap?: boolean,
         dontSpawnLoot?: boolean,
     ): Building {
-        const def = MapObjectDefs[type] as BuildingDef;
+        const def = MapObjectDefs.typeToDef(type) as BuildingDef;
 
         if (ori === undefined) {
             ori = this.getOriAndScale(type).ori;
@@ -2117,7 +2120,7 @@ export class GameMap {
             }
             if (!partType) continue;
 
-            if (dontSpawnLoot && MapObjectDefs[partType].type == "loot_spawner") continue;
+            if (dontSpawnLoot && MapObjectDefs.typeToDef(partType).type == "loot_spawner") continue;
 
             let partOri: number;
             if (mapObject.inheritOri === false) partOri = mapObject.ori;
@@ -2141,9 +2144,18 @@ export class GameMap {
         }
 
         for (const patch of def.mapGroundPatches ?? []) {
+            const worldBound =
+                patch.bound.type === collider.Type.Circle
+                    ? collider.createCircle(
+                          math.addAdjust(pos, patch.bound.pos, ori),
+                          patch.bound.rad,
+                      )
+                    : collider.createAabb(
+                          math.addAdjust(pos, patch.bound.min, ori),
+                          math.addAdjust(pos, patch.bound.max, ori),
+                      );
             this.msg.groundPatches.push({
-                min: math.addAdjust(pos, patch.bound.min, ori),
-                max: math.addAdjust(pos, patch.bound.max, ori),
+                bound: worldBound,
                 color: patch.color,
                 roughness: patch.roughness ?? 0,
                 offsetDist: patch.offsetDist ?? 0,
@@ -2164,7 +2176,7 @@ export class GameMap {
         ori?: number,
         parentId?: number,
     ): Structure {
-        const def = MapObjectDefs[type] as StructureDef;
+        const def = MapObjectDefs.typeToDef(type) as StructureDef;
 
         ori = ori ?? def.ori ?? util.randomInt(0, 3);
 
@@ -2190,7 +2202,7 @@ export class GameMap {
     }
 
     addBounds(mapObj: Obstacle | Building | Structure, hasParent: boolean) {
-        const def = MapObjectDefs[mapObj.type] as
+        const def = MapObjectDefs.typeToDef(mapObj.type) as
             | BuildingDef
             | ObstacleDef
             | StructureDef;

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
-import { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
+import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
@@ -62,6 +62,8 @@ export class Game {
     stopped = false;
     allowJoin = false;
     over = false;
+    /** Test hook: when true, the game never transitions to "started" (keeps it in the pre-game phase). */
+    preventStart = false;
     frozen = false;
     verifiedOnly = false;
     startedTime = 0;
@@ -260,7 +262,7 @@ export class Game {
             }
         }
 
-        if (!this.started) {
+        if (!this.started && !this.preventStart) {
             this.started = this.modeManager.isGameStarted();
             if (this.started) {
                 this.hasEverStarted = true;

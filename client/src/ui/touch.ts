@@ -594,7 +594,7 @@ class LineSprites {
 
         if (visible) {
             const curWeap = activePlayer.m_netData.m_activeWeapon;
-            const curWeapDef = GameObjectDefs.typeToDef(curWeap) as GunDef | ThrowableDef;
+            const curWeapDef = GameObjectDefs.typeToDefSafe(curWeap) as GunDef | ThrowableDef;
 
             // Determine max range of the aim line
             let maxRange = 30;

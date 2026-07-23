@@ -55,7 +55,8 @@ export type FindGameError =
     | "kicked_by_admin"
     | "player_not_verified"
     | "invalid_map"
-    | "invalid_team_mode";
+    | "invalid_team_mode"
+    | "failed_to_parse_body";
 
 export type FindGameResponse =
     | {

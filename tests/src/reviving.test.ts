@@ -38,7 +38,7 @@ test("Solo self revive", () => {
 test("Normal 2 players successful revive", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
 
@@ -63,7 +63,7 @@ test("Normal 2 players successful revive", () => {
 test("Normal player bleed out", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
 
@@ -84,7 +84,7 @@ test("Normal player bleed out", () => {
 test("Normal all teammates should die", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
     const playerC = game.playerBarn.addTestPlayer({ group });
@@ -117,7 +117,7 @@ test("Normal all teammates should die", () => {
 test("Normal medic reviving multiple players", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     const medic = game.playerBarn.addTestPlayer({ group });
     medic.promoteToRole("medic");
 

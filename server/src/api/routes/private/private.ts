@@ -39,7 +39,6 @@ import { MOCK_USER_ID } from "../user/auth/mock";
 import { getActiveChatBan, hashIp, isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
 import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, _allowedDeathEffects, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
-import { level } from "winston";
 
 /**
  * Adds each player's match result (games +1, wins, kills, damage) to the owned item

@@ -12,6 +12,7 @@ export function getConfig(isProduction: boolean, dir: string) {
     const isDev = !isProduction;
 
     const config: ConfigType = {
+        processMode: isDev ? "single" : "multi",
         apiServer: {
             host: "0.0.0.0",
             port: 8000,

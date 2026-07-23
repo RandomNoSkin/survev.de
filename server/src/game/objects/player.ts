@@ -5,10 +5,10 @@ import {
     getArenaModeExtraPerks,
 } from "../../../../shared/defs/customLoadout";
 import {
-    GameObjectDefs,
     type LootDef,
     WeaponTypeToDefs,
 } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { type EmoteDef, EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs";
 import {
     type BackpackDef,
@@ -26,12 +26,13 @@ import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs";
 import { type RoleDef, RoleDefs } from "../../../../shared/defs/gameObjects/roleDefs";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { TeamColor } from "../../../../shared/defs/maps/factionDefs";
 import {
     type Action,
     type Anim,
     EmoteSlot,
+    FactionTeam,
     GameConfig,
     type HasteType,
     type Input,
@@ -1265,7 +1266,7 @@ export class Player extends BaseGameObject {
                         continue;
                     }
 
-                    const curWeapDef = GameObjectDefs.typeToDefSafe(this.weapons[i].type);
+                    const curWeapDef = GameObjectDefs.typeToDefSafe(this.weapons[i].type)!;
                     if (curWeapDef.type == "gun") {
                         // refills the ammo of the existing weapon
                         this.weaponManager.reload(i, true);
@@ -1462,7 +1463,7 @@ export class Player extends BaseGameObject {
 
             // 2) Fallback: check bounding box from definition (good for obstacles whose visual cover isn't the same
             //    as their collision collider, like trees).
-            const def: any = MapObjectDefs[obj.type];
+            const def: any = MapObjectDefs.typeToDef(obj.type);
             if (def?.aabb) {
                 const s = obj.scale ?? 1;
 
@@ -1600,7 +1601,7 @@ export class Player extends BaseGameObject {
     }
 
     private isCoverType(type: string): boolean {
-        const def: any = MapObjectDefs[type];
+        const def: any = MapObjectDefs.typeToDef(type);
         if (!def) return false;
 
         // Trees/bushes are explicitly marked in their defs.
@@ -1620,7 +1621,7 @@ export class Player extends BaseGameObject {
     }
 
     private coverFactor(type: string): number {
-        const def: any = MapObjectDefs[type];
+        const def: any = MapObjectDefs.typeToDef(type);
         if (!def) return 1;
 
         // Trees tend to be larger cover; bushes a bit smaller.
@@ -1765,7 +1766,7 @@ export class Player extends BaseGameObject {
 
     getPanSegment() {
         const panSurface = this.wearingPan ? "unequipped" : "equipped";
-        let surface = (GameObjectDefs.pan as MeleeDef).reflectSurface![panSurface];
+        let surface = (GameObjectDefs.typeToDefSafe("pan") as MeleeDef).reflectSurface![panSurface];
 
         const scale = this.scale;
 
@@ -2716,7 +2717,7 @@ export class Player extends BaseGameObject {
             const closestLoot = this.getClosestLoot();
 
             if (closestLoot) {
-                const itemDef = GameObjectDefs.typeToDefSafe(closestLoot.type);
+                const itemDef = GameObjectDefs.typeToDefSafe(closestLoot.type)!;
                 switch (itemDef.type) {
                     case "gun":
                         const freeSlot = this.getFreeGunSlot(closestLoot);
@@ -3044,7 +3045,7 @@ export class Player extends BaseGameObject {
         this.chest = defaultItems.chest;
         assertType(this.chest, "chest", true);
 
-        const tc = 0 as TeamColor;
+        const tc = 0 as FactionTeam;
 
         this.helmet =
             typeof defaultItems.helmet === "function"
@@ -3301,7 +3302,7 @@ export class Player extends BaseGameObject {
                 | Player
                 | undefined;
 
-            const emoteDef = GameObjectDefs.typeToDefSafe(emote.type);
+            const emoteDef = GameObjectDefs.typeToDefSafe(emote.type)!;
 
             if (emotePlayer) {
                 if (!emote.isPing && !player.visibleObjects.has(emotePlayer)) {
@@ -4178,7 +4179,7 @@ export class Player extends BaseGameObject {
             for (let i = 0; i < GameConfig.WeaponSlot.Count; i++) {
                 const weap = this.weapons[i];
                 if (!weap.type) continue;
-                const def = GameObjectDefs.typeToDefSafe(weap.type);
+                const def = GameObjectDefs.typeToDefSafe(weap.type)!;
                 switch (def.type) {
                     case "gun":
                         this.weaponManager.dropGun(i);
@@ -4270,7 +4271,7 @@ export class Player extends BaseGameObject {
             for (let i = 0; i < GameConfig.WeaponSlot.Count; i++) {
                 const weap = this.weapons[i];
                 if (!weap.type) continue;
-                const def = GameObjectDefs.typeToDefSafe(weap.type);
+                const def = GameObjectDefs.typeToDefSafe(weap.type)!;
                 switch (def.type) {
                     case "gun":
                         weap.type = "";
@@ -4470,7 +4471,7 @@ export class Player extends BaseGameObject {
     }
 
     useHealingItem(item: InventoryItem): void {
-        const itemDef = GameObjectDefs.typeToDefSafe(item);
+        const itemDef = GameObjectDefs.typeToDefSafe(item)!;
         assert(itemDef.type === "heal", `Invalid heal item ${item}`);
 
         const hasAoeHeal = this.hasPerk("aoe_heal");
@@ -4525,7 +4526,7 @@ export class Player extends BaseGameObject {
     }
 
     useBoostItem(item: InventoryItem): void {
-        const itemDef = GameObjectDefs.typeToDefSafe(item);
+        const itemDef = GameObjectDefs.typeToDefSafe(item)!;
         assert(itemDef.type === "boost", `Invalid boost item ${item}`);
 
         if (
@@ -4794,7 +4795,7 @@ export class Player extends BaseGameObject {
 
         if (!this.invManager.isValid(msg.useItem) || !this.invManager.has(msg.useItem))
             return;
-        const def = GameObjectDefs.typeToDefSafe(msg.useItem);
+        const def = GameObjectDefs.typeToDefSafe(msg.useItem)!;
         switch (def.type) {
             case "heal":
                 this.useHealingItem(msg.useItem);
@@ -4977,7 +4978,7 @@ export class Player extends BaseGameObject {
             : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
 
-        const def = GameObjectDefs.typeToDefSafe(obj.type);
+        const def = GameObjectDefs.typeToDefSafe(obj.type)!;
         if (
             /*(this.actionType == GameConfig.Action.UseItem && def.type != "gun") ||*/
             this.actionType == GameConfig.Action.Revive ||
@@ -5444,7 +5445,9 @@ export class Player extends BaseGameObject {
 
     dropArmor(item: string): boolean {
         const armorDef = GameObjectDefs.typeToDefSafe(item);
-        if (armorDef.type != "chest" && armorDef.type != "helmet") return false;
+        if (!armorDef || (armorDef.type != "chest" && armorDef.type != "helmet")) {
+            return false;
+        }
         if (this[armorDef.type] !== item) return false;
         if (armorDef.noDrop) return false;
 
@@ -5465,7 +5468,7 @@ export class Player extends BaseGameObject {
 
     dropBackPackCopy(item: string): boolean {
         const armorDef = GameObjectDefs.typeToDefSafe(item);
-        if (armorDef.type != "backpack") return false;
+        if (!armorDef || armorDef.type != "backpack") return false;
         if (this[armorDef.type] !== item) return false;
         if (armorDef.level == 0) return false;
 
@@ -5537,7 +5540,7 @@ export class Player extends BaseGameObject {
     }
 
     dropInventoryItem(item: InventoryItem) {
-        const itemDef = GameObjectDefs.typeToDefSafe(item);
+        const itemDef = GameObjectDefs.typeToDefSafe(item)!;
 
         if (!this.invManager.has(item)) return;
         const inventoryCount = this.invManager.get(item);
@@ -5655,7 +5658,7 @@ export class Player extends BaseGameObject {
         const emoteMsg = msg as net.EmoteMsg;
 
         const emoteIdx = this.loadout.emotes.indexOf(emoteMsg.type);
-        const emoteDef = GameObjectDefs.typeToDefSafe(emoteMsg.type);
+        const emoteDef = GameObjectDefs.typeToDefSafe(emoteMsg.type)!;
 
         if (emoteMsg.isPing) {
             if (this.debug.teleportToPings) {

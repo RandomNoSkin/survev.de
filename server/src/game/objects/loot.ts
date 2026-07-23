@@ -1,4 +1,5 @@
-import { GameObjectDefs, type LootDef } from "../../../../shared/defs/gameObjectDefs";
+import type { LootDef } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { MapDef } from "../../../../shared/defs/mapDefs";
 import { GameConfig } from "../../../../shared/gameConfig";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
@@ -32,6 +33,9 @@ type LootTierItem = MapDef["lootTable"][string][number];
 export class LootBarn {
     loots: Loot[] = [];
     newLoots: Loot[] = [];
+
+    /** tiers we've already warned about being undefined, to avoid log spam */
+    static warnedMissingTiers = new Set<string>();
 
     private _cachedTiers: Record<string, () => LootTierItem> = {};
 
@@ -105,7 +109,7 @@ export class LootBarn {
         pushSpeed?: number,
         dir?: Vec2,
     ) {
-        const def = GameObjectDefs[type];
+        const def = GameObjectDefs.typeToDef(type);
 
         if (!def || !("lootImg" in def)) {
             this.game.logger.warn("Invalid loot type:", type);
@@ -127,7 +131,7 @@ export class LootBarn {
         preloadGun?: boolean,
         source?: "player" | "obstacle" | "map",
     ) {
-        const def = GameObjectDefs[type];
+        const def = GameObjectDefs.typeToDef(type);
 
         if (!def || !("lootImg" in def)) {
             this.game.logger.warn("Invalid loot type:", type);
@@ -146,7 +150,7 @@ export class LootBarn {
             loot.isPreloadedGun = true;
         }
 
-        if (def.type === "gun" && GameObjectDefs[def.ammo] && !loot.isPreloadedGun) {
+        if (def.type === "gun" && GameObjectDefs.typeToDef(def.ammo) && !loot.isPreloadedGun) {
             const ammoCount = useCountForAmmo ? count : def.ammoSpawnCount;
             if (ammoCount <= 0) return;
             const halfAmmo = Math.ceil(ammoCount / 2);
@@ -237,10 +241,17 @@ export class LootBarn {
 }
 
     getLootTable(tier: string): LootTierItem | undefined {
-        assert(
-            this.game.map.mapDef.lootTable[tier],
-            `Unknown loot tier with type ${tier}`,
-        );
+        if (!this.game.map.mapDef.lootTable[tier]) {
+            // A missing tier must not crash the whole game (which would kill every player
+            // in it). Warn once per tier and just spawn no loot for this spawner.
+            if (!LootBarn.warnedMissingTiers.has(tier)) {
+                LootBarn.warnedMissingTiers.add(tier);
+                this.game.logger.warn(
+                    `Unknown loot tier '${tier}' on map ${this.game.config.mapName} — spawning no loot`,
+                );
+            }
+            return undefined;
+        }
 
         let item: LootTierItem | undefined = this._getLootTable(tier);
 
@@ -294,7 +305,7 @@ export class Loot extends BaseGameObject {
     ) {
         super(game, pos);
 
-        const def = GameObjectDefs[type] as LootDef;
+        const def = GameObjectDefs.typeToDef(type) as LootDef;
         assert("lootImg" in def, `Invalid loot type ${type}`);
 
         this.layer = layer;

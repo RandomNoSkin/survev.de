@@ -2,7 +2,7 @@ import { GameConfig } from "../../gameConfig";
 import { util } from "../../utils/util";
 import { v2 } from "../../utils/v2";
 import type { MapDef } from "../mapDefs";
-import { MapId } from "../types/misc";
+import { MapId } from "../../gameConfig.ts";
 import { Main, type PartialMapDef } from "./baseDefs";
 
 export enum TeamColor {

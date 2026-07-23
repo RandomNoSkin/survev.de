@@ -5,7 +5,7 @@ import {
 } from "../../../../shared/defs/gameObjects/bulletDefs";
 import { type ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { type DamageType, GameConfig } from "../../../../shared/gameConfig";
 import { Constants } from "../../../../shared/net/net";
@@ -170,6 +170,7 @@ export class Bullet {
     apRounds!: boolean;
     highVelocity!: boolean;
     modified!: boolean;
+    combatStims = false;
     piercing!: boolean;
     pierceCount!: number;
     trailSaturated!: boolean;
@@ -728,7 +729,7 @@ export class Bullet {
 
             if (col.type == "obstacle") {
                 const obstacle = col.obj! as Obstacle;
-                const mapDef = MapObjectDefs[col.obstacleType!] as ObstacleDef;
+                const mapDef = MapObjectDefs.typeToDef(col.obstacleType!) as ObstacleDef;
 
                 const def = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
                 // AP Obstacle Multiplier Buff

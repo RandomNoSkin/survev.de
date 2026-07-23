@@ -23,7 +23,7 @@ test("Killed by enemy", () => {
 
 test("Downed by enemy, killed by enemy", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     // playerC exists so that the player doesn't instantly die due to lacking teammates
     const playerA = game.playerBarn.addTestPlayer({});
     const playerB = game.playerBarn.addTestPlayer({ group });
@@ -54,7 +54,7 @@ test("Downed by enemy, killed by enemy", () => {
 test("Downed by enemy, killed by bleeding", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     // playerC exists so that the player doesn't instantly die due to lacking teammates
     const playerA = game.playerBarn.addTestPlayer({});
     const playerB = game.playerBarn.addTestPlayer({ group });
@@ -84,7 +84,7 @@ test("Downed by enemy, killed by bleeding", () => {
 test("Downed by enemy, killed by gas", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
     // playerC exists so that the player doesn't instantly die due to lacking teammates
     const playerA = game.playerBarn.addTestPlayer({});
     const playerB = game.playerBarn.addTestPlayer({ group });
@@ -114,13 +114,13 @@ test("Downed by enemy, killed by gas", () => {
 test("Downed by enemy, killed by teammate", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({});
     const playerB = game.playerBarn.addTestPlayer({ group });
     const playerC = game.playerBarn.addTestPlayer({ group });
 
-    playerB.client.disconnected = true;
+    playerB.disconnected = true;
 
     playerB.damage({
         amount: 999,
@@ -148,12 +148,12 @@ test("Downed by enemy, killed by teammate", () => {
 test("Downed by teammate, killed by teammate", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
 
-    playerB.client.disconnected = true;
+    playerB.disconnected = true;
 
     playerB.damage({
         amount: 999,
@@ -180,13 +180,13 @@ test("Downed by teammate, killed by teammate", () => {
 test("Downed by teammate, killed by enemy", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({});
     const playerB = game.playerBarn.addTestPlayer({ group });
     const playerC = game.playerBarn.addTestPlayer({ group });
 
-    playerB.client.disconnected = true;
+    playerB.disconnected = true;
 
     playerB.damage({
         amount: 999,
@@ -207,19 +207,22 @@ test("Downed by teammate, killed by enemy", () => {
     });
 
     expect(playerB.dead).toBeTruthy();
-    expect(playerA.kills).toBe(1);
+    // Kill credit always goes to whoever downed the player. Here the downer is the
+    // victim's own (disconnected-damage) teammate, so no kill is scored: the enemy
+    // finisher doesn't steal it and a teammate can't be credited a kill.
+    expect(playerA.kills).toBe(0);
     expect(playerC.kills).toBe(0);
 });
 
 test("Downed by teammate, killed by bleeding", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
 
-    playerB.client.disconnected = true;
+    playerB.disconnected = true;
 
     playerB.damage({
         amount: 999,
@@ -245,12 +248,12 @@ test("Downed by teammate, killed by bleeding", () => {
 test("Downed by teammate, killed by gas", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
 
-    playerB.client.disconnected = true;
+    playerB.disconnected = true;
 
     playerB.damage({
         amount: 999,
@@ -275,7 +278,7 @@ test("Downed by teammate, killed by gas", () => {
 
 test("Teammates can't damage non-disconnected teammates", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });

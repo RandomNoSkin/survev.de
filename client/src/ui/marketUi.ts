@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import {
     getItemCategory,
     getItemPrice,
@@ -357,7 +357,7 @@ export class MarketUi {
         if (!q) return undefined;
         if (!this.cosmeticCatalog) {
             this.cosmeticCatalog = [];
-            for (const type in GameObjectDefs) {
+            for (const type of GameObjectDefs.getAllTypes()) {
                 if (!getItemCategory(type)) continue;
                 this.cosmeticCatalog.push({
                     type,
@@ -580,7 +580,7 @@ export class MarketUi {
     }
 
     private itemName(type: string): string {
-        const def = GameObjectDefs[type] as { name?: string } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
         return this.localization.translate(`game-${type}`) || def?.name || type;
     }
 
@@ -621,7 +621,7 @@ export class MarketUi {
         if (!source) return "Unknown";
         if (source === "market") return "Marketplace";
         if (source.startsWith("shop:")) return `Shop · ${source.slice(5)}`;
-        const def = GameObjectDefs[source] as { name?: string } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(source) as { name?: string } | undefined;
         return (
             this.localization.translate(`loadout-${source}`) ||
             this.localization.translate(source) ||

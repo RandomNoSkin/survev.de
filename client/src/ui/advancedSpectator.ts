@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { ExplosionDefs } from "../../../shared/defs/gameObjects/explosionsDefs";
 import type { ThrowableDef } from "../../../shared/defs/gameObjects/throwableDefs";
 import { GameConfig } from "../../../shared/gameConfig";
@@ -297,7 +297,7 @@ export class AdvancedSpectator {
             for (let i = 0; i < projectiles.length; i++) {
                 const p = projectiles[i];
                 if (!p.active) continue;
-                const def = GameObjectDefs[p.type] as ThrowableDef | undefined;
+                const def = GameObjectDefs.typeToDefSafe(p.type) as ThrowableDef | undefined;
                 // Only timed grenades: skip dynamite/mine/very-long-fuse throwables
                 // (snowball, potato, proximity mines, ...).
                 if (
@@ -350,7 +350,7 @@ export class AdvancedSpectator {
                 ) {
                     continue;
                 }
-                const def = GameObjectDefs[p.m_netData.m_activeWeapon] as
+                const def = GameObjectDefs.typeToDefSafe(p.m_netData.m_activeWeapon) as
                     | ThrowableDef
                     | undefined;
                 if (

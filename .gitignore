@@ -74,3 +74,5 @@ server/logs/
 server/*-audit.json
 *.gz
 server/recordings/*
+logs/
+tests/logs/

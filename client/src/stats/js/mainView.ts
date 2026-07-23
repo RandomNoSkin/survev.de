@@ -1,5 +1,4 @@
 import $ from "jquery";
-import { MinGames } from "../../../../shared/constants.ts";
 import { MapId } from "../../../../shared/gameConfig.ts";
 import type { LeaderboardRequest } from "../../../../shared/types/stats.ts";
 import { api } from "../../api.ts";

@@ -553,9 +553,9 @@ export class PlayerView {
         }
 
         const nameFor = (type: string) =>
-            (GameObjectDefs[type] as { name?: string } | undefined)?.name || type;
+            (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name || type;
         const catOf = (type: string) => {
-            const t = (GameObjectDefs[type] as { type?: string } | undefined)?.type;
+            const t = (GameObjectDefs.typeToDefSafe(type) as { type?: string } | undefined)?.type;
             switch (t) {
                 case "outfit":
                 case "melee":
@@ -594,7 +594,7 @@ export class PlayerView {
 
         // Owned, non-default, known cosmetics grouped by category.
         const shown = items.filter(
-            (it) => !DEFAULT_UNLOCKED.has(it.type) && !!GameObjectDefs[it.type],
+            (it) => !DEFAULT_UNLOCKED.has(it.type) && !!GameObjectDefs.typeToDefSafe(it.type),
         );
 
         // Total inventory worth in Golden Fries (shop value × copies).
@@ -685,7 +685,7 @@ export class PlayerView {
     makeStatsOffer(itemId: number, type: string) {
         if (!Number.isFinite(itemId)) return;
         const name = helpers.htmlEscape(
-            (GameObjectDefs[type] as { name?: string } | undefined)?.name || type,
+            (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name || type,
         );
         const est = getItemPrice(type);
         $(".ld-offer-overlay").remove();

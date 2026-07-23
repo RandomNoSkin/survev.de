@@ -1,4 +1,4 @@
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameConfig } from "../../../../shared/gameConfig";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
@@ -17,7 +17,7 @@ export class AirdropBarn {
     constructor(readonly game: Game) {}
 
     addAirdrop(pos: Vec2, type: string) {
-        if (!MapObjectDefs[type]) {
+        if (!MapObjectDefs.typeToDef(type)) {
             console.error("[AirdropBarn] invalid drop type", type, pos);
             gameLogger.error("[AirdropBarn] invalid drop type", { type, pos });
             return;
@@ -29,7 +29,7 @@ export class AirdropBarn {
     }
 
     addSupplyDrop(pos: Vec2, type: string) {
-        if (!MapObjectDefs[type]) {
+        if (!MapObjectDefs.typeToDef(type)) {
             console.error("[AirdropBarn] invalid drop type", type, pos);
             gameLogger.error("[AirdropBarn] invalid drop type", { type, pos });
             return;
@@ -75,14 +75,14 @@ export class Airdrop extends BaseGameObject {
 
     constructor(game: Game, pos: Vec2, obstacleType: string) {
         super(game, pos);
-        const def = MapObjectDefs[obstacleType] as ObstacleDef | undefined;
+        const def = MapObjectDefs.typeToDef(obstacleType) as ObstacleDef | undefined;
         if (!def?.collision) {
             console.error("[Airdrop] Invalid obstacleType:", obstacleType, "pos:", pos);
             gameLogger.error("[Airdrop] Invalid obstacleType", { obstacleType, pos });
             this.obstacleType = "airdrop_crate_01"; // oder dein echter default crate key
             this.type = this.obstacleType;
 
-            const fallbackDef = MapObjectDefs[this.obstacleType] as ObstacleDef;
+            const fallbackDef = MapObjectDefs.typeToDef(this.obstacleType) as ObstacleDef;
             this.crateCollision = collider.transform(fallbackDef.collision, this.pos, 0, 1);
             return;
         }

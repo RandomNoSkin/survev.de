@@ -36283,10 +36283,6 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         type: "loot_spawner",
         loot: [tierLoot("tier_spetsnaz_outfit", 1, 1)],
     },
-    loot_tier_eye_01: {
-         type: "loot_spawner",
-         loot: [tierLoot("tier_eye_01", 1, 1)],
-    },
     loot_tier_eye_02: {
         type: "loot_spawner",
         loot: [tierLoot("tier_eye_02", 1, 1)],

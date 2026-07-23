@@ -81,18 +81,14 @@ export const BuildingSprites = {
         "map/map-planter-03.svg",
         "map/map-planter-04.svg",
         "map/map-planter-05.svg",
-        "map/map-planter-07.svg",
         "map/map-planter-res-01.svg",
-        "map/map-planter-res-03.svg",
     ],
 
     greenhouse_aged: [
         "map/map-building-greenhouse-ceiling-02.svg",
         "map/map-building-greenhouse-floor-02.svg",
         "map/map-planter-06.svg",
-        "map/map-planter-07.svg",
         "map/map-planter-res-02.svg",
-        "map/map-planter-res-03.svg",
     ],
 
     house_red: [
@@ -319,21 +315,9 @@ export const BuildingSprites = {
     ],
 
     bunker_chrys: [
-        "map/map-bunker-chrys-chamber-ceiling-01.svg",
-        "map/map-bunker-chrys-chamber-floor-01a.svg",
-        "map/map-bunker-chrys-chamber-floor-01b.svg",
-        "map/map-bunker-chrys-compartment-ceiling-01a.svg",
-        "map/map-bunker-chrys-compartment-ceiling-01b.svg",
-        "map/map-bunker-chrys-compartment-ceiling-02a.svg",
-        "map/map-bunker-chrys-compartment-ceiling-02b.svg",
-        "map/map-bunker-chrys-compartment-ceiling-03a.svg",
-        "map/map-bunker-chrys-compartment-ceiling-03b.svg",
-        "map/map-bunker-chrys-compartment-floor-01a.svg",
         "map/map-bunker-chrys-compartment-floor-01b.svg",
         "map/map-bunker-chrys-compartment-floor-01d.svg",
-        "map/map-bunker-chrys-compartment-floor-02a.svg",
         "map/map-bunker-chrys-compartment-floor-02b.svg",
-        "map/map-bunker-chrys-compartment-floor-03a.svg",
     ],
 
     bunker_eye: [
@@ -350,19 +334,7 @@ export const BuildingSprites = {
     ],
 
     bunker_chrys_aged: [
-        "map/map-bunker-chrys-chamber-ceiling-01.svg",
-        "map/map-bunker-chrys-chamber-floor-01a.svg",
-        "map/map-bunker-chrys-chamber-floor-01b.svg",
-        "map/map-bunker-chrys-compartment-ceiling-01a.svg",
-        "map/map-bunker-chrys-compartment-ceiling-01b.svg",
-        "map/map-bunker-chrys-compartment-ceiling-02a.svg",
-        "map/map-bunker-chrys-compartment-ceiling-02b.svg",
-        "map/map-bunker-chrys-compartment-ceiling-03a.svg",
-        "map/map-bunker-chrys-compartment-ceiling-03b.svg",
-        "map/map-bunker-chrys-compartment-floor-01a.svg",
         "map/map-bunker-chrys-compartment-floor-01c.svg",
-        "map/map-bunker-chrys-compartment-floor-02a.svg",
         "map/map-bunker-chrys-compartment-floor-02c.svg",
-        "map/map-bunker-chrys-compartment-floor-03a.svg",
     ],
 };

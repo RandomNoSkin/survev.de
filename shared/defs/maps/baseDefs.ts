@@ -195,6 +195,18 @@ export const Main: MapDef = {
         tier_mansion_floor: [{ name: "outfitCasanova", count: 1, weight: 1 }],
         tier_vault_floor: [{ name: "outfitJester", count: 1, weight: 1 }],
         tier_police_floor: [{ name: "outfitPrisoner", count: 1, weight: 1 }],
+        // Bunker floor / crossing tiers used by shared building defs (hydra, vault, crossing
+        // bunkers) that spawn on standard maps. Values mirror the comp/scrims loot tables;
+        // without these here the loot spawner throws on Main-based maps. Tune as needed.
+        tier_hydra_floor: [{ name: "spade", count: 1, weight: 1 }],
+        tier_vault_floor_2: [{ name: "backpack03", count: 1, weight: 1 }],
+        tier_crossing: [
+            { name: "ots38", count: 1, weight: 0.2 },
+            { name: "ots38_dual", count: 1, weight: 0.2 },
+            { name: "p30l", count: 1, weight: 0.2 },
+            { name: "m134", count: 1, weight: 0.15 },
+            { name: "p90", count: 1, weight: 0.15 },
+        ],
         tier_fragtastic: [
             { name: "", count: 1, weight: 1 },
             { name: "outfitFragtastic", count: 1, weight: 0.15 },

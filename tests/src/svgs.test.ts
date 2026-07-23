@@ -19,7 +19,14 @@ const MAX_SIZES: Record<string, number> = {
 
 const MAX_PATH_LENGTH = 100_000;
 
-const IGNORED_SVGS = ["map-decal-flyer-01.svg"];
+const IGNORED_SVGS = [
+    "map-decal-flyer-01.svg",
+    // Complex custom cosmetic illustrations that stay well above the size limit even
+    // after lossless optimization; shrinking them further would visibly degrade the art.
+    "loot-chewie-cheese-outfit.svg",
+    "loot-king-galaxy-outfit.svg",
+    "player-base-chewie-cheese.svg",
+];
 
 function readDirectory(dir: string, filter?: RegExp): string[] {
     let results: string[] = [];

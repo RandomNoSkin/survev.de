@@ -223,7 +223,7 @@ export class ExplosionBarn {
         ignoreObstacleId?: number,
     ) {
         const def = GameObjectDefs.typeToDefSafe(type);
-        assert(def.type === "explosion", `Invalid explosion with type ${type}`);
+        assert(def?.type === "explosion", `Invalid explosion with type ${type}`);
 
         const explosion: Explosion = {
             rad: def.rad.max,

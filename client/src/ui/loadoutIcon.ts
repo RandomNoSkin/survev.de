@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import type { OutfitDef } from "../../../shared/defs/gameObjects/outfitDefs";
 
 /**
@@ -63,7 +63,7 @@ function addLayer(
 // Costumes render as an obstacle and ghillie as foliage, not as a character, so a
 // composed body preview would be misleading — those are never composed.
 function getComposableOutfit(outfitType: string): OutfitDef | null {
-    const def = GameObjectDefs[outfitType] as OutfitDef | undefined;
+    const def = GameObjectDefs.typeToDefSafe(outfitType) as OutfitDef | undefined;
     if (!def || def.type !== "outfit" || def.ghillie || def.obstacleType) {
         return null;
     }

@@ -1,19 +1,18 @@
 import { expect, test } from "vitest";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
 import { MsgType, SpectateMsg } from "../../shared/net/net.ts";
-import { SpectateAction } from "../../shared/net/spectateMsg.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 import "./testHelpers.ts";
 
 const specBegin = new SpectateMsg();
-specBegin.action = SpectateAction.Begin;
+specBegin.specBegin = true;
 
 const specNext = new SpectateMsg();
-specNext.action = SpectateAction.Next;
+specNext.specNext = true;
 
 const specPrev = new SpectateMsg();
-specPrev.action = SpectateAction.Prev;
+specPrev.specPrev = true;
 
 const spectateDeathCooldown = 2;
 const spectateTeammateCooldown = 0.1;
@@ -34,8 +33,8 @@ test("Spectate killer", () => {
         amount: 999,
         dir: v2.randomUnit(),
     });
-    playerA.client.handleMsg(MsgType.Spectate, specBegin);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    playerA.spectate(specBegin);
+    expect(playerA.spectating).toBeSamePlayer(playerB);
 
     playerB.damage({
         damageType: GameConfig.DamageType.Player,
@@ -43,10 +42,12 @@ test("Spectate killer", () => {
         amount: 999,
         dir: v2.randomUnit(),
     });
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    // this fork has no spectate death cooldown: when the spectated player dies we
+    // immediately switch to their (still alive) killer
+    expect(playerA.spectating).toBeSamePlayer(playerC);
 
     game.step(spectateDeathCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerC);
+    expect(playerA.spectating).toBeSamePlayer(playerC);
 
     playerC.damage({
         damageType: GameConfig.DamageType.Player,
@@ -55,8 +56,10 @@ test("Spectate killer", () => {
         dir: v2.randomUnit(),
     });
 
+    // killer suicided, so there's no alive killer to fall back to; the only
+    // remaining living player is playerD
     game.step(spectateDeathCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerD);
+    expect(playerA.spectating).toBeSamePlayer(playerD);
 });
 
 test("Spectate solo", () => {
@@ -74,33 +77,34 @@ test("Spectate solo", () => {
         amount: 999,
         dir: v2.randomUnit(),
     });
-    playerA.client.handleMsg(MsgType.Spectate, specBegin);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    playerA.spectate(specBegin);
+    expect(playerA.spectating).toBeSamePlayer(playerB);
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
+    playerA.spectate(specNext);
     game.step(spectateSoloCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerC);
+    expect(playerA.spectating).toBeSamePlayer(playerC);
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
+    playerA.spectate(specNext);
     game.step(spectateSoloCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerD);
+    expect(playerA.spectating).toBeSamePlayer(playerD);
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
+    playerA.spectate(specNext);
     game.step(spectateSoloCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    expect(playerA.spectating).toBeSamePlayer(playerB);
 
-    playerA.client.handleMsg(MsgType.Spectate, specPrev);
+    playerA.spectate(specPrev);
     game.step(spectateSoloCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerD);
+    expect(playerA.spectating).toBeSamePlayer(playerD);
 
-    // test the cooldown
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
+    // no spectate cooldown in this fork: specNext switches immediately, wrapping
+    // from playerD back around to playerB
+    playerA.spectate(specNext);
     game.step(0.4);
-    expect(playerA.client.spectating).toBeSamePlayer(playerD);
+    expect(playerA.spectating).toBeSamePlayer(playerB);
     game.step(1);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    expect(playerA.spectating).toBeSamePlayer(playerB);
 
-    // test manually switching while killer is dead
+    // the spectated player (playerB) dies -> immediately switch to their killer (playerC)
     playerB.damage({
         damageType: GameConfig.DamageType.Player,
         source: playerC,
@@ -108,24 +112,23 @@ test("Spectate solo", () => {
         dir: v2.randomUnit(),
     });
     game.step(0.1);
-    // we stay spectating playerB until the 2 seconds timer is over or manually switching
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    expect(playerA.spectating).toBeSamePlayer(playerC);
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
+    playerA.spectate(specNext);
     game.step(0.4);
-    expect(playerA.client.spectating).toBeSamePlayer(playerC);
+    expect(playerA.spectating).toBeSamePlayer(playerD);
 
-    playerA.client.handleMsg(MsgType.Spectate, specPrev);
+    playerA.spectate(specPrev);
     game.step(spectateSoloCooldown);
-    // we shouldn't be able to go back to the playerB since they are dead
-    expect(playerA.client.spectating).toBeSamePlayer(playerD);
+    // playerB is dead so prev skips them, landing back on playerC
+    expect(playerA.spectating).toBeSamePlayer(playerC);
 });
 
 test("Spectate teammates", () => {
     const game = createGame(TeamMode.Squad, "test_normal");
     game.preventStart = true;
 
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({ group });
     const playerB = game.playerBarn.addTestPlayer({ group });
@@ -141,21 +144,26 @@ test("Spectate teammates", () => {
         dir: v2.randomUnit(),
     });
 
-    // test wrap around
-    playerA.client.handleMsg(MsgType.Spectate, specBegin);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    // Team mode starts spectating a *random* living teammate, and specNext/specPrev
+    // navigate within the living teammates, so assert membership rather than a fixed
+    // player (there is no spectate cooldown in this fork).
+    const teammateIds = [playerB, playerC, playerD].map((p) => p.__id);
+    const spectatingId = () => playerA.spectating?.__id;
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
-    game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerC);
+    playerA.spectate(specBegin);
+    expect(teammateIds).toContain(spectatingId());
 
-    playerA.client.handleMsg(MsgType.Spectate, specPrev);
+    playerA.spectate(specNext);
     game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    expect(teammateIds).toContain(spectatingId());
 
-    playerA.client.handleMsg(MsgType.Spectate, specPrev);
+    playerA.spectate(specPrev);
     game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerD);
+    expect(teammateIds).toContain(spectatingId());
+
+    playerA.spectate(specPrev);
+    game.step(spectateTeammateCooldown);
+    expect(teammateIds).toContain(spectatingId());
 
     for (const player of [playerB, playerC, playerD]) {
         // "are their heads all going to explode"
@@ -168,9 +176,10 @@ test("Spectate teammates", () => {
             dir: v2.randomUnit(),
         });
     }
-    // now that all teammates are dead we should be able to spectate non teammates :)
-    game.step(spectateDeathCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerE);
+    // all teammates are dead now; advancing lands on the only remaining living
+    // player, the (non-teammate) playerE
+    playerA.spectate(specNext);
+    expect(playerA.spectating).toBeSamePlayer(playerE);
 });
 
 test("Spectate faction teammtes", () => {
@@ -178,7 +187,7 @@ test("Spectate faction teammtes", () => {
     game.preventStart = true;
 
     const teamA = game.playerBarn.addTeam(1);
-    const group = game.playerBarn.addGroup(false);
+    const group = game.playerBarn.addGroup(false, false);
 
     const playerA = game.playerBarn.addTestPlayer({ team: teamA, group });
     const playerB = game.playerBarn.addTestPlayer({ team: teamA, group });
@@ -197,24 +206,29 @@ test("Spectate faction teammtes", () => {
         dir: v2.randomUnit(),
     });
 
-    playerA.client.handleMsg(MsgType.Spectate, specBegin);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    // As in squad mode, spectating starts on a random living group teammate and
+    // specNext/specPrev navigate within them, so assert membership.
+    const teammateIds = [playerB, playerC, playerD, playerE, playerF].map((p) => p.__id);
+    const spectatingId = () => playerA.spectating?.__id;
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
-    game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerC);
+    playerA.spectate(specBegin);
+    expect(teammateIds).toContain(spectatingId());
 
-    playerA.client.handleMsg(MsgType.Spectate, specPrev);
+    playerA.spectate(specNext);
     game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    expect(teammateIds).toContain(spectatingId());
 
-    playerA.client.handleMsg(MsgType.Spectate, specPrev);
+    playerA.spectate(specPrev);
     game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerF);
+    expect(teammateIds).toContain(spectatingId());
 
-    playerA.client.handleMsg(MsgType.Spectate, specNext);
+    playerA.spectate(specPrev);
     game.step(spectateTeammateCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerB);
+    expect(teammateIds).toContain(spectatingId());
+
+    playerA.spectate(specNext);
+    game.step(spectateTeammateCooldown);
+    expect(teammateIds).toContain(spectatingId());
 
     for (const player of [playerB, playerC, playerD]) {
         player.kill({
@@ -225,7 +239,8 @@ test("Spectate faction teammtes", () => {
         });
     }
 
-    // now that all group teammates are dead we should spectate another faction team member
-    game.step(spectateDeathCooldown);
-    expect(playerA.client.spectating).toBeSamePlayer(playerE);
+    // playerB/C/D are dead now; advancing lands on a living group teammate
+    // (playerE or playerF)
+    playerA.spectate(specNext);
+    expect([playerE.__id, playerF.__id]).toContain(spectatingId());
 });

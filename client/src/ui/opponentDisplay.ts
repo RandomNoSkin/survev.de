@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import type { DeathEffectDef } from "../../../shared/defs/gameObjects/deathEffectDefs";
 import type { OutfitDef } from "../../../shared/defs/gameObjects/outfitDefs";
 import { type Action, type Anim, GameConfig } from "../../../shared/gameConfig";
@@ -247,7 +247,7 @@ export class LoadoutDisplay {
     playDeathEffectPreview(deathEffectType: string) {
         if (!this.initialized || !this.activePlayer) return;
 
-        const deathEffectDef = GameObjectDefs[deathEffectType] as
+        const deathEffectDef = GameObjectDefs.typeToDefSafe(deathEffectType) as
             | DeathEffectDef
             | undefined;
         if (!deathEffectDef) return;
@@ -346,8 +346,10 @@ export class LoadoutDisplay {
             actionItem: options.actionItem || "",
             wearingPan: false,
             healEffect: false,
+            lastStandEffect: false,
             frozen: false,
             frozenOri: 0,
+            frozenType: "",
             hasteType: 0,
             hasteSeq: 0,
             scale: 1,
@@ -499,7 +501,7 @@ export class LoadoutDisplay {
         const outfitDirty = this.loadout.outfit != this.outfitOld;
         this.outfitOld = this.loadout.outfit;
         if (hasFocus && outfitDirty) {
-            const itemDef = GameObjectDefs[this.loadout.outfit] as OutfitDef;
+            const itemDef = GameObjectDefs.typeToDefSafe(this.loadout.outfit) as OutfitDef;
             if (itemDef) {
                 this.audioManager.playSound(itemDef.sound.pickup, {
                     channel: "ui",
@@ -530,7 +532,7 @@ export class LoadoutDisplay {
         );
         this.particleBarn.m_update(dt, this.camera);
         this.decalBarn.m_update(dt, this.camera, this.renderer);
-        this.renderer.m_update(dt, this.camera, this.map);
+        this.renderer.m_update(dt, this.camera, this.map, false);
         this.activePlayer.playActionStartSfx = false;
 
         this.render(dt, debug);

@@ -14,7 +14,7 @@ interface GameTestHelpers<R = unknown> {
     toBeValidMapObjOrNone: (type?: MapObjectDef["type"]) => R;
     toBeValidGameObj: (type?: GameObjectDef["type"]) => R;
     toBeValidLoot: (type?: GameObjectDef["type"]) => R;
-    toBeValidLootTier: () => R;
+    toBeValidLootTier: (lootTable?: Record<string, unknown>) => R;
 
     toBeSamePlayer: (obj?: Player) => R;
 }
@@ -121,8 +121,13 @@ expect.extend({
         return { pass: true, message: () => "" };
     },
 
-    toBeValidLootTier: (received, _expected) => {
-        if (!(received in Main.lootTable)) {
+    toBeValidLootTier: (received, lootTable) => {
+        // The game resolves loot tiers from the current map's own lootTable
+        // (see server loot.ts: `this.game.map.mapDef.lootTable[tier]`), so a tier
+        // is valid when it exists in that map's table. Callers with a map in scope
+        // pass its lootTable; map-agnostic callers fall back to the base game's table.
+        const table = (lootTable as Record<string, unknown>) ?? Main.lootTable;
+        if (!(received in table)) {
             return {
                 message: () => `Expected '${received}' to be a valid loot table`,
                 pass: false,

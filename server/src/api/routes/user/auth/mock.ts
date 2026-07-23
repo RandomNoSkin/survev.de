@@ -4,7 +4,7 @@ import { setCookie } from "hono/cookie";
 import { Config } from "../../../../config.ts";
 import { db } from "../../../db/index.ts";
 import { usersTable } from "../../../db/schema.ts";
-import { createNewUser, generateId, setSessionTokenCookie } from "./authUtils.ts";
+import { createNewUser, generateId, sanitizeSlug, setSessionTokenCookie } from "./authUtils.ts";
 
 export const MockRouter = new Hono();
 
