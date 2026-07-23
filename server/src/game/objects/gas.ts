@@ -11,6 +11,27 @@ interface StageData {
     damage: number;
 }
 
+export function getGasDamageMultiplier(timeInGas: number) {
+    const t = math.clamp(timeInGas / GameConfig.gas.damageRampDuration, 0, 1);
+    return math.lerp(
+        t,
+        GameConfig.gas.damageRampStartMultiplier,
+        GameConfig.gas.damageRampEndMultiplier,
+    );
+}
+
+export function getGasSelfMoveRadius(circleIdx: number, radius: number) {
+    if (!GameConfig.gas.selfMoveEnabled) return 0;
+    if (circleIdx < GameConfig.gas.selfMoveStartCircle) return 0;
+
+    const circleOffset = circleIdx - GameConfig.gas.selfMoveStartCircle;
+    const extraFraction =
+        circleOffset * GameConfig.gas.selfMoveIncreasePerCircle +
+        GameConfig.gas.selfMoveBaseFraction;
+
+    return radius * extraFraction;
+}
+
 const GasStages: StageData[] = [
     {
         mode: GasMode.Inactive,
@@ -68,49 +89,73 @@ const GasStages: StageData[] = [
     },
     {
         mode: GasMode.Waiting,
-        duration: 30,
-        rad: 0.075,
-        damage: 10,
-    },
-    {
-        mode: GasMode.Moving,
-        duration: 10,
-        rad: 0.075,
-        damage: 10,
-    },
-    {
-        mode: GasMode.Waiting,
         duration: 25,
+        rad: 0.1,
+        damage: 10,
+    },
+    {
+        mode: GasMode.Moving,
+        duration: 15,
+        rad: 0.1,
+        damage: 10,
+    },
+    {
+        mode: GasMode.Waiting,
+        duration: 12,
+        rad: 0.075,
+        damage: 14,
+    },
+    {
+        mode: GasMode.Moving,
+        duration: 20,
+        rad: 0.075,
+        damage: 14,
+    },
+    {
+        mode: GasMode.Waiting,
+        duration: 8,
         rad: 0.045,
         damage: 14,
     },
     {
         mode: GasMode.Moving,
-        duration: 5,
+        duration: 20,
         rad: 0.045,
         damage: 14,
     },
     {
         mode: GasMode.Waiting,
-        duration: 20,
-        rad: 0.0225,
-        damage: 22,
-    },
-    {
-        mode: GasMode.Moving,
         duration: 6,
         rad: 0.0225,
         damage: 22,
     },
     {
+        mode: GasMode.Moving,
+        duration: 16,
+        rad: 0.0225,
+        damage: 22,
+    },
+    {
         mode: GasMode.Waiting,
-        duration: 15,
+        duration: 10,
+        rad: 0.0175,
+        damage: 22,
+    },
+    {
+        mode: GasMode.Moving,
+        duration: 18,
+        rad: 0.0175,
+        damage: 22,
+    },
+    {
+        mode: GasMode.Waiting,
+        duration: 8,
         rad: 0,
         damage: 22,
     },
     {
         mode: GasMode.Moving,
-        duration: 15,
+        duration: 30,
         rad: 0,
         damage: 22,
     },
@@ -276,16 +321,11 @@ export class Gas {
         if (this.mode === GasMode.Waiting) {
             this.posOld = v2.copy(this.posNew);
 
-            this.posNew = v2.add(
-                this.posNew,
-                util.randomPointInCircle(this.radOld - this.radNew),
-            );
+            const baseMoveRadius = this.radOld - this.radNew;
+            const selfMoveRadius = getGasSelfMoveRadius(this.circleIdx, baseMoveRadius);
+            const moveRadius = baseMoveRadius + selfMoveRadius;
+            this.posNew = v2.add(this.posNew, util.randomPointInCircle(moveRadius));
 
-            // Keep the safe-zone center on the map. The first circle's radius
-            // (0.85 * mapSize) is larger than the map, so the random walk above can push
-            // posNew off the edge into negative coords — which crashes serialization
-            // (writeMapPos asserts a [0, MaxPosition] range). Clamp the center inside the
-            // map (leaving a small radNew*0.1 margin) so the zone is always reachable.
             const margin = this.radNew * 0.1;
             this.posNew = math.v2Clamp(
                 this.posNew,

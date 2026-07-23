@@ -64,7 +64,7 @@ export const CUSTOM_LOADOUT_MELEES = Object.keys(MeleeDefs).filter(
 );
 export const CUSTOM_LOADOUT_GRENADES = [
     "frag",
-    "impact",
+    "dynamite",
     "smoke",
     "mirv",
     "strobe",

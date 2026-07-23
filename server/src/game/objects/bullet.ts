@@ -807,6 +807,28 @@ export class Bullet {
                         multiplier *= 1.25;
                     }
 
+                    const bulletDef = GameObjectDefs[this.bulletType] as BulletDef;
+                    const isSourceTeammate =
+                        !!player && player.teamId === col.player!.teamId;
+
+                    if (
+                        !isSourceTeammate &&
+                        bulletDef.freezeAmount !== undefined &&
+                        bulletDef.freezeDuration !== undefined &&
+                        bulletDef.freezeDuration > 0
+                    ) {
+                        const playerRot = Math.atan2(col.player!.dir.y, col.player!.dir.x);
+                        const collRot = -Math.atan2(col.normal.y, col.normal.x);
+                        const ori =
+                            (math.radToOri(playerRot) + math.radToOri(collRot) + 2) % 4;
+
+                        col.player!.freeze(
+                            ori,
+                            bulletDef.freezeDuration,
+                            bulletDef.freezeAmount,
+                        );
+                    }
+
                     this.bulletManager.damages.push({
                         obj: col.player!,
                         gameSourceType: this.shotSourceType,

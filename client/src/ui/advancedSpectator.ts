@@ -305,7 +305,7 @@ export class AdvancedSpectator {
                 const p = projectiles[i];
                 if (!p.active) continue;
                 const def = GameObjectDefs[p.type] as ThrowableDef | undefined;
-                // Only timed grenades: skip impact/mine/very-long-fuse throwables
+                // Only timed grenades: skip dynamite/mine/very-long-fuse throwables
                 // (snowball, potato, proximity mines, ...).
                 if (
                     !def ||

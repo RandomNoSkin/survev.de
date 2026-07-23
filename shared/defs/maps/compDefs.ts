@@ -221,6 +221,8 @@ export const Comp: MapDef = {
             { name: "frag", count: 3, weight: 0.6 }, // !
             { name: "smoke", count: 2, weight: 0.2 },
             { name: "mirv", count: 2, weight: 1 },
+            { name: "dynamite", count: 3, weight: 0.8 },
+            { name: "mine", count: 1, weight: 0.4 },
         ],
         tier_ammo: [
             { name: "9mm", count: 90, weight: 0.25 },
@@ -290,8 +292,8 @@ export const Comp: MapDef = {
             { name: "colt45", count: 1, weight: 0.15 },
         ],
         tier_crab: [
-            { name: "model94", count: 1, weight: 0.6 },
-            { name: "", count: 1, weight: 0.4 },
+            { name: "model94", count: 1, weight: 0.7 },
+            { name: "", count: 1, weight: 0.3 },
         ],
         tier_spas_hut: [
             { name: "spas12", count: 1, weight: 0.66 },
@@ -314,10 +316,10 @@ export const Comp: MapDef = {
             { name: "an94", count: 1, weight: 0.12 }, 
             { name: "tier_hawk", count: 1, weight: 0.16 }, 
             { name: "sv98", count: 1, weight: 0.1 }, 
-            { name: "m134", count: 1, weight: 0.11 }, 
+            { name: "usas", count: 1, weight: 0.08 }, 
             { name: "pkp", count: 1, weight: 0.11 }, 
             { name: "awc", count: 1, weight: 0.15 }, 
-            { name: "pkm", count: 1, weight: 0.03 }, 
+            { name: "pkm", count: 1, weight: 0.06 }, 
         ],
         tier_eye_stone: [
             { name: "vector45", count: 1, weight: 1 },
@@ -450,11 +452,15 @@ export const Comp: MapDef = {
             { name: "colt45_dual", count: 1, weight: 0.3 },
             { name: "m1911_dual", count: 1, weight: 0.3 },
         ],
+        tier_river_pirate_melee: [
+            { name: "hook", count: 1, weight: 0.5 }, // ?
+            { name: "", count: 1, weight: 0.5 },
+        ],
         tier_utility: [
             { name: "tier_armor", count: 1, weight: 0.4 }, // ?
             { name: "healthkit", count: 1, weight: 0.25 },
-            { name: "bandage", count: 5, weight: 0.2 },
-            { name: "painkiller", count: 1, weight: 0.15 },
+            { name: "bandage", count: 5, weight: 0.15 },
+            { name: "painkiller", count: 1, weight: 0.2 },
         ],
         tier_ot_military_crate: [
             { name: "ots38", count: 1, weight: 0.7 }, // ?
@@ -504,9 +510,9 @@ export const Comp: MapDef = {
             { name: "m93r_dual", count: 1, weight: 0.04 },
             { name: "m4a1", count: 1, weight: 0.1 }, 
             { name: "scar", count: 1, weight: 0.03 },
-            { name: "vector", count: 1, weight: 0.03 },
+            { name: "vector", count: 1, weight: 0.02 },
             { name: "p90", count: 1, weight: 0.07 },
-            { name: "saiga", count: 1, weight: 0.03 },
+            { name: "saiga", count: 1, weight: 0.04 },
             { name: "l86", count: 1, weight: 0.01 },
         ],
         tier_bank_vault_packs: [
@@ -524,8 +530,8 @@ export const Comp: MapDef = {
             { name: "saiga", count: 1, weight: 0.35 },
             { name: "blr", count: 1, weight: 0.35 },
             { name: "spas12", count: 1, weight: 0.7 },
-            { name: "deagle", count: 1, weight: 0.2 },
-            { name: "vector", count: 1, weight: 0.2 },
+            { name: "deagle", count: 1, weight: 0.25 },
+            { name: "vector", count: 1, weight: 0.15 },
             // { name: "awc", count: 1, weight: 0.074 },
             { name: "", count: 1, weight: 0.3 },
         ],
@@ -851,8 +857,9 @@ export const Comp: MapDef = {
             { name: "outfitGhillie", count: 1, weight: 0.5 },
         ],
         tier_airdrop_throwables: [
-            { name: "frag", count: 2, weight: 1 },
+            { name: "dynamite", count: 3, weight: 1 },
             { name: "mirv", count: 2, weight: 0.5 },
+            { name: "mine", count: 1, weight: 0.5 },
         ],
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 19 },
@@ -1170,7 +1177,7 @@ export const Comp: MapDef = {
                 outhouse_01: 6, //toilet houses
                 loot_tier_1: 24,
                 loot_tier_beach: 12,
-                stone_07: 5, // large stones
+                stone_07: 6, // large stones
             },
         ],
         fixedSpawns: [
