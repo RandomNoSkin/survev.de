@@ -549,6 +549,32 @@ class WebAudioEngine {
         }
     }
 
+    /** Live output-capture destination while a recording taps the mix (see below). */
+    captureDest: MediaStreamAudioDestinationNode | null = null;
+
+    /**
+     * Routes the final mix (post-master-gain + compressor — exactly what the
+     * speakers get) into a MediaStream, e.g. to mux game audio into a canvas
+     * video recording. Speakers keep playing. Undo with `stopOutputCapture()`.
+     */
+    startOutputCapture(): MediaStream {
+        if (!this.captureDest) {
+            this.captureDest = this.ctx.createMediaStreamDestination();
+            this.compressorNode.connect(this.captureDest);
+        }
+        return this.captureDest.stream;
+    }
+
+    /** Detaches the output capture started by `startOutputCapture()`. */
+    stopOutputCapture(): void {
+        if (!this.captureDest) return;
+        // Safari's selective disconnect(node) is broken (see testSelectiveDisconnect),
+        // so drop ALL compressor outputs and rebuild the speaker connection.
+        this.compressorNode.disconnect();
+        this.compressorNode.connect(this.ctx.destination);
+        this.captureDest = null;
+    }
+
     loadFile(path: string, onfileload: (path: string) => void) {
         if (this.files[path] != undefined) {
             onfileload(path);

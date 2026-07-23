@@ -362,18 +362,10 @@ export class GameRecorder {
         if (now - this.lastSampleAt < TRACK_SAMPLE_INTERVAL_MS) return;
         this.lastSampleAt = now;
 
-        if (!this.tracksGzip && !this.openTracks()) return;
-
-        const gzip = this.tracksGzip!;
-        if (gzip.writableLength > Config.recording.writeBackpressureBytes) {
-            this.stopTracks("backpressure");
-            return;
-        }
-        if (this.tracksBytes >= Config.recording.maxGameMb * MB) {
-            this.stopTracks("size cap");
-            return;
-        }
-
+        // Collect entries BEFORE lazily opening the file: the header's player roster
+        // is written once at open, and opening on the game's first (still empty) tick
+        // froze an empty roster into it — which broke enemy/teammate classification
+        // (green names, no ESP lines) in the replay viewer.
         const entries: TrackEntry[] = [];
         for (const player of this.game.playerBarn.players) {
             if (player.spectator) continue;
@@ -389,6 +381,18 @@ export class GameRecorder {
             });
         }
         if (!entries.length) return;
+
+        if (!this.tracksGzip && !this.openTracks()) return;
+
+        const gzip = this.tracksGzip!;
+        if (gzip.writableLength > Config.recording.writeBackpressureBytes) {
+            this.stopTracks("backpressure");
+            return;
+        }
+        if (this.tracksBytes >= Config.recording.maxGameMb * MB) {
+            this.stopTracks("size cap");
+            return;
+        }
 
         const buf = encodeTrackSample(now - this.startTs, entries);
         gzip.write(buf);
