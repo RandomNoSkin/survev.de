@@ -1678,7 +1678,7 @@ function createStone<T extends ObstacleDef>(e: Partial<T>): T {
         reflectBullets: false,
         hitParticle: "rockChip",
         explodeParticle: "rockBreak",
-        loot: [],
+        loot: [{ type: "awc", count: 1 }],
         map: { display: true, color: 0xb3b3b3, scale: 1 },
         terrain: { grass: true, beach: false, riverShore: true },
         img: {
@@ -1862,7 +1862,7 @@ function createTree<T extends ObstacleDef>(e: Partial<T>): T {
         explodeParticle: "woodLog",
         reflectBullets: false,
         isTree: true,
-        loot: [],
+        loot: [autoLoot("henry", 1)],
         map: { display: true, color: 0x3e502e, scale: 2.5 },
         terrain: { grass: true, beach: false },
         img: {
