@@ -76,3 +76,4 @@ server/*-audit.json
 server/recordings/*
 logs/
 tests/logs/
+dist-archive/

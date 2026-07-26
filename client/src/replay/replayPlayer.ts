@@ -65,6 +65,8 @@ export class ReplayPlayer {
     private destroyed = false;
     /** True while a POV switch is fetching/rebuilding — pauses frame feeding. */
     private switching = false;
+    /** Protocol-mismatch alert shown once (POV switches re-run the check). */
+    private protocolWarned = false;
 
     private ui: ReplayUI;
     private keyHandler: (e: KeyboardEvent) => void;
@@ -84,7 +86,7 @@ export class ReplayPlayer {
                 onSeekFraction: (f) => this.seekTo(f * this.duration),
                 onPrevPov: () => void this.switchPov(-1),
                 onNextPov: () => void this.switchPov(1),
-                onToggleRecord: () => this.toggleRecord(),
+                onToggleRecord: () => void this.toggleRecord(),
             },
             SPEEDS,
         );
@@ -173,6 +175,18 @@ export class ReplayPlayer {
             console.warn(
                 `Replay protocol ${this.meta.protocolVersion} differs from client ${GameConfig.protocolVersion} — playback may be inaccurate.`,
             );
+            // Landing here means no archived client build matched this recording
+            // (the dashboard would have opened /archive/<version>/ otherwise) — the
+            // stream will likely misdecode, so tell the viewer why it looks broken.
+            if (!this.protocolWarned) {
+                this.protocolWarned = true;
+                alert(
+                    `This replay was recorded on protocol ${this.meta.protocolVersion}, ` +
+                        `but this client uses protocol ${GameConfig.protocolVersion} — ` +
+                        `playback will likely be broken. If an archived client build ` +
+                        `exists for that version, open the replay via the dashboard.`,
+                );
+            }
         }
 
         let acc = 0;
@@ -321,16 +335,16 @@ export class ReplayPlayer {
         this.game.m_uiManager?.updateAdvancedSpectatorUi();
     }
 
-    /** Starts/stops recording the game canvas to a downloadable video file. */
-    private toggleRecord(): void {
+    /**
+     * Starts/stops recording the replay to a downloadable video file. Prefers a tab
+     * capture (full DOM UI + sound, one picker prompt); falls back to a canvas
+     * capture with the game audio muxed in where `getDisplayMedia` is unavailable.
+     */
+    private async toggleRecord(): Promise<void> {
         try {
             if (this.recorder?.isRecording) {
                 this.recorder.stop();
                 this.ui.setRecording(false);
-                return;
-            }
-            if (!ReplayRecorder.isSupported()) {
-                alert("Video recording is not supported in this browser.");
                 return;
             }
             const canvas = document.querySelector<HTMLCanvasElement>("#cvs");
@@ -338,13 +352,20 @@ export class ReplayPlayer {
                 console.error("Replay recording: game canvas (#cvs) not found.");
                 return;
             }
-            this.recorder = new ReplayRecorder(canvas, this.recordFileName());
-            if (this.recorder.start()) {
+            const recorder = new ReplayRecorder(canvas, this.recordFileName());
+            // The browser's own "Stop sharing" bar can end a tab capture without the
+            // ⏺ button — keep the control-bar state in sync either way.
+            recorder.onStop = () => this.ui.setRecording(false);
+            this.recorder = recorder;
+            const result = await recorder.start();
+            if (result === "ok") {
                 this.ui.setRecording(true);
             } else {
                 this.recorder = undefined;
                 this.ui.setRecording(false);
-                alert("Could not start video recording (no supported format).");
+                if (result !== "cancelled") {
+                    alert("Video recording is not supported in this browser.");
+                }
             }
         } catch (err) {
             console.error("Replay recording toggle failed:", err);

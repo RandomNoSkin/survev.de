@@ -717,6 +717,10 @@ export const dashboardHtml = `<!DOCTYPE html>
 
 // Base URL of the game client (Vite dev server in dev, same origin in prod) — used to open spectate tabs.
 const CLIENT_URL = ${JSON.stringify(Config.oauthRedirectURI)};
+// Current game protocol version. Replays recorded on an older protocol can't be
+// decoded by the current client — "Watch" opens the archived build of that version
+// (published under CLIENT_URL/archive/<version>/ by client/scripts/archiveBuild.mjs).
+const PROTOCOL_VERSION = ${JSON.stringify(GameConfig.protocolVersion)};
 // Grantable cosmetics by category (for the account-detail "Give" UI)
 const COSMETIC_CATALOG = ${JSON.stringify(COSMETIC_CATALOG)};
 // type → readable cosmetic name
@@ -1157,7 +1161,7 @@ function renderReplays() {
         <td><span class="rep-modcell" data-key="\${esc(rec.gameId + '|' + (p.modKey || ''))}">\${modBadge(p.modStatus)}</span></td>
         <td style="white-space:nowrap">
           <span style="display:inline-flex;gap:5px;align-items:center;">
-            <button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId})">▶ Watch</button>
+            <button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>
             \${p.modKey
               ? \`<button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" data-repname="\${esc(p.playerName)}" title="Flag this \${p.guest ? 'guest' : 'player'} in this game as suspicious">⚑ sus</button>\`
               : ''}
@@ -1177,6 +1181,9 @@ function renderReplays() {
           <span>\${esc(regionId)}</span>
           <span>\${esc(rec.mapName)} · \${mode}</span>
           <span>\${durStr}</span>
+          \${rec.protocolVersion && rec.protocolVersion !== PROTOCOL_VERSION
+            ? \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version; 404 means it was never archived">proto \${rec.protocolVersion}</span>\`
+            : ''}
           <span class="rep-modcell" data-key="\${esc(rec.gameId + '|')}">\${modBadge(rec.gameStatus)}</span>
           <button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" title="Flag this whole game as suspicious">⚑ sus game</button>
           <span style="margin-left:auto">\${fmtDate(rec.startTs)}</span>
@@ -1221,12 +1228,17 @@ async function markReplaySus(gameId, playerName) {
 }
 
 /** Mints a game-scoped replay token and opens the client in replay mode (with an initial POV). */
-async function watchReplay(region, gameId, playerId) {
+async function watchReplay(region, gameId, playerId, protocolVersion) {
   try {
     const params = new URLSearchParams({ region, gameId });
     const { token } = await get('/api/replays/token?' + params.toString());
     if (!token) { toast('Failed to get replay token', true); return; }
-    const url = CLIENT_URL + '/?replay=' + encodeURIComponent(token) + '&pov=' + playerId;
+    // Old-protocol recordings need the archived client build of that version — the
+    // current client would misdecode the byte stream. 404 = build was never archived.
+    const base = protocolVersion && protocolVersion !== PROTOCOL_VERSION
+      ? CLIENT_URL + '/archive/' + protocolVersion
+      : CLIENT_URL;
+    const url = base + '/?replay=' + encodeURIComponent(token) + '&pov=' + playerId;
     window.open(url, '_blank');
   } catch (e) {
     toast('Failed to open replay: ' + e.message, true);

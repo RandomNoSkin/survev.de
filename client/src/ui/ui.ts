@@ -1210,11 +1210,15 @@ export class UiManager {
             for (const gp of godView.values()) {
                 if (gp.id === activePlayerInfo.playerId) continue;
                 if (playerBarn.playerStatus[gp.id]) continue; // already drawn above
-                const isEnemy = gp.teamId != activePlayerInfo.teamId;
+                // Older/broken track files have an empty roster (teamId -1) — resolve
+                // the team via the playerInfo stream then (it has every player).
+                const gpTeamId =
+                    gp.teamId > 0 ? gp.teamId : playerBarn.getPlayerInfo(gp.id).teamId;
+                const isEnemy = gpTeamId != activePlayerInfo.teamId;
                 let texture = "player-map-inner.img";
                 if (gp.dead) texture = "skull-outlined.img";
                 else if (gp.downed) texture = "player-map-downed.img";
-                const tint = isEnemy ? 0xff4d4d : playerBarn.getTeamColor(gp.teamId);
+                const tint = isEnemy ? 0xff4d4d : playerBarn.getTeamColor(gpTeamId);
                 const scale = gp.dead || gp.downed ? dotScale * 1.25 : dotScale * 0.75;
                 addSprite(gp.pos, scale, 1, true, 65535 + gp.id * 2, texture, tint);
             }
