@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import { db } from "./index";
 import { itemsTable, passItemGrantsTable } from "./schema";
@@ -20,7 +20,7 @@ function passGrantKey(passType: string, level: number, item: string): string {
 
 /** A pass entry is a real, grantable cosmetic (not empty and not the fries currency). */
 function isGrantableItem(item: string): boolean {
-    return !!item && item !== "golden_fries" && !!GameObjectDefs[item];
+    return !!item && item !== "golden_fries" && !!GameObjectDefs.typeToDefSafe(item);
 }
 
 /**

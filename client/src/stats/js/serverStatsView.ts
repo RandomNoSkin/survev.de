@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { MapId } from "../../../../shared/defs/types/misc";
+import { MapId } from "../../../../shared/gameConfig.ts";
 import type {
     ServerStatsInterval,
     ServerStatsResponse,

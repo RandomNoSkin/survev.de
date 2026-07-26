@@ -2,8 +2,8 @@ import { GameConfig } from "../../gameConfig";
 import { util, type DeepPartial } from "../../utils/util";
 import { v2 } from "../../utils/v2";
 import type { MapDef } from "../mapDefs";
-import { MapId } from "../types/misc";
-import { Main, PartialMapDef } from "./baseDefs";
+import { MapId } from "../../gameConfig.ts";
+import { Main, type PartialMapDef } from "./baseDefs";
 import { Comp } from "./compDefs";
 
 // @NOTE: Entries defined as single-element arrays, like fixedSpawns: [{ }],

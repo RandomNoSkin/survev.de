@@ -6,13 +6,13 @@ import Path from "node:path";
 
 import { loadImage } from "canvas";
 import type { ISpritesheetData } from "pixi.js-legacy";
-import type { Atlas } from "../../shared/defs/mapDefs";
-import { Logger } from "../../shared/utils/logger";
-import { util } from "../../shared/utils/util";
-import { Atlases, type AtlasRes, scaledSprites } from "./atlasDefs";
-import type { MainToWorkerMsg, WorkerToMainMsg } from "./atlasWorker";
-import type { Edges } from "./detectEdges";
-import type { ParentMsg } from "./imageWorker";
+import type { Atlas } from "../../shared/defs/mapDefs.ts";
+import { Logger } from "../../shared/utils/logger.ts";
+import { util } from "../../shared/utils/util.ts";
+import { Atlases, type AtlasRes, scaledSprites } from "./atlasDefs.ts";
+import type { MainToWorkerMsg, WorkerToMainMsg } from "./atlasWorker.ts";
+import type { Edges } from "./detectEdges.ts";
+import type { ParentMsg } from "./imageWorker.ts";
 
 export const cacheFolder = Path.resolve(
     import.meta.dirname,
@@ -128,13 +128,23 @@ export class ImageManager {
             imagesPerThread = Math.ceil(imagesToRender.length / threadsLeft);
 
             const proc = cp.fork(Path.resolve(import.meta.dirname, "imageWorker.ts"), {
+                // Load the .ts worker via tsx so the build also works on Node < 22.18
+                // (older Node can't run .ts child processes natively).
                 execArgv: ["--import", "tsx"],
             });
 
-            const promise = new Promise<void>((resolve) => {
-                proc.send({
-                    images,
-                } satisfies ParentMsg);
+            const promise = new Promise<void>((resolve, reject) => {
+                proc.on("exit", (code) => {
+                    if (code !== 0) {
+                        reject();
+                    }
+                });
+
+                proc.send(
+                    {
+                        images,
+                    } satisfies ParentMsg,
+                );
 
                 proc.on("message", (msg: ImgCache) => {
                     Object.assign(this.cache, msg);
@@ -243,8 +253,8 @@ export class AtlasManager {
             const hash = `${hashBuff(data)}-${100 * scale}-${ATLAS_HASH_VERSION}`;
 
             if (
-                this.imageCache.get(file)?.hash !== hash ||
-                !fs.existsSync(Path.join(imagesCacheFolder, `${hash}.png`))
+                this.imageCache.get(file)?.hash !== hash
+                || !fs.existsSync(Path.join(imagesCacheFolder, `${hash}.png`))
             ) {
                 this.imageCache.queueImage(file, hash);
             }
@@ -302,10 +312,17 @@ export class AtlasManager {
 
             const proc = cp.fork(Path.resolve(import.meta.dirname, "atlasWorker.ts"), {
                 serialization: "advanced",
+                // Load the .ts worker via tsx so the build also works on Node < 22.18.
                 execArgv: ["--import", "tsx"],
             });
 
-            const promise = new Promise<void>((resolve) => {
+            const promise = new Promise<void>((resolve, reject) => {
+                proc.on("exit", (code) => {
+                    if (code !== 0) {
+                        reject();
+                    }
+                });
+
                 proc.send(atlases satisfies MainToWorkerMsg);
 
                 proc.on("message", (msg: WorkerToMainMsg) => {

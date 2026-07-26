@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import type {
     AuctionNotification,
     GiftNotification,
@@ -638,7 +638,7 @@ export class ProfileUi {
             return;
         }
 
-        const objDef = GameObjectDefs[sale.type] as { rarity?: number; name?: string };
+        const objDef = GameObjectDefs.typeToDefSafe(sale.type) as { rarity?: number; name?: string };
         const name =
             this.localization.translate(`game-${sale.type}`) || objDef?.name || sale.type;
         const svg = helpers.getSvgFromGameType(sale.type);
@@ -689,7 +689,7 @@ export class ProfileUi {
 
         const img = $("#modal-gift-notify-image-inner");
         if (gift.kind === "item") {
-            const objDef = GameObjectDefs[gift.itemType] as { name?: string };
+            const objDef = GameObjectDefs.typeToDefSafe(gift.itemType) as { name?: string };
             const name =
                 this.localization.translate(`game-${gift.itemType}`) ||
                 objDef?.name ||
@@ -745,7 +745,7 @@ export class ProfileUi {
             return;
         }
 
-        const objDef = GameObjectDefs[a.type] as { name?: string } | undefined;
+        const objDef = GameObjectDefs.typeToDefSafe(a.type) as { name?: string } | undefined;
         const name =
             this.localization.translate(`game-${a.type}`) || objDef?.name || a.type;
         $("#modal-auction-notify-image-inner").css({

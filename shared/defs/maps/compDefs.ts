@@ -2,7 +2,7 @@ import { GameConfig } from "../../gameConfig";
 import type { DeepPartial } from "../../utils/util";
 import { v2 } from "../../utils/v2";
 import type { MapDef } from "../mapDefs";
-import { MapId } from "../types/misc";
+import { MapId } from "../../gameConfig.ts";
 
 // @NOTE: Entries defined as single-element arrays, like fixedSpawns: [{ }],
 // are done this way so that util.mergeDeep(...) will function as expected
@@ -1022,7 +1022,7 @@ export const Comp: MapDef = {
             { name: "saw", count: 1, weight: 0.1 },
             { name: "spade", count: 1, weight: 0.25 },
             { name: "kukri_trad", count: 1, weight: 0.25 },
-            { name: "Hook", count: 1, weight: 0.1 },
+            { name: "hook", count: 1, weight: 0.1 },
             { name: "sledgehammer", count: 1, weight: 0.01 },
         ],
         tier_armor_3: [

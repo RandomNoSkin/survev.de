@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { BuildingDef, ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameConfig } from "../../../../shared/gameConfig";
 import {
@@ -40,7 +40,7 @@ const TRACK_SAMPLE_INTERVAL_MS = 250;
 /** Resolves a weapon/item key to its display name for the game-view damage log. */
 function weaponName(type: string): string {
     if (!type) return "";
-    const def = GameObjectDefs[type] as { name?: string } | undefined;
+    const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
     return def?.name ?? type;
 }
 
@@ -57,7 +57,7 @@ function buildMapShapes(map: Game["map"]): GameMapShape[] {
     }[] = [];
 
     for (const obj of map.msg.objects) {
-        const def = MapObjectDefs[obj.type] as ObstacleDef | BuildingDef | undefined;
+        const def = MapObjectDefs.typeToDef(obj.type) as ObstacleDef | BuildingDef | undefined;
         if (!def) continue;
         const zIdx =
             def.type === "building"

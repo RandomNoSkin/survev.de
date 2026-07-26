@@ -1,17 +1,17 @@
 import type { Hono } from "hono";
 import type { UpgradeWebSocket } from "hono/ws";
-import type { GameViewMeta } from "../../../shared/net/replay";
-import type { SiteInfoRes } from "../../../shared/types/api";
-import { Config } from "../config";
-import { PrivateLobbyMenu } from "../privateLobby";
-import { TeamMenu } from "../teamMenu";
-import { GIT_VERSION } from "../utils/gitRevision";
-import { defaultLogger, ServerLogger } from "../utils/logger";
+import type { GameViewMeta } from "../../../shared/net/replay.ts";
+import type { SiteInfoRes } from "../../../shared/types/api.ts";
+import { Config } from "../config.ts";
+import { PrivateLobbyMenu } from "../privateLobby.ts";
+import { TeamMenu } from "../teamMenu.ts";
+import { GIT_VERSION } from "../utils/gitRevision.ts";
+import { defaultLogger, ServerLogger } from "../utils/logger.ts";
 import type {
     FindGamePrivateBody,
     FindGamePrivateRes,
     FindPrivateLobbyGameBody,
-} from "../utils/types";
+} from "../utils/types.ts";
 
 /** Max time to wait for a region game server before treating it as offline.
  *  Raised from 5s: creating a fresh game (fork child process + generate map) can

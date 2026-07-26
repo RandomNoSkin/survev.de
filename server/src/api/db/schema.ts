@@ -16,8 +16,8 @@ import {
     uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
-import { TeamMode } from "../../../../shared/gameConfig";
-import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout";
+import { TeamMode } from "../../../../shared/gameConfig.ts";
+import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
 export const sessionTable = pgTable("session", {
     id: text("id").primaryKey(),
@@ -320,6 +320,7 @@ export const matchDataTable = pgTable(
             .$type<string[]>()
             .notNull()
             .default([]),
+        role: text("role").notNull().default(""),
         teamMode: integer("team_mode").$type<TeamMode>().notNull(),
         teamCount: integer("team_count").notNull(),
         teamTotal: integer("team_total").notNull(),
@@ -559,6 +560,34 @@ export const userXpTable = pgTable(
         pk: primaryKey({ columns: [table.userId, table.passType] }),
     }),
 );
+
+/**
+ * Per-user daily/rotating quests. Currently unused by gameplay code (the table exists
+ * so the schema is complete and ready if the quest system is turned on later).
+ */
+export const userQuestTable = pgTable(
+    "user_quest",
+    {
+        id: serial("id").primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        idx: integer("idx").notNull(),
+        questType: text("quest_type").notNull(),
+        progress: integer("progress").notNull().default(0),
+        target: integer("target").notNull(),
+        complete: boolean("complete").notNull().default(false),
+        rerolled: boolean("rerolled").notNull().default(false),
+        timeAcquired: bigint("time_acquired", { mode: "number" }).notNull(),
+        nextRefreshAt: bigint("next_refresh_at", { mode: "number" }).notNull(),
+    },
+    (table) => [uniqueIndex("user_quest_user_idx").on(table.userId, table.idx)],
+);
+
+export type UserQuestTableSelect = typeof userQuestTable.$inferSelect;
 
 /**
  * Append-only ledger of every Golden Fries balance change (earn or spend).
