@@ -1057,6 +1057,12 @@ export class Player extends BaseGameObject {
 
     downedCount = 0;
     /**
+     * `damageHistory` length captured at the moment of the (most recent) down.
+     * Assists for a player finished from the downed state only count damage dealt
+     * BEFORE this point — post-down/finishing damage must not earn an assist.
+     */
+    downedAtHistoryLen = 0;
+    /**
      * players have a buffer where they can't take damage immediately after being downed
      * this is mostly so players dont get knocked AND killed by the same airstrike
      */
@@ -3764,6 +3770,8 @@ export class Player extends BaseGameObject {
     down(params: DamageParams): void {
         this.downed = true;
         this.downedCount++;
+        // Freeze the assist window here: only damage recorded before the down counts.
+        this.downedAtHistoryLen = this.damageHistory.length;
         this.downedDamageTicker = GameConfig.player.downedDamageBuffer;
         this.boost = 0;
         this.health = 100;
@@ -3833,6 +3841,7 @@ export class Player extends BaseGameObject {
 
     kill(params: DamageParams): void {
         if (this.dead) return;
+        const diedWhileDowned = this.downed;
         if (this.downed) this.downed = false;
         if (!this.spectator) {
             this.rank = this.game.modeManager.aliveCount();
@@ -4040,7 +4049,14 @@ export class Player extends BaseGameObject {
         this.game.broadcastMsg(net.MsgType.Kill, killMsg);
 
         //assist logic
-        const lastDmg = this.damageHistory[this.damageHistory.length - 1];
+        // When finished from the downed state, only consider damage dealt before the
+        // down — `lastDmg` becomes the down-causing hit, and post-down/finishing damage
+        // is ignored for assists.
+        const historyEnd =
+            diedWhileDowned && this.downedAtHistoryLen > 0
+                ? this.downedAtHistoryLen
+                : this.damageHistory.length;
+        const lastDmg = this.damageHistory[historyEnd - 1];
         let dealtDamage = lastDmg?.amount ?? 0;
         if (dealtDamage <= 50) {
             //find assist (only if player dealt more than 50 damage)
@@ -4052,7 +4068,7 @@ export class Player extends BaseGameObject {
                 amount: number;
                 time: number;
             }[] = [];
-            for (let i = this.damageHistory.length - 2; i >= 0; i--) {
+            for (let i = historyEnd - 2; i >= 0; i--) {
                 const dmg = this.damageHistory[i];
                 if (!dmg) {
                     break;

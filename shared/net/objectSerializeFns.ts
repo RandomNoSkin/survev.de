@@ -596,7 +596,10 @@ export const ObjectSerializeFns: {
     },
     [ObjectType.Projectile]: {
         serializedPartialSize: 8,
-        serializedFullSize: 2,
+        // writeGameType(10 bits) + layer(2) + fuseTime(8) = 20 bits -> 3 bytes.
+        // The fuseTime field pushed this past 2 bytes; too small a size overflows
+        // the serialization buffer and crashes on every thrown projectile.
+        serializedFullSize: 3,
         /* STRIP_FROM_PROD_CLIENT:START */
         serializePart: (s, data) => {
             s.writeMapPos(data.pos);
@@ -650,8 +653,12 @@ export const ObjectSerializeFns: {
         },
     },
     [ObjectType.Airdrop]: {
-        serializedPartialSize: 1,
-        serializedFullSize: 4,
+        // The fork added the crate type (writeMapType, 12 bits) to BOTH part and full
+        // but left upstream's sizes, overflowing the buffer and crashing on every
+        // air/supply drop. Part = fallT(7)+landed(1)+type(12) = 20 bits -> 3 bytes;
+        // Full = mapPos(32)+type(12) = 44 bits -> 6 bytes.
+        serializedPartialSize: 3,
+        serializedFullSize: 6,
         /* STRIP_FROM_PROD_CLIENT:START */
         serializePart: (s, data) => {
             s.writeFloat(data.fallT, 0, 1, 7);
