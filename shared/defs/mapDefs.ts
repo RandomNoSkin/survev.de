@@ -352,7 +352,7 @@ export interface MapDef {
             spawns: string[];
             choose: number;
         }>;
-        spawnReplacements: [Record<string, string>];
+        spawnReplacements: [Record<string, string | Array<{ type: string; weight: number }>>];
         importantSpawns: string[];
         spawnOnRiver?: string[];
     };

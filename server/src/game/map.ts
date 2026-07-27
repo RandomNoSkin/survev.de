@@ -364,7 +364,13 @@ export class GameMap {
         this.msg.shoreInset = this.mapDef.mapGen.map.shoreInset;
         this.msg.places = [...this.mapDef.mapGen.places];
 
-        this.placeSpawns = [...this.mapDef.mapGen.customSpawnRules.placeSpawns];
+        this.placeSpawns = [
+            ...new Set(
+                this.mapDef.mapGen.customSpawnRules.placeSpawns.flatMap((spawnType) => {
+                    return this.getSpawnReplacementTypes(spawnType);
+                }),
+            ),
+        ];
         this.msg.places = [...this.mapDef.mapGen.places];
 
         this.placesToSpawn = this.mapDef.mapGen.places
@@ -1095,16 +1101,16 @@ export class GameMap {
         ignoreMapSpawnReplacement?: boolean,
         hideFromMap?: boolean,
     ) {
-        const def = MapObjectDefs.typeToDef(type);
+        const resolvedType = this.resolveSpawnType(type);
+        const spawnType = ignoreMapSpawnReplacement ? type : resolvedType;
+        const def = MapObjectDefs.typeToDef(spawnType);
 
         if (!def) {
             this.game.logger.warn("Invalid map object:", type);
             return;
         }
 
-        const spawnReplacements = this.mapDef.mapGen.spawnReplacements[0];
-        if (spawnReplacements[type] && !ignoreMapSpawnReplacement)
-            type = spawnReplacements[type];
+        type = spawnType;
 
         this.clampToMapBounds(pos);
 
@@ -1527,19 +1533,75 @@ export class GameMap {
         return { ori, scale };
     }
 
+    getSpawnReplacementTypes(type: string): string[] {
+        const spawnReplacements = this.mapDef.mapGen.spawnReplacements[0];
+        const types = new Set<string>();
+
+        const visit = (candidate: string) => {
+            if (types.has(candidate)) return;
+            types.add(candidate);
+
+            const replacement = spawnReplacements[candidate];
+            if (!replacement) return;
+
+            if (typeof replacement === "string") {
+                visit(replacement);
+                return;
+            }
+
+            for (const option of replacement.filter((option) => option.weight > 0)) {
+                visit(option.type);
+            }
+        };
+
+        visit(type);
+        return [...types];
+    }
+
+    resolveSpawnType(type: string): string {
+        const spawnReplacements = this.mapDef.mapGen.spawnReplacements[0];
+        let resolvedType = type;
+        let seen = new Set<string>();
+
+        for (let i = 0; i < 8; i++) {
+            const replacement = spawnReplacements[resolvedType];
+            if (!replacement) return resolvedType;
+
+            if (typeof replacement === "string") {
+                if (seen.has(resolvedType)) return resolvedType;
+                seen.add(resolvedType);
+                resolvedType = replacement;
+                continue;
+            }
+
+            const weightedOptions = replacement.filter((option) => option.weight > 0);
+            if (!weightedOptions.length) return resolvedType;
+
+            const chosenOption = util.weightedRandom(weightedOptions);
+            if (chosenOption.type === resolvedType) return resolvedType;
+
+            if (seen.has(resolvedType)) return resolvedType;
+            seen.add(resolvedType);
+            resolvedType = chosenOption.type;
+        }
+
+        return resolvedType;
+    }
+
     genOnWaterEdge(type: string): void {
-        const def = MapObjectDefs.typeToDef(type) as BuildingDef | StructureDef;
-        // safety check + makes ts shut up about it being possibly undefined
-        const waterEdge = def.terrain.waterEdge;
-        if (!waterEdge) return;
-
-        const aabb = collider.toAabb(mapHelpers.getBoundingCollider(type));
-        // const width = aabb.max.x - aabb.min.x;
-        const height = aabb.max.y - aabb.min.y;
-
-        const edgeRot = Math.atan2(waterEdge.dir.y, waterEdge.dir.x);
-
         this.trySpawn(type, () => {
+            const resolvedType = this.resolveSpawnType(type);
+            const def = MapObjectDefs.typeToDef(resolvedType) as BuildingDef | StructureDef;
+            // safety check + makes ts shut up about it being possibly undefined
+            const waterEdge = def.terrain.waterEdge;
+            if (!waterEdge) return false;
+
+            const aabb = collider.toAabb(mapHelpers.getBoundingCollider(resolvedType));
+            // const width = aabb.max.x - aabb.min.x;
+            const height = aabb.max.y - aabb.min.y;
+
+            const edgeRot = Math.atan2(waterEdge.dir.y, waterEdge.dir.x);
+
             let side: number;
             if (this.factionMode && "teamId" in def && def.teamId) {
                 // this formula does the same thing but isn't readable: ((this.factionModeSplitOri ^ 1) + 2) - ((def.teamId - 1) * 2);
@@ -1563,11 +1625,11 @@ export class GameMap {
 
             // TODO: figure out how to use distance values from definitions
 
-            if (type.includes("hut")) {
+            if (resolvedType.includes("hut")) {
                 dist -= 16;
-            } else if (type === "warehouse_complex_01") {
+            } else if (resolvedType === "warehouse_complex_01") {
                 dist -= this.shoreInset - 6.5;
-            } else if (type === "bunker_structure_04") {
+            } else if (resolvedType === "bunker_structure_04") {
                 dist -= 24;
             }
 
@@ -1582,9 +1644,9 @@ export class GameMap {
             const offset = v2.sub(this.center, tempPos);
             const pos = v2.add(this.center, v2.rotate(offset, rot));
 
-            if (!this.canSpawn(type, pos, ori!, 1)) return false;
+            if (!this.canSpawn(resolvedType, pos, ori!, 1)) return false;
 
-            this.genAuto(type, pos, 0, ori!, 1);
+            this.genAuto(resolvedType, pos, 0, ori!, 1);
             return true;
         });
     }
@@ -1593,164 +1655,167 @@ export class GameMap {
         const center = v2.create(pos.x * this.width, pos.y * this.height);
 
         return this.trySpawn(type, () => {
-            const ori = this.getOriAndScale(type).ori;
-            const pos = v2.add(util.randomPointInCircle(rad), center);
+            const resolvedType = this.resolveSpawnType(type);
+            const ori = this.getOriAndScale(resolvedType).ori;
+            const spawnPos = v2.add(util.randomPointInCircle(rad), center);
 
-            if (!this.canSpawn(type, pos, ori)) return false;
-            this.genAuto(type, pos, 0, ori);
+            if (!this.canSpawn(resolvedType, spawnPos, ori)) return false;
+            this.genAuto(resolvedType, spawnPos, 0, ori);
             return true;
         });
     }
 
     genOnGrass(type: string) {
-        const bounds = collider.toAabb(mapHelpers.getBoundingCollider(type));
-        const def = MapObjectDefs.typeToDef(type);
+        this.trySpawn(type, () => {
+            const resolvedType = this.resolveSpawnType(type);
+            const bounds = collider.toAabb(mapHelpers.getBoundingCollider(resolvedType));
+            const def = MapObjectDefs.typeToDef(resolvedType);
 
-        const getSpawnAabb = (ori: number, scale: number) => {
-            const rot = math.oriToRad(ori);
-            const bound = collider.transform(bounds, v2.create(0, 0), rot, scale) as AABB;
+            const getSpawnAabb = (ori: number, scale: number) => {
+                const rot = math.oriToRad(ori);
+                const bound = collider.transform(bounds, v2.create(0, 0), rot, scale) as AABB;
 
-            let width = bound.max.x - bound.min.x;
-            let height = bound.max.y - bound.min.y;
-            if (!def.terrain?.beach) {
-                width += this.grassInset;
-                height += this.grassInset;
-            }
-            const dims = v2.create(width, height);
+                let width = bound.max.x - bound.min.x;
+                let height = bound.max.y - bound.min.y;
+                if (!def.terrain?.beach) {
+                    width += this.grassInset;
+                    height += this.grassInset;
+                }
+                const dims = v2.create(width, height);
 
-            const mapAabb = collider.createAabb(
-                v2.create(this.shoreInset, this.shoreInset),
-                v2.create(this.width - this.shoreInset, this.height - this.shoreInset),
-            );
+                const mapAabb = collider.createAabb(
+                    v2.create(this.shoreInset, this.shoreInset),
+                    v2.create(this.width - this.shoreInset, this.height - this.shoreInset),
+                );
 
-            mapAabb.min = v2.add(mapAabb.min, dims);
-            mapAabb.max = v2.sub(mapAabb.max, dims);
+                mapAabb.min = v2.add(mapAabb.min, dims);
+                mapAabb.max = v2.sub(mapAabb.max, dims);
 
-            return mapAabb;
-        };
+                return mapAabb;
+            };
 
-        let getPos = (spawnAabb: AABB) => {
-            if (this.factionMode) {
-                // obstacles, buildings, and structures that need to spawn on either team's side
-                // doesn't matter which team, just as long as theyre grouped with the team specific buildings
-                const edgeObjects = [
-                    "warehouse_01f",
-                    "house_red_01",
-                    "house_red_02",
-                    "barn_01",
-                ];
+            let getPos = (spawnAabb: AABB) => {
+                if (this.factionMode) {
+                    // obstacles, buildings, and structures that need to spawn on either team's side
+                    // doesn't matter which team, just as long as theyre grouped with the team specific buildings
+                    const edgeObjects = [
+                        "warehouse_01f",
+                        "house_red_01",
+                        "house_red_02",
+                        "barn_01",
+                    ];
 
-                // obstacles, buildings, and structures that need to spawn away from the sides and closer to the center river
-                const centerObjects = [
-                    "greenhouse_01",
-                    "bunker_structure_03", // storm bunker
-                ];
+                    // obstacles, buildings, and structures that need to spawn away from the sides and closer to the center river
+                    const centerObjects = [
+                        "greenhouse_01",
+                        "bunker_structure_03", // storm bunker
+                    ];
 
-                const divisions = 10;
-                let divisionIdx: number;
-                if ("teamId" in def && def.teamId) {
-                    const teamId = def.teamId;
-                    // picks either of the furthest divisions from the center
-                    divisionIdx = (teamId - 1) * (divisions - 1);
-                } else if (edgeObjects.includes(type)) {
-                    const teamId = util.randomInt(1, 2);
-                    // picks either of the furthest divisions from the center
-                    divisionIdx = (teamId - 1) * (divisions - 1);
-                } else if (centerObjects.includes(type)) {
-                    // picks any "non-furthest" division
-                    divisionIdx = util.randomInt(1, divisions - 2);
-                } else {
-                    return util.randomPointInAabb(spawnAabb);
+                    const divisions = 10;
+                    let divisionIdx: number;
+                    if ("teamId" in def && def.teamId) {
+                        const teamId = def.teamId;
+                        // picks either of the furthest divisions from the center
+                        divisionIdx = (teamId - 1) * (divisions - 1);
+                    } else if (edgeObjects.includes(resolvedType)) {
+                        const teamId = util.randomInt(1, 2);
+                        // picks either of the furthest divisions from the center
+                        divisionIdx = (teamId - 1) * (divisions - 1);
+                    } else if (centerObjects.includes(resolvedType)) {
+                        // picks any "non-furthest" division
+                        divisionIdx = util.randomInt(1, divisions - 2);
+                    } else {
+                        return util.randomPointInAabb(spawnAabb);
+                    }
+
+                    const rad = math.oriToRad(this.factionModeSplitOri ^ 1);
+                    const vec = math.rad2Direction(rad);
+                    return util.randomPointInAabb(
+                        coldet.divideAabb(spawnAabb, vec, divisions)[divisionIdx],
+                    );
                 }
 
-                const rad = math.oriToRad(this.factionModeSplitOri ^ 1);
-                const vec = math.rad2Direction(rad);
-                return util.randomPointInAabb(
-                    coldet.divideAabb(spawnAabb, vec, divisions)[divisionIdx],
+                return util.randomPointInAabb(spawnAabb);
+            };
+
+            if (this.placesToSpawn.length && this.placeSpawns.includes(resolvedType)) {
+                let attempts = 0;
+                const spawnedOnPlace = this.trySpawn(
+                    type,
+                    () => {
+                        attempts++;
+
+                        const placeIdx = Math.floor(Math.random() * this.placeSpawns.length);
+                        const place = this.placesToSpawn[placeIdx];
+
+                        const { ori, scale } = this.getOriAndScale(resolvedType);
+                        const rot = math.oriToRad(ori);
+                        const bound = collider.transform(
+                            bounds,
+                            v2.create(0, 0),
+                            rot,
+                            scale,
+                        ) as AABB;
+
+                        const width = bound.max.x - bound.min.x;
+                        const height = bound.max.y - bound.min.y;
+                        const placePos = v2.add(
+                            place,
+                            v2.mulElems(
+                                v2.mul(v2.randomUnit(), 0.5),
+                                v2.create(width + attempts * 2, height + attempts * 2),
+                            ),
+                        );
+
+                        const pos = math.v2Clamp(
+                            placePos,
+                            v2.create(this.shoreInset + width, this.shoreInset + height),
+                            v2.create(
+                                this.width - this.shoreInset - width,
+                                this.height - this.shoreInset - height,
+                            ),
+                        );
+
+                        if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
+                        this.genAuto(resolvedType, pos, 0, ori, scale);
+
+                        this.placesToSpawn.splice(placeIdx, 1);
+                        util.removeFrom(this.placeSpawns, resolvedType);
+
+                        return true;
+                    },
+                    200,
+                    false,
                 );
-            }
 
-            return util.randomPointInAabb(spawnAabb);
-        };
-
-        if (this.placesToSpawn.length && this.placeSpawns.includes(type)) {
-            let attempts = 0;
-            const spawnedOnPlace = this.trySpawn(
-                type,
-                () => {
-                    attempts++;
-
-                    const placeIdx = Math.floor(Math.random() * this.placeSpawns.length);
-                    const place = this.placesToSpawn[placeIdx];
-
-                    const { ori, scale } = this.getOriAndScale(type);
-                    const rot = math.oriToRad(ori);
-                    const bound = collider.transform(
-                        bounds,
-                        v2.create(0, 0),
-                        rot,
-                        scale,
-                    ) as AABB;
-
-                    const width = bound.max.x - bound.min.x;
-                    const height = bound.max.y - bound.min.y;
-                    const placePos = v2.add(
-                        place,
-                        v2.mulElems(
-                            v2.mul(v2.randomUnit(), 0.5),
-                            v2.create(width + attempts * 2, height + attempts * 2),
-                        ),
-                    );
-
-                    const pos = math.v2Clamp(
-                        placePos,
-                        v2.create(this.shoreInset + width, this.shoreInset + height),
-                        v2.create(
-                            this.width - this.shoreInset - width,
-                            this.height - this.shoreInset - height,
-                        ),
-                    );
-
-                    if (!this.canSpawn(type, pos, ori, scale)) return false;
-                    this.genAuto(type, pos, 0, ori, scale);
-
-                    this.placesToSpawn.splice(placeIdx, 1);
-                    util.removeFrom(this.placeSpawns, type);
-
+                // if couldn't spawn it near a map place
+                // try spawning somewhere else on grass
+                if (spawnedOnPlace) {
                     return true;
-                },
-                200,
-                false,
-            );
-
-            // if couldn't spawn it near a map place
-            // try spawning somewhere else on grass
-            if (spawnedOnPlace) {
-                return;
+                }
             }
-        }
 
-        this.trySpawn(type, () => {
-            const { ori, scale } = this.getOriAndScale(type);
+            const { ori, scale } = this.getOriAndScale(resolvedType);
             const spawnAabb = getSpawnAabb(ori, scale);
             const pos = getPos(spawnAabb);
 
-            if (!this.canSpawn(type, pos, ori, scale)) return false;
-            this.genAuto(type, pos, 0, ori, scale);
+            if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
+            this.genAuto(resolvedType, pos, 0, ori, scale);
 
             return true;
         });
     }
 
     genOnBeach(type: string) {
-        const aabb = collider.toAabb(mapHelpers.getBoundingCollider(type));
-
-        const objSize = math.max(aabb.max.x - aabb.min.x, aabb.max.y - aabb.min.y) / 2;
-
-        const beachSize = this.grassInset - GameConfig.map.grassVariation * 2;
-
         this.trySpawn(type, () => {
-            const { ori, scale } = this.getOriAndScale(type);
+            const resolvedType = this.resolveSpawnType(type);
+            const aabb = collider.toAabb(mapHelpers.getBoundingCollider(resolvedType));
+
+            const objSize = math.max(aabb.max.x - aabb.min.x, aabb.max.y - aabb.min.y) / 2;
+
+            const beachSize = this.grassInset - GameConfig.map.grassVariation * 2;
+
+            const { ori, scale } = this.getOriAndScale(resolvedType);
             const side = util.randomInt(0, 3);
             const rot = math.oriToRad(side);
 
@@ -1766,8 +1831,8 @@ export class GameMap {
             const offset = v2.sub(this.center, tempPos);
             const pos = v2.add(this.center, v2.rotate(offset, rot));
 
-            if (!this.canSpawn(type, pos, ori, 1)) return false;
-            this.genAuto(type, pos, 0, ori, scale);
+            if (!this.canSpawn(resolvedType, pos, ori, 1)) return false;
+            this.genAuto(resolvedType, pos, 0, ori, scale);
             return true;
         });
     }
@@ -1786,99 +1851,96 @@ export class GameMap {
         if (this.normalRivers.length == 0) {
             return false;
         }
-        let { ori, scale } = this.getOriAndScale(type);
 
-        const def = MapObjectDefs.typeToDef(type);
+        return this.trySpawn(type, () => {
+            const resolvedType = this.resolveSpawnType(type);
+            const def = MapObjectDefs.typeToDef(resolvedType);
+            let { ori, scale } = this.getOriAndScale(resolvedType);
 
-        let rivers = this.normalRivers;
-        if (type === "bunker_structure_05") {
-            rivers = rivers.filter((r) => r.waterWidth > 8);
-            if (!rivers.length) return false;
-        }
-
-        const getPosAndOri = () => {
-            const oriAndScale = this.getOriAndScale(type);
-            ori = oriAndScale.ori;
-            scale = oriAndScale.scale;
-
-            let t: number;
-            if (progress) {
-                // sometimes the position exactly at "progress" is invalid so "canSpawn()" will always fail
-                // we avoid this by adding a tiny bit of random variation to the position so it'll eventually find a valid one
-                t = math.clamp(util.random(progress[0], progress[1]), 0, 1);
-            } else {
-                t = util.random(0, 1);
+            let rivers = this.normalRivers;
+            if (resolvedType === "bunker_structure_05") {
+                rivers = rivers.filter((r) => r.waterWidth > 8);
+                if (!rivers.length) return false;
             }
 
-            let finalRiver: River;
-            if (type == "river_town_01") {
-                finalRiver = rivers[0];
-            } else {
-                finalRiver = river ?? rivers[util.randomInt(0, rivers.length - 1)];
-            }
+            const getPosAndOri = () => {
+                const oriAndScale = this.getOriAndScale(resolvedType);
+                ori = oriAndScale.ori;
+                scale = oriAndScale.scale;
 
-            let pos = finalRiver.spline.getPos(t);
-
-            if (def.terrain?.nearbyRiver) {
-                const otherSide = Math.random() < 0.5;
-
-                const offset = finalRiver.waterWidth * 2 * (otherSide ? -1 : 1);
-                let norm = finalRiver.spline.getNormal(t);
-                v2.set(pos, v2.add(pos, v2.mul(norm, offset)));
-
-                const finalT = finalRiver.spline.getClosestTtoPoint(pos);
-                const finalNorm = finalRiver.spline.getNormal(finalT);
-
-                const riverOri =
-                    (math.radToOri(Math.atan2(finalNorm.y, finalNorm.x)) +
-                        (otherSide ? 2 : 0)) %
-                    4;
-                ori = (def.terrain.nearbyRiver.facingOri + riverOri) % 4;
-            } else {
-                const norm = finalRiver.spline.getNormal(t);
-                ori = math.radToOri(Math.atan2(norm.y, norm.x));
-            }
-            if (type === "bunker_structure_05") {
-                ori %= 2;
-            }
-            if (type == "river_town_01") {
-                // we flip the orientation because river town has red on left and blue on right by default
-                // the faction mode ori that gets us a left/right split vs top/bottom split is 1
-                // so of course we need to flip this value and vice versa for the other case
-                ori = this.factionModeSplitOri ^ 1;
-            }
-
-            return { pos, ori };
-        };
-
-        return this.trySpawn(
-            type,
-            () => {
-                const { pos, ori } = getPosAndOri();
-
-                if (!this.canSpawn(type, pos, ori, scale)) {
-                    return false;
+                let t: number;
+                if (progress) {
+                    // sometimes the position exactly at "progress" is invalid so "canSpawn()" will always fail
+                    // we avoid this by adding a tiny bit of random variation to the position so it'll eventually find a valid one
+                    t = math.clamp(util.random(progress[0], progress[1]), 0, 1);
+                } else {
+                    t = util.random(0, 1);
                 }
 
-                const obj = this.genAuto(type, pos, 0, ori, scale);
-                if (obj?.__type === ObjectType.Structure) {
-                    this.bridges.push(obj);
+                let finalRiver: River;
+                if (type == "river_town_01") {
+                    finalRiver = rivers[0];
+                } else {
+                    finalRiver = river ?? rivers[util.randomInt(0, rivers.length - 1)];
                 }
-                return true;
-            },
-            undefined,
-            logOnFailure,
-        );
+
+                let pos = finalRiver.spline.getPos(t);
+
+                if (def.terrain?.nearbyRiver) {
+                    const otherSide = Math.random() < 0.5;
+
+                    const offset = finalRiver.waterWidth * 2 * (otherSide ? -1 : 1);
+                    let norm = finalRiver.spline.getNormal(t);
+                    v2.set(pos, v2.add(pos, v2.mul(norm, offset)));
+
+                    const finalT = finalRiver.spline.getClosestTtoPoint(pos);
+                    const finalNorm = finalRiver.spline.getNormal(finalT);
+
+                    const riverOri =
+                        (math.radToOri(Math.atan2(finalNorm.y, finalNorm.x)) +
+                            (otherSide ? 2 : 0)) %
+                        4;
+                    ori = (def.terrain.nearbyRiver.facingOri + riverOri) % 4;
+                } else {
+                    const norm = finalRiver.spline.getNormal(t);
+                    ori = math.radToOri(Math.atan2(norm.y, norm.x));
+                }
+                if (resolvedType === "bunker_structure_05") {
+                    ori %= 2;
+                }
+                if (type == "river_town_01") {
+                    // we flip the orientation because river town has red on left and blue on right by default
+                    // the faction mode ori that gets us a left/right split vs top/bottom split is 1
+                    // so of course we need to flip this value and vice versa for the other case
+                    ori = this.factionModeSplitOri ^ 1;
+                }
+
+                return { pos, ori };
+            };
+
+            const { pos, ori: spawnOri } = getPosAndOri();
+
+            if (!this.canSpawn(resolvedType, pos, spawnOri, scale)) {
+                return false;
+            }
+
+            const obj = this.genAuto(resolvedType, pos, 0, spawnOri, scale);
+            if (obj?.__type === ObjectType.Structure) {
+                this.bridges.push(obj);
+            }
+            return true;
+        }, undefined, logOnFailure);
     }
 
     genOnRiver(type: string, river?: River) {
+        const resolvedType = this.resolveSpawnType(type);
         let rivers = this.terrain.rivers;
         if (!rivers.length) return;
 
-        this.trySpawn(type, () => {
+        this.trySpawn(resolvedType, () => {
             river = river ?? rivers[util.randomInt(0, rivers.length - 1)];
             const t = util.random(0, 1);
-            const def = MapObjectDefs.typeToDef(type);
+            const def = MapObjectDefs.typeToDef(resolvedType);
 
             let width = river.getWaterWidth(t);
             if (def.type === "obstacle") {
@@ -1897,20 +1959,21 @@ export class GameMap {
                 v2.mul(river.spline.getNormal(t), offset),
             );
 
-            const { ori, scale } = this.getOriAndScale(type);
+            const { ori, scale } = this.getOriAndScale(resolvedType);
 
-            if (!this.canSpawn(type, pos, ori, scale)) return false;
+            if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
 
-            this.genAuto(type, pos, 0, ori, scale);
+            this.genAuto(resolvedType, pos, 0, ori, scale);
             return true;
         });
     }
 
     genOnRiverShore(type: string, river?: River) {
+        const resolvedType = this.resolveSpawnType(type);
         let rivers = this.terrain.rivers;
         if (!rivers.length) return;
 
-        this.trySpawn(type, () => {
+        this.trySpawn(resolvedType, () => {
             river = river ?? rivers[util.randomInt(0, rivers.length - 1)];
             const t = util.random(0, 1);
 
@@ -1924,11 +1987,11 @@ export class GameMap {
                 v2.mul(river.spline.getNormal(t), offset),
             );
 
-            const { ori, scale } = this.getOriAndScale(type);
+            const { ori, scale } = this.getOriAndScale(resolvedType);
 
-            if (!this.canSpawn(type, pos, ori, scale)) return false;
+            if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
 
-            this.genAuto(type, pos, 0, ori, scale);
+            this.genAuto(resolvedType, pos, 0, ori, scale);
             return true;
         });
     }

@@ -27,6 +27,14 @@ export const Comp: MapDef = {
             { name: "ambient_steam_01", channel: "ambient" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
+            { name: "reserve_music_01", channel: "ambient" },
+            { name: "reserve_music_02", channel: "ambient" },
+            { name: "piano_02", channel: "sfx" },
+            { name: "log_03", channel: "sfx" },
+            { name: "log_04", channel: "sfx" },
+            { name: "coconut_01", channel: "sfx" },
+            { name: "potato_pickup_01", channel: "ui" },
+            { name: "piano_music_01", channel: "ambient" },
         ],
         atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
     },
@@ -56,7 +64,7 @@ export const Comp: MapDef = {
     gameMode: {
         maxPlayers: 8,
         killLeaderEnabled: true,
-        freezeTime: 10,
+        freezeTime: 0,
         joinTime: 10, // time until players can move after game start
         airdropMinDistance: 0.72, // minimum distance between airdrops as multiplier of gas radius (has to be between 0 and 1)
         betterSpawn: true,
@@ -1224,7 +1232,14 @@ export const Comp: MapDef = {
                 choose: 3,
             },*/
         ],
-        spawnReplacements: [{}],
+        spawnReplacements: [
+            {
+                club_complex_01: [
+                    { type: "club_complex_01", weight: 0.4 },
+                    { type: "reserve_structure_01", weight: 0.6 },
+                ],
+            },
+        ],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
         spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
     },

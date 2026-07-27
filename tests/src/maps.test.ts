@@ -1,7 +1,8 @@
 import "./testHelpers.ts";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { Atlases } from "../../client/atlas-builder/atlasDefs.ts";
 import { type MapDef, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
+import { GameMap } from "../../server/src/game/map.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
 import { Constants } from "../../shared/net/net.ts";
 import { getAllAtlasSprites, getAllMapSprites } from "./spriteHelpers.ts";
@@ -113,6 +114,57 @@ describe.for(maps)("Map %s", (map) => {
             key,
         ]) => {
             expect(key).toBeValidMapObj();
+        });
+
+        test("Weighted replacements stop when they resolve to the same type", () => {
+            const mapLike = {
+                mapDef: {
+                    mapGen: {
+                        spawnReplacements: [{
+                            club_complex_01: [
+                                { type: "club_complex_01", weight: 0.4 },
+                                { type: "reserve_structure_01", weight: 0.6 },
+                            ],
+                        }],
+                    },
+                },
+            } as any;
+
+            const randomSpy = vi.spyOn(Math, "random")
+                .mockReturnValueOnce(0.1)
+                .mockReturnValueOnce(0.9);
+
+            try {
+                const resolvedType = GameMap.prototype.resolveSpawnType.call(
+                    mapLike,
+                    "club_complex_01",
+                );
+                expect(resolvedType).toBe("club_complex_01");
+            } finally {
+                randomSpy.mockRestore();
+            }
+        });
+
+        test("Place-spawn rules include all replacement variants", () => {
+            const mapLike = {
+                mapDef: {
+                    mapGen: {
+                        spawnReplacements: [{
+                            club_complex_01: [
+                                { type: "club_complex_01", weight: 0.4 },
+                                { type: "reserve_structure_01", weight: 0.6 },
+                            ],
+                        }],
+                    },
+                },
+            } as any;
+
+            const variants = GameMap.prototype.getSpawnReplacementTypes.call(
+                mapLike,
+                "club_complex_01",
+            );
+
+            expect(variants).toEqual(["club_complex_01", "reserve_structure_01"]);
         });
 
         test.for(mapGen.importantSpawns)("Important Spawn $0", (spawn) => {
