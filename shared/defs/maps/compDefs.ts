@@ -622,10 +622,10 @@ export const Comp: MapDef = {
             { name: "pkp", count: 1, weight: 0.05 }, // ?
         ],
         tier_revolvers: [ // just named this because of the original code (not accurate)
-            { name: "", count: 1, weight: 0.4 },
-            { name: "m1911", count: 1, weight: 0.3 },
-            { name: "colt45", count: 1, weight: 0.2 },
-            { name: "ots38", count: 1, weight: 0.08 },
+            { name: "", count: 1, weight: 0.65 },
+            { name: "m1911", count: 1, weight: 0.18 },
+            { name: "colt45", count: 1, weight: 0.1 },
+            { name: "ots38", count: 1, weight: 0.05 },
             { name: "sw500", count: 1, weight: 0.02 },
         ],
         tier_shotguns: [

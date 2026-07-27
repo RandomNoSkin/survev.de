@@ -2999,7 +2999,7 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
             //
 
             {
-                type: "tree_interior_01de",
+                type: "tree_interior_01de_coconutless",
                 pos: v2.create(-22.5, -11),
                 scale: 1.15,
                 ori: 0,
@@ -15535,6 +15535,14 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         loot: [tierLoot("tier_coconut_outfit", 1, 1), autoLoot("coconut", 3)],
         img: {
             sprite: "map-tree-14.img",
+            scale: 0.35,
+            zIdx: 200,
+            randomRotation: true,
+        },
+    }),
+    tree_interior_01de_coconutless: createTree({
+        img: {
+            sprite: "map-tree-13.img",
             scale: 0.35,
             zIdx: 200,
             randomRotation: true,
