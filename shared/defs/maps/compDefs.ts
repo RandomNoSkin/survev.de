@@ -107,8 +107,9 @@ export const Comp: MapDef = {
                 },
             ],
             crates: [
-                { name: "airdrop_crate_01", weight: 4 },
-                { name: "airdrop_crate_02", weight: 1 },
+                { name: "airdrop_crate_01", weight: 8 },
+                { name: "airdrop_crate_02", weight: 2 },
+                { name: "airdrop_crate_05", weight: 1 },
             ],
         },
         bagSizes: {},
@@ -178,6 +179,9 @@ export const Comp: MapDef = {
             { name: "mp220", count: 1, weight: 0.08 },
             { name: "origin", count: 1, weight: 0.08 },
             //{ name: "tier_outfits", count: 1, weight: 0.025 }, // !
+        ],
+        tier_toilet_gold: [
+            { name: "4xscope", count: 1, weight: 1 },
         ],
         tier_scopes: [
             { name: "2xscope", count: 1, weight: 1 },
@@ -617,6 +621,13 @@ export const Comp: MapDef = {
             { name: "m249", count: 1, weight: 0.05 }, // ?
             { name: "pkp", count: 1, weight: 0.05 }, // ?
         ],
+        tier_revolvers: [ // just named this because of the original code (not accurate)
+            { name: "", count: 1, weight: 0.4 },
+            { name: "m1911", count: 1, weight: 0.3 },
+            { name: "colt45", count: 1, weight: 0.2 },
+            { name: "ots38", count: 1, weight: 0.08 },
+            { name: "sw500", count: 1, weight: 0.02 },
+        ],
         tier_shotguns: [
             { name: "spas12", count: 1, weight: 2 }, // ?
             { name: "mp220", count: 1, weight: 1.5 }, // ?
@@ -851,6 +862,11 @@ export const Comp: MapDef = {
             { name: "scarssr", count: 1, weight: 1 }, // ?
             { name: "usas", count: 1, weight: 1 }, // ?
             { name: "p30l_dual", count: 1, weight: 1 }, // ?
+        ],
+        tier_airdrop_crimson: [
+            { name: "ash12", count: 1, weight: 1 },
+            { name: "sw500", count: 1, weight: 1 },
+            { name: "barrett", count: 1, weight: 1 },
         ],
         tier_airdrop_ammo: [
             { name: "9mm", count: 30, weight: 3 },

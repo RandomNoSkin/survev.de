@@ -675,7 +675,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_sw500_big: {
         type: "bullet",
-        damage: 40,
+        damage: 35,
         obstacleDamage: 1,
         falloff: 0.92,
         speed: 140,
@@ -688,7 +688,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_sw500_medium: {
         type: "bullet",
-        damage: 20,
+        damage: 15,
         obstacleDamage: 0.5,
         falloff: 0.92,
         speed: 110,
@@ -701,7 +701,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_sw500_small: {
         type: "bullet",
-        damage: 20,
+        damage: 15,
         obstacleDamage: 0.5,
         falloff: 0.92,
         speed: 80,
