@@ -1,5 +1,5 @@
-import type { AtlasDef } from "../atlasDefs";
-import { BuildingSprites } from "./buildings";
+import type { AtlasDef } from "../atlasDefs.ts";
+import { BuildingSprites } from "./buildings.ts";
 
 export const HalloweenAtlas: AtlasDef = {
     compress: true,
@@ -12,7 +12,6 @@ export const HalloweenAtlas: AtlasDef = {
         "particles/part-airdrop-02h.svg",
 
         "map/map-bush-06.svg",
-        "map/map-bush-07sp.svg",
         "map/map-bush-res-06.svg",
 
         "map/map-crate-11h.svg",
@@ -28,6 +27,5 @@ export const HalloweenAtlas: AtlasDef = {
         "map/map-tree-07.svg",
         "map/map-tree-08.svg",
 
-        "map/map-web-01.svg",
     ],
 };

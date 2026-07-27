@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { getItemCategory, getItemRarity } from "../../../shared/defs/shopConfig";
 import type {
     BlockedUser,
@@ -237,7 +237,7 @@ export class SocialUi {
     }
 
     private itemName(type: string): string {
-        const def = GameObjectDefs[type] as { name?: string } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
         return this.localization.translate(`game-${type}`) || def?.name || type;
     }
 

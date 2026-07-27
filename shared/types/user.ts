@@ -180,7 +180,8 @@ export type ShopResponse = {
     offers: ShopOffer[];
 };
 
-export const zBuyShopRequest = z.object({ slot: z.number().int().min(0).max(1) });
+// Slots 0/1 are the daily rotation, 2/3 the weekly one — all four are buyable.
+export const zBuyShopRequest = z.object({ slot: z.number().int().min(0).max(3) });
 export type BuyShopRequest = z.infer<typeof zBuyShopRequest>;
 export type BuyShopResponse = {
     success: boolean;

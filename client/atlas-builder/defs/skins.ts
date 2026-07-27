@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import Path from "node:path";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import type { OutfitDef } from "../../../shared/defs/gameObjects/outfitDefs";
 import type { AtlasDef } from "../atlasDefs";
 
@@ -38,8 +38,10 @@ function skinSprites(): string[] {
     const index = indexImages();
     const images = new Set<string>();
 
-    for (const def of Object.values(GameObjectDefs)) {
-        const outfit = def as OutfitDef;
+    // GameObjectDefs is a DefinitionRegister (not a plain record), so enumerate
+    // via its API — Object.values() on it yields class internals, not defs.
+    for (const type of GameObjectDefs.getAllTypes()) {
+        const outfit = GameObjectDefs.typeToDef(type) as OutfitDef;
         // Mirrors `getComposableOutfit`: costumes render as an obstacle and
         // ghillie as foliage, so they're never composed as a character.
         if (outfit.type !== "outfit" || outfit.ghillie || outfit.obstacleType) continue;

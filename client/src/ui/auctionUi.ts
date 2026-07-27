@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import {
     AUCTION_MIN_INCREMENT,
     getItemCategory,
@@ -87,7 +87,7 @@ export class AuctionUi {
     }
 
     private itemName(type: string): string {
-        const def = GameObjectDefs[type] as { name?: string } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
         return this.localization.translate(`game-${type}`) || def?.name || type;
     }
 

@@ -1,8 +1,8 @@
-import { GameConfig, GasMode } from "../../../../shared/gameConfig";
-import { math } from "../../../../shared/utils/math";
-import { util } from "../../../../shared/utils/util";
-import { type Vec2, v2 } from "../../../../shared/utils/v2";
-import type { Game } from "../game";
+import { GameConfig, GasMode } from "../../../../shared/gameConfig.ts";
+import { math } from "../../../../shared/utils/math.ts";
+import { util } from "../../../../shared/utils/util.ts";
+import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
+import type { Game } from "../game.ts";
 
 interface StageData {
     mode: GasMode;
@@ -89,13 +89,13 @@ const GasStages: StageData[] = [
     },
     {
         mode: GasMode.Waiting,
-        duration: 30,
+        duration: 25,
         rad: 0.1,
         damage: 10,
     },
     {
         mode: GasMode.Moving,
-        duration: 10,
+        duration: 15,
         rad: 0.1,
         damage: 10,
     },
@@ -107,7 +107,7 @@ const GasStages: StageData[] = [
     },
     {
         mode: GasMode.Moving,
-        duration: 18,
+        duration: 20,
         rad: 0.075,
         damage: 14,
     },
@@ -119,7 +119,7 @@ const GasStages: StageData[] = [
     },
     {
         mode: GasMode.Moving,
-        duration: 16,
+        duration: 20,
         rad: 0.045,
         damage: 14,
     },
@@ -137,19 +137,19 @@ const GasStages: StageData[] = [
     },
     {
         mode: GasMode.Waiting,
-        duration: 8,
+        duration: 10,
         rad: 0.0175,
         damage: 22,
     },
     {
         mode: GasMode.Moving,
-        duration: 14,
+        duration: 18,
         rad: 0.0175,
         damage: 22,
     },
     {
         mode: GasMode.Waiting,
-        duration: 6,
+        duration: 8,
         rad: 0,
         damage: 22,
     },

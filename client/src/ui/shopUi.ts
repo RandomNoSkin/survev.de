@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { getItemRarity } from "../../../shared/defs/shopConfig";
 import type { ShopOffer } from "../../../shared/types/user";
 import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
@@ -428,7 +428,7 @@ export class ShopUi {
     }
 
     private renderItem(type: string): JQuery<HTMLElement> {
-        const def = GameObjectDefs[type] as
+        const def = GameObjectDefs.typeToDef(type) as
             | { rarity?: number; name?: string }
             | undefined;
         const rarity = getItemRarity(type);

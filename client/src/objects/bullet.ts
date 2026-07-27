@@ -1,23 +1,20 @@
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
-import { BulletDefs } from "../../../shared/defs/gameObjects/bulletDefs";
-import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
-import { MapObjectDefs } from "../../../shared/defs/mapObjectDefs";
-import type { ObstacleDef } from "../../../shared/defs/mapObjectsTyping";
-import { GameConfig } from "../../../shared/gameConfig";
-import type { Bullet } from "../../../shared/net/updateMsg";
-import { coldet } from "../../../shared/utils/coldet";
-import { collider } from "../../../shared/utils/collider";
-import { math } from "../../../shared/utils/math";
-import { util } from "../../../shared/utils/util";
-import { type Vec2, v2 } from "../../../shared/utils/v2";
-import type { AudioManager } from "../audioManager";
-import type { Camera } from "../camera";
-import type { Map } from "../map";
-import type { Renderer } from "../renderer";
-import type { FlareBarn } from "./flare";
-import type { ParticleBarn } from "./particles";
-import type { Player, PlayerBarn } from "./player";
+
+import { GameObjectDefs, MapObjectDefs } from "../../../shared/defs/register.ts";
+import { GameConfig } from "../../../shared/gameConfig.ts";
+import type { Bullet } from "../../../shared/net/updateMsg.ts";
+import { coldet } from "../../../shared/utils/coldet.ts";
+import { collider } from "../../../shared/utils/collider.ts";
+import { math } from "../../../shared/utils/math.ts";
+import { util } from "../../../shared/utils/util.ts";
+import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
+import type { AudioManager } from "../audioManager.ts";
+import type { Camera } from "../camera.ts";
+import type { Map } from "../map.ts";
+import type { Renderer } from "../renderer.ts";
+import type { FlareBarn } from "./flare.ts";
+import type { ParticleBarn } from "./particles.ts";
+import type { Player, PlayerBarn } from "./player.ts";
 
 export function createBullet(
     bullet: Bullet,
@@ -26,7 +23,8 @@ export function createBullet(
     playerBarn: PlayerBarn,
     renderer: Renderer,
 ) {
-    if (BulletDefs[bullet.bulletType].addFlare || BulletDefs[bullet.bulletType].addSupplyFlare) {
+    const bulletTypeDef = GameObjectDefs.typeToDef(bullet.bulletType, "bullet");
+    if (bulletTypeDef.addFlare || bulletTypeDef.addSupplyFlare) {
         flareBarn.addFlare(bullet, playerBarn);
     } else {
         bulletBarn.addBullet(bullet, playerBarn, renderer);
@@ -84,6 +82,8 @@ export class BulletBarn {
         suppressedOnDist: boolean;
         tracerAlphaRate: number;
         tracerAlphaMin: number;
+        combatStims: boolean;
+        particleTicker: number;
     }> = [];
 
     tracerColors: Record<
@@ -128,13 +128,12 @@ export class BulletBarn {
             this.bullets.push(b);
         }
 
-        const bulletDef = BulletDefs[bullet.bulletType];
+        const bulletDef = GameObjectDefs.typeToDef(bullet.bulletType, "bullet");
 
         const variance = 1 + bullet.varianceT * bulletDef.variance;
         const distAdj = math.remap(bullet.distAdjIdx, 0, 16, -1, 1);
-        let distance =
-            bulletDef.distance /
-            Math.pow(GameConfig.bullet.reflectDistDecay, bullet.reflectCount);
+        let distance = bulletDef.distance
+            / Math.pow(GameConfig.bullet.reflectDistDecay, bullet.reflectCount);
         if (bullet.clipDistance) {
             distance = bullet.distance;
         }
@@ -158,6 +157,8 @@ export class BulletBarn {
         b.reflectCount = bullet.reflectCount;
         b.reflectObjId = bullet.reflectObjId;
         b.whizHeard = false;
+        b.combatStims = bullet.combatStims;
+        b.particleTicker = util.random(0.05, 0.15);
 
         const angleRadians = Math.atan2(b.dir.x, b.dir.y);
         b.container.rotation = angleRadians - Math.PI / 2;
@@ -236,12 +237,28 @@ export class BulletBarn {
                 b.pos = v2.add(b.pos, v2.mul(b.dir, distTravel));
                 b.distanceTraveled += distTravel;
 
+                b.particleTicker += dt;
+                if (b.combatStims && b.particleTicker >= 0.15) {
+                    particleBarn.addParticle(
+                        "boost_basic",
+                        b.layer,
+                        b.pos,
+                        b.dir,
+                        undefined,
+                        undefined,
+                        undefined,
+                        undefined,
+                        PIXI.Color.shared.setValue(b.bulletTrail.tint).toNumber(),
+                    );
+                    b.particleTicker = util.random(0, 0.1); // Done to make the particles for shotguns less periodic and more continuous
+                }
+
                 if (
-                    !activePlayer.m_netData.m_dead &&
-                    util.sameAudioLayer(activePlayer.layer, b.layer) &&
-                    v2.length(v2.sub(camera.m_pos, b.pos)) < 7.5 &&
-                    !b.whizHeard &&
-                    b.playerId != activePlayer.__id
+                    !activePlayer.m_netData.m_dead
+                    && util.sameAudioLayer(activePlayer.layer, b.layer)
+                    && v2.length(v2.sub(camera.m_pos, b.pos)) < 7.5
+                    && !b.whizHeard
+                    && b.playerId != activePlayer.__id
                 ) {
                     audioManager.playGroup("bullet_whiz", {
                         soundPos: b.pos,
@@ -309,11 +326,11 @@ export class BulletBarn {
                 for (let C = 0; C < players.length; C++) {
                     const player = players[C];
                     if (
-                        player.active &&
-                        !player.m_netData.m_dead &&
-                        (util.sameLayer(player.m_netData.m_layer, b.layer) ||
-                            player.m_netData.m_layer & 2) &&
-                        (player.__id != b.playerId || b.damageSelf)
+                        player.active
+                        && !player.m_netData.m_dead
+                        && (util.sameLayer(player.m_netData.m_layer, b.layer)
+                            || player.m_netData.m_layer & 2)
+                        && (player.__id != b.playerId || b.damageSelf)
                     ) {
                         let panCollision = null;
                         if (player.m_hasActivePan()) {
@@ -361,10 +378,10 @@ export class BulletBarn {
                             player.m_rad,
                         );
                         if (
-                            collision &&
-                            (!panCollision ||
-                                v2.length(v2.sub(collision.point, b.startPos)) <
-                                    v2.length(v2.sub(panCollision.point, b.startPos)))
+                            collision
+                            && (!panCollision
+                                || v2.length(v2.sub(collision.point, b.startPos))
+                                    < v2.length(v2.sub(panCollision.point, b.startPos)))
                         ) {
                             colObjs.push({
                                 type: "player",
@@ -419,7 +436,7 @@ export class BulletBarn {
                 for (let i = 0; i < colObjs.length; i++) {
                     const col = colObjs[i];
                     if (col.type == "obstacle") {
-                        const mapDef = MapObjectDefs[col?.obstacleType!] as ObstacleDef;
+                        const mapDef = MapObjectDefs.typeToDef(col.obstacleType!, "obstacle");
                         playHitFx(
                             mapDef.hitParticle,
                             mapDef.sound.bullet!,
@@ -439,7 +456,7 @@ export class BulletBarn {
                         if (!shooterDead) {
                             const Y = col.player!;
                             if (map.turkeyMode && W?.m_hasPerk("turkey_shoot")) {
-                                const J = v2.mul(v2.randomUnit(), util.random(3, 6));
+                                const J = v2.randomUnit(util.random(3, 6));
                                 particleBarn.addParticle(
                                     "turkeyFeathersHit",
                                     Y.layer,
@@ -469,7 +486,7 @@ export class BulletBarn {
                     } else if (col.type == "pan") {
                         playHitFx(
                             "barrelChip",
-                            (GameObjectDefs.pan as MeleeDef).sound.bullet!,
+                            GameObjectDefs.typeToDef("pan", "melee").sound.bullet!,
                             col.point,
                             col.normal,
                             col.layer!,
@@ -494,9 +511,9 @@ export class BulletBarn {
                             for (let oe = 0; oe < re.stairs.length; oe++) {
                                 const se = re.stairs[oe];
                                 if (
-                                    !se?.lootOnly &&
-                                    collider.intersectSegment(
-                                        se?.collision!,
+                                    !se?.lootOnly
+                                    && collider.intersectSegment(
+                                        se?.collision,
                                         b.pos,
                                         posOld,
                                     )

@@ -1,8 +1,11 @@
 import { expect } from "vitest";
-import { type GameObjectDef, GameObjectDefs } from "../../shared/defs/gameObjectDefs";
-import { MapObjectDefs } from "../../shared/defs/mapObjectDefs";
-import type { MapObjectDef } from "../../shared/defs/mapObjectsTyping";
-import { Main } from "../../shared/defs/maps/baseDefs";
+
+import type { GameObjectDef } from "../../shared/defs/gameObjectDefs.ts";
+
+import type { Player } from "../../server/src/game/objects/player.ts";
+import type { MapObjectDef } from "../../shared/defs/mapObjectsTyping.ts";
+import { Main } from "../../shared/defs/maps/baseDefs.ts";
+import { GameObjectDefs, MapObjectDefs } from "../../shared/defs/register.ts";
 
 interface GameTestHelpers<R = unknown> {
     toBeInRange: (value: { min: number; max: number }) => R;
@@ -11,7 +14,9 @@ interface GameTestHelpers<R = unknown> {
     toBeValidMapObjOrNone: (type?: MapObjectDef["type"]) => R;
     toBeValidGameObj: (type?: GameObjectDef["type"]) => R;
     toBeValidLoot: (type?: GameObjectDef["type"]) => R;
-    toBeValidLootTier: () => R;
+    toBeValidLootTier: (lootTable?: Record<string, unknown>) => R;
+
+    toBeSamePlayer: (obj?: Player) => R;
 }
 
 declare module "vitest" {
@@ -23,8 +28,7 @@ expect.extend({
     toBeInRange: (received: number, expected: { min: number; max: number }) => {
         if (received > expected.max || received < expected.min) {
             return {
-                message: () =>
-                    `Expected ${received} to be a in range [${expected.min}, ${expected.max}]`,
+                message: () => `Expected ${received} to be a in range [${expected.min}, ${expected.max}]`,
                 pass: false,
             };
         }
@@ -33,7 +37,7 @@ expect.extend({
     },
 
     toBeValidMapObj: (received, expected) => {
-        if (!(received in MapObjectDefs)) {
+        if (!MapObjectDefs.typeExists(received)) {
             return {
                 message: () => `Expected '${received}' to be a valid map object type`,
                 pass: false,
@@ -41,11 +45,10 @@ expect.extend({
         }
 
         if (expected) {
-            const def = MapObjectDefs[received];
+            const def = MapObjectDefs.typeToDef(received);
             if (def.type !== expected) {
                 return {
-                    message: () =>
-                        `Expected '${received}' to be a be of type ${expected}`,
+                    message: () => `Expected '${received}' to be a be of type ${expected}`,
                     pass: false,
                 };
             }
@@ -55,7 +58,7 @@ expect.extend({
     },
 
     toBeValidMapObjOrNone: (received, expected) => {
-        if (received && !(received in MapObjectDefs)) {
+        if (received && !MapObjectDefs.typeExists(received)) {
             return {
                 message: () => `Expected '${received}' to be a valid map object type`,
                 pass: false,
@@ -63,11 +66,10 @@ expect.extend({
         }
 
         if (received && expected) {
-            const def = MapObjectDefs[received];
+            const def = MapObjectDefs.typeToDef(received);
             if (def.type !== expected) {
                 return {
-                    message: () =>
-                        `Expected '${received}' to be a be of type ${expected}`,
+                    message: () => `Expected '${received}' to be a be of type ${expected}`,
                     pass: false,
                 };
             }
@@ -77,7 +79,7 @@ expect.extend({
     },
 
     toBeValidGameObj: (received, expected) => {
-        if (!(received in GameObjectDefs)) {
+        if (!GameObjectDefs.typeExists(received)) {
             return {
                 message: () => `Expected '${received}' to be a valid game object type`,
                 pass: false,
@@ -85,11 +87,10 @@ expect.extend({
         }
 
         if (expected) {
-            const def = GameObjectDefs[received];
+            const def = GameObjectDefs.typeToDef(received);
             if (def.type !== expected) {
                 return {
-                    message: () =>
-                        `Expected '${received}' to be a be of type ${expected}`,
+                    message: () => `Expected '${received}' to be a be of type ${expected}`,
                     pass: false,
                 };
             }
@@ -99,7 +100,7 @@ expect.extend({
     },
 
     toBeValidLoot: (received, expected) => {
-        const def = GameObjectDefs[received];
+        const def = GameObjectDefs.typeToDefSafe(received);
         if (!def || !("lootImg" in def)) {
             return {
                 message: () => `Expected '${received}' to be a valid loot type`,
@@ -108,11 +109,10 @@ expect.extend({
         }
 
         if (expected) {
-            const def = GameObjectDefs[received];
+            const def = GameObjectDefs.typeToDef(received);
             if (def.type !== expected) {
                 return {
-                    message: () =>
-                        `Expected '${received}' to be a be of type ${expected}`,
+                    message: () => `Expected '${received}' to be a be of type ${expected}`,
                     pass: false,
                 };
             }
@@ -121,10 +121,32 @@ expect.extend({
         return { pass: true, message: () => "" };
     },
 
-    toBeValidLootTier: (received, _expected) => {
-        if (!(received in Main.lootTable)) {
+    toBeValidLootTier: (received, lootTable) => {
+        // The game resolves loot tiers from the current map's own lootTable
+        // (see server loot.ts: `this.game.map.mapDef.lootTable[tier]`), so a tier
+        // is valid when it exists in that map's table. Callers with a map in scope
+        // pass its lootTable; map-agnostic callers fall back to the base game's table.
+        const table = (lootTable as Record<string, unknown>) ?? Main.lootTable;
+        if (!(received in table)) {
             return {
                 message: () => `Expected '${received}' to be a valid loot table`,
+                pass: false,
+            };
+        }
+
+        return { pass: true, message: () => "" };
+    },
+
+    toBeSamePlayer: (received: Player | undefined, expected: Player) => {
+        if (!received) {
+            return {
+                message: () => `Expected a player instance, received '${expected}'`,
+                pass: false,
+            };
+        }
+        if (received.__id !== expected.__id) {
+            return {
+                message: () => `Expected player '${received.name}' to be '${expected.name}'`,
                 pass: false,
             };
         }

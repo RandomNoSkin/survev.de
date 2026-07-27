@@ -1,14 +1,15 @@
-import "./testHelpers";
+import "./testHelpers.ts";
 import { describe, expect, test } from "vitest";
-import { Atlases } from "../../client/atlas-builder/atlasDefs";
-import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
-import { Constants } from "../../shared/net/net";
-import { GameConfig } from "../../shared/gameConfig";
+import { Atlases } from "../../client/atlas-builder/atlasDefs.ts";
+import { type MapDef, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
+import { GameConfig } from "../../shared/gameConfig.ts";
+import { Constants } from "../../shared/net/net.ts";
+import { getAllAtlasSprites, getAllMapSprites } from "./spriteHelpers.ts";
 
 const maps = Object.keys(MapDefs);
 
 describe.for(maps)("Map %s", (map) => {
-    const mapDef: MapDef = MapDefs[map as keyof typeof MapDefs];
+    const mapDef: MapDef = MapDefs[map as MapDefKey];
 
     describe("Loot Tables", () => {
         test.for(Object.entries(mapDef.lootTable))("Loot table $0", ([
@@ -17,9 +18,12 @@ describe.for(maps)("Map %s", (map) => {
         ]) => {
             const itemsSet = new Set();
             for (const item of table) {
-                itemsSet.add(item.name);
+                // Key on the full entry: same-name entries with different counts are a
+                // valid weighted-quantity pattern (the game picks one entry by weight),
+                // so only flag exact-duplicate entries (real copy-paste mistakes).
+                itemsSet.add(`${item.name}:${item.count}:${item.weight}`);
                 if (item.name.startsWith("tier_")) {
-                    expect(item.name).toBeValidLootTier();
+                    expect(item.name).toBeValidLootTier(mapDef.lootTable);
                 } else if (item.name !== "") {
                     expect(item.name).toBeValidLoot();
                 }
@@ -28,7 +32,7 @@ describe.for(maps)("Map %s", (map) => {
                 table.length,
             );
 
-            expect(tableId).toBeValidLootTier();
+            expect(tableId).toBeValidLootTier(mapDef.lootTable);
         });
     });
 
@@ -127,5 +131,17 @@ describe.for(maps)("Map %s", (map) => {
                 sprites.add(sprite);
             }
         });
+    });
+
+    test("Map has no missing sprites", () => {
+        const atlasSprites = getAllAtlasSprites(map as MapDefKey);
+        const mapSprites = getAllMapSprites(map as MapDefKey);
+
+        const diff = mapSprites.difference(atlasSprites);
+
+        expect(
+            diff.size,
+            `Map ${map} is missing ${[...diff].join(", ")} sprites on its atlases`,
+        ).toBe(0);
     });
 });

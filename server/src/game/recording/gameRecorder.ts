@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { BuildingDef, ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameConfig } from "../../../../shared/gameConfig";
 import {
@@ -40,7 +40,7 @@ const TRACK_SAMPLE_INTERVAL_MS = 250;
 /** Resolves a weapon/item key to its display name for the game-view damage log. */
 function weaponName(type: string): string {
     if (!type) return "";
-    const def = GameObjectDefs[type] as { name?: string } | undefined;
+    const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
     return def?.name ?? type;
 }
 
@@ -57,7 +57,7 @@ function buildMapShapes(map: Game["map"]): GameMapShape[] {
     }[] = [];
 
     for (const obj of map.msg.objects) {
-        const def = MapObjectDefs[obj.type] as ObstacleDef | BuildingDef | undefined;
+        const def = MapObjectDefs.typeToDef(obj.type) as ObstacleDef | BuildingDef | undefined;
         if (!def) continue;
         const zIdx =
             def.type === "building"
@@ -362,18 +362,10 @@ export class GameRecorder {
         if (now - this.lastSampleAt < TRACK_SAMPLE_INTERVAL_MS) return;
         this.lastSampleAt = now;
 
-        if (!this.tracksGzip && !this.openTracks()) return;
-
-        const gzip = this.tracksGzip!;
-        if (gzip.writableLength > Config.recording.writeBackpressureBytes) {
-            this.stopTracks("backpressure");
-            return;
-        }
-        if (this.tracksBytes >= Config.recording.maxGameMb * MB) {
-            this.stopTracks("size cap");
-            return;
-        }
-
+        // Collect entries BEFORE lazily opening the file: the header's player roster
+        // is written once at open, and opening on the game's first (still empty) tick
+        // froze an empty roster into it — which broke enemy/teammate classification
+        // (green names, no ESP lines) in the replay viewer.
         const entries: TrackEntry[] = [];
         for (const player of this.game.playerBarn.players) {
             if (player.spectator) continue;
@@ -389,6 +381,18 @@ export class GameRecorder {
             });
         }
         if (!entries.length) return;
+
+        if (!this.tracksGzip && !this.openTracks()) return;
+
+        const gzip = this.tracksGzip!;
+        if (gzip.writableLength > Config.recording.writeBackpressureBytes) {
+            this.stopTracks("backpressure");
+            return;
+        }
+        if (this.tracksBytes >= Config.recording.maxGameMb * MB) {
+            this.stopTracks("size cap");
+            return;
+        }
 
         const buf = encodeTrackSample(now - this.startTs, entries);
         gzip.write(buf);

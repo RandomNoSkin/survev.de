@@ -2,7 +2,7 @@ import { GameConfig } from "../../gameConfig";
 import type { DeepPartial } from "../../utils/util";
 import { v2 } from "../../utils/v2";
 import type { MapDef } from "../mapDefs";
-import { MapId } from "../types/misc";
+import { MapId } from "../../gameConfig.ts";
 
 // @NOTE: Entries defined as single-element arrays, like fixedSpawns: [{ }],
 // are done this way so that util.mergeDeep(...) will function as expected
@@ -221,6 +221,8 @@ export const Comp: MapDef = {
             { name: "frag", count: 3, weight: 0.6 }, // !
             { name: "smoke", count: 2, weight: 0.2 },
             { name: "mirv", count: 2, weight: 1 },
+            { name: "dynamite", count: 3, weight: 0.8 },
+            { name: "mine", count: 1, weight: 0.4 },
         ],
         tier_ammo: [
             { name: "9mm", count: 90, weight: 0.25 },
@@ -290,8 +292,8 @@ export const Comp: MapDef = {
             { name: "colt45", count: 1, weight: 0.15 },
         ],
         tier_crab: [
-            { name: "model94", count: 1, weight: 0.6 },
-            { name: "", count: 1, weight: 0.4 },
+            { name: "model94", count: 1, weight: 0.7 },
+            { name: "", count: 1, weight: 0.3 },
         ],
         tier_spas_hut: [
             { name: "spas12", count: 1, weight: 0.66 },
@@ -855,8 +857,9 @@ export const Comp: MapDef = {
             { name: "outfitGhillie", count: 1, weight: 0.5 },
         ],
         tier_airdrop_throwables: [
-            { name: "frag", count: 2, weight: 1 },
+            { name: "dynamite", count: 3, weight: 1 },
             { name: "mirv", count: 2, weight: 0.5 },
+            { name: "mine", count: 1, weight: 0.5 },
         ],
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 19 },
@@ -1019,7 +1022,7 @@ export const Comp: MapDef = {
             { name: "saw", count: 1, weight: 0.1 },
             { name: "spade", count: 1, weight: 0.25 },
             { name: "kukri_trad", count: 1, weight: 0.25 },
-            { name: "Hook", count: 1, weight: 0.1 },
+            { name: "hook", count: 1, weight: 0.1 },
             { name: "sledgehammer", count: 1, weight: 0.01 },
         ],
         tier_armor_3: [

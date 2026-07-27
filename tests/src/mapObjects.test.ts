@@ -1,20 +1,24 @@
-import "./testHelpers";
+import "./testHelpers.ts";
 import { describe, expect, test } from "vitest";
 
-import { MapObjectDefs } from "../../shared/defs/mapObjectDefs";
-import type {
-    BuildingDef,
-    LootSpawnerDef,
-    ObstacleDef,
-    StructureDef,
-} from "../../shared/defs/mapObjectsTyping";
-import { Constants } from "../../shared/net/net";
+import type { BuildingDef, LootSpawnerDef, ObstacleDef, StructureDef } from "../../shared/defs/mapObjectsTyping.ts";
+import { MapDefs } from "../../shared/defs/mapDefs.ts";
+import { MapObjectDefs } from "../../shared/defs/register.ts";
+import { Constants } from "../../shared/net/net.ts";
 
-const mapObjects = Object.entries(MapObjectDefs);
+const mapObjects = MapObjectDefs.getAllTypes();
 
-const obstacles = mapObjects.filter(([, def]) => {
-    return def.type === "obstacle";
-}) as [string, ObstacleDef][];
+// A map object def is map-agnostic, but the loot tiers it references are resolved
+// from the lootTable of whichever map it spawns on. A referenced tier is therefore
+// valid when *any* map defines it, so validate against the union of all map tiers.
+const allTiers: Record<string, unknown> = {};
+for (const mapDef of Object.values(MapDefs)) {
+    Object.assign(allTiers, mapDef.lootTable);
+}
+
+const obstacles = mapObjects.filter((type) => {
+    return MapObjectDefs.typeToDef(type).type === "obstacle";
+}).map(t => [t, MapObjectDefs.typeToDef(t)]) as [string, ObstacleDef][];
 
 describe.for(obstacles)("Obstacle %s", ([, def]) => {
     test("Scale", () => {
@@ -46,15 +50,15 @@ describe.for(obstacles)("Obstacle %s", ([, def]) => {
                 expect(loot.type).toBeValidLoot();
             }
             if (loot.tier) {
-                expect(loot.tier).toBeValidLootTier();
+                expect(loot.tier).toBeValidLootTier(allTiers);
             }
         });
     }
 });
 
-const buildings = mapObjects.filter(([, def]) => {
-    return def.type === "building";
-}) as [string, BuildingDef][];
+const buildings = mapObjects.filter((type) => {
+    return MapObjectDefs.typeToDef(type).type === "building";
+}).map(t => [t, MapObjectDefs.typeToDef(t)]) as [string, BuildingDef][];
 
 describe.for(buildings)("Building %s", ([, def]) => {
     if (def.mapObjects.length > 0) {
@@ -80,9 +84,9 @@ describe.for(buildings)("Building %s", ([, def]) => {
     }
 });
 
-const structures = mapObjects.filter(([, def]) => {
-    return def.type === "structure";
-}) as [string, StructureDef][];
+const structures = mapObjects.filter((type) => {
+    return MapObjectDefs.typeToDef(type).type === "structure";
+}).map(t => [t, MapObjectDefs.typeToDef(t)]) as [string, StructureDef][];
 
 describe.for(structures)("Structure %s", ([, def]) => {
     test.for(def.layers)("Layer %$", (layer) => {
@@ -90,9 +94,9 @@ describe.for(structures)("Structure %s", ([, def]) => {
     });
 });
 
-const lootSpawners = mapObjects.filter(([, def]) => {
-    return def.type === "loot_spawner";
-}) as [string, LootSpawnerDef][];
+const lootSpawners = mapObjects.filter((type) => {
+    return MapObjectDefs.typeToDef(type).type === "loot_spawner";
+}).map(t => [t, MapObjectDefs.typeToDef(t)]) as [string, LootSpawnerDef][];
 
 describe.for(lootSpawners)("Loot Spawner %s", ([, def]) => {
     test.for(def.loot)("Loot %$", (loot) => {
@@ -100,7 +104,7 @@ describe.for(lootSpawners)("Loot Spawner %s", ([, def]) => {
             expect(loot.type).toBeValidLoot();
         }
         if (loot.tier) {
-            expect(loot.tier).toBeValidLootTier();
+            expect(loot.tier).toBeValidLootTier(allTiers);
         }
     });
 });

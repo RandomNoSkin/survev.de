@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import type { EmoteDef } from "../../../shared/defs/gameObjects/emoteDefs";
 import {
     DEFAULT_PASS_GOLDEN_FRIES,
@@ -12,7 +12,7 @@ import type { Account } from "../account";
 import { helpers } from "../helpers";
 import type { LoadoutMenu } from "./loadoutMenu";
 import type { Localization } from "./localization";
-import { passUtil } from "./passUtil";
+import { passUtil } from "../../../shared/utils/passUtil.ts";
 import { GameConfig } from "../../../shared/gameConfig";
 
 /** The reward unlocked at the level *after* `level` (i.e. the next unlock preview). */
@@ -427,7 +427,7 @@ export class Pass {
             $("#pass-progress-unlock-type-wrapper").css({ display: "none" });
             return;
         }
-        const t = GameObjectDefs[item] as EmoteDef;
+        const t = GameObjectDefs.typeToDefSafe(item) as EmoteDef;
         const r = t ? helpers.getSvgFromGameType(item) : "img/emotes/surviv.svg";
         const a = `url(${r})`;
         const i = helpers.getCssTransformFromGameType(item);

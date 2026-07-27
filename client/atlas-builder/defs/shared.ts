@@ -1,5 +1,5 @@
-import type { AtlasDef } from "../atlasDefs";
-import { BuildingSprites } from "./buildings";
+import type { AtlasDef } from "../atlasDefs.ts";
+import { BuildingSprites } from "./buildings.ts";
 
 export const SharedAtlas: AtlasDef = {
     compress: true,
@@ -22,6 +22,20 @@ export const SharedAtlas: AtlasDef = {
         ...BuildingSprites.bunker_egg,
         ...BuildingSprites.bunker_storm,
 
+        // chrys bunker sprites shared by the base + aged variants
+        "map/map-bunker-chrys-chamber-ceiling-01.svg",
+        "map/map-bunker-chrys-chamber-floor-01a.svg",
+        "map/map-bunker-chrys-chamber-floor-01b.svg",
+        "map/map-bunker-chrys-compartment-ceiling-01a.svg",
+        "map/map-bunker-chrys-compartment-ceiling-01b.svg",
+        "map/map-bunker-chrys-compartment-ceiling-02a.svg",
+        "map/map-bunker-chrys-compartment-ceiling-02b.svg",
+        "map/map-bunker-chrys-compartment-ceiling-03a.svg",
+        "map/map-bunker-chrys-compartment-ceiling-03b.svg",
+        "map/map-bunker-chrys-compartment-floor-01a.svg",
+        "map/map-bunker-chrys-compartment-floor-02a.svg",
+        "map/map-bunker-chrys-compartment-floor-03a.svg",
+
         // generic bunker sprites
         "map/map-bunker-generic-ceiling-01.svg",
         "map/map-bunker-generic-ceiling-02.svg",
@@ -33,6 +47,7 @@ export const SharedAtlas: AtlasDef = {
         "map/map-bunker-vent-03.svg",
 
         "map/map-building-porch-01.svg",
+        "map/map-building-bridge-xlg-floor.svg",
 
         // generic obstacles, residues, decals etc
 
@@ -48,6 +63,7 @@ export const SharedAtlas: AtlasDef = {
         "map/map-barrel-02.svg",
         "map/map-barrel-03.svg",
         "map/map-barrel-04.svg",
+        "map/map-barrel-05.svg",
         "map/map-barrel-res-02.svg",
         "map/map-barrel-res-03.svg",
 
@@ -66,7 +82,9 @@ export const SharedAtlas: AtlasDef = {
         "map/map-bottle-05.svg",
 
         "map/map-bush-07.svg",
+        "map/map-bush-07sp.svg",
         "map/map-bush-07x.svg",
+        "map/map-web-01.svg",
         "map/map-bush-res-01.svg",
         "map/map-bush-res-02.svg",
         "map/map-bush-res-04.svg",
@@ -83,6 +101,9 @@ export const SharedAtlas: AtlasDef = {
         "map/map-case-hatchet-01.svg",
         "map/map-case-hatchet-res-01.svg",
         "map/map-case-ring-01.svg",
+
+        "map/map-chair-01.svg",
+        "map/map-chair-02.svg",
 
         "map/map-chest-01.svg",
         "map/map-chest-02.svg",
@@ -136,6 +157,7 @@ export const SharedAtlas: AtlasDef = {
         "map/map-decal-club-01.svg",
         "map/map-decal-club-02.svg",
         "map/map-decal-initiative.svg",
+        "map/map-decal-caduceus.svg",
 
         "map/map-decal-oil-01.svg",
         "map/map-decal-oil-02.svg",
@@ -189,6 +211,8 @@ export const SharedAtlas: AtlasDef = {
 
         "map/map-pot-res-01.svg",
         "map/map-potato-res.svg",
+        "map/map-planter-07.svg",
+        "map/map-planter-res-03.svg",
 
         "map/map-power-box-01.svg",
 
@@ -231,7 +255,9 @@ export const SharedAtlas: AtlasDef = {
         "map/map-table-01.svg",
         "map/map-table-02.svg",
         "map/map-table-03.svg",
+        "map/map-table-04.svg",
         "map/map-table-res-01.svg",
+        "map/map-table-res-02.svg",
 
         "map/map-toilet-01.svg",
         "map/map-toilet-02.svg",
@@ -244,9 +270,13 @@ export const SharedAtlas: AtlasDef = {
 
         "map/map-tree-03.svg",
         "map/map-tree-04.svg",
+        "map/map-tree-07sp.svg",
+        "map/map-tree-08sp.svg",
         "map/map-tree-07su.svg",
         "map/map-tree-08su.svg",
         "map/map-tree-09.svg",
+        "map/map-tree-13.svg",
+        "map/map-tree-14.svg",
         "map/map-tree-res-01.svg",
         "map/map-tree-res-02.svg",
 
@@ -287,11 +317,13 @@ export const SharedAtlas: AtlasDef = {
         "map/map-wall-13.svg",
         "map/map-wall-14-rounded.svg",
         "map/map-wall-14.svg",
+        "map/map-wall-16-rounded.svg",
         "map/map-wall-18.svg",
+        "map/map-wall-glass-9.svg",
         "map/map-wall-glass-10.svg",
         "map/map-wall-glass-12-2.svg",
         "map/map-wall-glass-12.svg",
-        "map/map-wall-glass-9.svg",
+        "map/map-wall-glass-13.svg",
         "map/map-wall-outhouse-bot.svg",
         "map/map-wall-outhouse-side.svg",
         "map/map-wall-outhouse-top.svg",
