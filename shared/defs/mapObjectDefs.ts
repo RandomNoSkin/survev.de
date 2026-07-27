@@ -1678,7 +1678,7 @@ function createStone<T extends ObstacleDef>(e: Partial<T>): T {
         reflectBullets: false,
         hitParticle: "rockChip",
         explodeParticle: "rockBreak",
-        loot: [{ type: "awc", count: 1 }],
+        loot: [{ type: "scout_elite", count: 1 }],
         map: { display: true, color: 0xb3b3b3, scale: 1 },
         terrain: { grass: true, beach: false, riverShore: true },
         img: {
