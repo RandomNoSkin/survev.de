@@ -10796,6 +10796,115 @@ function createHouseRed2<T extends ExtendedBuildingDef>(e: Partial<T>): T {
     };
     return util.mergeDeep(t, e || {});
 }
+function createBuckhouse<T extends BuildingDef>(e: Partial<T>): T {
+    const t = {
+        type: "building",
+        map: { display: true, color: 0x6b4f3a, scale: 1 },
+        terrain: { grass: true, beach: false },
+        zIdx: 1,
+        mapObstacleBounds: [
+            collider.createAabbExtents(v2.create(0, 0), v2.create(11, 9)),
+        ],
+        floor: {
+            surfaces: [
+                {
+                    type: "house",
+                    collision: [
+                        collider.createAabbExtents(v2.create(0, 0), v2.create(7.5, 5.5)),
+                    ],
+                },
+            ],
+            imgs: [
+                {
+                    sprite: "map-building-buckhouse-floor.img",
+                    pos: v2.create(0, 0),
+                    scale: 0.5,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+            ],
+        },
+        ceiling: {
+            zoomRegions: [
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(0, 0),
+                        v2.create(7.5, 5.5),
+                    ),
+                    zoomOut: collider.createAabbExtents(
+                        v2.create(0, 0),
+                        v2.create(9, 7),
+                    ),
+                },
+            ],
+            vision: {
+                dist: 5,
+                width: 2.5,
+                linger: 0.5,
+                fadeRate: 6,
+            },
+            imgs: [
+                {
+                    sprite: "map-building-house-ceiling.img",
+                    scale: 0.667,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+            ],
+        },
+        mapObjects: [
+            {
+                type: "house_wall_int_5",
+                pos: v2.create(-6.75, 0),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_wall_int_5",
+                pos: v2.create(6.75, 0),
+                scale: 1,
+                ori: 2,
+            },
+            {
+                type: "house_wall_int_9",
+                pos: v2.create(0, 5.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_wall_int_9",
+                pos: v2.create(0, -5.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-6.75, 2),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(6.75, -2),
+                scale: 1,
+                ori: 2,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(0, 5.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "loot_tier_1",
+                pos: v2.create(0, 0),
+                scale: 1,
+                ori: 0,
+            },
+        ],
+    };
+    return util.mergeDeep(t, e || {});
+}
 function createShack2<T extends BuildingDef>(e: Partial<T>): T {
     const t = {
         type: "building",
@@ -23422,6 +23531,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         plant_pos: v2.create(4, 8.5),
         plant_loot: randomObstacleType({ loot_tier_surviv: 1 }),
     } as unknown as Partial<ExtendedBuildingDef>),
+    buckhouse_01: createBuckhouse({}),
     cabin_wall_int_5: createWall({
         material: "wood",
         extents: v2.create(0.5, 2.5),

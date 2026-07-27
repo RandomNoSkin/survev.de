@@ -5,6 +5,7 @@ export const WoodsAtlas: AtlasDef = {
     compress: true,
     images: [
         ...BuildingSprites.pavilion,
+        ...BuildingSprites.buckhouse,
         ...BuildingSprites.bunker_eye,
         ...BuildingSprites.bunker_hatchet,
         ...BuildingSprites.workshop,
