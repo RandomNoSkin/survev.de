@@ -275,7 +275,6 @@ export class BulletBarn {
                         !!obstacle.active
                         && !obstacle.dead
                         && !!util.sameLayer(obstacle.layer, b.layer)
-                        && obstacle.height >= GameConfig.bullet.height
                         && (b.reflectCount <= 0 || obstacle.__id != b.reflectObjId)
                     ) {
                         const res = collider.intersectSegment(
@@ -284,10 +283,13 @@ export class BulletBarn {
                             b.pos,
                         );
                         if (res) {
+                            const collidable = obstacle.height >= GameConfig.bullet.height
+                                ? obstacle.collidable
+                                : false;
                             colObjs.push({
                                 type: "obstacle",
                                 obstacleType: obstacle.type,
-                                collidable: obstacle.collidable,
+                                collidable,
                                 point: res.point,
                                 normal: res.normal,
                             });

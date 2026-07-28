@@ -10796,28 +10796,59 @@ function createHouseRed2<T extends ExtendedBuildingDef>(e: Partial<T>): T {
     };
     return util.mergeDeep(t, e || {});
 }
-function createBuckhouse<T extends BuildingDef>(e: Partial<T>): T {
+function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
     const t = {
         type: "building",
-        map: { display: true, color: 0x6b4f3a, scale: 1 },
-        terrain: { grass: true, beach: false },
+        map: {
+            display: true,
+            shapes: [
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, 0.5),
+                        v2.create(18, 12),
+                    ),
+                    color: 0x3a5618,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, -13),
+                        v2.create(17, 2),
+                    ),
+                    color: 0x612d10,
+                },
+            ],
+        },
+        terrain: {
+            grass: true,
+            beach: false,
+            riverShore: true,
+            nearbyRiver: {
+                radMin: 0.75,
+                radMax: 1.5,
+                facingOri: 1,
+            },
+        },
         zIdx: 1,
-        mapObstacleBounds: [
-            collider.createAabbExtents(v2.create(0, 0), v2.create(11, 9)),
-        ],
         floor: {
             surfaces: [
                 {
                     type: "house",
                     collision: [
-                        collider.createAabbExtents(v2.create(0, 0), v2.create(7.5, 5.5)),
+                        collider.createAabbExtents(v2.create(0, -1.5), v2.create(18, 14)),
+                    ],
+                },
+                {
+                    type: "asphalt",
+                    collision: [
+                        collider.createAabbExtents(v2.create(4, -14), v2.create(3, 2.5)),
+                        collider.createAabbExtents(v2.create(-4, 13.5), v2.create(2, 1)),
                     ],
                 },
             ],
             imgs: [
                 {
                     sprite: "map-building-buckhouse-floor.img",
-                    pos: v2.create(0, 0),
+                    pos: v2.create(0, -1),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -10828,76 +10859,241 @@ function createBuckhouse<T extends BuildingDef>(e: Partial<T>): T {
             zoomRegions: [
                 {
                     zoomIn: collider.createAabbExtents(
-                        v2.create(0, 0),
-                        v2.create(7.5, 5.5),
+                        v2.create(0, 0.5),
+                        v2.create(19, 12),
                     ),
                     zoomOut: collider.createAabbExtents(
-                        v2.create(0, 0),
-                        v2.create(9, 7),
+                        v2.create(0, 0.5),
+                        v2.create(21, 14),
+                    ),
+                },
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(4, -13),
+                        v2.create(3, 2),
                     ),
                 },
             ],
             vision: {
-                dist: 5,
-                width: 2.5,
+                dist: 5.5,
+                width: 2.75,
                 linger: 0.5,
                 fadeRate: 6,
             },
+            damage: { obstacleCount: 1 },
             imgs: [
                 {
-                    sprite: "map-building-house-ceiling.img",
+                    sprite: "map-building-cabin-ceiling-01a.img",
+                    pos: v2.create(0, 0.5),
                     scale: 0.667,
                     alpha: 1,
                     tint: 0xffffff,
                 },
+                {
+                    sprite: "map-building-cabin-ceiling-01b.img",
+                    pos: v2.create(4, -13),
+                    scale: 0.667,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+                {
+                    sprite: "map-chimney-01.img",
+                    pos: v2.create(13, 2),
+                    scale: 0.5,
+                    alpha: 1,
+                    tint: 0xffffff,
+                    removeOnDamaged: true,
+                },
             ],
         },
+        occupiedEmitters: [
+            {
+                type: "cabin_smoke_parent",
+                pos: v2.create(0, 0),
+                rot: 0,
+                scale: 1,
+                layer: 0,
+                parentToCeiling: true,
+            },
+        ],
         mapObjects: [
             {
-                type: "house_wall_int_5",
-                pos: v2.create(-6.75, 0),
-                scale: 1,
-                ori: 0,
-            },
-            {
-                type: "house_wall_int_5",
-                pos: v2.create(6.75, 0),
-                scale: 1,
-                ori: 2,
-            },
-            {
-                type: "house_wall_int_9",
-                pos: v2.create(0, 5.5),
+                type: "log_wall_ext_12",
+                pos: v2.create(-19, 22),
                 scale: 1,
                 ori: 1,
-            },
-            {
-                type: "house_wall_int_9",
-                pos: v2.create(0, -5.5),
-                scale: 1,
-                ori: 3,
-            },
-            {
-                type: "house_window_01",
-                pos: v2.create(-6.75, 2),
-                scale: 1,
-                ori: 0,
-            },
-            {
-                type: "house_window_01",
-                pos: v2.create(6.75, -2),
-                scale: 1,
-                ori: 2,
             },
             {
                 type: "house_door_01",
-                pos: v2.create(0, 5.5),
+                pos: v2.create(-9, 22.25),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: "loot_tier_1",
-                pos: v2.create(0, 0),
+                type: "log_wall_ext_12",
+                pos: v2.create(-3, 22),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(4.5, 22.20),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_12",
+                pos: v2.create(12, 22),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(19.5, 22.20),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_5",
+                pos: v2.create(23.5, 22),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_5",
+                pos: v2.create(25.5, 20),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "fence_wall",
+                pos: v2.create(25.5, 14.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "log_wall_ext_5",
+                pos: v2.create(25.5, 9),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "log_wall_ext_5",
+                pos: v2.create(23.5, 7),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(19.5, 6.75),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_7",
+                pos: v2.create(14.5, 7),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_7",
+                pos: v2.create(11.5, 4),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(11.75, -1),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "log_wall_ext_13",
+                pos: v2.create(11.5, -9),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(11.75, -17),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "log_wall_ext_6",
+                pos: v2.create(11.5, -21.5),
+                scale: 1,
+                ori: 0,
+            },  
+            {
+                type: "log_wall_ext_12",
+                pos: v2.create(5, -24),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-1, -24.25),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_12",
+                pos: v2.create(-11, -24),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-18.5, -24.2),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "log_wall_ext_5",
+                pos: v2.create(-22.5, -24),
+                scale: 1,
+                ori: 1,
+            },    
+            {
+                type: "log_wall_ext_6",
+                pos: v2.create(-25.5, -21.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-25.75, -17),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "log_wall_ext_13",
+                pos: v2.create(-25.5, -9),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-25.75, -1),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "log_wall_ext_13",
+                pos: v2.create(-25.5, 7),
+                scale: 1,
+                ori: 0,
+            },       
+            {
+                type: "house_window_01",
+                pos: v2.create(-25.75, 15),
+                scale: 1,
+                ori: 0,
+            },                 
+            {
+                type: "log_wall_ext_6",
+                pos: v2.create(-25.5, 19.5),
                 scale: 1,
                 ori: 0,
             },
@@ -16122,6 +16318,16 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: {
             sprite: "map-building-reserve-window-res-01.img",
             tint: 0x14161b,
+        },
+    }),
+    fence_wall: createLowWall({
+        extents: v2.create(0.6, 3),
+        img: {
+            sprite: "none",
+        },
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
         },
     }),
     container_05_collider: createWall({
@@ -21979,6 +22185,46 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     brick_wall_ext_12: createWall({
         material: "brick",
         extents: v2.create(0.5, 6),
+    }),
+    log_wall_ext_12: createWall({
+        material: "brick",
+        extents: v2.create(0.5, 6),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
+    }),
+    log_wall_ext_5: createWall({
+        material: "brick",
+        extents: v2.create(0.5, 2.5),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
+    }),
+    log_wall_ext_6: createWall({
+        material: "brick",
+        extents: v2.create(0.5, 3),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
+    }),
+    log_wall_ext_7: createWall({
+        material: "brick",
+        extents: v2.create(0.5, 3.5),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
+    }),
+    log_wall_ext_13: createWall({
+        material: "brick",
+        extents: v2.create(0.5, 6.5),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
     }),
     brick_wall_ext_12_5: createWall({
         material: "brick",
