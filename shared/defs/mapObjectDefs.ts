@@ -29023,6 +29023,58 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         ],
         // group: { id: BuildingGroups.SVSpawns, minDistance: 300, noSpawnRadius: NoSpawnRadius.SniperSpawns }, //removed to allow for consistent center spawns again
     },
+    reserve_complex_01: {
+        type: "building",
+        map: {
+            display: true,      
+            shapes: []
+        },
+        terrain: {
+            grass: true,
+            beach: false,
+            spawnPriority: 10,
+        },
+        mapObstacleBounds: [
+            // --- Reserve_01 (main building) ---
+
+            // Main hall (center)
+            collider.createAabbExtents(v2.create(0, 2.5), v2.create(37.5, 26.25)),
+
+            // Left wing
+            collider.createAabbExtents(v2.create(-44, 1.5), v2.create(17.5, 31.25)),
+
+            // Top connector
+            collider.createAabbExtents(v2.create(-22.5, 24.5), v2.create(9.375, 2.5)),
+
+            // Bottom entrance (foyer)
+            collider.createAabbExtents(v2.create(0, -27.5), v2.create(23.75, 11.25)),
+
+            // Main right wing (slightly enlarged to cover the bulk)
+            collider.createAabbExtents(v2.create(44.5, 0), v2.create(20, 32)),
+
+            // Loading Bay 1 (Main bay floor)
+            collider.createAabbExtents(v2.create(51.5, 16.5), v2.create(8.125, 13.75)),
+
+            // Loading Bay 2 (Upper bay area)
+            collider.createAabbExtents(v2.create(42, 22), v2.create(3.75, 6.875)),
+
+            // Loading Bay Ramp / Exterior area 
+            collider.createAabbExtents(v2.create(46, 26.5), v2.create(16.25, 5)),
+            // --- Reserve_basement_01 (underground) ---
+            // Placed at (14.5, -2) inside the structure
+            collider.createAabbExtents(v2.create(14.5, -2), v2.create(60, 35)),
+        ],
+        floor: { surfaces: [], imgs: [] },
+        ceiling: { zoomRegions: [], imgs: [] },
+        mapObjects: [
+            {
+                type: "reserve_structure_01",
+                pos: v2.create(0, 0),
+                scale: 1,
+                ori: 0,
+            },
+        ],
+    },
     reserve_armory_01: (function(e) {
         const t = {
             type: "building",

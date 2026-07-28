@@ -1160,7 +1160,7 @@ export const Comp: MapDef = {
                 {
                     type: "club_complex_01",
                     pos: v2.create(0.5, 0.5),
-                    rad: 80,
+                    rad: 150,
                     retryOnFailure: true,
                 },
                 {
@@ -1252,7 +1252,7 @@ export const Comp: MapDef = {
             {
                 club_complex_01: [
                     { type: "club_complex_01", weight: 0.4 },
-                    { type: "reserve_structure_01", weight: 0.6 },
+                    { type: "reserve_complex_01", weight: 0.6 },
                 ],
             },
         ],
