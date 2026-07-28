@@ -3522,12 +3522,6 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 inheritOri: false,
             },
             {
-                type: "crate_01",
-                pos: v2.create(33.75, 33.5),
-                scale: 1,
-                ori: 0,
-            },
-            {
                 type: "sandbags_01",
                 pos: v2.create(28, 29.75),
                 scale: 1,
@@ -3538,13 +3532,6 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
             // Exterior
             //
 
-            {
-                type: "decal_pipe_01",
-                pos: v2.create(6, 27),
-                scale: 1,
-                ori: 0,
-                inheritOri: false,
-            },
             {
                 type: "barrel_01",
                 pos: v2.create(13, 25.75),
