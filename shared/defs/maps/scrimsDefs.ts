@@ -29,7 +29,7 @@ export const mapDef: PartialMapDef = {
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach"],
+        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
     },
     biome: {
         colors: {
@@ -1115,12 +1115,12 @@ export const mapDef: PartialMapDef = {
         },
         customSpawnRules: {
             locationSpawns: [
-                {
+                /*{
                     type: "club_complex_01",
                     pos: v2.create(0.5, 0.5),
                     rad: 10,
                     retryOnFailure: true,
-                },
+                },*/
                 {
                     type: "stone_04",
                     pos: v2.create(0.5, 0.5),
@@ -1214,14 +1214,14 @@ export const mapDef: PartialMapDef = {
             },
         ],
         randomSpawns: [
-            /*{
-                spawns: ["mansion_structure_01", "police_01", "bank_01"],
-                choose: 3,
-            },*/
+            {
+                spawns: ["club_complex_01", "reserve_complex_01"],
+                choose: 1,
+            },
         ],
         spawnReplacements: [{}],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
-        spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
+        spawnOnRiver: ["club_complex_01", "warehouse_complex_01", "reserve_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };

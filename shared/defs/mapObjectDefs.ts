@@ -2951,13 +2951,13 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: randomObstacleType({ barrel_02: 1, barrel_05: 1 }),
+                type: "barrel_02",
                 pos: v2.create(-22.75, 17.5),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: randomObstacleType({ barrel_02: 1, barrel_05: 1 }),
+                type: "barrel_02",
                 pos: v2.create(-32, -1.5),
                 scale: 1,
                 ori: 0,
@@ -2999,27 +2999,27 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
             //
 
             {
-                type: "tree_interior_01de",
+                type: "tree_interior_01de_coconutless",
                 pos: v2.create(-22.5, -11),
                 scale: 1.15,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ "": 1, bush_02: 3, bush_03: 1, bush_07sp: 1 }),
+                type: randomObstacleType({ "": 1, bush_02: 3, bush_07sp: 1 }),
                 pos: v2.create(-19, -7.5),
                 scale: 1,
                 ori: 0,
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: randomObstacleType({ bush_02: 1, bush_03: 1, bush_07sp: 1 }),
+                type: randomObstacleType({ bush_02: 1, bush_07sp: 1 }),
                 pos: v2.create(-19, -14.5),
                 scale: 1,
                 ori: 0,
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: randomObstacleType({ bush_02: 1, bush_03: 1, bush_07sp: 1 }),
+                type: randomObstacleType({ bush_02: 1, bush_07sp: 1 }),
                 pos: v2.create(-26.25, -7.5),
                 scale: 1,
                 ori: 0,
@@ -3046,7 +3046,7 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "barrel_05",
+                type: "barrel_02",
                 pos: v2.create(-27, -14),
                 scale: 1,
                 ori: 0,
@@ -3128,9 +3128,9 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 ori: 0,
             },
-            {
-                type: "chest_02",
-                pos: v2.create(-32.4, -20.75),
+            {   
+                type: randomObstacleType({ mil_crate_04: 3, chest_02: 1 }),
+                pos: v2.create(-33.4, -20.75),
                 scale: 1,
                 ori: 2,
             },
@@ -3438,25 +3438,25 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 2,
             },
             {
-                type: randomObstacleType({ barrel_02: 1, barrel_05: 1 }),
+                type: "barrel_02",
                 pos: v2.create(39, -14.5),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                 pos: v2.create(30.65, -18.5),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                 pos: v2.create(33.5, -21.85),
                 scale: 1,
                 ori: 2,
             },
             {
-                type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                 pos: v2.create(38.5, -21.85),
                 scale: 1,
                 ori: 2,
@@ -3474,9 +3474,9 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 3,
             },
             {
-                type: "chest_02",
+                type: randomObstacleType({ mil_crate_04: 3, chest_02: 1 }),
                 pos: v2.create(56.35, -20),
-                scale: 1,
+                scale: 0.85,
                 ori: 3,
             },
             {
@@ -3522,12 +3522,6 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 inheritOri: false,
             },
             {
-                type: "crate_01",
-                pos: v2.create(33.75, 33.5),
-                scale: 1,
-                ori: 0,
-            },
-            {
                 type: "sandbags_01",
                 pos: v2.create(28, 29.75),
                 scale: 1,
@@ -3538,13 +3532,6 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
             // Exterior
             //
 
-            {
-                type: "decal_pipe_01",
-                pos: v2.create(6, 27),
-                scale: 1,
-                ori: 0,
-                inheritOri: false,
-            },
             {
                 type: "barrel_01",
                 pos: v2.create(13, 25.75),
@@ -3922,7 +3909,7 @@ function createReserveBasement<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: randomObstacleType({ barrel_02: 1, barrel_05: 1 }),
+                type: "barrel_02",
                 pos: v2.create(-6.5, 28.75),
                 scale: 0.9,
                 ori: 1,
@@ -12936,7 +12923,6 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         loot: [
             tierLoot("tier_airdrop_crimson", 1, 1),
             autoLoot("backpack03", 1),
-            tierLoot("tier_crimson_perks", 1, 1),
             autoLoot("4xscope", 1),
         ],
         hitParticle: "blackChip",
@@ -13798,9 +13784,8 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
             tierLoot("tier_medical", 2, 3),
             tierLoot("tier_airdrop_scopes", 1, 1),
             tierLoot("tier_airdrop_ammo", 3, 3),
+            tierLoot("tier_scrap", 3, 3),
             tierLoot("tier_airdrop_throwables", 1, 2),
-            tierLoot("tier_perks", 0, 1),
-            autoLoot("outfitCasanova", 1),
         ],
         map: { display: false },
         img: {
@@ -14545,7 +14530,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-deposit-box-03.img" },
         loot: [
             tierLoot("tier_chest", 1, 1),
-            tierLoot("tier_guns", 1, 2),
+            tierLoot("tier_bank_vault_basic", 1, 2),
             tierLoot("tier_surviv", 1, 2),
         ],
     }),
@@ -14557,7 +14542,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-drawers-02.img" },
         loot: [tierLoot("tier_soviet", 2, 3),  tierLoot("tier_additional_scopes", 1, 1)],
     }),
-    rack_01: createDrawer({
+    rack_01: createDrawer({ // (Beer Crate)
         collision: collider.createAabbExtents(v2.create(0, 0.2), v2.create(2, 1.25)),
         scale: { createMin: 1, createMax: 1, destroy: 0.9 },
         img: {
@@ -14568,8 +14553,8 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         explodeParticle: ["potBreak", "woodPlank"],
         loot: [
             tierLoot("tier_revolvers", 0, 1),
-            tierLoot("tier_medical", 1, 1),
-            tierLoot("tier_vending_soda", 1, 2),
+            tierLoot("tier_beverage_crate", 2, 2),
+            tierLoot("tier_better_throwables", 0, 1),
         ],
         sound: { explode: "window_break_02" },
     }),
@@ -15491,9 +15476,11 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         explodeParticle: "toiletGoldBreak",
         loot: [
             tierLoot("tier_toilet_gold", 1, 1),
-            tierLoot("tier_medical", 3, 4),
-            autoLoot("coconut", 5),
-            autoLoot("outfitGold", 1),
+            tierLoot("tier_medical", 1, 2),
+            autoLoot("bandage", 5),
+            autoLoot("healthkit", 1),
+            autoLoot("painkiller", 1),
+            tierLoot("tier_soda", 1, 1),
         ],
         sound: {
             bullet: "toilet_metal_bullet",
@@ -15535,6 +15522,14 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         loot: [tierLoot("tier_coconut_outfit", 1, 1), autoLoot("coconut", 3)],
         img: {
             sprite: "map-tree-14.img",
+            scale: 0.35,
+            zIdx: 200,
+            randomRotation: true,
+        },
+    }),
+    tree_interior_01de_coconutless: createTree({
+        img: {
+            sprite: "map-tree-13.img",
             scale: 0.35,
             zIdx: 200,
             randomRotation: true,
@@ -28813,7 +28808,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: "case_07",
+                    type: randomObstacleType({case_07: 8, case_07de: 2 }),
                     pos: v2.create(0, 5.25),
                     scale: 1,
                     ori: 0,
@@ -29015,6 +29010,58 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         ],
         // group: { id: BuildingGroups.SVSpawns, minDistance: 300, noSpawnRadius: NoSpawnRadius.SniperSpawns }, //removed to allow for consistent center spawns again
     },
+    reserve_complex_01: {
+        type: "building",
+        map: {
+            display: true,      
+            shapes: []
+        },
+        terrain: {
+            grass: true,
+            beach: false,
+            spawnPriority: 10,
+        },
+        mapObstacleBounds: [
+            // --- Reserve_01 (main building) ---
+
+            // Main hall (center)
+            collider.createAabbExtents(v2.create(0, 2.5), v2.create(37.5, 26.25)),
+
+            // Left wing
+            collider.createAabbExtents(v2.create(-44, 1.5), v2.create(17.5, 31.25)),
+
+            // Top connector
+            collider.createAabbExtents(v2.create(-22.5, 24.5), v2.create(9.375, 2.5)),
+
+            // Bottom entrance (foyer)
+            collider.createAabbExtents(v2.create(0, -27.5), v2.create(23.75, 11.25)),
+
+            // Main right wing (slightly enlarged to cover the bulk)
+            collider.createAabbExtents(v2.create(44.5, 0), v2.create(20, 32)),
+
+            // Loading Bay 1 (Main bay floor)
+            collider.createAabbExtents(v2.create(51.5, 16.5), v2.create(8.125, 13.75)),
+
+            // Loading Bay 2 (Upper bay area)
+            collider.createAabbExtents(v2.create(42, 22), v2.create(3.75, 6.875)),
+
+            // Loading Bay Ramp / Exterior area 
+            collider.createAabbExtents(v2.create(46, 26.5), v2.create(16.25, 5)),
+            // --- Reserve_basement_01 (underground) ---
+            // Placed at (14.5, -2) inside the structure
+            collider.createAabbExtents(v2.create(14.5, -2), v2.create(60, 35)),
+        ],
+        floor: { surfaces: [], imgs: [] },
+        ceiling: { zoomRegions: [], imgs: [] },
+        mapObjects: [
+            {
+                type: "reserve_structure_01",
+                pos: v2.create(0, 0),
+                scale: 1,
+                ori: 0,
+            },
+        ],
+    },
     reserve_armory_01: (function(e) {
         const t = {
             type: "building",
@@ -29115,45 +29162,45 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                    type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                     pos: v2.create(-7.25, -7),
                     scale: 1,
                     ori: 1,
                 },
                 {
-                    type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                    type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                     pos: v2.create(-7.25, -2.5),
                     scale: 1,
                     ori: 1,
                 },
                 {
-                    type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                    type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                     pos: v2.create(-7.25, 2),
                     scale: 1,
                     ori: 1,
                 },
                 {
-                    type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                    type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                     pos: v2.create(7.25, -1),
                     scale: 1,
                     ori: 3,
                 },
                 {
-                    type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                    type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                     pos: v2.create(7.25, 3.5),
                     scale: 1,
                     ori: 3,
                 },
                 {
-                    type: randomObstacleType({ locker_01: 9, locker_02: 1 }),
+                    type: randomObstacleType({ locker_01: 11, locker_02: 1 }),
                     pos: v2.create(7.25, 8),
                     scale: 1,
                     ori: 3,
                 },
                 {
-                    type: "chest_02",
+                    type: randomObstacleType({ mil_crate_04: 3, chest_02: 1 }),
                     pos: v2.create(0, 0.5),
-                    scale: 1,
+                    scale: 0.85,
                     ori: 3,
                 },
                 {
@@ -29484,61 +29531,61 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
 
                 // Objects
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(-14.75, 8.25),
                     scale: 1,
                     ori: 1,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(-14.75, -8.25),
                     scale: 1,
                     ori: 1,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(-10.25, -13.75),
                     scale: 1,
                     ori: 2,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(-5, -13.75),
                     scale: 1,
                     ori: 2,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(5, -13.75),
                     scale: 1,
                     ori: 2,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(10.25, -13.75),
                     scale: 1,
                     ori: 2,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(-10.25, 13.75),
                     scale: 1,
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(-5, 13.75),
                     scale: 1,
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(5, 13.75),
                     scale: 1,
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({ deposit_box_02: 4, deposit_box_03: 1 }),
+                    type: randomObstacleType({deposit_box_01: 3, deposit_box_02: 2, deposit_box_03: 1 }),
                     pos: v2.create(10.25, 13.75),
                     scale: 1,
                     ori: 0,
@@ -29562,7 +29609,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: "case_07de",
+                    type: randomObstacleType({case_07: 8, case_07de: 2 }),
                     pos: v2.create(-7.25, 5),
                     scale: 1,
                     ori: 0,
@@ -29578,13 +29625,6 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     type: "crate_05",
                     pos: v2.create(4, -7.5),
                     scale: 1.1,
-                    ori: 0,
-                    inheritOri: false,
-                },
-                {
-                    type: "stone_04",
-                    pos: v2.create(-3.75, -6.5),
-                    scale: 0.75,
                     ori: 0,
                     inheritOri: false,
                 },
