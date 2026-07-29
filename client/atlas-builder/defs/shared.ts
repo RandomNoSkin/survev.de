@@ -49,6 +49,7 @@ export const SharedAtlas: AtlasDef = {
         "map/map-bathrocks-01.svg",
         "map/map-bed-01.svg",
         "map/map-bed-02.svg",
+        "map/map-bed-03.svg",
         "map/map-bed-res-01.svg",
         "map/map-bed-res-02.svg",
         "map/map-bollard-01.svg",
@@ -252,6 +253,7 @@ export const SharedAtlas: AtlasDef = {
 
         "map/map-vending-res.svg",
         "map/map-vending-soda-01.svg",
+        "map/map-moonshine-jug-01.svg",
 
         // walls
         "map/map-wall-01-rounded.svg",
@@ -306,5 +308,6 @@ export const SharedAtlas: AtlasDef = {
 
         "map/map-woodpile-01.svg",
         "map/map-woodpile-res-01.svg",
+        "map/map-gun-mount-buck.svg",
     ],
 };

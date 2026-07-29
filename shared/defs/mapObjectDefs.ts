@@ -11185,6 +11185,66 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 ori: 2,
             },
+            {
+                type: "fireplace_wall",
+                pos: v2.create(18.5, 14.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "ashtray_wall",
+                pos: v2.create(16.5, 14.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "gun_mount_buck",
+                pos: v2.create(20.5, 14.5),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: "stove_02",
+                pos: v2.create(23.5, 20),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: "stove_02",
+                pos: v2.create(23.5, 9),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: "bush_01",
+                pos: v2.create(9, 19.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "bush_01",
+                pos: v2.create(9, 9.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "bed_bh_01",
+                pos: v2.create(-2, 18),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                pos: v2.create(2, 9),
+                scale: 1,
+                ori: 2,
+            },
+            {
+                type: "moonshine_jug",
+                pos: v2.create(2, 20),
+                scale: 1,
+                ori: 0,
+            },
         ],
     };
     return util.mergeDeep(t, e || {});
@@ -12854,6 +12914,9 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     }),
     bed_lg_01: createBed({
         img: { residue: "map-bed-res-02.img" },
+    }),
+    bed_bh_01: createBed({
+        img: { residue: "map-bed-res-01.img", sprite: "map-bed-03.img" },
     }),
     bollard_01: {
         type: "obstacle",
@@ -14716,6 +14779,10 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         loot: [autoLoot("spas16", 1)],
         img: { sprite: "map-gun-mount-07.img" },
     }),
+    gun_mount_buck: createGunMount({
+        loot: [autoLoot("henry", 1)],
+        img: { sprite: "map-gun-mount-buck.img" },
+    }),
     locker_01: createLocker({
         img: { sprite: "map-locker-01.img" },
         loot: [tierLoot("tier_world", 1, 1)],
@@ -16212,6 +16279,48 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         };
         return util.mergeDeep(t, {});
     })(),
+    moonshine_jug: (function() {
+        const t = {
+            type: "obstacle",
+            obstacleType: "vending",
+            scale: {
+                createMin: 1,
+                createMax: 1,
+                destroy: 0.75,
+            },
+            collision: collider.createAabbExtents(v2.create(0, 0), v2.create(1, 1)),
+            height: 0.5,
+            collidable: true,
+            destructible: true,
+            health: 150,
+            hitParticle: "tanChip",
+            explodeParticle: "potBreak",
+            reflectBullets: false,
+            loot: [tierLoot("tier_vending_soda", 1, 3), autoLoot("soda", 1)],
+            map: {
+                display: false,
+                color: 0x2aad,
+                scale: 0.875,
+            },
+            terrain: { grass: true, beach: true },
+            img: {
+                sprite: "map-moonshine-jug-01.img",
+                residue: "map-pot-res-01.img",
+                scale: 0.5,
+                alpha: 1,
+                tint: 0xffffff,
+                zIdx: 10,
+            },
+            sound: {
+            bullet: "toilet_porc_bullet",
+            punch: "toilet_porc_bullet",
+            explode: "toilet_break_01",
+            enter: "none",
+        },
+        };
+        return util.mergeDeep(t, {});
+    })(),
+    
     wheel_01: createWheel({
         button: {
             interactionRad: 1,
@@ -16410,6 +16519,16 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     }),
     fence_wall: createLowWall({
         extents: v2.create(0.6, 3),
+        img: {
+            sprite: "none",
+        },
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
+    }),
+        ashtray_wall: createLowWall({
+        extents: v2.create(0.5, 2),
         img: {
             sprite: "none",
         },
@@ -22273,6 +22392,10 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     brick_wall_ext_12: createWall({
         material: "brick",
         extents: v2.create(0.5, 6),
+    }),
+        fireplace_wall: createWall({
+        material: "brick",
+        extents: v2.create(1.5, 3),
     }),
     log_wall_ext_12: createWall({
         material: "brick",
