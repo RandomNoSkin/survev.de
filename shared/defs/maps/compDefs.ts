@@ -107,7 +107,7 @@ export const Comp: MapDef = {
                 },
             ],
             crates: [
-                { name: "airdrop_crate_01", weight: 8 },
+                { name: "airdrop_crate_01", weight: 7 },
                 { name: "airdrop_crate_02", weight: 2 },
                 { name: "airdrop_crate_05", weight: 1 },
             ],
@@ -305,7 +305,7 @@ export const Comp: MapDef = {
         ],
         tier_crab: [
             { name: "model94", count: 1, weight: 0.7 },
-            { name: "", count: 1, weight: 0.3 },
+            //{ name: "", count: 1, weight: 0.3 },
         ],
         tier_spas_hut: [
             { name: "spas12", count: 1, weight: 0.66 },
@@ -621,7 +621,7 @@ export const Comp: MapDef = {
             { name: "pkp", count: 1, weight: 0.05 }, // ?
         ],
         tier_revolvers: [ // just named this because of the original code (not accurate)
-            { name: "", count: 1, weight: 0.65 },
+            { name: "ot38", count: 1, weight: 0.15 },
             { name: "m1911", count: 1, weight: 0.18 },
             { name: "colt45", count: 1, weight: 0.1 },
             { name: "ots38", count: 1, weight: 0.05 },
@@ -889,9 +889,9 @@ export const Comp: MapDef = {
             // { name: "pan", count: 1, weight: 1 },
         ],
         tier_airdrop_armor: [
-            { name: "helmet03", count: 1, weight: 1 },
-            { name: "chest03", count: 1, weight: 1 },
-            { name: "backpack03", count: 1, weight: 1 },
+            { name: "helmet03", count: 1, weight: 1.8 },
+            { name: "chest03", count: 1, weight: 1.2 },
+            //{ name: "backpack03", count: 1, weight: 1 },
         ],
         tier_airdrop_scopes: [
             { name: "", count: 1, weight: 24 }, // ?
@@ -1220,7 +1220,7 @@ export const Comp: MapDef = {
                 hut_02: 2, // spas hut
                 hut_03: 1, // scout hut
                 shack_03a: 3, // small river / sea cabins
-                shack_03b: { small: 2, large: 4,}, // small river / sea cabins
+                shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
                 cache_01: 1, // flare stone
                 cache_02: { odds: 0.5 }, // mosin tree

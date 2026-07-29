@@ -487,7 +487,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_vss",
-        upgraded: { gun: "modified_vss", cost: 5 },
+        upgraded: { gun: "modified_vss", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 0 },
         lootImg: {
@@ -3676,7 +3676,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 1,
         bulletType: "bullet_ash12",
         headshotMult: 1,
-        speed: { equip: -1, attack: 2.5 },
+        speed: { equip: 0, attack: 2.5 },
         lootImg: {
             sprite: "loot-weapon-ash12.img",
             tint: 0xff00,

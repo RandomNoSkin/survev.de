@@ -14552,7 +14552,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         hitParticle: "woodChip",
         explodeParticle: ["potBreak", "woodPlank"],
         loot: [
-            tierLoot("tier_revolvers", 1, 1),
+            tierLoot("tier_revolvers", 0, 1),
             tierLoot("tier_beverage_crate", 2, 2),
             tierLoot("tier_better_throwables", 0, 1),
         ],
