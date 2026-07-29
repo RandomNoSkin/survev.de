@@ -10804,17 +10804,38 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             shapes: [
                 {
                     collider: collider.createAabbExtents(
-                        v2.create(0, 0.5),
-                        v2.create(18, 12),
+                        v2.create(-7, 23),
+                        v2.create(17, 2),
                     ),
-                    color: 0x3a5618,
+                    color: 0x412817,
                 },
                 {
                     collider: collider.createAabbExtents(
-                        v2.create(0, -13),
+                        v2.create(-7, -24),
                         v2.create(17, 2),
                     ),
-                    color: 0x612d10,
+                    color: 0x412817,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, 15),
+                        v2.create(23, 10),
+                    ),
+                    color: 0x412817,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(-7, -1),
+                        v2.create(18, 22),
+                    ),
+                    color: 0x2b1a0e,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, 15),
+                        v2.create(24, 7),
+                    ),
+                    color: 0x2b1a0e,
                 },
             ],
         },
@@ -10859,46 +10880,37 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             zoomRegions: [
                 {
                     zoomIn: collider.createAabbExtents(
-                        v2.create(0, 0.5),
-                        v2.create(19, 12),
+                        v2.create(0, 14),
+                        v2.create(24, 10),
                     ),
                     zoomOut: collider.createAabbExtents(
-                        v2.create(0, 0.5),
-                        v2.create(21, 14),
+                        v2.create(0, 14),
+                        v2.create(26, 12),
                     ),
                 },
                 {
                     zoomIn: collider.createAabbExtents(
-                        v2.create(4, -13),
-                        v2.create(3, 2),
+                        v2.create(-7, -1),
+                        v2.create(17, 25),
+                    ),
+                    zoomOut: collider.createAabbExtents(
+                        v2.create(-7, -1),
+                        v2.create(19, 27),
                     ),
                 },
             ],
-            vision: {
-                dist: 5.5,
-                width: 2.75,
-                linger: 0.5,
-                fadeRate: 6,
-            },
             damage: { obstacleCount: 1 },
             imgs: [
                 {
-                    sprite: "map-building-cabin-ceiling-01a.img",
-                    pos: v2.create(0, 0.5),
-                    scale: 0.667,
-                    alpha: 1,
-                    tint: 0xffffff,
-                },
-                {
-                    sprite: "map-building-cabin-ceiling-01b.img",
-                    pos: v2.create(4, -13),
-                    scale: 0.667,
+                    sprite: "map-building-buckhouse-ceiling.img",
+                    pos: v2.create(0.5, -1),
+                    scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
                 },
                 {
                     sprite: "map-chimney-01.img",
-                    pos: v2.create(13, 2),
+                    pos: v2.create(19.5, 14.5),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -11096,6 +11108,78 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 pos: v2.create(-25.5, 19.5),
                 scale: 1,
                 ori: 0,
+            },
+            {
+                type: "buckhouse_wall_int_12",
+                pos: v2.create(-19, -9),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "buckhouse_wall_int_12",
+                pos: v2.create(5, 7),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "buckhouse_wall_int_5",
+                pos: v2.create(11.5, 10),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "buckhouse_wall_int_5",
+                pos: v2.create(11.5, 19),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "buckhouse_wall_int_15",
+                pos: v2.create(-8.5, -16),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "buckhouse_wall_int_15",
+                pos: v2.create(-5.5, 14),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "buckhouse_wall_int_26",
+                pos: v2.create(2.5, -10.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "buckhouse_wall_int_26",
+                pos: v2.create(-16.5, 8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-5, 7),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-9, -9),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-16.5, -8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(2.5, 6.5),
+                scale: 1,
+                ori: 2,
             },
         ],
     };
@@ -23795,6 +23879,30 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         extents: v2.create(0.5, 6.5),
         hitParticle: "tanChip",
         img: wallImg("map-wall-13-rounded.img", 0xa18168),
+    }),
+    buckhouse_wall_int_12: createWall({
+        material: "wood",
+        extents: v2.create(0.5, 6),
+        hitParticle: "tanChip",
+        img: wallImg("map-wall-12-rounded.img", 0x2b1a0e),
+    }),
+    buckhouse_wall_int_5: createWall({
+        material: "wood",
+        extents: v2.create(0.5, 2.5),
+        hitParticle: "tanChip",
+        img: wallImg("map-wall-05-rounded.img", 0x2b1a0e),
+    }),
+    buckhouse_wall_int_15: createWall({
+        material: "wood",
+        extents: v2.create(0.5, 7.5),
+        hitParticle: "tanChip",
+        img: wallImg("map-wall-15-rounded.img", 0x2b1a0e),
+    }),
+    buckhouse_wall_int_26: createWall({
+        material: "wood",
+        extents: v2.create(0.5, 13),
+        hitParticle: "tanChip",
+        img: wallImg("map-wall-26-rounded.img", 0x2b1a0e),
     }),
     cabin_01: createCabin({}),
     cabin_01x: createCabin({
