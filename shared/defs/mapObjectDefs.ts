@@ -10855,14 +10855,18 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 {
                     type: "house",
                     collision: [
-                        collider.createAabbExtents(v2.create(0, -1.5), v2.create(18, 14)),
+                        collider.createAabbExtents(v2.create(-7, -1), v2.create(18, 22)),
+                        collider.createAabbExtents(v2.create(0, 15), v2.create(24, 7)),
+                        collider.createAabbExtents(v2.create(-7, 24.5), v2.create(18, 2.25)),
+                        collider.createAabbExtents(v2.create(-7, -27), v2.create(19.5, 2.25)),
+                        collider.createAabbExtents(v2.create(2, 14.5), v2.create(23, 13)),
                     ],
                 },
                 {
                     type: "asphalt",
                     collision: [
-                        collider.createAabbExtents(v2.create(4, -14), v2.create(3, 2.5)),
-                        collider.createAabbExtents(v2.create(-4, 13.5), v2.create(2, 1)),
+                        collider.createAabbExtents(v2.create(-11, 25.5), v2.create(3, 2.5)),
+                        collider.createAabbExtents(v2.create(-3, -26.5), v2.create(3, 2.5)),
                     ],
                 },
             ],
@@ -10910,7 +10914,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 },
                 {
                     sprite: "map-chimney-01.img",
-                    pos: v2.create(19.5, 14.5),
+                    pos: v2.create(19, 14.5),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -23884,25 +23888,25 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         material: "wood",
         extents: v2.create(0.5, 6),
         hitParticle: "tanChip",
-        img: wallImg("map-wall-12-rounded.img", 0x2b1a0e),
+        img: wallImg("map-wall-12-rounded.img", 0x412817),
     }),
     buckhouse_wall_int_5: createWall({
         material: "wood",
         extents: v2.create(0.5, 2.5),
         hitParticle: "tanChip",
-        img: wallImg("map-wall-05-rounded.img", 0x2b1a0e),
+        img: wallImg("map-wall-05-rounded.img", 0x412817),
     }),
     buckhouse_wall_int_15: createWall({
         material: "wood",
         extents: v2.create(0.5, 7.5),
         hitParticle: "tanChip",
-        img: wallImg("map-wall-15-rounded.img", 0x2b1a0e),
+        img: wallImg("map-wall-15-rounded.img", 0x412817),
     }),
     buckhouse_wall_int_26: createWall({
         material: "wood",
         extents: v2.create(0.5, 13),
         hitParticle: "tanChip",
-        img: wallImg("map-wall-26-rounded.img", 0x2b1a0e),
+        img: wallImg("map-wall-26-rounded.img", 0x412817),
     }),
     cabin_01: createCabin({}),
     cabin_01x: createCabin({
