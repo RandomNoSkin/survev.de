@@ -11311,6 +11311,12 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 ori: 0,
             },
+            {
+                type: "woodpile_h015",
+                pos: v2.create(-22, 8),
+                scale: 1,
+                ori: 1,
+            },
         ],
     };
     return util.mergeDeep(t, e || {});
@@ -16419,6 +16425,17 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         map: { display: true, color: 0x663300, scale: 0.8 },
         img: {
             sprite: "map-woodpile-03.img",
+            residue: "map-woodpile-res-03.img",
+        },
+    }),
+    woodpile_h015: createWoodPile({
+        collision: collider.createAabbExtents(v2.create(0, 0), v2.create(3, 1.75)),
+        health: 175,
+        destructible: true,
+        map: { display: true, color: 0x663300, scale: 0.8 },
+        loot: [autoLoot("henry", 1)],
+        img: {
+            sprite: "map-woodpile-h015.img",
             residue: "map-woodpile-res-03.img",
         },
     }),
