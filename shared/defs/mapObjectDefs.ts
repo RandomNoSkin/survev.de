@@ -11246,7 +11246,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: -1,
             },
             {
-                type: randomObstacleType({ toilet_01: 5, toilet_02: 1 }),
+                type: randomObstacleType({ toilet_01: 3, toilet_02: 1 }),
                 pos: v2.create(-23, -11),
                 scale: 1,
                 ori: 1,
@@ -11258,7 +11258,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: 1,
             },
             {
-                type: randomObstacleType({ drawers_01: 7, drawers_02: 1 }),
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
                 pos: v2.create(-23.5, -21),
                 scale: 1,
                 ori: 1,
@@ -11276,7 +11276,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: randomObstacleType({ drawers_01: 7, drawers_02: 1 }),
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
                 pos: v2.create(-10.5, -16.5),
                 scale: 1,
                 ori: -1,
@@ -11306,16 +11306,70 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "woodpile_01",
-                pos: v2.create(9.5, 5),
+                type: "chest_buck",
+                pos: v2.create(8.5, 4.5),
                 scale: 1,
                 ori: 0,
             },
             {
-                type: "woodpile_h015",
+                type: randomObstacleType({ woodpile_h015: 1, tree_02: 2 }),
                 pos: v2.create(-22, 8),
                 scale: 1,
                 ori: 1,
+            },
+            {
+                type: "woodpile_03",
+                pos: v2.create(-21, 0),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                pos: v2.create(-18.5, 7),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: "woodpile_03",
+                pos: v2.create(-19, 16),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                pos: v2.create(-23.5, 19),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "woodpile_03",
+                pos: v2.create(7, -2),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                pos: v2.create(4.5, -9),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "woodpile_03",
+                pos: v2.create(5, -18),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                pos: v2.create(9.5, -21),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: randomObstacleType({ gun_mount_05: 2, gun_mount_02: 1 }),
+                pos: v2.create(5.5, -22.6),
+                scale: 1,
+                ori: 2,
             },
         ],
     };
@@ -13297,6 +13351,11 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     }),
     chest_02: createChest({
         img: { sprite: "map-chest-02.img" },
+        loot: [tierLoot("tier_chest", 2, 2)],
+        map: { display: true, color: 7025920, scale: 0.85 },
+    }),
+    chest_buck: createChest({
+        img: { sprite: "map-chest-buck.img" },
         loot: [tierLoot("tier_chest", 2, 2)],
         map: { display: true, color: 7025920, scale: 0.85 },
     }),

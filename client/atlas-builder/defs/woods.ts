@@ -18,6 +18,7 @@ export const WoodsAtlas: AtlasDef = {
         "map/map-campfire-01.svg",
 
         "map/map-chest-03x.svg",
+        "map/map-chest-buck.svg",
 
         "map/map-crate-01x.svg",
         "map/map-crate-02x.svg",
