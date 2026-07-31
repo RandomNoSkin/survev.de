@@ -173,6 +173,60 @@ const BaseDefs: Record<string, MeleeDef> = {
             tint: 0xffffff,
         },
     },
+    antlers: {
+        name: "Buck Antlers",
+        type: "melee",
+        quality: 1,
+        autoAttack: false,
+        switchDelay: 0.5,
+        damage: 45,
+        obstacleDamage: 2.5,
+        attack: {
+            offset: {
+                x: 1.35,
+                y: 0,
+            },
+            rad: 2,
+            damageTimes: [0.1],
+            cooldownTime: 0.6,
+        },
+        speed: {
+            equip: 1,
+            attack: 0,
+        },
+        anim: {
+            idlePose: "fists",
+            attackAnims: ["fists", "fists"],
+        },
+        sound: {
+            pickup: "heavy_pickup_01",
+            swing: "heavy_swing_01",
+            deploy: "stow_weapon_01",
+            playerHit: "axe_hit_01",
+        },
+        lootImg: {
+            sprite: "loot-melee-buck-antler.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-02.img",
+            borderTint: 0xffffff,
+            scale: 0.3,
+            rad: 25,
+            rot: 0.785,
+        },
+        worldImg: {
+            sprite: "loot-melee-knuckles-rusted.img",
+            pos: {
+                x: 0,
+                y: -27,
+            },
+            rot: 0.5 * Math.PI,
+            scale: {
+                x: 0.2,
+                y: 0.2,
+            },
+            tint: 0xffffff,
+        },
+    },
     karambit: {
         name: "Karambit",
         type: "melee",
