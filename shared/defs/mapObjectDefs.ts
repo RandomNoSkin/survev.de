@@ -11371,6 +11371,12 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 ori: 2,
             },
+            {
+                type: "hat_mount_buck",
+                pos: v2.create(10, -9),
+                scale: 1,
+                ori: 1,
+            },
         ],
     };
     return util.mergeDeep(t, e || {});
@@ -14913,6 +14919,10 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     gun_mount_buck: createGunMount({
         loot: [autoLoot("henry", 1)],
         img: { sprite: "map-gun-mount-buck.img" },
+    }),
+    hat_mount_buck: createGunMount({
+        loot: [],
+        img: { sprite: "map-hat-mount-buck.img" },
     }),
     locker_01: createLocker({
         img: { sprite: "map-locker-01.img" },
