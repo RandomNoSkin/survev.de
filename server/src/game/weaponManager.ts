@@ -133,6 +133,16 @@ export class WeaponManager {
         )
             return;
 */
+        // Release a cooked throwable BEFORE the slot changes (same as upstream). Doing it
+        // afterwards — which is what the `curWeapIdx != Throwable` branch in update() ends
+        // up doing a tick later — makes the server play the Throw anim while a melee/gun
+        // is already equipped. The client then runs the throw anim's effects against the
+        // new weapon def and dies on `typeToDef(activeWeapon, "throwable")`, taking down
+        // the client of everyone who could see the throw.
+        if (this.cookingThrowable && idx !== WeaponSlot.Throwable) {
+            this.throwThrowable(true);
+        }
+
         this.player.cancelAnim();
 
         if (cancelSlowdown) {
@@ -301,6 +311,25 @@ export class WeaponManager {
 
     bufferInput = false;
 
+    /**
+     * Last-resort fix up for an active slot that doesn't hold a valid weapon: fall back
+     * to the melee slot (restoring fists if that one is empty too). Only reachable if
+     * some weapon state bug slipped through — it exists so such a bug can't crash the
+     * game tick, which would kill the whole match.
+     */
+    recoverFromInvalidWeapon(): void {
+        if (!GameObjectDefs.typeToDefSafe(this.weapons[WeaponSlot.Melee].type)) {
+            this.weapons[WeaponSlot.Melee].type = "fists";
+            this.weapons[WeaponSlot.Melee].cooldown = 0;
+        }
+        this._curWeapIdx = WeaponSlot.Melee;
+        this.cookingThrowable = false;
+        this.bursts.length = 0;
+        this.meleeAttacks.length = 0;
+        this.player.setDirty();
+        this.player.weapsDirty = true;
+    }
+
     update(dt: number) {
         const player = this.player;
 
@@ -323,7 +352,21 @@ export class WeaponManager {
             this.tryReload();
         }
 
-        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon)!;
+        // The active slot must always hold a known weapon. If any code path left it
+        // empty/bogus, dereferencing the def here throws INSIDE the game tick, which
+        // kills the entire game (gameProcess -> stopCrashedGame -> every player kicked).
+        // Recover to melee and log it instead, so a weapon state bug stays a bug report
+        // instead of taking the match down with it.
+        let itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
+        if (!itemDef) {
+            this.player.game.logger.warn(
+                `Player ${this.player.name} had an invalid active weapon ` +
+                    `("${this.activeWeapon}" in slot ${this.curWeapIdx}), recovering to melee`,
+            );
+            this.recoverFromInvalidWeapon();
+            itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
+            if (!itemDef) return;
+        }
 
         switch (itemDef.type) {
             case "gun": {
@@ -1641,12 +1684,21 @@ export class WeaponManager {
         ) {
             return;
         }
+        // Runs from the game tick, so a bad state must never throw here (that kills the
+        // whole match). Just don't start cooking if the slot isn't a throwable we
+        // actually own — cooking one the player has 0 of leaves the throw path with
+        // nothing to consume.
+        const throwableType = this.activeWeapon;
+        const itemDef = GameObjectDefs.typeToDefSafe(throwableType);
+        if (itemDef?.type !== "throwable") return;
+        if (
+            !this.player.invManager.isValid(throwableType) ||
+            !this.player.invManager.has(throwableType)
+        ) {
+            return;
+        }
+
         this.player.cancelAction();
-        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon)!;
-        assert(
-            itemDef.type === "throwable",
-            `Invalid projectile type: ${this.activeWeapon}`,
-        );
 
         this.cookingThrowable = true;
         this.cookTicker = 0;
@@ -1695,33 +1747,66 @@ export class WeaponManager {
         return false;
     }
 
+    /** Ends a cook anim left over from a throw that never happened. */
+    cancelCookAnim(): void {
+        if (this.player.animType === GameConfig.Anim.Cook) {
+            this.player.cancelAnim();
+        }
+    }
+
     throwThrowable(noSpeed?: boolean): void {
         if (!this.cookingThrowable) return;
         this.cookingThrowable = false;
 
         if (this.cookTicker < GameConfig.player.cookTime) {
+            // Throw aborted before the minimum cook time (switching or cycling slots
+            // right after pulling the pin). The cook anim would otherwise keep running —
+            // for non cookable throwables it's started with an Infinity duration — and
+            // `cookThrowable()` refuses to start while it plays, leaving the player
+            // unable to throw anything until they switch weapons again.
+            this.cancelCookAnim();
             return;
         }
 
         const oldThrowableType = this.weapons[GameConfig.WeaponSlot.Throwable].type;
-        const amount = this.player.invManager.get(oldThrowableType as InventoryItem);
-        if (amount <= 0) return;
+
+        // NOTE: invManager.get() returns undefined for an empty/unknown type and
+        // `undefined <= 0` is false, so an empty throwable slot used to slip past the
+        // old count check and blow up on the def lookup below — inside the game tick.
+        // Validate the type itself instead of trusting the count.
+        if (
+            !this.player.invManager.isValid(oldThrowableType) ||
+            this.player.invManager.get(oldThrowableType) <= 0
+        ) {
+            this.cancelCookAnim();
+            return;
+        }
 
         // need to store this incase throwableType gets replaced with its "heavy" variant like snowball => snowball_heavy
         // used to manage inventory since snowball_heavy isnt stored in inventory, when it's thrown you decrement "snowball" from inv
 
-        let throwableType = this.weapons[GameConfig.WeaponSlot.Throwable].type;
-        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType)!;
+        let throwableType: string = oldThrowableType;
+        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType);
 
-        assert(throwableDef.type === "throwable");
+        if (throwableDef?.type !== "throwable") {
+            this.player.game.logger.warn(
+                `Player ${this.player.name} tried to throw a non throwable ` +
+                    `("${throwableType}"), ignoring`,
+            );
+            this.cancelCookAnim();
+            return;
+        }
 
         if (throwableDef.heavyType && throwableDef.changeTime) {
             if (this.cookTicker >= throwableDef.changeTime) {
-                throwableType = throwableDef.heavyType;
-                throwableDef = GameObjectDefs.typeToDefSafe(throwableType) as ThrowableDef;
+                const heavyDef = GameObjectDefs.typeToDefSafe(throwableDef.heavyType);
+                // fall back to the light variant if the heavy one isn't a real def
+                if (heavyDef?.type === "throwable") {
+                    throwableType = throwableDef.heavyType;
+                    throwableDef = heavyDef;
+                }
             }
         }
-        assert(throwableDef.type === "throwable");
 
         let multiplier: number;
         if (throwableDef.forceMaxThrowDistance) {
@@ -1836,14 +1921,22 @@ export class WeaponManager {
             this.setupStrobe(projectile, throwableDef);
         }
 
-        const animationDuration = GameConfig.player.throwTime;
-        this.player.playAnim(GameConfig.Anim.Throw, animationDuration);
+        // Only animate the throw while the throwable is still the equipped weapon. The
+        // throw anim's client side effects resolve the *active weapon* as a throwable, so
+        // sending it with a gun/melee equipped (throws triggered by a slot switch, going
+        // down, dying) crashes every client that sees this player.
+        if (this.curWeapIdx === GameConfig.WeaponSlot.Throwable) {
+            const animationDuration = GameConfig.player.throwTime;
+            this.player.playAnim(GameConfig.Anim.Throw, animationDuration);
+        } else {
+            this.cancelCookAnim();
+        }
 
         /**
          * Remove the throwable from the inventory
          * This will handle showing next throwables or switching weapons if theres none left
          */
-        this.player.invManager.take(oldThrowableType as InventoryItem, 1);
+        this.player.invManager.take(oldThrowableType, 1);
     }
 
     /**
