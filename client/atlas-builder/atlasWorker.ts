@@ -2,10 +2,10 @@ import { createCanvas, type Image } from "canvas";
 import { type Bin, MaxRectsPacker, type Rectangle } from "maxrects-packer";
 import type { ISpritesheetData } from "pixi.js-legacy";
 import sharp from "sharp";
-import type { Atlas } from "../../shared/defs/mapDefs";
-import { atlasLogger, ImageManager } from "./atlasBuilder";
-import { type AtlasDef, Atlases, type AtlasRes, AtlasResolutions } from "./atlasDefs";
-import type { Edges } from "./detectEdges";
+import type { Atlas } from "../../shared/defs/mapDefs.ts";
+import { atlasLogger, ImageManager } from "./atlasBuilder.ts";
+import { type AtlasDef, Atlases, type AtlasRes, AtlasResolutions } from "./atlasDefs.ts";
+import type { Edges } from "./detectEdges.ts";
 
 interface ImageData {
     image: Image;
@@ -42,9 +42,11 @@ export class AtlasBuilder {
 
     atlases: WorkerToMainMsg[0]["data"] = [];
 
+    name: Atlas;
     def: AtlasDef;
 
-    constructor(public name: Atlas) {
+    constructor(name: Atlas) {
+        this.name = name;
         this.def = Atlases[name];
         this.packer = new MaxRectsPacker(4096, 4096, 8, {
             border: 8,

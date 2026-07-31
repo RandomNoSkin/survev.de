@@ -16,7 +16,7 @@ import {
     MAX_EXTRA_CUSTOM_LOADOUTS,
     validateCustomLoadout,
 } from "../../../shared/defs/customLoadout";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
@@ -1531,7 +1531,7 @@ export class PrivateLobbyMenu {
     itemLabel(type: string): string {
         if (!type)
             return this.localization.translate("index-private-lobby-custom-loadout-none");
-        const def = GameObjectDefs[type] as { name?: string } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
         return this.localization.translate(`game-${type}`) || def?.name || type;
     }
 

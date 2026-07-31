@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig";
 import { helpers } from "../../helpers";
@@ -90,7 +90,7 @@ export function upgradeSkinImages($root: JQuery<HTMLElement>): void {
             $root.find(".ld-img[data-type]").each((_i, el) => {
                 const type = el.dataset.type!;
                 if (
-                    (GameObjectDefs[type] as { type?: string } | undefined)?.type !==
+                    (GameObjectDefs.typeToDefSafe(type) as { type?: string } | undefined)?.type !==
                     "outfit"
                 ) {
                     return;
@@ -102,7 +102,7 @@ export function upgradeSkinImages($root: JQuery<HTMLElement>): void {
 }
 
 export function nameFor(type: string): string {
-    return (GameObjectDefs[type] as { name?: string } | undefined)?.name || type;
+    return (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name || type;
 }
 
 /**
@@ -113,7 +113,7 @@ export function showMatchLoadout(username: string, cosmetics: string[]): void {
     $(".loadout-modal-overlay").remove();
 
     const shown = cosmetics.filter(
-        (t) => !DEFAULT_UNLOCKED.has(t) && !!GameObjectDefs[t],
+        (t) => !DEFAULT_UNLOCKED.has(t) && !!GameObjectDefs.typeToDefSafe(t),
     );
     const total = shown.reduce((s, t) => s + getItemPrice(t), 0);
     const tiles = shown

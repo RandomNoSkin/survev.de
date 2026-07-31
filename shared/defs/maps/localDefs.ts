@@ -2,8 +2,8 @@ import { GameConfig } from "../../gameConfig";
 import { util, type DeepPartial } from "../../utils/util";
 import { v2 } from "../../utils/v2";
 import type { MapDef } from "../mapDefs";
-import { MapId } from "../types/misc";
-import { Comp, PartialMapDef } from "./compDefs";
+import { MapId } from "../../gameConfig.ts";
+import { Comp, type PartialMapDef } from "./compDefs";
 
 // @NOTE: Entries defined as single-element arrays, like fixedSpawns: [{ }],
 // are done this way so that util.mergeDeep(...) will function as expected
@@ -198,7 +198,7 @@ export const mapDef: PartialMapDef = {
         ],
         randomSpawns: [
             {
-                spawns: ["logging_complex_01local", "mansion_structure_01", "police_01", "club_complex_01", "warehouse_complex_01", "workshop_complex_01", "logging_complex_01local", "kopje_patch_01", "river_town_02_local", "desert_town_02_local"],
+                spawns: ["logging_complex_01local", "mansion_structure_01", "police_01", "club_complex_01", "warehouse_complex_01", "workshop_complex_01", "logging_complex_01local", "kopje_patch_01", "river_town_02_local", "reserve_complex_01"],
                 choose: 1,
             },
             {
@@ -215,7 +215,7 @@ export const mapDef: PartialMapDef = {
             }
         ],
         spawnReplacements: [{}],
-        importantSpawns: ["logging_complex_01local", "mansion_structure_01", "police_01", "club_complex_01", "warehouse_complex_01", "workshop_complex_01", "logging_complex_01local", "kopje_patch_01", "river_town_02_local", "desert_town_02_local"],
+        importantSpawns: ["logging_complex_01local", "mansion_structure_01", "police_01", "club_complex_01", "warehouse_complex_01", "workshop_complex_01", "logging_complex_01local", "kopje_patch_01", "river_town_02_local", "reserve_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };

@@ -96,11 +96,12 @@ export class ReplayUI {
         this.speedSelect.onchange = () =>
             this.cb.onSetSpeed(Number(this.speedSelect.value));
 
-        // Record the game canvas to a downloadable video (toggles start/stop).
+        // Record the replay to a downloadable video (toggles start/stop). Tab capture
+        // (full UI + sound) where supported — pick "This tab" in the browser prompt.
         this.recBtn = document.createElement("button");
         this.recBtn.style.cssText = btnCss;
         this.recBtn.textContent = "⏺";
-        this.recBtn.title = "Record video";
+        this.recBtn.title = "Record video (pick “This tab” for UI + sound)";
         this.recBtn.onclick = () => this.cb.onToggleRecord();
 
         const bar = document.createElement("div");

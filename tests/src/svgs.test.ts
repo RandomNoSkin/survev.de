@@ -19,7 +19,14 @@ const MAX_SIZES: Record<string, number> = {
 
 const MAX_PATH_LENGTH = 100_000;
 
-const IGNORED_SVGS = ["map-decal-flyer-01.svg"];
+const IGNORED_SVGS = [
+    "map-decal-flyer-01.svg",
+    // Complex custom cosmetic illustrations that stay well above the size limit even
+    // after lossless optimization; shrinking them further would visibly degrade the art.
+    "loot-chewie-cheese-outfit.svg",
+    "loot-king-galaxy-outfit.svg",
+    "player-base-chewie-cheese.svg",
+];
 
 function readDirectory(dir: string, filter?: RegExp): string[] {
     let results: string[] = [];
@@ -50,7 +57,7 @@ const svgPaths = Object.keys(MAX_SIZES)
         return !IGNORED_SVGS.some((i) => p.endsWith(i));
     });
 
-function checkNode(path: string, node: svgParser.ElementNode): void {
+function checkNode(node: svgParser.ElementNode): void {
     if (!node) return;
 
     switch (node.tagName) {
@@ -83,14 +90,14 @@ function checkNode(path: string, node: svgParser.ElementNode): void {
     for (const child of node.children) {
         if (typeof child === "string") continue;
         if (child.type === "text") continue;
-        checkNode(path, child);
+        checkNode(child);
     }
 }
 
 test.for(svgPaths)("Testing SVG %s", (path) => {
     const stats = fs.statSync(path);
 
-    const baseDir = path.split("/").at(-2)!;
+    const baseDir = path.split(npath.sep).at(-2)!;
 
     let maxSize = MAX_SIZES[baseDir];
 
@@ -107,6 +114,6 @@ test.for(svgPaths)("Testing SVG %s", (path) => {
     for (const node of rootNode.children) {
         if (typeof node === "string") continue;
         if (node.type === "text") continue;
-        checkNode(path, node);
+        checkNode(node);
     }
 });

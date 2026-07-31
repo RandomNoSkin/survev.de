@@ -1,13 +1,12 @@
 // Optimized audio backend built around the soundjs interface.
 
-import type { AudioManager } from "../audioManager";
-import type { ReverbDef } from "../soundDefs";
+import type { AudioManager } from "../audioManager.ts";
+import type { ReverbDef } from "../soundDefs.ts";
 
 // @HACK: From soundjs:
-const isIOS =
-    window.navigator.userAgent.includes("iPod") ||
-    window.navigator.userAgent.includes("iPhone") ||
-    window.navigator.userAgent.includes("iPad");
+const isIOS = window.navigator.userAgent.includes("iPod")
+    || window.navigator.userAgent.includes("iPhone")
+    || window.navigator.userAgent.includes("iPad");
 let nullBuffer: AudioBuffer | null = null;
 
 // @HACK: More Safari work-arounds. Safari does't support the
@@ -183,7 +182,7 @@ export class SoundHandle {
     check(_checkCoalesce?: unknown) {
         if (this.id != this.instance.id) {
             this.instance = nullInstance!;
-            this.id = nullInstance?.id!;
+            this.id = nullInstance?.id || 0;
         }
     }
 
@@ -362,8 +361,7 @@ class Reverb {
             }
             const { buffer } = this.convolverNode!;
             const duration = buffer ? buffer.duration : 0.0;
-            this.drainEndTime =
-                fadeEndTime + duration + this.echoDelay + this.stereoSpread;
+            this.drainEndTime = fadeEndTime + duration + this.echoDelay + this.stereoSpread;
         }
         // If the reverb was silent and draining, but is now audible again, we
         // need to make sure to turn on the echo node
@@ -432,7 +430,7 @@ class WebAudioEngine {
     startTime!: number;
 
     // Soundjs API compat:
-    onfileload = function (..._args: any[]) {};
+    onfileload = function(..._args: any[]) {};
 
     PLAY_INITED = "playInited";
     PLAY_SUCCEEDED = "playSucceeded";
@@ -549,6 +547,32 @@ class WebAudioEngine {
         }
     }
 
+    /** Live output-capture destination while a recording taps the mix (see below). */
+    captureDest: MediaStreamAudioDestinationNode | null = null;
+
+    /**
+     * Routes the final mix (post-master-gain + compressor — exactly what the
+     * speakers get) into a MediaStream, e.g. to mux game audio into a canvas
+     * video recording. Speakers keep playing. Undo with `stopOutputCapture()`.
+     */
+    startOutputCapture(): MediaStream {
+        if (!this.captureDest) {
+            this.captureDest = this.ctx.createMediaStreamDestination();
+            this.compressorNode.connect(this.captureDest);
+        }
+        return this.captureDest.stream;
+    }
+
+    /** Detaches the output capture started by `startOutputCapture()`. */
+    stopOutputCapture(): void {
+        if (!this.captureDest) return;
+        // Safari's selective disconnect(node) is broken (see testSelectiveDisconnect),
+        // so drop ALL compressor outputs and rebuild the speaker connection.
+        this.compressorNode.disconnect();
+        this.compressorNode.connect(this.ctx.destination);
+        this.captureDest = null;
+    }
+
     loadFile(path: string, onfileload: (path: string) => void) {
         if (this.files[path] != undefined) {
             onfileload(path);
@@ -637,10 +661,10 @@ class WebAudioEngine {
         }
         // Verify the filter
         if (
-            filter !== "none" &&
-            filter !== "reverb" &&
-            filter !== "muffled" &&
-            filter !== "club"
+            filter !== "none"
+            && filter !== "reverb"
+            && filter !== "muffled"
+            && filter !== "club"
         ) {
             console.error(
                 `Invalid filter: ${filter}. Only valid filters are 'none', 'reverb', 'muffled' and 'club'.`,
@@ -711,12 +735,11 @@ class WebAudioEngine {
         sound.instances.push(instance);
 
         // Play the sound!
-        const outNode =
-            filter === "none"
-                ? this.masterGainNode
-                : filter === "reverb"
-                  ? this.reverbNode
-                  : this.eqNodes[filter];
+        const outNode = filter === "none"
+            ? this.masterGainNode
+            : filter === "reverb"
+            ? this.reverbNode
+            : this.eqNodes[filter];
         instance.start(
             outNode,
             sound.file.buffer,
@@ -887,7 +910,7 @@ class WebAudioEngine {
 
     on(eventName: string, eventHandler: (...args: any[]) => void, that?: AudioManager) {
         if (eventName != "fileload") {
-            console.error('Only "fileload" event supported');
+            console.error("Only \"fileload\" event supported");
             return;
         }
 
@@ -897,8 +920,7 @@ class WebAudioEngine {
     // A hacky code playground for building intution about the performance
     // characteristics of various WebAudio nodes
     updatePerformanceTest() {
-        this.runningOfflineTest =
-            this.runningOfflineTest != undefined ? this.runningOfflineTest : false;
+        this.runningOfflineTest = this.runningOfflineTest != undefined ? this.runningOfflineTest : false;
         if (this.runningOfflineTest) {
             return;
         }
@@ -920,9 +942,8 @@ class WebAudioEngine {
         for (let channel = 0; channel < soundBuffer.numberOfChannels; channel++) {
             const pcm = soundBuffer.getChannelData(channel);
             for (let i = 0; i < pcm.length; i++) {
-                pcm[i] =
-                    Math.sin(i / 2333.0) * Math.sin(i / 5741.0) * 2.0 * Math.random() -
-                    1.0;
+                pcm[i] = Math.sin(i / 2333.0) * Math.sin(i / 5741.0) * 2.0 * Math.random()
+                    - 1.0;
             }
         }
         const soundNode = this.offlineCtx.createBufferSource();

@@ -1,6 +1,6 @@
-import { GameObjectDefs } from "../../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
-import { MapObjectDefs } from "../../../../shared/defs/mapObjectDefs";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { DamageType, GameConfig } from "../../../../shared/gameConfig";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
@@ -86,6 +86,11 @@ export class Obstacle extends BaseGameObject {
         useType: string;
         useDelay: number;
         useDir: Vec2;
+        useStyle?: "toggle" | "close" | "open";
+        useLock?: "lock" | "unlock";
+        useCooldown?: number;
+        useExpiration?: number;
+        resetAfterCooldown?: boolean;
     };
 
     isPuzzlePiece: boolean;
@@ -137,7 +142,7 @@ export class Obstacle extends BaseGameObject {
 
         this.isPuzzlePiece = !!puzzlePiece;
         this.puzzlePiece = puzzlePiece;
-        const def = MapObjectDefs[type];
+        const def = MapObjectDefs.typeToDef(type);
 
         this.rot = math.oriToRad(ori);
 
@@ -202,6 +207,11 @@ export class Obstacle extends BaseGameObject {
                 useType: def.button.useType!,
                 useDelay: def.button.useDelay,
                 useDir: def.button.useDir,
+                useStyle: def.button.useStyle,
+                useLock: def.button.useLock,
+                useCooldown: def.button.useCooldown,
+                useExpiration: def.button.useExpiration,
+                resetAfterCooldown: def.button.resetAfterCooldown,
             };
             this.interactionRad = def.button.interactionRad;
         }
@@ -267,7 +277,7 @@ export class Obstacle extends BaseGameObject {
     }
 
     updateCollider() {
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         this.collider = collider.transform(def.collision, this.pos, this.rot, this.scale);
 
         if (def.aabb) {
@@ -305,7 +315,7 @@ export class Obstacle extends BaseGameObject {
         );
         const objs = this.game.grid.intersectCollider(coll);
 
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         const closedColl = collider.transform(
             def.collision,
             this.door.closedPos,
@@ -349,7 +359,7 @@ export class Obstacle extends BaseGameObject {
         // @hack this door shouldn't switch layers
         if (this.type === "saloon_door_secret" || this.type === "house_door_01") return;
         let newLayer = this.originalLayer;
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         if(!def.door) return;
         const coll = collider.createCircle(this.pos, def.door!.interactionRad + 1);
         const objs = this.game.grid.intersectCollider(coll);
@@ -373,7 +383,7 @@ export class Obstacle extends BaseGameObject {
     damage(params: DamageParams): void {
         if (this.isSkin) return;
 
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         if (this.health === 0 || !this.destructible) return;
 
         if (params.damageType === DamageType.Player) {
@@ -381,7 +391,7 @@ export class Obstacle extends BaseGameObject {
             let stonePiercing = false;
 
             if (params.gameSourceType) {
-                const sourceDef = GameObjectDefs[params.gameSourceType] as
+                const sourceDef = GameObjectDefs.typeToDefSafe(params.gameSourceType) as
                     | {
                           armorPiercing?: boolean;
                           stonePiercing?: boolean;
@@ -417,7 +427,7 @@ export class Obstacle extends BaseGameObject {
     }
 
     kill(params: DamageParams) {
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         this.health = this.healthT = 0;
         this.dead = true;
         this.setDirty();
@@ -603,94 +613,173 @@ export class Obstacle extends BaseGameObject {
     useButton(): void {
         if (!this.button.canUse) return;
 
+        // `useDelay` is how long the opening/actuating ANIMATION runs — not an input
+        // delay. The button state (onOff + seq) has to flip right away, because that is
+        // the only feedback the client gets: the unlock sound and the `useImg` swap. It
+        // used to be deferred together with the effect, so pressing e.g. an airdrop did
+        // nothing visible for 2.5s and only THEN started the 2.5s destroy timer.
+        const previousOnOff = this.button.onOff;
         this.button.onOff = !this.button.onOff;
         this.button.seq++;
 
-        if (this.button.useOnce) {
+        if (this.button.useOnce || this.button.useCooldown) {
             this.button.canUse = false;
         }
 
-        if (this.button.useType === "weapon_upgrade_bench") {
-            const player = this.interactedBy;
-            if (!player) return;
-            const pickupMsg = new net.PickupMsg();
+        if (this.button.useCooldown) {
+            setTimeout(() => {
+                if (this.button.resetAfterCooldown !== false) {
+                    this.button.canUse = true;
+                    this.button.onOff = previousOnOff;
+                    this.setDirty();
+                }
+            }, this.button.useCooldown * 1000);
+        }
 
-            const activeWeaponType = player.activeWeapon;
-            const playerCurWeapIdx = player.weaponManager.curWeapIdx;
-            if (!activeWeaponType) {
-                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
-                player.msgsToSend.push({
-                        type: net.MsgType.Pickup,
-                        msg: pickupMsg,
-                    });
-                return;
-            }
+        const applyEffect = () => {
+            if (this.button.useType === "weapon_upgrade_bench") {
+                const player = this.interactedBy;
+                if (!player) return;
+                const pickupMsg = new net.PickupMsg();
 
-            const weapon = GunDefs[activeWeaponType];
-            if (!weapon) {
-                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
-                player.msgsToSend.push({
-                        type: net.MsgType.Pickup,
-                        msg: pickupMsg,
-                    });
-                return;
-            }
+                const activeWeaponType = player.activeWeapon;
+                const playerCurWeapIdx = player.weaponManager.curWeapIdx;
+                if (!activeWeaponType) {
+                    pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                    player.msgsToSend.push({
+                            type: net.MsgType.Pickup,
+                            msg: pickupMsg,
+                        });
+                    return;
+                }
 
-            if (!weapon.upgraded) {
-                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
-                player.msgsToSend.push({
-                        type: net.MsgType.Pickup,
-                        msg: pickupMsg,
-                    });
-                return;
-            }
+                const weapon = GunDefs[activeWeaponType];
+                if (!weapon) {
+                    pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                    player.msgsToSend.push({
+                            type: net.MsgType.Pickup,
+                            msg: pickupMsg,
+                        });
+                    return;
+                }
 
-            const upgradedWeaponDef = GunDefs[weapon.upgraded.gun];
-            if (!upgradedWeaponDef) {
-                pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
-                player.msgsToSend.push({
-                        type: net.MsgType.Pickup,
-                        msg: pickupMsg,
-                    });
-                return;
-            }
-            const cost = weapon.upgraded.cost;
-            if (player.invManager.get("construction_item") < cost) {
-                pickupMsg.type = net.PickupMsgType.NotEnoughResources;
-                pickupMsg.count = cost;
-                player.msgsToSend.push({
-                        type: net.MsgType.Pickup,
-                        msg: pickupMsg,
-                    });
-                return;
-            }
+                if (!weapon.upgraded) {
+                    pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                    player.msgsToSend.push({
+                            type: net.MsgType.Pickup,
+                            msg: pickupMsg,
+                        });
+                    return;
+                }
 
-            player.doAction(weapon.upgraded.gun, GameConfig.Action.Modify, 3, 0, this.pos);
+                const upgradedWeaponDef = GunDefs[weapon.upgraded.gun];
+                if (!upgradedWeaponDef) {
+                    pickupMsg.type = net.PickupMsgType.NoWeaponUpgrade;
+                    player.msgsToSend.push({
+                            type: net.MsgType.Pickup,
+                            msg: pickupMsg,
+                        });
+                    return;
+                }
+                const cost = weapon.upgraded.cost;
+                if (player.invManager.get("construction_item") < cost) {
+                    pickupMsg.type = net.PickupMsgType.NotEnoughResources;
+                    pickupMsg.count = cost;
+                    player.msgsToSend.push({
+                            type: net.MsgType.Pickup,
+                            msg: pickupMsg,
+                        });
+                    return;
+                }
 
-        } else
-        if (this.button.useType && this.parentBuilding) {
-            for (const obj of this.parentBuilding.childObjects) {
-                if (
-                    obj.__type === ObjectType.Obstacle &&
-                    obj.type === this.button.useType &&
-                    obj.isDoor
-                ) {
-                    obj.delayedToggle(
-                        this.button.useDelay,
-                        undefined,
-                        this.button.useDir,
-                    );
+                player.doAction(weapon.upgraded.gun, GameConfig.Action.Modify, 3, 0, this.pos);
+
+            } else if (this.button.useType && this.parentBuilding) {
+                const style = this.button.useStyle ?? "toggle";
+                const lockState = this.button.useLock;
+                const useDir = this.button.useDir;
+
+                for (const obj of this.parentBuilding.childObjects) {
+                    if (
+                        obj.__type === ObjectType.Obstacle &&
+                        obj.type === this.button.useType &&
+                        obj.isDoor && obj.door
+                    ) {
+                        const prevOpen = obj.door.open;
+                        const prevCanUse = obj.door.canUse;
+                        const prevLocked = obj.door.locked;
+
+                        let nextOpen = prevOpen;
+                        if (style === "open") {
+                            nextOpen = true;
+                        } else if (style === "close") {
+                            nextOpen = false;
+                        } else {
+                            nextOpen = !prevOpen;
+                        }
+
+                        if (nextOpen !== prevOpen) {
+                            obj.toggleDoor(undefined, useDir);
+                        } else if (style === "close" && prevOpen) {
+                            obj.toggleDoor(undefined, useDir);
+                        }
+
+                        if (lockState === "lock") {
+                            obj.door.locked = true;
+                            obj.door.canUse = false;
+                        } else if (lockState === "unlock") {
+                            obj.door.locked = false;
+                            obj.door.canUse = true;
+                        }
+
+                        if (this.button.useExpiration && this.button.useExpiration > 0) {
+                            setTimeout(() => {
+                                if (obj.dead) return;
+                                if (obj.door) {
+                                    obj.door.canUse = prevCanUse;
+                                    obj.door.locked = prevLocked;
+                                    if (obj.door.open !== prevOpen) {
+                                        obj.toggleDoor(undefined, useDir);
+                                    }
+                                    obj.setDirty();
+                                }
+                            }, this.button.useExpiration * 1000);
+                        }
+
+                        obj.setDirty();
+                    }
                 }
             }
-        }
+            this.setDirty();
+        };
+
         if (this.button.onOff && this.isPuzzlePiece) {
             this.parentBuilding?.puzzlePieceToggled(this);
         }
-        const def = MapObjectDefs[this.type] as ObstacleDef;
+
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
         if (def.button?.destroyOnUse && def.destroyType) {
+            // breaks open once the opening animation finished (airdrops, supply crates)
             this.killTicker = this.button.useDelay;
         }
+
         this.setDirty();
+
+        // Only the *effect* (doors, weapon bench) waits for the animation to finish.
+        if (this.button.useDelay > 0) {
+            // block re-presses while the delayed effect is pending; a button that already
+            // locked itself (useOnce/useCooldown) stays locked and is re-armed by its own
+            // cooldown timer instead
+            const reArm = this.button.canUse;
+            this.button.canUse = false;
+            setTimeout(() => {
+                if (reArm) this.button.canUse = true;
+                applyEffect();
+            }, this.button.useDelay * 1000);
+            return;
+        }
+
+        applyEffect();
     }
 
     getPlayerSide(player: Player) {

@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
 import { GameConfig, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
@@ -19,7 +19,6 @@ import { Editor } from "./debug/editor";
 
 /* STRIP_FROM_PROD_CLIENT:END */
 
-import { name } from "ejs";
 import { type GunDef, GunDefs } from "../../shared/defs/gameObjects/gunDefs";
 import { device } from "./device";
 import { EmoteBarn } from "./emote";
@@ -743,7 +742,7 @@ export class Game {
                 const activePlayer = this.m_activePlayer;
                 const curWeapIdx = activePlayer.m_localData.m_curWeapIdx;
                 const curWeapon = activePlayer.m_localData.m_weapons[curWeapIdx];
-                const weaponDef = GameObjectDefs[curWeapon?.type];
+                const weaponDef = GameObjectDefs.typeToDefSafe(curWeapon?.type);
 
                 if (
                     touchAimMovement.touched &&
@@ -1200,7 +1199,7 @@ export class Game {
             this.m_camera,
             this.m_renderer,
         );
-        this.m_renderer.m_update(dt, this.m_camera, this.m_map);
+        this.m_renderer.m_update(dt, this.m_camera, this.m_map, false);
 
         for (let i = 0; i < this.m_emoteBarn.newPings.length; i++) {
             const ping = this.m_emoteBarn.newPings[i];
@@ -1427,7 +1426,7 @@ export class Game {
         const newWeapon = this.m_activePlayer.m_localData.m_weapons[oldWeapIdx];
         const newAmmo = newWeapon?.ammo ?? -1;
 
-        const weaponDef = GameObjectDefs[oldWeaponType];
+        const weaponDef = GameObjectDefs.typeToDefSafe(oldWeaponType);
 
         if (
             device.touch &&
@@ -1927,7 +1926,7 @@ export class Game {
                         msg.item,
                         this.m_audioManager,
                     );
-                    const itemDef = GameObjectDefs[msg.item];
+                    const itemDef = GameObjectDefs.typeToDefSafe(msg.item);
                     if (itemDef && itemDef.type == "xp") {
                         this.m_ui2Manager.addRareLootMessage(msg.item, true);
                     }
@@ -2032,7 +2031,7 @@ export class Game {
             case net.MsgType.PickupExtra: {
                 const msg = new net.PickupExtraMsg();
                 msg.deserialize(stream);
-                const modifiedWeaponName = (GameObjectDefs[msg.modifiedWeapon] as GunDef).name;
+                const modifiedWeaponName = (GameObjectDefs.typeToDef(msg.modifiedWeapon) as GunDef).name;
                 this.m_ui2Manager.displayPickupExtraMessage(
                     `${modifiedWeaponName}`,
                     msg.modifiedWeapon

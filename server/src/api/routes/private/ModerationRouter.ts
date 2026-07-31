@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, lt, ne } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
-import { MapId, TeamModeToString } from "../../../../../shared/defs/types/misc";
+import { MapId, TeamModeToString } from "../../../../../shared/gameConfig.ts";
 import {
     zBanAccountParams,
     zBanChatIpParams,

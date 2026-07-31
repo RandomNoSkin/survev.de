@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { MapId } from "../defs/types/misc";
-import { TeamMode } from "../gameConfig";
+import { MapId, TeamMode } from "../gameConfig.ts";
 
 //
 // Match History
@@ -66,6 +65,7 @@ export type MatchData = {
     killed_ids: number[];
     /** Non-default cosmetics this player had equipped for the match ([] when private). */
     equipped_cosmetics: string[];
+    role: string;
 };
 
 //
@@ -125,27 +125,29 @@ export const zLeaderboardsRequest = z.object({
     teamMode: z.enum(["solo", "duo", "squad"]).transform((mode) => teamModeMap[mode]),
 });
 
-export type LeaderboardResponse = {
-    val: number;
-    region: string;
-    /**
-     * not used
-     */
-    active?: boolean;
-    /**
-     * required for all types except most_kills & win_streak
-     */
-    games?: number;
-} & (
-    | {
-          slug: string | null;
-          username: string;
-      }
-    | {
-          slugs: (string | null)[];
-          usernames: string[];
-      }
-);
+export type LeaderboardResponse =
+    & {
+        val: number;
+        region: string;
+        /**
+         * not used
+         */
+        active?: boolean;
+        /**
+         * required for all types except most_kills & win_streak
+         */
+        games?: number;
+    }
+    & (
+        | {
+            slug: string | null;
+            username: string;
+        }
+        | {
+            slugs: (string | null)[];
+            usernames: string[];
+        }
+    );
 
 export type LeaderboardRequest = z.infer<typeof zLeaderboardsRequest>;
 

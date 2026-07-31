@@ -13,6 +13,7 @@ export interface ExplosionDef {
     teamDamage?: boolean;
     freezeAmount?: number; // unused atm in favor of gameconfig constant
     freezeDuration?: number; // how long to slow down player on hit
+    frozenSprites?: string[]; // client-side: sprites drawn on a frozen player
     dropRandomLoot?: number;
     healTeam?: boolean;
     healAmount?: number;
@@ -41,7 +42,7 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
     },
     explosion_mine: {
         type: "explosion",
-        damage: 65,
+        damage: 75,
         obstacleDamage: 4,
         rad: { min: 11, max: 14 },
         shrapnelCount: 0,
@@ -112,7 +113,7 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
     explosion_bar_modified: {
         type: "explosion",
         damage: 6,
-        obstacleDamage: 15,
+        obstacleDamage: 30,
         rad: { min: 0.75, max: 1 },
         shrapnelCount: 0,
         shrapnelType: "shrapnel_usas",
@@ -236,6 +237,34 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
         decalType: "",
         freezeAmount: 3,
         freezeDuration: 1,
+    },
+    // PMG-134 potato LMG variant of the smgshot freeze burst (analog of _smgshot)
+    explosion_potato_lmgshot: {
+        type: "explosion",
+        damage: 15,
+        obstacleDamage: 1.25,
+        teamDamage: false,
+        rad: { min: 1.25, max: 1.75 },
+        shrapnelCount: 0,
+        shrapnelType: "",
+        explosionEffectType: "potato_smgshot",
+        decalType: "",
+        freezeAmount: 3,
+        freezeDuration: 1,
+    },
+    // Tomato throwable freeze burst (freezes on impact)
+    explosion_tomato: {
+        type: "explosion",
+        damage: 10,
+        obstacleDamage: 1,
+        teamDamage: false,
+        rad: { min: 1.5, max: 2.5 },
+        shrapnelCount: 0,
+        shrapnelType: "",
+        explosionEffectType: "potato_smgshot",
+        decalType: "",
+        freezeAmount: 4,
+        freezeDuration: 2,
     },
     explosion_bomb_iron: {
         type: "explosion",

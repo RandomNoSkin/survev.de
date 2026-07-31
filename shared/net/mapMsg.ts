@@ -1,7 +1,8 @@
-import type { MapDef } from "../defs/mapDefs";
-import type { MapRiverData } from "../utils/terrainGen";
-import type { Vec2 } from "../utils/v2";
-import { type AbstractMsg, type BitStream, Constants } from "./net";
+import type { MapDef, MapDefKey } from "../defs/mapDefs.ts";
+import type { Collider } from "../utils/coldet.ts";
+import type { MapRiverData } from "../utils/terrainGen.ts";
+import type { Vec2 } from "../utils/v2.ts";
+import { type AbstractMsg, type BitStream, Constants } from "./net.ts";
 
 function serializeMapRiver(s: BitStream, data: MapRiverData) {
     s.writeUint8(data.width);
@@ -35,18 +36,16 @@ function deserializeMapPlaces(s: BitStream): Place {
 }
 
 export interface GroundPatch {
+    bound: Collider;
     color: number;
     roughness: number;
     offsetDist: number;
     order?: number;
     useAsMapShape?: boolean;
-    min: Vec2;
-    max: Vec2;
 }
 
 function serializeMapGroundPatch(s: BitStream, patch: GroundPatch) {
-    s.writeMapPos(patch.min);
-    s.writeMapPos(patch.max);
+    s.writeCollider(patch.bound);
     s.writeUint32(patch.color);
     s.writeFloat32(patch.roughness);
     s.writeFloat32(patch.offsetDist);
@@ -56,8 +55,7 @@ function serializeMapGroundPatch(s: BitStream, patch: GroundPatch) {
 
 function deserializeMapGroundPatch(s: BitStream): GroundPatch {
     return {
-        min: s.readMapPos(),
-        max: s.readMapPos(),
+        bound: s.readCollider(),
         color: s.readUint32(),
         roughness: s.readFloat32(),
         offsetDist: s.readFloat32(),
@@ -95,7 +93,7 @@ function deserializeMapObj(s: BitStream): MapObj {
 }
 
 export class MapMsg implements AbstractMsg {
-    mapName = "";
+    mapName = "" as MapDefKey;
     seed = 0;
     width = 0;
     height = 0;
@@ -134,7 +132,7 @@ export class MapMsg implements AbstractMsg {
     }
 
     deserialize(s: BitStream) {
-        this.mapName = s.readString(Constants.MapNameMaxLen);
+        this.mapName = s.readString(Constants.MapNameMaxLen) as MapDefKey;
         this.seed = s.readUint32();
         this.width = s.readUint16();
         this.height = s.readUint16();

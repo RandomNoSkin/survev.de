@@ -1,6 +1,6 @@
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
-import { GameObjectDefs } from "../../../shared/defs/gameObjectDefs";
+import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { PingDefs } from "../../../shared/defs/gameObjects/pingDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import type { MapDef } from "../../../shared/defs/mapDefs";
@@ -823,12 +823,12 @@ export class UiManager {
             switch (player.m_action.type) {
                 case Action.Reload:
                 case Action.ReloadAlt:
-                    if (GameObjectDefs[player.m_action.item]) {
+                    if (GameObjectDefs.typeToDef(player.m_action.item)) {
                         actionTxt1 = this.localization.translate("game-reloading");
                     }
                     break;
                 case Action.UseItem:
-                    if (GameObjectDefs[player.m_action.item]) {
+                    if (GameObjectDefs.typeToDef(player.m_action.item)) {
                         actionTxt1 = this.localization.translate("game-using");
                         actionTxt2 = this.localization.translate(
                             `game-${player.m_action.item}`,
@@ -1210,11 +1210,15 @@ export class UiManager {
             for (const gp of godView.values()) {
                 if (gp.id === activePlayerInfo.playerId) continue;
                 if (playerBarn.playerStatus[gp.id]) continue; // already drawn above
-                const isEnemy = gp.teamId != activePlayerInfo.teamId;
+                // Older/broken track files have an empty roster (teamId -1) — resolve
+                // the team via the playerInfo stream then (it has every player).
+                const gpTeamId =
+                    gp.teamId > 0 ? gp.teamId : playerBarn.getPlayerInfo(gp.id).teamId;
+                const isEnemy = gpTeamId != activePlayerInfo.teamId;
                 let texture = "player-map-inner.img";
                 if (gp.dead) texture = "skull-outlined.img";
                 else if (gp.downed) texture = "player-map-downed.img";
-                const tint = isEnemy ? 0xff4d4d : playerBarn.getTeamColor(gp.teamId);
+                const tint = isEnemy ? 0xff4d4d : playerBarn.getTeamColor(gpTeamId);
                 const scale = gp.dead || gp.downed ? dotScale * 1.25 : dotScale * 0.75;
                 addSprite(gp.pos, scale, 1, true, 65535 + gp.id * 2, texture, tint);
             }
@@ -2945,7 +2949,7 @@ export class UiManager {
 
         for (let a = 0; a < roles.length; a++) {
             const role = roles[a];
-            const roleDef = GameObjectDefs[role] as RoleDef;
+            const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
             const roleOption = $("<div/>", {
                 class: "ui-role-option",
                 "data-role": role,
@@ -2974,7 +2978,7 @@ export class UiManager {
 
         for (let a = 0; a < roles.length; a++) {
             const role = roles[a];
-            const roleDef = GameObjectDefs[role] as RoleDef;
+            const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
             const roleOption = $("<div/>", {
                 class: "ui-arena-role-option",
                 "data-role": role,
@@ -2999,7 +3003,7 @@ export class UiManager {
     }
 
     setRoleMenuInfo(role: string) {
-        const roleDef = GameObjectDefs[role] as RoleDef;
+        const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
         $(".ui-role-option").css({
             "background-size": 132,
             opacity: 0.5,
@@ -3067,7 +3071,7 @@ export class UiManager {
     }
 
     setArenaRoleMenuInfo(role: string) {
-        const roleDef = GameObjectDefs[role] as RoleDef;
+        const roleDef = GameObjectDefs.typeToDef(role) as RoleDef;
         $(".ui-arena-role-option").css({
             "background-size": 132,
             opacity: 0.5,

@@ -1,11 +1,11 @@
 import $ from "jquery";
-import { GameObjectDefs } from "../../shared/defs/gameObjectDefs";
-import type { MeleeDef } from "../../shared/defs/gameObjects/meleeDefs";
-import type { OutfitDef } from "../../shared/defs/gameObjects/outfitDefs";
-import { MapDefs } from "../../shared/defs/mapDefs";
-import * as net from "../../shared/net/net";
-import { device } from "./device";
-import { getOutfitIconUrl } from "./ui/loadoutIcon";
+import type { MeleeDef } from "../../shared/defs/gameObjects/meleeDefs.ts";
+import type { OutfitDef } from "../../shared/defs/gameObjects/outfitDefs.ts";
+import { type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
+import { GameObjectDefs } from "../../shared/defs/register.ts";
+import * as net from "../../shared/net/net.ts";
+import { device } from "./device.ts";
+import { getOutfitIconUrl } from "./ui/loadoutIcon.ts";
 
 const truncateCanvas = document.createElement("canvas");
 
@@ -16,7 +16,7 @@ export function getParameterByName<T extends string>(name: string, url?: string)
 
 export const helpers = {
     getParameterByName,
-    getCookie: function (cname: string) {
+    getCookie: function(cname: string) {
         const name = `${cname}=`;
         const decodedCookie = decodeURIComponent(document.cookie);
         const ca = decodedCookie.split(";");
@@ -33,7 +33,7 @@ export const helpers = {
         }
         return "";
     },
-    getGameModes: function () {
+    getGameModes: function() {
         const gameModes: {
             mapId: number;
             desc: {
@@ -47,7 +47,7 @@ export const helpers = {
         const mapKeys = Object.keys(MapDefs);
         for (let i = 0; i < mapKeys.length; i++) {
             const mapKey = mapKeys[i];
-            const mapDef = MapDefs[mapKey as keyof typeof MapDefs];
+            const mapDef = MapDefs[mapKey as MapDefKey];
             if (
                 !gameModes.find((x) => {
                     return x.mapId == mapDef.mapId;
@@ -64,22 +64,20 @@ export const helpers = {
         });
         return gameModes;
     },
-    sanitizeNameInput: function (input: string) {
+    sanitizeNameInput: function(input: string) {
         let name = input.trim();
         if (name.length > net.Constants.PlayerNameMaxLen) {
             name = name.substring(0, net.Constants.PlayerNameMaxLen);
         }
         return name;
     },
-    colorToHexString: function (c: number) {
+    colorToHexString: function(c: number) {
         return `#${`000000${c.toString(16)}`.slice(-6)}`;
     },
-    colorToDOMString: function (color: number, alpha: number) {
-        return `rgba(${(color >> 16) & 255}, ${(color >> 8) & 255}, ${
-            color & 255
-        }, ${alpha})`;
+    colorToDOMString: function(color: number, alpha: number) {
+        return `rgba(${(color >> 16) & 255}, ${(color >> 8) & 255}, ${color & 255}, ${alpha})`;
     },
-    htmlEscape: function (str = "") {
+    htmlEscape: function(str = "") {
         return str
             .replace(/&/g, "&amp;")
             .replace(/"/g, "&quot;")
@@ -87,7 +85,7 @@ export const helpers = {
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
     },
-    truncateString: function (str: string, font: string, maxWidthPixels: number) {
+    truncateString: function(str: string, font: string, maxWidthPixels: number) {
         const context = truncateCanvas.getContext("2d")!;
         context.font = font;
         let truncated = str;
@@ -100,14 +98,14 @@ export const helpers = {
         }
         return truncated;
     },
-    toggleFullScreen: function (clear?: boolean) {
+    toggleFullScreen: function(clear?: boolean) {
         let elem = document.documentElement;
         if (
-            document.fullscreenElement ||
-            document.mozFullScreenElement ||
-            document.webkitFullscreenElement ||
-            document.msFullscreenElement ||
-            clear
+            document.fullscreenElement
+            || document.mozFullScreenElement
+            || document.webkitFullscreenElement
+            || document.msFullscreenElement
+            || clear
         ) {
             if (document.exitFullscreen) {
                 document.exitFullscreen();
@@ -130,7 +128,7 @@ export const helpers = {
             elem.webkitRequestFullscreen?.();
         }
     },
-    copyTextToClipboard: function (text: string) {
+    copyTextToClipboard: function(text: string) {
         try {
             const $temp = $<HTMLInputElement>("<input>");
             $("body").append($temp);
@@ -171,10 +169,11 @@ export const helpers = {
     emoteImgToSvg(img: string) {
         return img && img.length > 4 ? `../img/emotes/${img.slice(0, -4)}.svg` : "";
     },
-    getSvgFromGameType: function (gameType: string) {
-        const def = GameObjectDefs[gameType] as any;
-        const defType = def ? def.type : "";
-        switch (defType) {
+    getSvgFromGameType: function(gameType: string) {
+        const def = GameObjectDefs.typeToDefSafe(gameType);
+        if (!def) return "";
+
+        switch (def.type) {
             case "gun":
             case "melee":
             case "throwable":
@@ -235,23 +234,35 @@ export const helpers = {
                 return "";
         }
     },
-    getCssTransformFromGameType: function (gameType: string) {
-        const def = GameObjectDefs[gameType] as MeleeDef;
+    getCssTransformFromGameType: function(gameType: string) {
+        const def = GameObjectDefs.typeToDefSafe(gameType) as MeleeDef;
         let transform = "";
         if (def?.lootImg) {
-            transform = `rotate(${def.lootImg.rot || 0}rad) scaleX(${
-                def.lootImg.mirror ? -1 : 1
-            })`;
+            transform = `rotate(${def.lootImg.rot || 0}rad) scaleX(${def.lootImg.mirror ? -1 : 1})`;
         }
         return transform;
     },
-    random64: function () {
+    random64: function() {
         function r32() {
             return Math.floor(Math.random() * Math.pow(2, 32)).toString(16);
         }
         return r32() + r32();
     },
-    verifyTurnstile: function (enabled: boolean, cb: (token: string) => void) {
+    abortSignal(timeout: number) {
+        if ("timeout" in AbortSignal) {
+            return AbortSignal.timeout(timeout);
+        }
+        const controller = new AbortController();
+
+        setTimeout(() => {
+            controller.abort(
+                new DOMException("The operation timed out.", "TimeoutError"),
+            );
+        }, timeout);
+
+        return controller.signal;
+    },
+    verifyTurnstile: function(enabled: boolean, cb: (token: string) => void) {
         if (!enabled || !window.turnstile || !TURNSTILE_SITE_KEY) {
             cb("");
             return;

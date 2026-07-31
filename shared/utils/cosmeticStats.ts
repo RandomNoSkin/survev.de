@@ -1,4 +1,4 @@
-import { GameObjectDefs } from "../defs/gameObjectDefs";
+import { GameObjectDefs } from "../defs/register.ts";
 import { Rarity } from "../gameConfig";
 
 /**
@@ -78,7 +78,7 @@ export const cosmeticStats = {
     getRarity(type: string): Rarity {
         const stat = statsMap[type];
         if (stat) return stat.rarity;
-        const def = GameObjectDefs[type] as { rarity?: number } | undefined;
+        const def = GameObjectDefs.typeToDefSafe(type) as { rarity?: number } | undefined;
         return (def?.rarity as Rarity) ?? Rarity.Stock;
     },
     /** Number of accounts owning the item (0 when unknown). */
