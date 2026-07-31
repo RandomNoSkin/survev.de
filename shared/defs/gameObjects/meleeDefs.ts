@@ -188,7 +188,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             },
             rad: 2,
             damageTimes: [0.1],
-            cooldownTime: 0.6,
+            cooldownTime: 0.75,
         },
         speed: {
             equip: 1,
@@ -210,19 +210,18 @@ const BaseDefs: Record<string, MeleeDef> = {
             border: "loot-circle-outer-02.img",
             borderTint: 0xffffff,
             scale: 0.3,
-            rad: 25,
             rot: 0.785,
         },
         worldImg: {
-            sprite: "loot-melee-knuckles-rusted.img",
+            sprite: "loot-melee-buck-antler.img",
             pos: {
                 x: 0,
                 y: -27,
             },
             rot: 0.5 * Math.PI,
             scale: {
-                x: 0.2,
-                y: 0.2,
+                x: .5,
+                y: .5,
             },
             tint: 0xffffff,
         },

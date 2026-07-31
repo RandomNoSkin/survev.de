@@ -14917,11 +14917,16 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-gun-mount-07.img" },
     }),
     gun_mount_buck: createGunMount({
-        loot: [autoLoot("henry", 1)],
+        loot: [
+            autoLoot("henry", 1),
+            autoLoot("antlers", 1),
+        ],
         img: { sprite: "map-gun-mount-buck.img" },
     }),
     hat_mount_buck: createGunMount({
-        loot: [],
+        loot: [
+            autoLoot("antlers", 1),
+        ],
         img: { sprite: "map-hat-mount-buck.img" },
     }),
     locker_01: createLocker({
