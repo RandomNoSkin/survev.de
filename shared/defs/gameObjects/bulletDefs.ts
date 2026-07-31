@@ -727,7 +727,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         accelerating: -0.04,
         shrapnel: false,
         tracerColor: "50AE",
-        tracerWidth: 0.12,
+        tracerWidth: 0.16,
         tracerLength: 0.7,
     },
     bullet_mac10: {
