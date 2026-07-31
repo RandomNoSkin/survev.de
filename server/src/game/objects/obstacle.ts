@@ -613,25 +613,30 @@ export class Obstacle extends BaseGameObject {
     useButton(): void {
         if (!this.button.canUse) return;
 
+        // `useDelay` is how long the opening/actuating ANIMATION runs — not an input
+        // delay. The button state (onOff + seq) has to flip right away, because that is
+        // the only feedback the client gets: the unlock sound and the `useImg` swap. It
+        // used to be deferred together with the effect, so pressing e.g. an airdrop did
+        // nothing visible for 2.5s and only THEN started the 2.5s destroy timer.
+        const previousOnOff = this.button.onOff;
+        this.button.onOff = !this.button.onOff;
+        this.button.seq++;
+
+        if (this.button.useOnce || this.button.useCooldown) {
+            this.button.canUse = false;
+        }
+
+        if (this.button.useCooldown) {
+            setTimeout(() => {
+                if (this.button.resetAfterCooldown !== false) {
+                    this.button.canUse = true;
+                    this.button.onOff = previousOnOff;
+                    this.setDirty();
+                }
+            }, this.button.useCooldown * 1000);
+        }
+
         const applyEffect = () => {
-            const previousOnOff = this.button.onOff;
-            this.button.onOff = !this.button.onOff;
-            this.button.seq++;
-
-            if (this.button.useOnce || this.button.useCooldown) {
-                this.button.canUse = false;
-            }
-
-            if (this.button.useCooldown) {
-                setTimeout(() => {
-                    if (this.button.resetAfterCooldown !== false) {
-                        this.button.canUse = true;
-                        this.button.onOff = previousOnOff;
-                        this.setDirty();
-                    }
-                }, this.button.useCooldown * 1000);
-            }
-
             if (this.button.useType === "weapon_upgrade_bench") {
                 const player = this.interactedBy;
                 if (!player) return;
@@ -745,21 +750,30 @@ export class Obstacle extends BaseGameObject {
                     }
                 }
             }
-            if (this.button.onOff && this.isPuzzlePiece) {
-                this.parentBuilding?.puzzlePieceToggled(this);
-            }
-            const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
-            if (def.button?.destroyOnUse && def.destroyType) {
-                this.killTicker = this.button.useDelay;
-            }
             this.setDirty();
         };
 
+        if (this.button.onOff && this.isPuzzlePiece) {
+            this.parentBuilding?.puzzlePieceToggled(this);
+        }
+
+        const def = MapObjectDefs.typeToDef(this.type) as ObstacleDef;
+        if (def.button?.destroyOnUse && def.destroyType) {
+            // breaks open once the opening animation finished (airdrops, supply crates)
+            this.killTicker = this.button.useDelay;
+        }
+
+        this.setDirty();
+
+        // Only the *effect* (doors, weapon bench) waits for the animation to finish.
         if (this.button.useDelay > 0) {
+            // block re-presses while the delayed effect is pending; a button that already
+            // locked itself (useOnce/useCooldown) stays locked and is re-armed by its own
+            // cooldown timer instead
+            const reArm = this.button.canUse;
             this.button.canUse = false;
-            this.setDirty();
             setTimeout(() => {
-                this.button.canUse = true;
+                if (reArm) this.button.canUse = true;
                 applyEffect();
             }, this.button.useDelay * 1000);
             return;

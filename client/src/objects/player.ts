@@ -719,7 +719,9 @@ export class Player implements AbstractObject {
     }
 
     m_equippedWeaponType() {
-        return GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon).type;
+        // typeToDefSafe: an empty active weapon must not throw here, this is called from
+        // the render/update path where an exception takes the whole client down
+        return GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon)?.type ?? "";
     }
 
     m_hasWeaponInSlot(slot: WeaponSlot) {
@@ -1281,12 +1283,16 @@ export class Player implements AbstractObject {
         if (isActivePlayer && !isSpectating) {
             const curWeapIdx = this.m_localData.m_curWeapIdx;
             const curWeap = this.m_localData.m_weapons[curWeapIdx];
-            const itemDef = GameObjectDefs.typeToDef(curWeap.type) as GunDef;
+            // typeToDefSafe: the slot can be empty for a frame while weapon and active
+            // index updates arrive, and typeToDef throws on ""
+            const itemDef = GameObjectDefs.typeToDefSafe(curWeap.type) as
+                | GunDef
+                | undefined;
 
             // Play dry fire sound when empty
             if (
                 !this.playedDryFire
-                && this.m_equippedWeaponType() == "gun"
+                && itemDef?.type === "gun"
                 && (inputBinds.isBindPressed(Input.Fire)
                     || (inputBinds.isBindDown(Input.Fire) && itemDef.fireMode == "auto"))
                 && this.m_action.type == Action.None
@@ -2405,8 +2411,13 @@ export class Player implements AbstractObject {
     }
 
     animPlaySound(animCtx: AnimCtx, args: { sound: string }) {
-        const itemDef = GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon) as MeleeDef;
-        const sound = itemDef.sound[args.sound];
+        // Anim effects can fire on the same frame the active weapon changed (the anim is
+        // networked separately from the weapon), so the def may not match the anim — and
+        // typeToDef throws on an empty/mismatched type, which would kill the whole client.
+        const itemDef = GameObjectDefs.typeToDefSafe(
+            this.m_netData.m_activeWeapon,
+        ) as MeleeDef | undefined;
+        const sound = itemDef?.sound?.[args.sound];
         if (sound) {
             animCtx.audioManager.playSound(sound, {
                 channel: "sfx",
@@ -2423,10 +2434,13 @@ export class Player implements AbstractObject {
     }
 
     animThrowableParticles(animCtx: AnimCtx, _args: unknown) {
-        if (
-            GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon, "throwable")
-                .useThrowParticles
-        ) {
+        // Same as animPlaySound / animMeleeCollision: the throw anim can still be running
+        // (or arrive) while the player already holds something else — pulling a pin and
+        // switching to melee did exactly that, and typeToDef(x, "throwable") threw,
+        // crashing the client of everyone who could see that player.
+        const throwableDef = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon);
+        if (throwableDef?.type !== "throwable") return;
+        if (throwableDef.useThrowParticles) {
             // Pin
             const pinOff = v2.rotate(
                 v2.create(0.75, 0.75),

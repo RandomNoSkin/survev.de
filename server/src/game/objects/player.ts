@@ -4668,7 +4668,11 @@ export class Player extends BaseGameObject {
 
                         let iterations = 0;
                         let idx = this.curWeapIdx;
+                        // NOTE: `iterations` MUST be incremented — without it this loops
+                        // forever if no slot holds a weapon, freezing the game process
+                        // (and with it every game running on that process).
                         while (iterations < GameConfig.WeaponSlot.Count * 2) {
+                            iterations++;
                             idx = absMod(idx + toAdd, GameConfig.WeaponSlot.Count);
                             if (this.weapons[idx].type) {
                                 break;
@@ -5002,7 +5006,9 @@ export class Player extends BaseGameObject {
         )
             return;
 
-        if (this.pickupTicker > 0) return;
+        // Pickup cooldown intentionally disabled: it dropped any loot input that landed
+        // inside the window, which is what made picking things up feel delayed.
+        // if (this.pickupTicker > 0) return;
         this.pickupTicker = 0.1;
         let amountLeft = 0;
         let lootToAdd = obj.type;

@@ -4,7 +4,7 @@ import { Obstacle } from "../../server/src/game/objects/obstacle.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 
 describe("Obstacle button interactions", () => {
-    test("delayed buttons reject repeat interactions until the effect runs", () => {
+    test("buttons flip state immediately and reject repeat interactions", () => {
         vi.useFakeTimers();
 
         try {
@@ -35,12 +35,15 @@ describe("Obstacle button interactions", () => {
             Obstacle.prototype.useButton.call(buttonObstacle as any);
             Obstacle.prototype.useButton.call(buttonObstacle as any);
 
+            // the press registers right away (that's the client's only feedback), and the
+            // second press is rejected while the button is on cooldown
+            expect(buttonObstacle.button.seq).toBe(2);
+            expect(buttonObstacle.button.onOff).toBe(true);
             expect(buttonObstacle.button.canUse).toBe(false);
-            expect(buttonObstacle.button.seq).toBe(1);
 
             vi.advanceTimersByTime(250);
             expect(buttonObstacle.button.canUse).toBe(false);
-            expect(buttonObstacle.button.seq).toBe(1);
+            expect(buttonObstacle.button.seq).toBe(2);
 
             vi.advanceTimersByTime(500);
             expect(buttonObstacle.button.canUse).toBe(true);
