@@ -2303,15 +2303,19 @@ export class Player extends BaseGameObject {
                 this.footstepTicker += dt;
                 if (this.footstepTicker >= 0.25) {
                     this.footstepTicker = 0;
-                    const rot = Math.atan2(this.dir.y, this.dir.x);
-                    const ori = math.radToOri(rot);
+                    // Compute 8-direction index from movement velocity (0-7, one per 45°).
+                    // We store it in goreKills (uint8, always 0 for footprints) so we
+                    // don't need to change the serialization protocol.
+                    const velAngleDeg = Math.atan2(this.moveVel.y, this.moveVel.x) * (180 / Math.PI);
+                    const dirIdx = Math.round(((velAngleDeg % 360) + 360) % 360 / 45) % 8;
                     const decal = this.game.decalBarn.addDecal(
                         "decal_footprint_antler",
                         this.pos,
                         0,
-                        ori
+                        0  // ori unused for footprints
                     );
                     decal.ownerId = this.__id;
+                    decal.goreKills = dirIdx; // repurposed as direction index
                 }
             }
         }

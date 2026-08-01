@@ -65,7 +65,12 @@ class Decal implements AbstractObject {
             // Copy data
             this.type = data.type;
             this.pos = v2.copy(data.pos);
-            this.rot = math.oriToRad(data.ori);
+            // Footprint decals store an 8-direction movement index (0-7) in goreKills
+            // so that ori (2-bit, protocol-safe) is left unchanged for all other decals.
+            const isFootprint = data.type.startsWith("decal_footprint");
+            this.rot = isFootprint
+                ? data.goreKills * (Math.PI / 4)
+                : math.oriToRad(data.ori);
             this.scale = data.scale;
             this.layer = data.layer;
             this.goreKills = data.goreKills;
