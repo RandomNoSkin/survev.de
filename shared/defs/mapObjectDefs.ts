@@ -15361,7 +15361,11 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         interactionText: "game-modify-weapon",
         useOnce: false,
         useType: "weapon_upgrade_bench",
-        useDelay: 1,
+        // No animation delay: the upgrade itself is a 3s Modify action with its own
+        // progress bar, and useImg equals the normal sprite, so a delay here was a dead
+        // pause between the click sound and the timer appearing. 0 makes the action (and
+        // the "not enough resources" feedback) start on the press.
+        useDelay: 0,
         useDir: v2.create(0, -1),
         useImg: "map-table-04.img",
         sound: {
