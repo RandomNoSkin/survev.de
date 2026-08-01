@@ -183,6 +183,13 @@
       "when": 1784748593263,
       "tag": "0023_role_and_user_quest",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785611795969,
+      "tag": "0024_medical_kid_colt",
+      "breakpoints": true
     }
   ]
 }

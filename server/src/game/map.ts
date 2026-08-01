@@ -1161,6 +1161,16 @@ export class GameMap {
     }
 
     /**
+     * Spawns a type that was already run through {@link resolveSpawnType}.
+     * The gen* methods resolve the type themselves so they can validate the position
+     * with the right bounds, and genAuto would otherwise roll the spawn replacement a
+     * second time and spawn something canSpawn() never checked for.
+     */
+    genResolved(type: string, pos: Vec2, layer = 0, ori?: number, scale?: number) {
+        return this.genAuto(type, pos, layer, ori, scale, undefined, undefined, true);
+    }
+
+    /**
      * Helper to not reapeat the stupid while loop everywhere
      * @param type The type of thing you are trying to spawn, used to show a log when it fails
      * @param cb The callback to spawn it, it should return true on a sucessful spawn attempt to break the loop
@@ -1646,7 +1656,7 @@ export class GameMap {
 
             if (!this.canSpawn(resolvedType, pos, ori!, 1)) return false;
 
-            this.genAuto(resolvedType, pos, 0, ori!, 1);
+            this.genResolved(resolvedType, pos, 0, ori!, 1);
             return true;
         });
     }
@@ -1660,7 +1670,7 @@ export class GameMap {
             const spawnPos = v2.add(util.randomPointInCircle(rad), center);
 
             if (!this.canSpawn(resolvedType, spawnPos, ori)) return false;
-            this.genAuto(resolvedType, spawnPos, 0, ori);
+            this.genResolved(resolvedType, spawnPos, 0, ori);
             return true;
         });
     }
@@ -1777,7 +1787,7 @@ export class GameMap {
                         );
 
                         if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
-                        this.genAuto(resolvedType, pos, 0, ori, scale);
+                        this.genResolved(resolvedType, pos, 0, ori, scale);
 
                         this.placesToSpawn.splice(placeIdx, 1);
                         util.removeFrom(this.placeSpawns, resolvedType);
@@ -1800,7 +1810,7 @@ export class GameMap {
             const pos = getPos(spawnAabb);
 
             if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
-            this.genAuto(resolvedType, pos, 0, ori, scale);
+            this.genResolved(resolvedType, pos, 0, ori, scale);
 
             return true;
         });
@@ -1832,7 +1842,7 @@ export class GameMap {
             const pos = v2.add(this.center, v2.rotate(offset, rot));
 
             if (!this.canSpawn(resolvedType, pos, ori, 1)) return false;
-            this.genAuto(resolvedType, pos, 0, ori, scale);
+            this.genResolved(resolvedType, pos, 0, ori, scale);
             return true;
         });
     }
@@ -1924,7 +1934,7 @@ export class GameMap {
                 return false;
             }
 
-            const obj = this.genAuto(resolvedType, pos, 0, spawnOri, scale);
+            const obj = this.genResolved(resolvedType, pos, 0, spawnOri, scale);
             if (obj?.__type === ObjectType.Structure) {
                 this.bridges.push(obj);
             }
@@ -1963,7 +1973,7 @@ export class GameMap {
 
             if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
 
-            this.genAuto(resolvedType, pos, 0, ori, scale);
+            this.genResolved(resolvedType, pos, 0, ori, scale);
             return true;
         });
     }
@@ -1991,7 +2001,7 @@ export class GameMap {
 
             if (!this.canSpawn(resolvedType, pos, ori, scale)) return false;
 
-            this.genAuto(resolvedType, pos, 0, ori, scale);
+            this.genResolved(resolvedType, pos, 0, ori, scale);
             return true;
         });
     }

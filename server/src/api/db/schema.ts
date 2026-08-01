@@ -1,4 +1,3 @@
-import { table } from "node:console";
 import { sql } from "drizzle-orm";
 import {
     bigint,
@@ -16,6 +15,7 @@ import {
     uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
+import { table } from "node:console";
 import { TeamMode } from "../../../../shared/gameConfig.ts";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
@@ -498,9 +498,13 @@ export type BanHistoryTable = typeof banHistoryTable.$inferSelect;
 /**
  * Per-(game, player) moderation flag, set from the XP-gain "Games" view.
  *
- *   status = "sus"    → watchlist label only, no effect on XP.
- *   status = "botted" → the XP this player gained in this game, plus the pass
- *                       cosmetics and Golden Fries earned from it, are revoked.
+ *   status = "sus"      → watchlist label only, no effect on XP.
+ *   status = "botted"   → the XP this player gained in this game, plus the pass
+ *                         cosmetics and Golden Fries earned from it, are revoked.
+ *   status = "resolved" → a sus report an admin has handled. Kept (rather than
+ *                         deleted like a "clear") so the reporting moderator can see
+ *                         the outcome, with `resolveNote` saying what was decided.
+ *                         `markedBy`/`note` still name the original reporter.
  *
  * Reversible: the exact per-pass XP amount removed is stored in `xpDeltas`, so
  * clearing a "botted" flag adds it back (and the idempotent grant helpers restore
@@ -511,10 +515,14 @@ export const gameModerationTable = pgTable(
     {
         gameId: uuid("game_id").notNull(),
         userId: text("user_id").notNull(),
-        status: text("status").notNull(), // "sus" | "botted" | "removed"
+        status: text("status").notNull(), // "sus" | "botted" | "removed" | "resolved"
         note: text("note").notNull().default(""),
         markedBy: text("marked_by").notNull(), // admin slug
         markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+        // Set only for status = "resolved": who closed the report and why.
+        resolvedBy: text("resolved_by"),
+        resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+        resolveNote: text("resolve_note").notNull().default(""),
         // For "botted": the exact XP removed per pass, so a later un-bott restores it
         // precisely. Empty for "sus".
         xpDeltas: json("xp_deltas")
@@ -525,6 +533,10 @@ export const gameModerationTable = pgTable(
     (table) => [
         primaryKey({ columns: [table.gameId, table.userId] }),
         index("game_moderation_user_idx").on(table.userId),
+        // The Sus tab lists by status, newest first, and a moderator's own page filters
+        // by who raised the flag on top of that.
+        index("game_moderation_status_idx").on(table.status, table.markedAt),
+        index("game_moderation_marked_by_idx").on(table.markedBy, table.markedAt),
     ],
 );
 

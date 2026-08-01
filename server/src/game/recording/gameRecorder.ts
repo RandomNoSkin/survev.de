@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import type { BuildingDef, ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { MapObjectDefs } from "../../../../shared/defs/register.ts";
-import type { BuildingDef, ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { GameConfig } from "../../../../shared/gameConfig";
 import {
     encodeFrameHeader,
@@ -59,10 +59,9 @@ function buildMapShapes(map: Game["map"]): GameMapShape[] {
     for (const obj of map.msg.objects) {
         const def = MapObjectDefs.typeToDef(obj.type) as ObstacleDef | BuildingDef | undefined;
         if (!def) continue;
-        const zIdx =
-            def.type === "building"
-                ? 750 + (def.zIdx || 0)
-                : (def as ObstacleDef).img?.zIdx || 0;
+        const zIdx = def.type === "building"
+            ? 750 + (def.zIdx || 0)
+            : (def as ObstacleDef).img?.zIdx || 0;
 
         let shapes: { collider: any; scale?: number; color?: number }[] = [];
         const bDef = def as BuildingDef;
@@ -73,8 +72,8 @@ function buildMapShapes(map: Game["map"]): GameMapShape[] {
             if (def.type === "obstacle") {
                 col = (def as ObstacleDef).collision;
             } else if (
-                bDef.ceiling?.zoomRegions?.length > 0 &&
-                bDef.ceiling.zoomRegions[0].zoomIn
+                bDef.ceiling?.zoomRegions?.length > 0
+                && bDef.ceiling.zoomRegions[0].zoomIn
             ) {
                 col = bDef.ceiling.zoomRegions[0].zoomIn;
             } else {
@@ -261,10 +260,12 @@ export class GameRecorder {
         try {
             const rankById = new Map<number, number>();
             try {
-                for (const {
-                    player,
-                    rank,
-                } of this.game.modeManager.getPlayersSortedByRank()) {
+                for (
+                    const {
+                        player,
+                        rank,
+                    } of this.game.modeManager.getPlayersSortedByRank()
+                ) {
                     rankById.set(player.__id, rank);
                 }
             } catch {
@@ -583,8 +584,48 @@ export interface GameRecordingInfo {
     tracks?: boolean;
 }
 
-/** Lists all recorded games on this host (newest first), read from their `meta.json`. */
-export async function listRecordings(): Promise<GameRecordingInfo[]> {
+/** How many meta.json reads {@link listRecordings} keeps in flight, to not hit EMFILE. */
+const META_READ_CONCURRENCY = 32;
+
+/** Reads one day's `meta.json` files, at most {@link META_READ_CONCURRENCY} at a time. */
+async function readDayMetas(
+    dayDir: string,
+    gameIds: string[],
+): Promise<GameRecordingInfo[]> {
+    const out: GameRecordingInfo[] = [];
+    for (let i = 0; i < gameIds.length; i += META_READ_CONCURRENCY) {
+        const batch = await Promise.all(
+            gameIds.slice(i, i + META_READ_CONCURRENCY).map(async (gameId) => {
+                try {
+                    const raw = await fs.promises.readFile(
+                        path.join(dayDir, gameId, "meta.json"),
+                        "utf8",
+                    );
+                    return JSON.parse(raw) as GameRecordingInfo;
+                } catch {
+                    return null; // incomplete/aborted game dir — skip
+                }
+            }),
+        );
+        for (const meta of batch) {
+            if (meta) out.push(meta);
+        }
+    }
+    return out;
+}
+
+/**
+ * Lists recorded games on this host, newest first, read from their `meta.json`.
+ *
+ * Retention caps total bytes and age, not the number of games, so a busy host holds many
+ * thousands of tiny recordings. Reading every one of them serially is what made the
+ * dashboard's Replays tab take forever, so: walk the day dirs newest-first (they're named
+ * YYYY-MM-DD, so a reverse sort is chronological), read each day's metas concurrently,
+ * and stop as soon as `limit` games are in hand instead of scanning the whole archive.
+ *
+ * @param limit Maximum recordings to return. Omit for the full archive.
+ */
+export async function listRecordings(limit = Infinity): Promise<GameRecordingInfo[]> {
     const root = recordingsRoot();
     const out: GameRecordingInfo[] = [];
     let days: string[];
@@ -593,7 +634,10 @@ export async function listRecordings(): Promise<GameRecordingInfo[]> {
     } catch {
         return out; // dir doesn't exist yet
     }
+    days.sort().reverse();
+
     for (const day of days) {
+        if (out.length >= limit) break;
         const dayDir = path.join(root, day);
         let games: string[];
         try {
@@ -601,20 +645,12 @@ export async function listRecordings(): Promise<GameRecordingInfo[]> {
         } catch {
             continue;
         }
-        for (const gameId of games) {
-            try {
-                const raw = await fs.promises.readFile(
-                    path.join(dayDir, gameId, "meta.json"),
-                    "utf8",
-                );
-                out.push(JSON.parse(raw) as GameRecordingInfo);
-            } catch {
-                /* incomplete/aborted game dir — skip */
-            }
-        }
+        out.push(...(await readDayMetas(dayDir, games)));
     }
+
     out.sort((a, b) => b.startTs - a.startTs);
-    return out;
+    // A whole day is read at once, so the last one can overshoot the limit.
+    return Number.isFinite(limit) ? out.slice(0, limit) : out;
 }
 
 /** Reads a single per-player `.svrep.gz` file. Returns the gzip bytes, or null if not found. */

@@ -7,11 +7,7 @@ import { PrivateLobbyMenu } from "../privateLobby.ts";
 import { TeamMenu } from "../teamMenu.ts";
 import { GIT_VERSION } from "../utils/gitRevision.ts";
 import { defaultLogger, ServerLogger } from "../utils/logger.ts";
-import type {
-    FindGamePrivateBody,
-    FindGamePrivateRes,
-    FindPrivateLobbyGameBody,
-} from "../utils/types.ts";
+import type { FindGamePrivateBody, FindGamePrivateRes, FindPrivateLobbyGameBody } from "../utils/types.ts";
 
 /** Max time to wait for a region game server before treating it as offline.
  *  Raised from 5s: creating a fresh game (fork child process + generate map) can
@@ -68,10 +64,9 @@ class Region {
             );
         } catch (err) {
             const elapsed = Date.now() - startTime;
-            const reason =
-                err instanceof Error && err.name === "TimeoutError"
-                    ? `timed out after ${REGION_FETCH_TIMEOUT_MS}ms`
-                    : err;
+            const reason = err instanceof Error && err.name === "TimeoutError"
+                ? `timed out after ${REGION_FETCH_TIMEOUT_MS}ms`
+                : err;
             defaultLogger.error(
                 `Error fetching region ${this.id} (${endPoint}) after ${elapsed}ms:`,
                 reason,
@@ -124,9 +119,14 @@ class Region {
         return data?.entries ?? [];
     }
 
-    /** Lists replay recordings stored on this region's game server (from each game's meta.json). */
-    async listReplays(): Promise<any[]> {
-        const data = await this.fetch<{ recordings: any[] }>("api/dashboard/replays", {});
+    /**
+     * Lists replay recordings stored on this region's game server (from each game's
+     * meta.json). `limit` keeps the game host from reading its whole archive off disk.
+     */
+    async listReplays(limit?: number): Promise<any[]> {
+        const data = await this.fetch<{ recordings: any[] }>("api/dashboard/replays", {
+            limit,
+        });
         return data?.recordings ?? [];
     }
 
@@ -263,10 +263,9 @@ export class ApiServer {
     }
 
     getSiteInfo(region?: string): SiteInfoRes {
-        const selectedRegion =
-            region && this.modesByRegion[region]?.length
-                ? region
-                : Object.keys(this.modesByRegion)[0];
+        const selectedRegion = region && this.modesByRegion[region]?.length
+            ? region
+            : Object.keys(this.modesByRegion)[0];
         const data: SiteInfoRes = {
             modes: this.modesByRegion[selectedRegion] ?? [],
             modesByRegion: this.modesByRegion,
@@ -355,7 +354,7 @@ export class ApiServer {
                         region
                             .getDashboardGamePlayers(g.id)
                             .then((players) => ({ gameId: g.id, players }))
-                            .catch(() => ({ gameId: g.id, players: [] as any[] })),
+                            .catch(() => ({ gameId: g.id, players: [] as any[] }))
                     ),
                 );
                 for (const { gameId, players } of lists) {
@@ -406,8 +405,8 @@ export class ApiServer {
     }
 
     /** Lists replay recordings stored on a region's game server. */
-    async listReplays(region: string): Promise<any[]> {
-        return (await this.regions[region]?.listReplays()) ?? [];
+    async listReplays(region: string, limit?: number): Promise<any[]> {
+        return (await this.regions[region]?.listReplays(limit)) ?? [];
     }
 
     /** Fetches a per-player replay file (raw gzip bytes) from a region's game server. */

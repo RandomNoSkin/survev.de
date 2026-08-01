@@ -102,7 +102,12 @@ export class PlayerBarn {
     newPlayers: Player[] = [];
     deletedPlayers: number[] = [];
     killedPlayers: Player[] = [];
-    groupIdAllocator = new IDAllocator(8);
+    /**
+     * 255 is the wire limit: groupId and teamId both go out as writeUint8. Solo modes hand
+     * out one ID per player (there are no groups), so this has to cover maxPlayers, and
+     * removePlayer gives IDs back so long-lived arena games don't exhaust it either.
+     */
+    groupIdAllocator = new IDAllocator(255);
     aliveCountDirty = false;
 
     socketIdToPlayer = new Map<string, Player>();
@@ -524,9 +529,14 @@ export class PlayerBarn {
             player.group.removePlayer(player);
 
             if (player.group.players.length <= 0) {
+                this.groupIdAllocator.give(player.group.id);
                 util.removeFrom(this.groups, player.group);
                 this.groupsByHash.delete(player.group.hash);
             }
+        } else if (player.groupId) {
+            // No group means activatePlayer allocated this ID for the player alone (solo
+            // modes and spectators), so it's free the moment they leave.
+            this.groupIdAllocator.give(player.groupId);
         }
         if (this.game.isTeamMode) {
             this.livingPlayers.sort((a, b) => a.teamId - b.teamId);
@@ -1095,6 +1105,12 @@ export class Player extends BaseGameObject {
     frozenTicker = 0;
     frozen = false;
     frozenOri = 0;
+    /**
+     * Explosion type the client looks up for the frozen sprites, "" when the freeze has no
+     * visual. Must always be a string: it goes through writeGameType while frozen, and
+     * typeToId throws on undefined.
+     */
+    frozenType = "";
     frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
 
     private _hasteTicker = 0;
@@ -2513,6 +2529,7 @@ export class Player extends BaseGameObject {
             if (this.frozenTicker <= 0) {
                 this.frozenTicker = 0;
                 this.frozen = false;
+                this.frozenType = "";
                 this.frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
                 this.setDirty();
             }
@@ -5877,10 +5894,12 @@ export class Player extends BaseGameObject {
         frozenOri: number,
         duration: number,
         freezeAmount: number = GameConfig.player.frozenSpeedPenalty,
+        frozenType = "",
     ): void {
         this.frozenTicker = duration;
         this.frozen = true;
         this.frozenOri = frozenOri;
+        this.frozenType = frozenType;
         this.frozenSpeedPenalty = freezeAmount;
         this.setDirty();
     }
