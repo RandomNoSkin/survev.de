@@ -827,6 +827,9 @@ export class Bullet {
                             ori,
                             bulletDef.freezeDuration,
                             bulletDef.freezeAmount,
+                            // onHitFx is always an explosion type when set; bullets
+                            // without one (mac10 [+]) freeze without a sprite.
+                            this.onHitFx ?? "",
                         );
                     }
 
