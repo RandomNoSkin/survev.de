@@ -46,7 +46,7 @@ export class Decal extends BaseGameObject {
     rot: number;
     collider?: Circle;
     surface?: string;
-
+    ownerId?: number;
     lifeTime = Infinity;
 
     constructor(

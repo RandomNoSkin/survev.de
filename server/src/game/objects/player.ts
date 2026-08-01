@@ -602,7 +602,7 @@ export class Player extends BaseGameObject {
     spectatorCountDirty = false;
     hasFiredFlare = false;
     flareTimer = 0;
-
+    footstepTicker = 0;
     sendDeathEmoteTicker = 0;
     sentDeathEmote = false;
 
@@ -2298,7 +2298,21 @@ export class Player extends BaseGameObject {
         // Weapon stuff
         //
         this.weaponManager.update(dt);
-
+        if (!this.dead) {
+            if (this.moveVel.x !== 0 || this.moveVel.y !== 0) {
+                this.footstepTicker += dt;
+                if (this.footstepTicker >= 0.5) {
+                    this.footstepTicker = 0;
+                    const decal = this.game.decalBarn.addDecal(
+                        "decal_footprint_antler",
+                        this.pos,
+                        0,
+                        math.radToOri(Math.atan2(this.moveVel.y, this.moveVel.x))
+                    );
+                    decal.ownerId = this.__id;
+                }
+            }
+        }
         this.shotSlowdownTimer -= dt;
         if (this.shotSlowdownTimer <= 0) {
             this.shotSlowdownTimer = 0;

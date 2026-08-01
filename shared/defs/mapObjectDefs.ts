@@ -36884,4 +36884,18 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
             zIdx: 4,
         },
     },
+        decal_footprint_antler: {
+        type: "decal",
+        collision: collider.createCircle(v2.create(0, 0), 0.1),
+        height: 0,
+        fadeChance: 0,
+        lifetime: 30, // 30 seconds exactly as requested
+        img: {
+            sprite: "loot-melee-buck-antler.img",
+            scale: 0.2, // Need to make sure it's the right size
+            alpha: 1,
+            tint: 0xffffff,
+            zIdx: 5,
+        },
+    },
 };

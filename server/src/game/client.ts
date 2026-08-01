@@ -2,6 +2,7 @@ import type { EmoteDef } from "../../../shared/defs/gameObjects/emoteDefs.ts";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { GameConfig } from "../../../shared/gameConfig.ts";
 import * as net from "../../../shared/net/net.ts";
+import { ObjectType } from "../../../shared/net/objectSerializeFns.ts";
 import { SpectateAction } from "../../../shared/net/spectateMsg.ts";
 import type { Emote, GroupStatus } from "../../../shared/net/updateMsg.ts";
 import type { GameWsDisconnectReason } from "../../../shared/types/api.ts";
@@ -11,9 +12,9 @@ import { math } from "../../../shared/utils/math.ts";
 import { util } from "../../../shared/utils/util.ts";
 import { v2 } from "../../../shared/utils/v2.ts";
 import { Config } from "../config.ts";
-
 import type { Game } from "./game.ts";
 import type { GameObject } from "./objects/gameObject.ts";
+import type { Decal } from "./objects/decal.ts";
 import type { MapIndicator } from "./objects/mapIndicator.ts";
 import type { Player } from "./objects/player.ts";
 import type { ClientSocket } from "./socket.ts";
@@ -463,7 +464,16 @@ export class Client {
         // client crashes if active player is not visible
         // so make sure its always added to visible objects
         newVisibleObjects.add(player);
-
+        for (const obj of newVisibleObjects) {
+            if (obj.__type === ObjectType.Decal) {
+                const decal = obj as Decal;
+                if (decal.type === "decal_footprint_antler") {
+                    if (!player.hasPerk("buck_stalker") || decal.ownerId === player.__id) {
+                        newVisibleObjects.delete(obj);
+                    }
+                }
+            }
+        }
         for (const obj of this.visibleObjects) {
             if (!newVisibleObjects.has(obj)) {
                 updateMsg.delObjIds.push(obj.__id);
