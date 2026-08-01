@@ -40,6 +40,7 @@ export const _allowedMeleeSkins = [
     "bowie_frontier",
     "bowie_redtiger",
     "bowie_ice",
+    "combat_banana",
 ];
 export const _allowedOutfits = [
     "outfitBase",
