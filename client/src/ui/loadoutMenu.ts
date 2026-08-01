@@ -79,13 +79,18 @@ function sortAcquired(a: Item, b: Item) {
     return b.timeAcquired - a.timeAcquired;
 }
 
+// Both sides use the safe lookup and tolerate a missing def: half of this was already
+// converted, and leaving the other half on the throwing typeToDef meant one unknown item
+// type would take down the whole category render (see the emote-slot note in selectCat).
 function sortAlphabetical(a: Item, b: Item) {
-    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef;
-    const defB = GameObjectDefs.typeToDef(b.type) as EmoteDef;
-    if (defA.name! < defB.name!) {
+    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef | undefined;
+    const defB = GameObjectDefs.typeToDefSafe(b.type) as EmoteDef | undefined;
+    const nameA = defA?.name ?? "";
+    const nameB = defB?.name ?? "";
+    if (nameA < nameB) {
         return -1;
     }
-    if (defA.name! > defB.name!) {
+    if (nameA > nameB) {
         return 1;
     }
     return 0;
@@ -101,9 +106,9 @@ function sortRarity(a: Item, b: Item) {
 }
 
 function sortSubcat(a: Item, b: Item) {
-    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef;
-    const defB = GameObjectDefs.typeToDef(b.type) as EmoteDef;
-    if (!defA.category || !defB.category || defA.category == defB.category) {
+    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef | undefined;
+    const defB = GameObjectDefs.typeToDefSafe(b.type) as EmoteDef | undefined;
+    if (!defA?.category || !defB?.category || defA.category == defB.category) {
         return sortAlphabetical(a, b);
     }
     return defA.category - defB.category;
@@ -1592,12 +1597,20 @@ export class LoadoutMenu {
             for (let T = 0; T < this.loadout.emotes.length; T++) {
                 this.equippedItems.push({} as EquippedItem);
                 const emote = this.loadout.emotes[T];
-                if (GameObjectDefs.typeToDef(emote)) {
-                    const svg = helpers.getSvgFromGameType(emote);
-                    const imgCss = `url(${svg})`;
-                    const domElem = emoteSlotToDomElem(T);
-                    this.updateSlotData(domElem, imgCss, emote);
-                }
+                // An empty slot is normal: the Win and Death slots are "" in
+                // GameConfig.defaultEmoteLoadout, and validateWithAvailableItems blanks
+                // any slot holding something the player no longer owns. This fork's
+                // typeToDef THROWS on an empty type, which aborted the whole Emotes
+                // render right before setItemListeners/setCategoryAlerts — so the list
+                // never re-bound its click handlers (emotes unselectable) and the "new"
+                // tags were never acknowledged.
+                //
+                // updateSlotData does its own safe lookup and clears the slot for an
+                // empty type, so hand every slot to it — that also drops the stale image
+                // a slot used to keep after its emote was unequipped.
+                const domElem = emoteSlotToDomElem(T);
+                const imgCss = emote ? `url(${helpers.getSvgFromGameType(emote)})` : "";
+                this.updateSlotData(domElem, imgCss, emote);
             }
         }
 
