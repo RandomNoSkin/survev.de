@@ -259,6 +259,50 @@ export const Animations: Record<
             effect(def("fists").attack.damageTimes[0], "animMeleeCollision", {}),
         ],
     },
+    slashAntler1: {
+        keyframes: [
+            frame(0, {
+                [Bones.HandL]: new Pose(v2.create(18, -8.25)),
+                [Bones.HandR]: new Pose(v2.create(6, 20.25)),
+            }),
+            frame(0.1, {
+                [Bones.HandL]: new Pose(v2.create(6, -22.25)),
+                [Bones.HandR]: new Pose(v2.create(6, 20.25)).rotate(-Math.PI * 0.6),
+            }),
+            frame(0.5, {
+                [Bones.HandL]: new Pose(v2.create(18, -8.25)),
+                [Bones.HandR]: new Pose(v2.create(6, 20.25)).rotate(0),
+            }),
+        ],
+        effects: [
+            effect(0, "animPlaySound", { sound: "swing" }),
+            effect(0.1, "animMeleeCollision", {}),
+        ],
+    },
+    slashAntler2: {
+        keyframes: [
+            frame(0, {
+                [Bones.HandL]: new Pose(v2.create(18, -8.25)),
+                [Bones.HandR]: new Pose(v2.create(6, 20.25)),
+            }),
+            frame(0.15, {
+                [Bones.HandL]: new Pose(v2.create(6, -22.25)).rotate(-Math.PI * 0.05),
+                [Bones.HandR]: new Pose(v2.create(6, 20.25)).rotate(-Math.PI * 0.5),
+            }),
+            frame(0.55, {
+                [Bones.HandL]: new Pose(v2.create(10, -16.25)).rotate(-Math.PI * 0.02),
+                [Bones.HandR]: new Pose(v2.create(10, 14.25)).rotate(-Math.PI * 0.1),
+            }),
+            frame(def("antlers").attack.cooldownTime, {
+                [Bones.HandL]: new Pose(v2.create(14, -12.25)),
+                [Bones.HandR]: new Pose(v2.create(14, 12.25)).rotate(0),
+            }),
+        ],
+        effects: [
+            effect(0, "animPlaySound", { sound: "swing" }),
+            effect(0.15, "animMeleeCollision", {}),
+        ],
+    },
     hook: {
         keyframes: [
             frame(0, { [Bones.HandR]: new Pose(v2.create(14, 12.25)) }),

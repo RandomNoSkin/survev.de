@@ -25,6 +25,7 @@ export interface MeleeDef {
     anim: {
         idlePose: string;
         attackAnims: string[];
+        attackSequence?: string[];
     };
     sound: Record<string, string>;
     //  {
@@ -73,7 +74,11 @@ export interface Img {
     scale: Vec2;
     tint: number;
     leftHandOntop?: boolean;
+    leftHandUnder?: boolean;
+    handUnder?: boolean;
     renderOnHand?: boolean;
+    leftSprite?: string;
+    rightSprite?: string;
 }
 
 function defineMeleeSkin(baseType: string, params: DeepPartial<MeleeDef>): MeleeDef {
@@ -179,24 +184,27 @@ const BaseDefs: Record<string, MeleeDef> = {
         quality: 1,
         autoAttack: false,
         switchDelay: 0.5,
-        damage: 45,
+        damage: 30,
         obstacleDamage: 2.5,
         attack: {
             offset: {
                 x: 1.35,
                 y: 0,
             },
-            rad: 2,
-            damageTimes: [0.1],
-            cooldownTime: 0.75,
+            rad: 1,
+            damageTimes: [0.1, 0.5],
+            cooldownTime: .9,
         },
         speed: {
             equip: 1,
             attack: 0,
         },
+        armorPiercing: true,
+        cleave: true,
         anim: {
             idlePose: "fists",
-            attackAnims: ["fists", "fists"],
+            attackAnims: ["slashAntler1"],
+            attackSequence: ["slashAntler1", "slashAntler2"],
         },
         sound: {
             pickup: "heavy_pickup_01",
@@ -214,9 +222,10 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-buck-antler.img",
+            leftSprite: "loot-melee-buck-antler-01.img",
             pos: {
                 x: 0,
-                y: -27,
+                y: -32,
             },
             rot: 0.5 * Math.PI,
             scale: {
@@ -224,6 +233,10 @@ const BaseDefs: Record<string, MeleeDef> = {
                 y: .5,
             },
             tint: 0xffffff,
+            renderOnHand: false,
+            handUnder: true,
+            leftHandOntop: true,
+            leftHandUnder: true,
         },
     },
     karambit: {
