@@ -718,6 +718,8 @@
   "game-small_arms-desc": "Move faster with weapons deployed.</br>Decreased size.",
   "game-takedown": "Takedown",
   "game-takedown-desc": "Kills grant health, boost and a short burst of speed.",
+  "game-buck_stalker": "Buck Stalker",
+  "game-buck_stalker-desc": "See footstep trails left behind by enemies from up to 30 seconds ago.",
   "game-field_medic": "Combat Medic",
   "game-field_medic-desc": "Move quickly while healing.",
   "game-combat_stims": "Combat Stimulants",

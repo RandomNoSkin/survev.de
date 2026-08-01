@@ -2301,13 +2301,15 @@ export class Player extends BaseGameObject {
         if (!this.dead) {
             if (this.moveVel.x !== 0 || this.moveVel.y !== 0) {
                 this.footstepTicker += dt;
-                if (this.footstepTicker >= 0.5) {
+                if (this.footstepTicker >= 0.25) {
                     this.footstepTicker = 0;
+                    const rot = Math.atan2(this.dir.y, this.dir.x);
+                    const ori = math.radToOri(rot);
                     const decal = this.game.decalBarn.addDecal(
                         "decal_footprint_antler",
                         this.pos,
                         0,
-                        math.radToOri(Math.atan2(this.moveVel.y, this.moveVel.x))
+                        ori
                     );
                     decal.ownerId = this.__id;
                 }

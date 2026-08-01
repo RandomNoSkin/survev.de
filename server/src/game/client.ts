@@ -468,7 +468,17 @@ export class Client {
             if (obj.__type === ObjectType.Decal) {
                 const decal = obj as Decal;
                 if (decal.type === "decal_footprint_antler") {
-                    if (!player.hasPerk("buck_stalker") || decal.ownerId === player.__id) {
+                    // Only show footprints to players with the perk, not their own, and not teammates'
+                    const hasPerk = player.hasPerk("buck_stalker");
+                    const isOwn = decal.ownerId === player.__id;
+                    let isTeammate = false;
+                    if (decal.ownerId !== undefined) {
+                        const owner = game.playerBarn.players.find(p => p.__id === decal.ownerId);
+                        if (owner) {
+                            isTeammate = owner.teamId === player.teamId;
+                        }
+                    }
+                    if (!hasPerk || isOwn || isTeammate) {
                         newVisibleObjects.delete(obj);
                     }
                 }

@@ -141,17 +141,15 @@ export const math = {
     },
 
     oriToRad(ori: number) {
-        return (ori % 4) * 0.5 * Math.PI;
+        // Original 4 orientation support (0-3). Each step is 90° (π/2 rad).
+        return (ori % 4) * (Math.PI * 0.5);
     },
 
-    oriToAngle(ori: number) {
-        return ori * (180 / Math.PI);
-    },
-
+    // Convert radians to one of 4 orientation indices (0-3)
     radToOri(rad: number) {
-        return Math.floor(
-            math.fmod(rad + Math.PI * 0.25, Math.PI * 2.0) / (Math.PI * 0.5),
-        );
+        // Each orientation covers 90 degrees (π/2 radians).
+        const ori = Math.floor((math.fmod(rad + Math.PI, Math.PI * 2.0)) / (Math.PI * 0.5));
+        return ori % 4;
     },
 
     quantize(f: number, min: number, max: number, bits: number) {

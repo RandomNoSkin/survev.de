@@ -36888,12 +36888,12 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         type: "decal",
         collision: collider.createCircle(v2.create(0, 0), 0.1),
         height: 0,
-        fadeChance: 0,
-        lifetime: 30, // 30 seconds exactly as requested
+        fadeChance: 1,
+        lifetime: 20, // 20 seconds as requested
         img: {
-            sprite: "loot-melee-buck-antler.img",
-            scale: 0.2, // Need to make sure it's the right size
-            alpha: 1,
+            sprite: "map-buck-track.img",
+            scale: 0.02, // Need to make sure it's the right size
+            alpha: .5,
             tint: 0xffffff,
             zIdx: 5,
         },
