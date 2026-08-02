@@ -1014,6 +1014,12 @@ export class GameMap {
             }
         }
 
+        // spawn the buckhouse on the outer shore of the lake in woods mode
+        // so it always generates right next to the ring lake surrounding the island
+        if (this.woodsMode && this.lakes.length) {
+            this.genBuckhouseNearLake();
+        }
+
         this.timerStart();
         for (const spawn of objsToSpawn.stage1) {
             genSpawn(spawn, true);
@@ -1522,6 +1528,69 @@ export class GameMap {
             this.genAuto(type, pos, 0, ori);
             return true;
         });
+    }
+
+    /**
+     * Spawns the buckhouse on the outer shore of the lake in woods mode.
+     * The lake is a ring of water surrounding a small island at the center of the map.
+     * This places the buckhouse right next to the lake, on the land side.
+     */
+    genBuckhouseNearLake() {
+        const type = "buckhouse_01";
+
+        // woods mode only has one lake
+        const lake = this.lakes[0];
+
+        // calculate the building's half-size from its bounding collider
+        // building bounds are scaled by 1.15 in canSpawn, so account for that
+        const bounds = collider.toAabb(mapHelpers.getBoundingCollider(type));
+        const halfSize = Math.max(
+            (bounds.max.x - bounds.min.x) / 2,
+            (bounds.max.y - bounds.min.y) / 2,
+        ) * 1.15;
+
+        this.trySpawn(
+            type,
+            () => {
+                // pick a random point on the lake ring
+                const t = util.random(0, 1);
+                const splinePos = lake.spline.getPos(t);
+
+                // use the spline normal to determine the outward direction
+                // (the normal is perpendicular to the spline tangent)
+                const norm = lake.spline.getNormal(t);
+                const toCenter = v2.sub(lake.center, splinePos);
+                // if the normal points toward the center, flip it to point outward
+                const outward = v2.dot(norm, toCenter) < 0 ? norm : v2.neg(norm);
+
+                const waterWidth = lake.getWaterWidth(t);
+
+                // the spline runs through the middle of the water ring
+                // water extends waterWidth outward from the spline
+                // we need to offset by at least waterWidth + halfSize so the
+                // building's inner edge clears the water, then try further out
+                // to handle the curved water edge
+                const minOffset = waterWidth + halfSize;
+                const maxOffset = minOffset + halfSize * 2 + lake.shoreWidth + 40;
+                const step = 3;
+
+                for (let offset = minOffset; offset <= maxOffset; offset += step) {
+                    const pos = v2.add(splinePos, v2.mul(outward, offset));
+
+                    // try all 4 orientations since the building's AABB
+                    // changes with orientation and some may fit better
+                    // against the curved water edge
+                    for (let ori = 0; ori < 4; ori++) {
+                        if (this.canSpawn(type, pos, ori, 1)) {
+                            this.genAuto(type, pos, 0, ori);
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            },
+            5000,
+        );
     }
 
     genOnGrass(type: string) {
