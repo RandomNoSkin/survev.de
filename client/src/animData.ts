@@ -188,8 +188,26 @@ export const Animations: Record<
     fistsSlow: {
         keyframes: [
             frame(0, { [Bones.HandR]: new Pose(v2.create(6, 16)) }),
+            frame(def("antlers").attack.damageTimes[0] * 0.15, {
+                [Bones.HandR]: new Pose(v2.create(3, 18.5)),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.3, {
+                [Bones.HandR]: new Pose(v2.create(0, 19.5)),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.45, {
+                [Bones.HandR]: new Pose(v2.create(-2.5, 19.5)),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.55, {
+                [Bones.HandR]: new Pose(v2.create(12, 12)),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.65, {
+                [Bones.HandR]: new Pose(v2.create(20, 6)),
+            }),
             frame(def("antlers").attack.damageTimes[0], {
                 [Bones.HandR]: new Pose(v2.create(29.75, 1.75)),
+            }),
+            frame(def("antlers").attack.cooldownTime * 0.7, {
+                [Bones.HandR]: new Pose(v2.create(18, 8)),
             }),
             frame(def("antlers").attack.cooldownTime, {
                 [Bones.HandR]: new Pose(v2.create(6, 16)),
@@ -257,11 +275,26 @@ export const Animations: Record<
     cutReverseSlow: {
         keyframes: [
             frame(0, { [Bones.HandR]: new Pose(v2.create(1, 17.75)) }),
-            frame(def("antlers").attack.damageTimes[0] * 0.4, {
-                [Bones.HandR]: new Pose(v2.create(25, 6.25)).rotate(Math.PI * 0.3),
+            frame(def("antlers").attack.damageTimes[0] * 0.15, {
+                [Bones.HandR]: new Pose(v2.create(-1, 18.5)).rotate(Math.PI * 0.03),
             }),
-            frame(def("antlers").attack.damageTimes[0] * 1.4, {
+            frame(def("antlers").attack.damageTimes[0] * 0.3, {
+                [Bones.HandR]: new Pose(v2.create(-2, 19)).rotate(Math.PI * 0.05),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.45, {
+                [Bones.HandR]: new Pose(v2.create(-2.5, 19.5)).rotate(Math.PI * 0.08),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.55, {
+                [Bones.HandR]: new Pose(v2.create(12, 12)).rotate(-Math.PI * 0.2),
+            }),
+            frame(def("antlers").attack.damageTimes[0] * 0.65, {
+                [Bones.HandR]: new Pose(v2.create(18, 9)).rotate(-Math.PI * 0.35),
+            }),
+            frame(def("antlers").attack.damageTimes[0], {
                 [Bones.HandR]: new Pose(v2.create(25, 6.25)).rotate(-Math.PI * 0.5),
+            }),
+            frame(def("antlers").attack.cooldownTime * 0.7, {
+                [Bones.HandR]: new Pose(v2.create(15, 12)).rotate(-Math.PI * 0.2),
             }),
             frame(def("antlers").attack.cooldownTime, {
                 [Bones.HandR]: new Pose(v2.create(1, 17.75)),
