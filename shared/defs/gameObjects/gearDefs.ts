@@ -929,7 +929,7 @@ const SkinDefs = {
         },
     }),
         helmet03_hat: defineSkin("helmet03", {
-        name: "Stalker Hat",
+        name: "Cowboy Hat",
         perk: "buck_stalker",
         skinImg: {
             baseTint: 0xffffff,

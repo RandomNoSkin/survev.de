@@ -179,9 +179,10 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
     },
     antlers: {
-        name: "Buck Antlers",
+        name: "Buck Antler",
         type: "melee",
         quality: 1,
+        armorPiercing: true,
         cleave: true,
         autoAttack: false,
         switchDelay: 0.25,
