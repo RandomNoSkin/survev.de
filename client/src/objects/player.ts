@@ -1753,6 +1753,7 @@ export class Player implements AbstractObject {
         } else {
             this.meleeSprite.visible = false;
             this.objectLSprite.visible = false;
+            this.objectRSprite.visible = false;
         }
         if (R.type == "throwable") {
             const K = function(

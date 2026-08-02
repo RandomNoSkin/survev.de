@@ -14926,6 +14926,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     hat_mount_buck: createGunMount({
         loot: [
             autoLoot("antlers", 1),
+            autoLoot("helmet03_hat", 1),
         ],
         img: { sprite: "map-hat-mount-buck.img" },
     }),
