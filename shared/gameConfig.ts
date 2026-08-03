@@ -138,6 +138,12 @@ export enum Input {
     Count,
 }
 
+// Values are persisted as raw integers in match_data/ip_logs (see server/src/api/db/schema.ts)
+// and in old replays/stats. NEVER renumber or reorder existing entries - only append new
+// ones at the end, right before Custom stays last. Renumbering silently reclassifies every
+// historical row stored under the old numeric value (this happened once already: the
+// upstream merge in 6780659a re-typed this enum in a different order and swapped years of
+// Comp/2v2 stats with each other).
 export enum MapId {
     Main = 0,
     Desert = 1,
