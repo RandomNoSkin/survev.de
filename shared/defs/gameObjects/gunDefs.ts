@@ -3607,7 +3607,7 @@ export const BaseDefs: Record<string, GunDef> = {
         fireMode: "single",
         caseTiming: "reload",
         ammo: "50AE",
-        ammoSpawnCount: 35,
+        ammoSpawnCount: 45,
         pistol: true,
         maxClip: 5,
         maxReload: 5,
