@@ -28744,7 +28744,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({case_07: 8, case_07de: 2 }),
+                    type: randomObstacleType({case_07: 3, case_07de: 1 }),
                     pos: v2.create(0, 5.25),
                     scale: 1,
                     ori: 0,
@@ -29545,7 +29545,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({case_07: 8, case_07de: 2 }),
+                    type: randomObstacleType({case_07: 3, case_07de: 1 }),
                     pos: v2.create(-7.25, 5),
                     scale: 1,
                     ori: 0,

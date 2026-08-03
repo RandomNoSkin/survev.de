@@ -2461,7 +2461,7 @@ export const BaseDefs: Record<string, GunDef> = {
         switchDelay: 0.75,
         barrelLength: 3.2,
         barrelOffset: 0,
-        recoilTime: 1e10,
+        recoilTime: 0.5,
         moveSpread: 2,
         shotSpread: 3,
         bulletCount: 1,

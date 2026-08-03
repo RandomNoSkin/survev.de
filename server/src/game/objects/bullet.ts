@@ -706,8 +706,11 @@ export class Bullet {
             const distT = math.clamp(this.distanceTraveled / this.distance, 0, 1);
             const falloff = math.remap(distT, 0, 1, 1, def.falloff);
             finalDamage *= falloff;
+            finalDamage *= falloff; // Apply falloff twice for exponential damage dropoff to stop excessive damage from short range guns lie vector
 
-            finalDamage *= math.remap(distT, 0, 1, 1, def.falloff);
+            if (def.falloffUpperMax !== undefined && finalDamage > def.falloffUpperMax) {
+                finalDamage = def.falloffUpperMax;
+            }
 
             // 2. New rule: Stacking -10% every 5 units after 55
             const falloffStartDist = 55;    // Start penalty after 55 units
