@@ -45,6 +45,7 @@ export interface MeleeDef {
         borderTint?: number;
         rot?: number;
         mirror?: boolean;
+        innerScale?: number;
     };
     baseType?: string;
     rarity?: number;
@@ -212,12 +213,13 @@ const BaseDefs: Record<string, MeleeDef> = {
             playerHit: "axe_hit_01",
         },
         lootImg: {
-            sprite: "loot-melee-buck-antler.img",
+            sprite: "loot-melee-buck-antler-02.img",
             tint: 0xffffff,
             border: "loot-circle-outer-02.img",
             borderTint: 0xffffff,
             scale: 0.3,
-            rot: 0.785,
+            innerScale: 1.5,
+            rot: 0,
         },
         worldImg: {
             sprite: "loot-melee-buck-antler.img",
