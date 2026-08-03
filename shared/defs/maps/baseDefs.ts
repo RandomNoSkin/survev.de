@@ -595,7 +595,6 @@ export const Main: MapDef = {
             { name: "flare_gun", count: 1, weight: 0.5 },
             { name: "scout_elite", count: 1, weight: 2.5 },
             { name: "vss", count: 1, weight: 2.5 }, // !
-            { name: "henry", count: 1, weight: 1 },
         ],
         tier_airdrop_rare: [
             { name: "garand", count: 1, weight: 6 },
@@ -640,11 +639,9 @@ export const Main: MapDef = {
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 19 },
             { name: "pan", count: 1, weight: 1 },
-            { name: "antlers", count: 1, weight: 1 },
         ],
         tier_airdrop_armor: [
             { name: "helmet03", count: 1, weight: 1 },
-            { name: "helmet03_hat", count: 1, weight: 1 },
             { name: "chest03", count: 1, weight: 1 },
             { name: "backpack03", count: 1, weight: 1 },
         ],
