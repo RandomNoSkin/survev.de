@@ -1,7 +1,18 @@
 import { pathToFileURL } from "node:url";
 import { and, gte, lt, sql } from "drizzle-orm";
-import { db } from "./index";
+import { drizzle } from "drizzle-orm/node-postgres";
+import pg from "pg";
+import { Config } from "../../config";
+import * as schema from "./schema";
 import { ipLogsTable, matchDataTable } from "./schema";
+
+// Standalone connection (not the shared `db` from ./index.ts): that module also pulls in
+// apiServer.ts, whose ApiServer constructor fires off a background refreshRegionModes()
+// call that pings every configured region - harmless (caught + logged) but noisy and
+// confusing to watch run for a one-off data script, since it prints unrelated fetch-failure
+// stack traces (e.g. for a "local" region with nothing listening) while this runs.
+const pool = new pg.Pool({ ...Config.database });
+const db = drizzle({ client: pool, schema });
 
 /**
  * One-time fix for match_data/ip_logs rows written before the upstream merge in 6780659a
@@ -89,10 +100,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
             console.log(
                 `map_id backfill ${verb}: ${r.matchData} match_data rows, ${r.ipLogs} ip_logs rows (cutoff ${cutoff.toISOString()})`,
             );
-            process.exit(0);
         })
         .catch((err) => {
             console.error("map_id backfill failed:", err);
-            process.exit(1);
-        });
+            process.exitCode = 1;
+        })
+        .finally(() => pool.end());
 }
