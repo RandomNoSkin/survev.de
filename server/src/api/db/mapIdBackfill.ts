@@ -66,8 +66,11 @@ export async function backfillMapIds(
 // touched; pass --apply once the cutoff has been double-checked against the actual
 // production deploy time of 6780659a.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    const cutoffArg = process.argv[2];
-    const apply = process.argv.includes("--apply");
+    // pnpm's `run <script> -- <args>` re-inserts its own `--` ahead of the forwarded args,
+    // so argv can contain a stray "--" before the real cutoff arg - strip it.
+    const args = process.argv.slice(2).filter((a) => a !== "--");
+    const cutoffArg = args[0];
+    const apply = args.includes("--apply");
     if (!cutoffArg) {
         console.error(
             "Usage: tsx src/api/db/mapIdBackfill.ts <cutoff-iso-timestamp> [--apply]",
