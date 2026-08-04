@@ -9,6 +9,7 @@ import { MainView } from "./mainView";
 import { PlayerView } from "./playerView";
 import { ServerStatsView } from "./serverStatsView";
 import language from "./templates/langauge.ejs";
+import { WeaponStatsView } from "./weaponStatsView";
 
 import "bootstrap/dist/css/bootstrap.css";
 import "../../../css/stats/app.css";
@@ -22,7 +23,7 @@ const templates = {
 
 type AcceptedLocales = "en" | "es";
 
-type Routes = "player" | "main" | "server" | "game";
+type Routes = "player" | "main" | "server" | "game" | "weapons";
 
 //
 // Ads
@@ -46,9 +47,10 @@ export class App {
     playerView: PlayerView;
     serverStatsView: ServerStatsView;
     gameView: GameView;
+    weaponStatsView: WeaponStatsView;
     config: ConfigManager;
     localization: Localization;
-    view!: MainView | PlayerView | ServerStatsView | GameView;
+    view!: MainView | PlayerView | ServerStatsView | GameView | WeaponStatsView;
     adManager: Ads;
 
     constructor() {
@@ -61,6 +63,7 @@ export class App {
         this.playerView = new PlayerView(this);
         this.serverStatsView = new ServerStatsView(this);
         this.gameView = new GameView(this);
+        this.weaponStatsView = new WeaponStatsView(this);
 
         $("#search-players").on("submit", (e) => {
             e.preventDefault();
@@ -101,6 +104,8 @@ export class App {
                 this.setView("game");
             } else if (helpers.getParameterByName("view") === "server") {
                 this.setView("server");
+            } else if (helpers.getParameterByName("view") === "weapons") {
+                this.setView("weapons");
             } else if (helpers.getParameterByName("slug")) {
                 this.setView("player");
             } else {
@@ -134,6 +139,8 @@ export class App {
             this.view = this.serverStatsView;
         } else if (name == "game") {
             this.view = this.gameView;
+        } else if (name == "weapons") {
+            this.view = this.weaponStatsView;
         } else {
             /*
             elAdsPlayerTop.css("display", "none");

@@ -267,6 +267,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="sus">Sus</button>
   <button class="tab-btn"        data-tab="leaderboard">Leaderboard</button>
   <button class="tab-btn"        data-tab="warnings">Warnings</button>
+  <button class="tab-btn"        data-tab="apps">Apps</button>
 </div>
 
 <div id="main">
@@ -495,6 +496,22 @@ export const dashboardHtml = `<!DOCTYPE html>
       <span style="font-size:11px;color:var(--text-dim);">Heuristics — review before acting; not proof of cheating.</span>
     </div>
     <div id="warnings-container"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- ════════════════ TAB: APPS (third-party OAuth app registrations) ════════════════ -->
+  <div id="tab-apps" class="tab-pane">
+    <div class="toolbar">
+      <button class="btn btn-gray" id="apps-refresh-btn">↻ Refresh</button>
+      <select id="apps-status-filter" title="Filter by status" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="suspended">Suspended</option>
+      </select>
+      <span style="font-size:11px;color:var(--text-dim);">Third-party OAuth apps registered by users. New apps need approval before they can be used.</span>
+    </div>
+    <div id="apps-container"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB 4: ACCOUNTS ════════════════ -->
@@ -1044,6 +1061,9 @@ function switchTab(name) {
   } else if (name === 'warnings') {
     closeSSE();
     loadWarnings();
+  } else if (name === 'apps') {
+    closeSSE();
+    loadApps();
   } else {
     closeSSE();
   }
@@ -2600,6 +2620,102 @@ function renderWarnings(data) {
 
 document.getElementById('warnings-refresh-btn').addEventListener('click', loadWarnings);
 document.getElementById('warnings-window').addEventListener('change', loadWarnings);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – APPS (admin-only queue of third-party OAuth apps awaiting review)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let appsData = []; // all apps matching the current status filter
+
+function appStatusBadge(status) {
+  if (status === 'pending')   return '<span class="badge badge-sus">PENDING</span>';
+  if (status === 'approved')  return '<span class="badge badge-alive">APPROVED</span>';
+  if (status === 'rejected')  return '<span class="badge badge-botted">REJECTED</span>';
+  if (status === 'suspended') return '<span class="badge badge-disc">SUSPENDED</span>';
+  return esc(status);
+}
+
+async function loadApps() {
+  const container = document.getElementById('apps-container');
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  const status = document.getElementById('apps-status-filter').value;
+  try {
+    appsData = await get('/api/apps' + (status ? '?status=' + encodeURIComponent(status) : ''));
+    renderApps();
+  } catch (e) {
+    container.innerHTML = '<div class="empty">Failed to load apps.</div>';
+  }
+}
+
+function renderApps() {
+  const container = document.getElementById('apps-container');
+  if (!appsData.length) {
+    container.innerHTML = '<div class="empty">No apps match this filter.</div>';
+    return;
+  }
+
+  const rows = appsData.map(function (a) {
+    const uris = (a.redirectUris || []);
+    const uriList = uris.length
+      ? uris.map(function (u) { return esc(u); }).join('<br>')
+      : '<span style="color:var(--text-muted)">–</span>';
+    const actions = a.status === 'pending'
+      ? '<button class="btn btn-green btn-sm" data-appreview="approve" data-appid="' + esc(a.id) + '">✅ approve</button>' +
+        '<button class="btn btn-red btn-sm" data-appreview="reject" data-appid="' + esc(a.id) + '">❌ reject</button>'
+      : '<span style="font-size:11px;color:var(--text-dim);">' +
+          (a.reviewNote ? esc(a.reviewNote) : '–') +
+        '</span>';
+    return '<tr>' +
+      '<td>' + esc(a.name) + '</td>' +
+      '<td style="max-width:280px;">' + esc(a.description || '–') + '</td>' +
+      '<td>' + esc(a.ownerSlug) + '</td>' +
+      '<td>' + appStatusBadge(a.status) + '</td>' +
+      '<td style="font-size:11px;">' + uriList + '</td>' +
+      '<td style="font-size:11px;white-space:nowrap;">' + fmtDate(a.createdAt) + '</td>' +
+      '<td><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;">' + actions + '</span></td>' +
+    '</tr>';
+  }).join('');
+
+  container.innerHTML =
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + appsData.length + ' app(s).</div>' +
+    '<table class="data-table"><thead><tr><th>Name</th><th>Description</th><th>Owner</th><th>Status</th><th>Redirect URIs</th><th>Created</th><th>Actions / Note</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+document.getElementById('apps-status-filter').addEventListener('change', loadApps);
+
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-appreview]');
+  if (btn) { reviewAppFlag(btn.dataset.appid, btn.dataset.appreview); }
+});
+
+/** Approves or rejects a pending app, with an optional note explaining the decision. */
+async function reviewAppFlag(applicationId, decision) {
+  const approve = decision === 'approve';
+  const note = await askInput({
+    title: approve ? '✅ Approve app' : '❌ Reject app',
+    body: 'Application <span style="font-family:monospace;font-size:11px;">' + esc(applicationId) + '</span>',
+    confirmLabel: approve ? '✅ Approve' : '❌ Reject',
+    confirmClass: approve ? 'btn-green' : 'btn-red',
+    field: {
+      label: 'Note (optional)',
+      multiline: true,
+      maxlength: 280, // matches the server's z.string().max(280)
+      placeholder: approve ? 'Optional note for the developer' : 'Why is this being rejected?',
+      required: false,
+    },
+  });
+  if (note === null) return;
+  try {
+    await post('/api/apps/review', { applicationId: applicationId, decision: decision, note: note });
+    // Refetch (respecting the current status filter) instead of just dropping the row
+    // locally, since the reviewed app may still match the active filter (e.g. "All").
+    await loadApps();
+    toast(approve ? 'App approved' : 'App rejected');
+  } catch (e) { toast('Failed to review app: ' + e.message, true); }
+}
+
+document.getElementById('apps-refresh-btn').addEventListener('click', loadApps);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 – BAN MANAGEMENT (receives live "bans" events via SSE)

@@ -35,11 +35,14 @@ import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
+import { cleanupExpiredOAuthArtifacts } from "./db/oauth";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
-import type { SessionTableSelect, UsersTableSelect } from "./db/schema";
+import type { OAuthGrantSelect, SessionTableSelect, UsersTableSelect } from "./db/schema";
 import { verifyReplayToken } from "./replayToken";
 import { ModerationDashboardRouter } from "./routes/ModerationDashboardRouter";
+import { ExternalRouter } from "./routes/external/ExternalRouter";
+import { OAuthRouter } from "./routes/oauth/OAuthRouter";
 import { cleanupOldLogs, isBanned } from "./routes/private/ModerationRouter";
 import { PrivateRouter } from "./routes/private/private";
 import { StatsRouter } from "./routes/stats/StatsRouter";
@@ -50,6 +53,8 @@ export type Context = {
     Variables: {
         user: UsersTableSelect | null;
         session: SessionTableSelect | null;
+        // Only set on /api/external/* requests, by requireOAuthScope (bearer-token auth).
+        oauthGrant?: OAuthGrantSelect | null;
     };
 };
 
@@ -89,6 +94,8 @@ app.use(
 app.route("/api/user/", UserRouter);
 app.route("/api/auth/", AuthRouter);
 app.route("/api/", StatsRouter);
+app.route("/api/oauth/", OAuthRouter);
+app.route("/api/external/", ExternalRouter);
 app.route("/private/", PrivateRouter);
 // The dashboard SPA lives at "/moderation" (no trailing slash); redirect the
 // slashed variant so a hand-typed "/moderation/" doesn't 404.
@@ -494,7 +501,8 @@ new Cron("0 0 * * *", async () => {
     try {
         await cleanupOldLogs();
         await deleteExpiredSessions();
-        server.logger.info("Deleted old logs and expired sessions");
+        await cleanupExpiredOAuthArtifacts();
+        server.logger.info("Deleted old logs, expired sessions, and expired OAuth codes");
     } catch (err) {
         server.logger.error("Failed to run cleanup script", err);
     }

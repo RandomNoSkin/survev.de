@@ -8,6 +8,7 @@ export interface MeleeDef {
     /** When true, this item can appear in the Golden Fries daily shop. */
     shop?: boolean;
     perk?: string;
+    creatorDiscordId?: number;
     quality: number;
     autoAttack: boolean;
     switchDelay: number;

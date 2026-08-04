@@ -10276,3 +10276,32 @@ input [type="image"]:focus {
   font-weight: 700;
   min-height: 18px;
 }
+.loadout-settings-title-spaced {
+  margin-top: 24px;
+}
+.loadout-connected-app-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.loadout-connected-app-scopes {
+  color: #c5c5c5;
+  font-size: 12px;
+  margin-top: 3px;
+}
+.loadout-connected-app-revoke {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.loadout-connected-app-revoke:hover {
+  background: rgba(255, 80, 80, 0.25);
+  border-color: rgba(255, 80, 80, 0.5);
+}

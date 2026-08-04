@@ -94,6 +94,7 @@ const defaultConfig = {
     masterVolume: 1,
     soundVolume: 1,
     musicVolume: 1,
+    gameMusicVolume: 1,
     highResTex: true,
     interpolation: true,
     localRotation: false,

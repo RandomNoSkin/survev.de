@@ -23,6 +23,7 @@ export interface EmoteDef {
     teamOnly?: boolean;
     category: number;
     noCustom?: boolean;
+    creatorDiscordId?: number;
 }
 
 export const EmotesDefs: Record<string, EmoteDef> = {

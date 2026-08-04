@@ -1,0 +1,57 @@
+<!-- Overview Card -->
+<div class="container mt-3">
+  <div class="card card-leaderboard col-lg-8 col-12 p-0">
+    <div class="card-body">
+      <div class='row card-row-top'>
+        <div class='col-12'>
+          <div class="leaderboard-title ml-sm-3 ml-0 mr-0 mt-3" data-l10n='stats-weapon-stats' data-caps='true'>WEAPON STATS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class='container mt-3'>
+  <div class="row">
+    <div class='col-lg-2 col-4 pr-lg-3 pr-1'>
+      <select id="weapon-stats-team-mode" class="weapon-stats-opt custom-select">
+        <option value="7" data-l10n='stats-all-modes'>All modes</option>
+        <option value="1" data-l10n='stats-solo'>Solo</option>
+        <option value="2" data-l10n='stats-duo'>Duo</option>
+        <option value="4" data-l10n='stats-squad'>Squad</option>
+      </select>
+    </div>
+    <div class='col-lg-2 col-4 pl-lg-0 pr-lg-3 pl-0 pr-1'>
+      <select id="weapon-stats-map-id" class="weapon-stats-opt custom-select">
+        <option value="-1" data-l10n='stats-all-maps'>All maps</option>
+        <% for (var i = 0; i < env.gameModes.length; i++) { %>
+          <option value="<%= env.gameModes[i].mapId %>"><%= env.gameModes[i].desc.name%></option>
+        <% } %>
+      </select>
+    </div>
+    <div class='col-lg-2 col-4 pl-lg-0 pr-lg-3 pl-0 pr-1'>
+      <select id="weapon-stats-range" class="weapon-stats-opt custom-select">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="month">This month</option>
+        <option value="alltime">All time</option>
+        <option value="custom">Custom range</option>
+      </select>
+    </div>
+    <div class='col-lg-2 col-6 pl-lg-0 pr-lg-3 pl-0 pr-1'>
+      <input type="date" id="weapon-stats-from" class="weapon-stats-opt weapon-stats-date custom-select" />
+    </div>
+    <div class='col-lg-2 col-6 pl-lg-0 pl-0'>
+      <input type="date" id="weapon-stats-to" class="weapon-stats-opt weapon-stats-date custom-select" />
+    </div>
+  </div>
+</div>
+
+<div class='container mt-2 mb-4 p-sm-3 p-0'>
+  <div class="row justify-content-center">
+    <div class="col-md-12">
+      <div class="content"></div>
+    </div>
+  </div>
+</div>

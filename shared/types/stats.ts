@@ -152,6 +152,35 @@ export type LeaderboardResponse =
 export type LeaderboardRequest = z.infer<typeof zLeaderboardsRequest>;
 
 //
+// Weapon Stats (weapon damage/kills ranking, filterable by map, mode and date range)
+//
+export const zWeaponStatsRequest = z.object({
+    /** ISO date (YYYY-MM-DD), inclusive. */
+    from: z.string(),
+    /** ISO date (YYYY-MM-DD), inclusive. */
+    to: z.string(),
+    mapIdFilter: z.enum([ALL_MAPS, ...VALID_MAP_IDS]),
+    teamModeFilter: z.union([
+        z.literal(TeamMode.Solo),
+        z.literal(TeamMode.Duo),
+        z.literal(TeamMode.Squad),
+        z.literal(ALL_TEAM_MODES),
+    ]),
+});
+
+export type WeaponStatsRequest = z.infer<typeof zWeaponStatsRequest>;
+
+export interface WeaponStatsEntry {
+    type: string;
+    name: string;
+    totalDamage: number;
+    kills: number;
+    gamesUsed: number;
+    avgDamagePerGame: number;
+}
+export type WeaponStatsResponse = WeaponStatsEntry[];
+
+//
 // Server Stats (aggregate server-wide activity for the public /stats?view=server page)
 //
 export const zServerStatsRequest = z.object({

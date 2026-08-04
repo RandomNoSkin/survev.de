@@ -23,8 +23,8 @@ export const mapDef: PartialMapDef = {
     },
     assets: {
         audio: [
-            { name: "club_music_01", channel: "ambient" },
-            { name: "club_music_02", channel: "ambient" },
+            { name: "club_music_01", channel: "gameMusic" },
+            { name: "club_music_02", channel: "gameMusic" },
             { name: "ambient_steam_01", channel: "ambient" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },

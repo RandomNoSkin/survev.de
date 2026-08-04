@@ -49,6 +49,14 @@ export interface SaveGameBody {
         damage: number;
         types: string[];
     }[];
+    /** Per-weapon damage/kills dealt this match, across all players, for the weapon
+     *  ranking stats page's daily rollup. Optional for backward-compat with
+     *  locally-saved "lost" games. */
+    weaponStats?: {
+        mapId: number;
+        teamMode: TeamMode;
+        entries: { weaponType: string; damage: number; kills: number }[];
+    };
 }
 
 export interface ServerGameConfig {

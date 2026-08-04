@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
     bigint,
     boolean,
+    date,
     index,
     integer,
     json,
@@ -17,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { table } from "node:console";
 import { TeamMode } from "../../../../shared/gameConfig.ts";
+import type { OAuthAppStatus, OAuthScope } from "../../../../shared/types/oauth.ts";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
 export const sessionTable = pgTable("session", {
@@ -375,6 +377,31 @@ export const matchDataTable = pgTable(
 
 export type MatchDataTable = typeof matchDataTable.$inferInsert;
 
+// Daily rollup of per-weapon damage/kills/usage, aggregated at game-save time (see
+// attributeWeaponStats in routes/private/private.ts) instead of storing one row per
+// match+weapon. Bounded row growth (days x weapons x maps x modes) keeps this cheap to
+// query for the weapon-ranking stats page even as match volume grows.
+export const weaponStatsDailyTable = pgTable(
+    "weapon_stats_daily",
+    {
+        day: date("day").notNull(),
+        weaponType: text("weapon_type").notNull(),
+        mapId: integer("map_id").notNull(),
+        teamMode: integer("team_mode").$type<TeamMode>().notNull(),
+        damageDealt: bigint("damage_dealt", { mode: "number" }).notNull().default(0),
+        kills: integer("kills").notNull().default(0),
+        gamesUsed: integer("games_used").notNull().default(0),
+    },
+    (table) => [
+        primaryKey({
+            columns: [table.day, table.weaponType, table.mapId, table.teamMode],
+        }),
+        index("idx_weapon_stats_daily_day").on(table.day),
+    ],
+);
+
+export type WeaponStatsDailyTable = typeof weaponStatsDailyTable.$inferInsert;
+
 //
 // LOGS
 //
@@ -723,3 +750,148 @@ export const blocksTable = pgTable(
 );
 
 export type BlocksTable = typeof blocksTable.$inferSelect;
+
+//
+// THIRD-PARTY OAUTH APPS
+//
+// Lightweight, custom OAuth2-style authorization server: users self-register an
+// "application" (e.g. a Discord bot), an admin must approve it before it can be used
+// (see `status`), and other users individually consent per-app to share specific
+// scopes (`oauthGrantsTable`). See the redirect-flow (`oauthAuthCodesTable`) and
+// device-flow (`oauthDeviceCodesTable`) issuance tables below.
+//
+
+// Self-registered third-party applications. `id` doubles as the OAuth client_id.
+export const oauthApplicationsTable = pgTable(
+    "oauth_applications",
+    {
+        id: text("id").notNull().primaryKey(),
+        ownerId: text("owner_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        name: text("name").notNull(),
+        description: text("description").notNull().default(""),
+        redirectUris: json("redirect_uris").$type<string[]>().notNull().default([]),
+        // sha256 hex of the client secret, same store-only-the-hash pattern as
+        // sessionTable.id — the raw secret is only ever shown once, at creation/rotation.
+        clientSecretHash: text("client_secret_hash").notNull(),
+        secretLastFour: text("secret_last_four").notNull().default(""),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        secretRotatedAt: timestamp("secret_rotated_at", { withTimezone: true }),
+        // pending | approved | rejected | suspended — new apps start unusable (both
+        // consent flows reject them) until an admin reviews them on the moderation
+        // dashboard's Apps tab.
+        status: text("status").$type<OAuthAppStatus>().notNull().default("pending"),
+        reviewedBy: text("reviewed_by"), // admin slug
+        reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+        reviewNote: text("review_note").notNull().default(""),
+    },
+    (table) => [
+        index("oauth_applications_owner_idx").on(table.ownerId),
+        index("oauth_applications_status_idx").on(table.status, table.createdAt),
+    ],
+);
+
+export type OAuthApplicationSelect = typeof oauthApplicationsTable.$inferSelect;
+export type OAuthApplicationInsert = typeof oauthApplicationsTable.$inferInsert;
+
+// One row per (user, app) consent. Holds the long-lived, revocable access token for
+// that grant. Re-authorizing an already-granted app upserts this row (rotating the
+// token), mirroring the composite-PK upsert pattern used for userXpTable.
+export const oauthGrantsTable = pgTable(
+    "oauth_grants",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        // sha256 hex of the raw access token (same pattern as sessionTable.id).
+        accessTokenHash: text("access_token_hash").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    },
+    (table) => [
+        primaryKey({ columns: [table.userId, table.applicationId] }),
+        uniqueIndex("oauth_grants_token_hash_idx").on(table.accessTokenHash),
+        index("oauth_grants_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthGrantSelect = typeof oauthGrantsTable.$inferSelect;
+
+// Short-lived, single-use codes for the redirect (classic OAuth2) consent flow.
+export const oauthAuthCodesTable = pgTable(
+    "oauth_auth_codes",
+    {
+        id: text("id").notNull().primaryKey(), // sha256 hex of the raw code
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        // Exact redirect_uri from /authorize, re-checked at /token (defense in depth).
+        redirectUri: text("redirect_uri").notNull(),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        index("oauth_auth_codes_expires_idx").on(table.expiresAt),
+        index("oauth_auth_codes_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthAuthCodeSelect = typeof oauthAuthCodesTable.$inferSelect;
+
+// Short-lived device-flow codes (RFC 8628-flavored, not spec-exact). A bot backend
+// requests one, shows `userCode` to its user, and polls /api/oauth/token with
+// `deviceCode` until the user approves/denies it on survev.de/link.
+export const oauthDeviceCodesTable = pgTable(
+    "oauth_device_codes",
+    {
+        id: text("id").notNull().primaryKey(), // sha256 hex of the raw device_code
+        userCode: text("user_code").notNull(), // short human-typed code, e.g. "ABCD-1234"
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        status: text("status").notNull().default("pending"), // pending | approved | denied
+        userId: text("user_id").references(() => usersTable.id, {
+            onDelete: "cascade",
+            onUpdate: "cascade",
+        }), // set once the user approves/denies via /link
+        pollIntervalSec: integer("poll_interval_sec").notNull().default(5),
+        lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("oauth_device_codes_user_code_idx").on(table.userCode),
+        index("oauth_device_codes_expires_idx").on(table.expiresAt),
+        index("oauth_device_codes_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthDeviceCodeSelect = typeof oauthDeviceCodesTable.$inferSelect;
