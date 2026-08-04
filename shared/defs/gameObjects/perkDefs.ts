@@ -633,7 +633,7 @@ export const PerkDefs: Record<string, PerkDef> = {
         name: "Buck Stalker",
         type: "perk",
         lootImg: {
-            sprite: "loot-perk-hunted.img",
+            sprite: "loot-perk-buck-stalker.img",
             tint: 0xffffff,
             border: "loot-circle-outer-03.img",
             borderTint: 0xffffff,

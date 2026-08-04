@@ -195,7 +195,7 @@ const BaseDefs: Record<string, MeleeDef> = {
                 x: 1.5,
                 y: 0,
             },
-            rad: 1.75,
+            rad: 1,
             damageTimes: [0.3],
             cooldownTime: 0.6,
         },

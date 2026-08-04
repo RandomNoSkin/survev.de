@@ -288,10 +288,10 @@ export const Animations: Record<
                 [Bones.HandR]: new Pose(v2.create(12, 12)).rotate(-Math.PI * 0.2),
             }),
             frame(def("antlers").attack.damageTimes[0] * 0.65, {
-                [Bones.HandR]: new Pose(v2.create(18, 9)).rotate(-Math.PI * 0.35),
+                [Bones.HandR]: new Pose(v2.create(10, 18)).rotate(-Math.PI * 0.3),
             }),
             frame(def("antlers").attack.damageTimes[0], {
-                [Bones.HandR]: new Pose(v2.create(25, 6.25)).rotate(-Math.PI * 0.5),
+                [Bones.HandR]: new Pose(v2.create(10, 16)).rotate(-Math.PI * 0.4),
             }),
             frame(def("antlers").attack.cooldownTime * 0.7, {
                 [Bones.HandR]: new Pose(v2.create(15, 12)).rotate(-Math.PI * 0.2),
