@@ -72,6 +72,7 @@ export class Application {
     masterSliders = $<HTMLInputElement>(".sl-master-volume");
     soundSliders = $<HTMLInputElement>(".sl-sound-volume");
     musicSliders = $<HTMLInputElement>(".sl-music-volume");
+    gameMusicSliders = $<HTMLInputElement>(".sl-game-music-volume");
     serverWarning = $("#server-warning");
     languageSelect = $<HTMLSelectElement>(".language-select");
     startMenuWrapper = $("#start-menu-wrapper");
@@ -325,6 +326,9 @@ export class Application {
             $(this.musicSliders).on("mousedown", (e) => {
                 e.stopPropagation();
             });
+            $(this.gameMusicSliders).on("mousedown", (e) => {
+                e.stopPropagation();
+            });
             this.masterSliders.on("input", (t) => {
                 const r = Number($(t.target).val()) / 100;
                 this.audioManager.setMasterVolume(r);
@@ -339,6 +343,11 @@ export class Application {
                 const r = Number($(t.target).val()) / 100;
                 this.audioManager.setMusicVolume(r);
                 this.config.set("musicVolume", r);
+            });
+            this.gameMusicSliders.on("input", (t) => {
+                const r = Number($(t.target).val()) / 100;
+                this.audioManager.setGameMusicVolume(r);
+                this.config.set("gameMusicVolume", r);
             });
             $(".modal-settings-item")
                 .children("input")
@@ -857,6 +866,10 @@ export class Application {
         const musicVolume = this.config.get("musicVolume")!;
         this.musicSliders.val(musicVolume * 100);
         this.audioManager.setMusicVolume(musicVolume);
+
+        const gameMusicVolume = this.config.get("gameMusicVolume")!;
+        this.gameMusicSliders.val(gameMusicVolume * 100);
+        this.audioManager.setGameMusicVolume(gameMusicVolume);
 
         if (key == "language") {
             const language = this.config.get("language")!;

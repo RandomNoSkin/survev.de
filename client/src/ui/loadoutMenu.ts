@@ -11,6 +11,7 @@ import {
     MARKET_LISTING_TTL_MS,
 } from "../../../shared/defs/shopConfig";
 import { EmoteSlot, Rarity } from "../../../shared/gameConfig";
+import type { OAuthGrantEntry } from "../../../shared/types/oauth";
 import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { ItemStatus } from "../../../shared/utils/loadout";
 import { type Crosshair, type Loadout, loadout } from "../../../shared/utils/loadout";
@@ -916,6 +917,67 @@ export class LoadoutMenu {
         );
         $("#loadout-settings-status").text("");
         $("#loadout-settings-panel").css("display", "block");
+
+        $("#loadout-discord-status").text(
+            this.account.profile.linkedDiscord ? "Linked ✓" : "Not linked",
+        );
+        this.loadConnectedApps();
+    }
+
+    /** Fetches + renders the "Connected apps" list (with per-app revoke buttons). */
+    private loadConnectedApps() {
+        const list = $("#loadout-connected-apps-list");
+        list.html('<div class="loadout-setting-desc">Loading…</div>');
+        this.account.listConnectedApps((err, apps) => {
+            if (!this.settingsOpen) return; // panel was closed before this resolved
+            if (err) {
+                list.html('<div class="loadout-setting-desc">Failed to load.</div>');
+                return;
+            }
+            this.renderConnectedApps(apps ?? []);
+        });
+    }
+
+    private renderConnectedApps(apps: OAuthGrantEntry[]) {
+        const list = $("#loadout-connected-apps-list");
+        list.empty();
+        if (!apps.length) {
+            list.html('<div class="loadout-setting-desc">No apps connected yet.</div>');
+            return;
+        }
+        for (const app of apps) {
+            const row = $("<div/>", { class: "loadout-connected-app-row" });
+            const text = $("<div/>", { class: "loadout-setting-text" });
+            text.append($("<div/>", { class: "loadout-setting-name", text: app.appName }));
+            text.append(
+                $("<div/>", {
+                    class: "loadout-connected-app-scopes",
+                    text: app.scopes.join(", "),
+                }),
+            );
+            const revoke = $("<button/>", {
+                class: "loadout-connected-app-revoke",
+                text: "Revoke",
+                type: "button",
+            });
+            revoke.on("click", () => {
+                revoke.prop("disabled", true).text("Revoking…");
+                this.account.revokeConnectedApp(app.applicationId, (err) => {
+                    if (err) {
+                        revoke.prop("disabled", false).text("Revoke");
+                        return;
+                    }
+                    row.remove();
+                    if (!list.children().length) {
+                        list.html(
+                            '<div class="loadout-setting-desc">No apps connected yet.</div>',
+                        );
+                    }
+                });
+            });
+            row.append(text, revoke);
+            list.append(row);
+        }
     }
 
     /** Restores the item list + deselects the Settings tab (when switching to a cosmetic tab). */

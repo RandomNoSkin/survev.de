@@ -1,4 +1,3 @@
-import $ from "jquery";
 import type {
     AccountSettings,
     AuctionListResponse,
@@ -39,57 +38,15 @@ import type {
     UsernameResponse,
     UserSearchResponse,
 } from "../../shared/types/user";
+import type { OAuthGrantEntry } from "../../shared/types/oauth";
 import type { ItemStatus } from "../../shared/utils/loadout";
 import { type Loadout, loadout as loadouts } from "../../shared/utils/loadout";
 import { util } from "../../shared/utils/util";
-import { api } from "./api";
+import { ajaxRequest, type DataOrCallback } from "./ajax";
 import type { ConfigManager } from "./config";
 import { errorLogManager } from "./errorLogs";
 import { helpers } from "./helpers";
-import { proxy } from "./proxy";
 import type { Item } from "./ui/loadoutMenu";
-
-type DataOrCallback =
-    | Record<string, unknown>
-    | ((err: null | JQuery.jqXHR<any>, res?: any) => void)
-    | null;
-
-function ajaxRequest(
-    url: string,
-    data: DataOrCallback,
-    cb: (err: null | JQuery.jqXHR<any>, res?: any) => void,
-) {
-    if (typeof data === "function") {
-        cb = data;
-        data = null;
-    }
-    const opts: JQueryAjaxSettings = {
-        url: api.resolveUrl(url),
-        type: "POST",
-        timeout: 10 * 1000,
-        xhrFields: {
-            withCredentials: proxy.anyLoginSupported(),
-        },
-        headers: {
-            // Set a header to guard against CSRF attacks.
-            //
-            // JQuery does this automatically, however we'll add it here explicitly
-            // so the intent is clear incase of refactoring in the future.
-            "X-Requested-With": "XMLHttpRequest",
-        },
-    };
-    if (data) {
-        opts.contentType = "application/json; charset=utf-8";
-        opts.data = JSON.stringify(data);
-    }
-    $.ajax(opts)
-        .done((res) => {
-            cb(null, res);
-        })
-        .fail((e) => {
-            cb(e);
-        });
-}
 
 export type Quest = {
     idx: number;
@@ -115,6 +72,7 @@ export class Account {
     loggedIn = false;
     profile = {
         linked: false,
+        linkedDiscord: false,
         usernameSet: false,
         username: "",
         slug: "",
@@ -700,6 +658,18 @@ export class Account {
             }
             cb?.(err, res);
         });
+    }
+
+    /** Third-party apps the caller has authorized ("Connected apps" settings section). */
+    listConnectedApps(cb: (err: unknown, res?: OAuthGrantEntry[]) => void) {
+        this.ajaxRequest("/api/oauth/grants/list", {}, (err, res: OAuthGrantEntry[]) => {
+            cb(err, err ? undefined : res);
+        });
+    }
+
+    /** Revokes one app's access; takes effect on its very next API call. */
+    revokeConnectedApp(applicationId: string, cb: (err: unknown) => void) {
+        this.ajaxRequest("/api/oauth/grants/revoke", { applicationId }, (err) => cb(err));
     }
 
     endAuction(auctionId: number, cb: (err: unknown, res?: EndAuctionResponse) => void) {

@@ -996,6 +996,8 @@ export class Game {
             {} as Record<string, number>,
         );
 
+        const mapId = this.advancedSettings ? MapId.Custom : this.map.mapId;
+
         const values: SaveGameBody["matchData"] = players.map(({ player, rank }) => {
             return {
                 // *NOTE: userId is optional; we save the game stats for non logged users too
@@ -1019,7 +1021,7 @@ export class Game {
                 damageTaken: Math.round(player.damageTaken),
                 killerId: player.killedBy?.matchDataId || 0,
                 gameId: this.id,
-                mapId: this.advancedSettings ? MapId.Custom : this.map.mapId,
+                mapId,
                 mapSeed: this.map.seed,
                 killedIds: player.killedIds,
                 assistedIds: player.assistedIds,
@@ -1044,6 +1046,22 @@ export class Game {
                 types: player.equippedCosmetics,
             }));
 
+        // Per weapon a player dealt damage with this match: fuel for the weapon-ranking
+        // stats page's daily rollup (see attributeWeaponStats in private.ts). Not tied to
+        // a user account, so spectators/bots/guests all still contribute.
+        const weaponStatsEntries = players
+            .filter(({ player }) => player.weaponDamageDealt.size > 0)
+            .flatMap(({ player }) =>
+                [...player.weaponDamageDealt.entries()].map(([weaponType, damage]) => ({
+                    weaponType,
+                    damage: Math.round(damage),
+                    kills: player.weaponKills.get(weaponType) ?? 0,
+                })),
+            );
+        const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length
+            ? { mapId, teamMode: this.teamMode, entries: weaponStatsEntries }
+            : undefined;
+
         // only save the game if it has more than 2 players lol
         if (values.length < 2) return;
 
@@ -1057,6 +1075,7 @@ export class Game {
                 json: {
                     matchData: values,
                     cosmeticStats,
+                    weaponStats,
                 },
             });
         } catch (err) {

@@ -99,8 +99,8 @@
                 <input type="range" min="0" max="100" value="100" class="slider sl-sound-volume">
               </div>
               <div class="slider-container ui-slider-container">
-                <p class="slider-text" data-l10n="index-music-volume">Music Volume</p>
-                <input type="range" min="0" max="100" value="100" class="slider sl-music-volume">
+                <p class="slider-text" data-l10n="game-music-volume">Building Music Volume</p>
+                <input type="range" min="0" max="100" value="100" class="slider sl-game-music-volume">
               </div>
               <a id="btn-game-quit" class="btn-quit btn-game-menu btn-darken" data-l10n="game-quit-game">Quit Game</a>
             </div>
@@ -1445,6 +1445,16 @@
                   <div id="setting-loadout-private" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
                 </div>
                 <div id="loadout-settings-status" class="loadout-settings-status"></div>
+                <div class="loadout-settings-title loadout-settings-title-spaced">Connected accounts</div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Discord</div>
+                    <div id="loadout-discord-status" class="loadout-setting-desc">Not linked</div>
+                  </div>
+                </div>
+                <div class="loadout-settings-title loadout-settings-title-spaced">Connected apps</div>
+                <div class="loadout-setting-desc">Third-party applications you've authorized to access your account data. <a href="/apps" target="_blank" rel="noopener">Manage your own apps &rarr;</a></div>
+                <div id="loadout-connected-apps-list"></div>
               </div>
             </div>
             <div id="modal-customize-footer" class="modal-footer modal-footer-round">
@@ -1608,6 +1618,10 @@
             <div class="modal-settings-item slider-container main-volume-slider">
               <p class="modal-slider-text" data-l10n="index-music-volume">Music Volume</p>
               <input type="range" min="0" max="100" value="50" class="slider sl-music-volume" id="">
+            </div>
+            <div class="modal-settings-item slider-container main-volume-slider">
+              <p class="modal-slider-text" data-l10n="index-game-music-volume">Building Music Volume</p>
+              <input type="range" min="0" max="100" value="50" class="slider sl-game-music-volume" id="">
             </div>
             <div id="settings-links">
               <!--

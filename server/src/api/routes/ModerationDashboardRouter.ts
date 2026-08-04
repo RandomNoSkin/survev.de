@@ -25,6 +25,8 @@
  *   GET  /moderation/api/events                    → SSE stream for live updates
  *   GET  /moderation/api/game/:region/:id/players  → live player list for a game
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
+ *   GET  /moderation/api/apps                       → OAuth apps (optionally ?status=pending|approved|rejected|suspended)
+ *   POST /moderation/api/apps/review                → approve/reject a pending OAuth app
  */
 
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
@@ -44,6 +46,7 @@ import {
 import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
 import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
+import { OAUTH_APP_STATUSES, type OAuthAppStatus, zAppReviewRequest } from "../../../../shared/types/oauth.ts";
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
@@ -60,6 +63,7 @@ import {
     setGamePlayerModeration,
 } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
+import { listApps, reviewApp } from "../db/oauth";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
@@ -3833,4 +3837,36 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .post("/api/reconcile_pass_xp", async (c) => {
         const result = await reconcileAllPasses();
         return c.json({ ok: true, ...result });
+    })
+    // ─────────────────────────────────────────────────────────────────────────
+    // OAUTH APP REVIEW (admin-only — deliberately absent from MODERATOR_ALLOWED_PATHS)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Returns third-party OAuth apps for the Apps tab — every app by default, or a
+     *  single status via `?status=pending|approved|rejected|suspended`. */
+    .get("/api/apps", async (c) => {
+        const statusParam = c.req.query("status");
+        const status = (OAUTH_APP_STATUSES as readonly string[]).includes(statusParam ?? "")
+            ? (statusParam as OAuthAppStatus)
+            : undefined;
+        return c.json(await listApps(status));
+    })
+    /** Approves or rejects a pending OAuth app registration. */
+    .post("/api/apps/review", validateParams(zAppReviewRequest), async (c) => {
+        const admin = c.get("user")!;
+        const { applicationId, decision, note } = c.req.valid("json");
+
+        const ok = await reviewApp(applicationId, admin.slug, decision, note);
+        if (!ok) return c.json({ error: "not_found" }, 404);
+
+        void logModerationAction(
+            decision === "approve" ? "✅ OAuth app approved" : "❌ OAuth app rejected",
+            [
+                { name: "Application ID", value: applicationId },
+                { name: "Note", value: note || "–" },
+                { name: "By admin", value: adminTag(admin) },
+            ],
+        );
+
+        return c.json({ success: true });
     });

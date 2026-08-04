@@ -3544,6 +3544,15 @@ export class Player extends BaseGameObject {
      * doesn't care about kill credit or anything, simply the last player to damage you (excludes yourself)
      */
     lastDamagedBy: Player | undefined;
+
+    /** Per-weapon damage this player has dealt this match (attacker-side), for the
+     *  weapon-ranking stats page. Keyed by gameSourceType/mapSourceType, gun/melee/
+     *  throwable only (see the gate in damage()). */
+    weaponDamageDealt: Map<string, number> = new Map();
+    /** Per-weapon down-credits this match, using the same weapon key as weaponDamageDealt
+     *  and the same "downer gets credit" convention as `kills`. */
+    weaponKills: Map<string, number> = new Map();
+
     damageHistory: {
         source: GameObject;
         /** Source player's object id (0 for non-player sources like gas), for replay/game-view. */
@@ -3646,6 +3655,27 @@ export class Player extends BaseGameObject {
         if (playerSource && params.source !== this && !this.downed) {
             if (playerSource.groupId !== this.groupId) {
                 playerSource.damageDealt += finalDamage;
+
+                // Weapon-ranking stats: only count damage actually dealt by a weapon
+                // (excludes gas/bleeding/airdrop/etc, which use other DamageTypes).
+                if (params.damageType === GameConfig.DamageType.Player) {
+                    const weaponKey = params.gameSourceType ?? params.mapSourceType ?? "";
+                    const weaponDef = GameObjectDefs.typeToDefSafe(weaponKey) as
+                        | { type?: string }
+                        | undefined;
+                    if (
+                        weaponKey &&
+                        (weaponDef?.type === "gun" ||
+                            weaponDef?.type === "melee" ||
+                            weaponDef?.type === "throwable")
+                    ) {
+                        playerSource.weaponDamageDealt.set(
+                            weaponKey,
+                            (playerSource.weaponDamageDealt.get(weaponKey) ?? 0) +
+                                finalDamage,
+                        );
+                    }
+                }
             }
             if (playerSource.teamId !== this.teamId) {
                 this.lastDamagedBy = playerSource;
@@ -3826,6 +3856,26 @@ export class Player extends BaseGameObject {
             this.downedBy = params.source;
             downedMsg.killerId = params.source.__id;
             downedMsg.killCreditId = params.source.__id;
+
+            // Weapon-ranking stats: attribute the down-credit to the weapon that
+            // caused it (only when the down came directly from a weapon hit, not a
+            // lastDamagedBy fallback where the triggering damage may be non-weapon).
+            const weaponKey = params.gameSourceType ?? params.mapSourceType ?? "";
+            const weaponDef = GameObjectDefs.typeToDefSafe(weaponKey) as
+                | { type?: string }
+                | undefined;
+            if (
+                weaponKey &&
+                (weaponDef?.type === "gun" ||
+                    weaponDef?.type === "melee" ||
+                    weaponDef?.type === "throwable")
+            ) {
+                const source = params.source as Player;
+                source.weaponKills.set(
+                    weaponKey,
+                    (source.weaponKills.get(weaponKey) ?? 0) + 1,
+                );
+            }
         } else if (this.lastDamagedBy) {
             this.downedBy = this.lastDamagedBy;
             downedMsg.killerId = this.lastDamagedBy.__id;

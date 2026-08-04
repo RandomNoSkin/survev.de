@@ -34,6 +34,7 @@ import {
     matchDataTable,
     usersTable,
     userXpTable,
+    weaponStatsDailyTable,
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { getActiveChatBan, hashIp, isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
@@ -102,6 +103,66 @@ async function attributeCosmeticStats(
         server.logger.info(
             `Attributed cosmetic stats to ${updated} item(s) across ${stats.length} player(s)`,
         );
+    }
+}
+
+/**
+ * Upserts this match's per-weapon damage/kills/usage into the daily rollup that backs
+ * the weapon-ranking stats page. One batched multi-row upsert per game-save call,
+ * regardless of player/weapon count. Failures are swallowed so they never break game
+ * saving.
+ */
+async function attributeWeaponStats(
+    weaponStats: NonNullable<SaveGameBody["weaponStats"]>,
+): Promise<void> {
+    const { mapId, teamMode, entries } = weaponStats;
+    if (!entries.length) return;
+
+    // Collapse per-player entries down to one row per weapon: multiple players can use
+    // the same weapon in one match, and a single INSERT's ON CONFLICT DO UPDATE can't
+    // touch the same (day, weapon, map, mode) row twice.
+    const byWeapon = new Map<string, { damage: number; kills: number; games: number }>();
+    for (const e of entries) {
+        const agg = byWeapon.get(e.weaponType) ?? { damage: 0, kills: 0, games: 0 };
+        agg.damage += e.damage;
+        agg.kills += e.kills;
+        agg.games += 1;
+        byWeapon.set(e.weaponType, agg);
+    }
+
+    // UTC day bucket, computed in app code rather than CURRENT_DATE so it matches
+    // whichever day this game-save call logically belongs to.
+    const day = new Date().toISOString().slice(0, 10);
+
+    try {
+        await db
+            .insert(weaponStatsDailyTable)
+            .values(
+                [...byWeapon.entries()].map(([weaponType, agg]) => ({
+                    day,
+                    weaponType,
+                    mapId,
+                    teamMode,
+                    damageDealt: agg.damage,
+                    kills: agg.kills,
+                    gamesUsed: agg.games,
+                })),
+            )
+            .onConflictDoUpdate({
+                target: [
+                    weaponStatsDailyTable.day,
+                    weaponStatsDailyTable.weaponType,
+                    weaponStatsDailyTable.mapId,
+                    weaponStatsDailyTable.teamMode,
+                ],
+                set: {
+                    damageDealt: sql`${weaponStatsDailyTable.damageDealt} + excluded.damage_dealt`,
+                    kills: sql`${weaponStatsDailyTable.kills} + excluded.kills`,
+                    gamesUsed: sql`${weaponStatsDailyTable.gamesUsed} + excluded.games_used`,
+                },
+            });
+    } catch (err) {
+        server.logger.warn("Failed to attribute weapon stats:", err);
     }
 }
 
@@ -217,6 +278,9 @@ export const PrivateRouter = new Hono<Context>()
         await logPlayerIPs(matchData);
         if (data.cosmeticStats?.length) {
             await attributeCosmeticStats(data.cosmeticStats);
+        }
+        if (data.weaponStats?.entries.length) {
+            await attributeWeaponStats(data.weaponStats);
         }
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);

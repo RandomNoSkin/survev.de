@@ -16,6 +16,7 @@ export interface DeathEffectDef {
     // For particle effects with custom min/max particle counts
     minParticles?: number;
     maxParticles?: number;
+    creatorDiscordId?: number;
 }
 
 export const DeathEffectDefs: Record<string, DeathEffectDef> = {

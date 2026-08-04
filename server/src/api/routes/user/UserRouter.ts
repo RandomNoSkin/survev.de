@@ -157,6 +157,7 @@ UserRouter.post("/profile", async (c) => {
         loadout,
         slug,
         linked,
+        linkedDiscord,
         username,
         usernameSet,
         lastUsernameChangeTime,
@@ -214,6 +215,7 @@ UserRouter.post("/profile", async (c) => {
             profile: {
                 slug,
                 linked,
+                linkedDiscord,
                 username,
                 usernameSet,
                 usernameChangeTime: timeUntilNextChange,
