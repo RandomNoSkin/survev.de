@@ -14,7 +14,16 @@
 <!-- Filters -->
 <div class='container mt-3'>
   <div class="row">
-    <div class='col-lg-2 col-4 pr-lg-3 pr-1'>
+    <div class='col-lg-3 col-6 pr-lg-3 pr-1 mb-2'>
+      <select id="weapon-stats-sort" class="weapon-stats-opt custom-select">
+        <option value="damage" data-l10n='stats-total-damage'>Total damage</option>
+        <option value="damage_per_game" data-l10n='stats-avg-damage-per-game'>Avg dmg/game</option>
+        <option value="kills" data-l10n='stats-kills'>Kills</option>
+        <option value="kills_per_game" data-l10n='stats-avg-kills-per-game'>Avg kills/game</option>
+        <option value="games" data-l10n='stats-games'>Games</option>
+      </select>
+    </div>
+    <div class='col-lg-3 col-6 pl-lg-0 pr-lg-3 pl-0 pr-1 mb-2'>
       <select id="weapon-stats-team-mode" class="weapon-stats-opt custom-select">
         <option value="7" data-l10n='stats-all-modes'>All modes</option>
         <option value="1" data-l10n='stats-solo'>Solo</option>
@@ -22,7 +31,7 @@
         <option value="4" data-l10n='stats-squad'>Squad</option>
       </select>
     </div>
-    <div class='col-lg-2 col-4 pl-lg-0 pr-lg-3 pl-0 pr-1'>
+    <div class='col-lg-3 col-6 pl-lg-0 pr-lg-3 pl-0 pr-1 mb-2'>
       <select id="weapon-stats-map-id" class="weapon-stats-opt custom-select">
         <option value="-1" data-l10n='stats-all-maps'>All maps</option>
         <% for (var i = 0; i < env.gameModes.length; i++) { %>
@@ -30,7 +39,7 @@
         <% } %>
       </select>
     </div>
-    <div class='col-lg-2 col-4 pl-lg-0 pr-lg-3 pl-0 pr-1'>
+    <div class='col-lg-3 col-6 pl-lg-0 pl-0 mb-2'>
       <select id="weapon-stats-range" class="weapon-stats-opt custom-select">
         <option value="7">Last 7 days</option>
         <option value="30">Last 30 days</option>
@@ -39,10 +48,10 @@
         <option value="custom">Custom range</option>
       </select>
     </div>
-    <div class='col-lg-2 col-6 pl-lg-0 pr-lg-3 pl-0 pr-1'>
+    <div class='col-lg-3 col-6 pr-lg-3 pr-1'>
       <input type="date" id="weapon-stats-from" class="weapon-stats-opt weapon-stats-date custom-select" />
     </div>
-    <div class='col-lg-2 col-6 pl-lg-0 pl-0'>
+    <div class='col-lg-3 col-6 pl-lg-0 pl-0'>
       <input type="date" id="weapon-stats-to" class="weapon-stats-opt weapon-stats-date custom-select" />
     </div>
   </div>

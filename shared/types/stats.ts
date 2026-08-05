@@ -154,6 +154,17 @@ export type LeaderboardRequest = z.infer<typeof zLeaderboardsRequest>;
 //
 // Weapon Stats (weapon damage/kills ranking, filterable by map, mode and date range)
 //
+export const WEAPON_STATS_SORT_BY = [
+    "games",
+    "damage",
+    "damage_per_game",
+    "kills",
+    "kills_per_game",
+] as const;
+
+/** Top N rows returned per request, ranked by `sortBy`. */
+export const WEAPON_STATS_MAX_RESULTS = 100;
+
 export const zWeaponStatsRequest = z.object({
     /** ISO date (YYYY-MM-DD), inclusive. */
     from: z.string(),
@@ -166,9 +177,11 @@ export const zWeaponStatsRequest = z.object({
         z.literal(TeamMode.Squad),
         z.literal(ALL_TEAM_MODES),
     ]),
+    sortBy: z.enum(WEAPON_STATS_SORT_BY),
 });
 
 export type WeaponStatsRequest = z.infer<typeof zWeaponStatsRequest>;
+export type WeaponStatsSortBy = WeaponStatsRequest["sortBy"];
 
 export interface WeaponStatsEntry {
     type: string;
@@ -177,6 +190,7 @@ export interface WeaponStatsEntry {
     kills: number;
     gamesUsed: number;
     avgDamagePerGame: number;
+    avgKillsPerGame: number;
 }
 export type WeaponStatsResponse = WeaponStatsEntry[];
 

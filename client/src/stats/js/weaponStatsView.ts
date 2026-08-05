@@ -1,5 +1,5 @@
 import $ from "jquery";
-import type { WeaponStatsRequest, WeaponStatsResponse } from "../../../../shared/types/stats.ts";
+import type { WeaponStatsRequest, WeaponStatsResponse, WeaponStatsSortBy } from "../../../../shared/types/stats.ts";
 import { ALL_MAPS, ALL_TEAM_MODES } from "../../../../shared/types/stats.ts";
 import { api } from "../../api.ts";
 import { helpers } from "../../helpers.ts";
@@ -58,6 +58,7 @@ export class WeaponStatsView {
         range: RangePreset;
         from: string;
         to: string;
+        sortBy: WeaponStatsSortBy;
     } | null = null;
     el = $(
         templates.weaponStats({
@@ -80,6 +81,7 @@ export class WeaponStatsView {
         const range = (helpers.getParameterByName<RangePreset>("range") || "7") as RangePreset;
         const customFrom = helpers.getParameterByName("from");
         const customTo = helpers.getParameterByName("to");
+        const sortBy = (helpers.getParameterByName<WeaponStatsSortBy>("sort") || "damage") as WeaponStatsSortBy;
 
         const { from, to } = resolveRange(range, customFrom, customTo);
 
@@ -88,9 +90,10 @@ export class WeaponStatsView {
             to,
             mapIdFilter: mapId,
             teamModeFilter: teamMode as WeaponStatsRequest["teamModeFilter"],
+            sortBy,
         };
 
-        this.pendingParams = { teamMode, mapId, range, from, to };
+        this.pendingParams = { teamMode, mapId, range, from, to, sortBy };
 
         $.ajax({
             url: api.resolveUrl("/api/weapon_stats"),
@@ -118,12 +121,14 @@ export class WeaponStatsView {
         const range = $("#weapon-stats-range").val() as RangePreset;
         const from = $("#weapon-stats-from").val();
         const to = $("#weapon-stats-to").val();
+        const sortBy = $("#weapon-stats-sort").val() as WeaponStatsSortBy;
 
         const params = new URLSearchParams({
             view: "weapons",
             team: String(teamMode),
             mapId: String(mapId),
             range,
+            sort: sortBy,
         });
         if (range === "custom") {
             if (from) params.set("from", String(from));
@@ -149,6 +154,7 @@ export class WeaponStatsView {
                 $("#weapon-stats-range").val(p.range);
                 $("#weapon-stats-from").val(p.from);
                 $("#weapon-stats-to").val(p.to);
+                $("#weapon-stats-sort").val(p.sortBy);
                 const customRange = p.range === "custom";
                 $("#weapon-stats-from").prop("disabled", !customRange);
                 $("#weapon-stats-to").prop("disabled", !customRange);
