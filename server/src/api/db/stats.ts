@@ -11,6 +11,7 @@ import { matchDataTable, usersTable } from "./schema.ts";
 export const emptyUserStats = {
     slug: "",
     username: "",
+    assists: 0,
     modes: [],
 };
 
@@ -39,6 +40,7 @@ export async function userStatsSqlQuery(
                     "wins",
                 ),
                 kills: sum(matchDataTable.kills).as("kills"),
+                assists: sum(matchDataTable.assists).as("assists"),
                 winPct: sql`ROUND(SUM(CASE WHEN ${matchDataTable.rank} = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1)`
                     .as(
                         "winpct",
@@ -54,6 +56,9 @@ export async function userStatsSqlQuery(
                 avg_time_alive: sql`ROUND(AVG(${matchDataTable.timeAlive}))`.as(
                     "avg_time_alive",
                 ),
+                // AVG() ignores NULL rows on its own, so matches without an impact
+                // score (solo, or maps that don't opt in) don't skew this.
+                rating: sql`ROUND(AVG(${matchDataTable.impactScore}))`.as("rating"),
             })
             .from(matchDataTable)
             .where(
@@ -78,6 +83,7 @@ export async function userStatsSqlQuery(
             games: sql`COALESCE(SUM("mode_stats".games), 0)`,
             wins: sql`COALESCE(SUM("mode_stats".wins), 0)`,
             kills: sql`COALESCE(SUM("mode_stats".kills), 0)`,
+            assists: sql`COALESCE(SUM("mode_stats".assists), 0)`,
             kpg: sql`COALESCE(ROUND(SUM("mode_stats".kills) * 1.0 / NULLIF(SUM("mode_stats".games), 0), 1), 0)`,
             modes: sql`
         COALESCE(JSON_AGG(
@@ -85,6 +91,7 @@ export async function userStatsSqlQuery(
                 JSON_BUILD_OBJECT(
                     'wins', "mode_stats".wins,
                     'kills', "mode_stats".kills,
+                    'assists', "mode_stats".assists,
                     'teamMode', "mode_stats".team_mode,
                     'avgDamage', "mode_stats".avg_damage,
                     'avgTimeAlive', "mode_stats".avg_time_alive,
@@ -92,7 +99,8 @@ export async function userStatsSqlQuery(
                     'kpg', "mode_stats".kpg,
                     'winPct', "mode_stats".winPct,
                     'mostKills', "mode_stats".most_kills,
-                    'games', "mode_stats".games
+                    'games', "mode_stats".games,
+                    'rating', "mode_stats".rating
                 )
             END
         ), '[]')`,

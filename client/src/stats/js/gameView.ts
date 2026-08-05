@@ -8,6 +8,7 @@ import {
     type ParsedTracks,
     parseTracks,
 } from "../../../../shared/net/replay";
+import type { ImpactBreakdown } from "../../../../shared/impactScore";
 import type { MatchDataRequest, MatchDataResponse } from "../../../../shared/types/stats";
 import { api } from "../../api";
 import { helpers } from "../../helpers";
@@ -83,6 +84,8 @@ export class GameView {
     private map: GameMapFile | null = null;
     /** Cosmetics each player had equipped in this match, keyed by name (see `fetchLoadouts`). */
     private loadouts = new Map<string, string[]>();
+    /** Impact score + breakdown per player name, from `/api/match_data` (see `fetchLoadouts`). */
+    private impact = new Map<string, { score: number; breakdown: ImpactBreakdown }>();
     private meta = new Map<number, PlayerMeta>();
     private paths = new Map<number, PathPoint[]>();
     private deaths = new Map<number, PathPoint>();
@@ -186,8 +189,17 @@ export class GameView {
             for (const r of rows) {
                 if (this.loadouts.has(r.username)) ambiguous.add(r.username);
                 this.loadouts.set(r.username, r.equipped_cosmetics ?? []);
+                if (r.impact_score !== null && r.impact_breakdown) {
+                    this.impact.set(r.username, {
+                        score: r.impact_score,
+                        breakdown: r.impact_breakdown,
+                    });
+                }
             }
-            for (const name of ambiguous) this.loadouts.delete(name);
+            for (const name of ambiguous) {
+                this.loadouts.delete(name);
+                this.impact.delete(name);
+            }
         } catch {
             /* loadouts are optional — the rest of the view works without them */
         }
@@ -539,6 +551,8 @@ export class GameView {
         if (!this.stats.length) return '<div class="gv-empty">No stats</div>';
         // Older matches predate loadout recording — drop the column entirely for them.
         const anyLoadout = [...this.loadouts.values()].some((c) => c.length);
+        // Impact score only exists for team-mode matches on maps that opted in.
+        const anyImpact = this.impact.size > 0;
         const rows = [...this.stats]
             .sort((a, b) => (a.rank || 999) - (b.rank || 999))
             .map((p) => {
@@ -550,6 +564,19 @@ export class GameView {
                     : this.loadouts.get(p.name)?.length
                       ? `<td><span class="gv-loadout-btn" data-pid="${p.id}">View</span></td>`
                       : `<td class="gv-loadout-none">—</td>`;
+                let impact = "";
+                if (anyImpact) {
+                    const imp = this.impact.get(p.name);
+                    if (imp) {
+                        const b = imp.breakdown;
+                        const title = esc(
+                            `Combat: ${b.combat.points}/${b.combat.max} (${b.combat.detail}) · Support: ${b.support.points}/${b.support.max} (${b.support.detail})`,
+                        );
+                        impact = `<td><span class="gv-impact-score" title="${title}">${imp.score}</span></td>`;
+                    } else {
+                        impact = `<td class="gv-loadout-none">—</td>`;
+                    }
+                }
                 return `<tr class="${hl}">
                     <td>#${p.rank || "—"}</td>
                     <td class="gv-stats-name">${esc(p.name)}</td>
@@ -561,11 +588,12 @@ export class GameView {
                     <td>${p.hits}</td>
                     <td>${acc}</td>
                     ${loadout}
+                    ${impact}
                 </tr>`;
             })
             .join("");
         return `<table class="gv-stats-table"><thead><tr>
-            <th>#</th><th>Player</th><th>K</th><th>Dmg</th><th>Took</th><th>Alive</th><th>Shots</th><th>Hits</th><th>Acc</th>${anyLoadout ? "<th>Loadout</th>" : ""}
+            <th>#</th><th>Player</th><th>K</th><th>Dmg</th><th>Took</th><th>Alive</th><th>Shots</th><th>Hits</th><th>Acc</th>${anyLoadout ? "<th>Loadout</th>" : ""}${anyImpact ? "<th>Impact</th>" : ""}
         </tr></thead><tbody>${rows}</tbody></table>`;
     }
 

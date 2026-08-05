@@ -1,6 +1,10 @@
 import { aliasedTable, and, desc, eq, gte, inArray, lte, sql, sum } from "drizzle-orm";
 import type { TeamMode } from "../../../../shared/gameConfig.ts";
-import { ALL_TEAM_MODES, type MatchHistoryResponse } from "../../../../shared/types/stats.ts";
+import {
+    ALL_TEAM_MODES,
+    type MatchHistoryResponse,
+    type MatchHistoryTeammate,
+} from "../../../../shared/types/stats.ts";
 import { db } from "./index.ts";
 import { matchDataTable, usersTable } from "./schema.ts";
 
@@ -60,14 +64,32 @@ export async function matchHistoryQuery(opts: {
             team_mode: matchDataTable.teamMode,
             team_count: matchDataTable.teamCount,
             team_total: matchDataTable.teamTotal,
+            team_id: matchDataTable.teamId,
             end_time: matchDataTable.createdAt,
             time_alive: matchDataTable.timeAlive,
             rank: matchDataTable.rank,
             kills: matchDataTable.kills,
+            assists: matchDataTable.assists,
             team_kills: sum(aliased.kills).mapWith(Number),
             damage_dealt: matchDataTable.damageDealt,
             damage_taken: matchDataTable.damageTaken,
             slug: usersTable.slug,
+            username: matchDataTable.username,
+            // Other players on the same team in this match (excludes the row itself via
+            // player_id, since guest rows can share an empty user_id and can't be told
+            // apart that way). A correlated subquery keeps this out of the outer
+            // GROUP BY/join entirely instead of aggregating over yet another self-join.
+            teammates: sql<MatchHistoryTeammate[]>`(
+                SELECT COALESCE(
+                    JSON_AGG(JSON_BUILD_OBJECT('username', tmd.username, 'slug', tu.slug)),
+                    '[]'::json
+                )
+                FROM match_data tmd
+                LEFT JOIN users tu ON tu.id = tmd.user_id
+                WHERE tmd.game_id = ${matchDataTable.gameId}
+                  AND tmd.team_id = ${matchDataTable.teamId}
+                  AND tmd.player_id != ${matchDataTable.playerId}
+            )`,
         })
         .from(matchDataTable)
         .groupBy(
@@ -77,12 +99,16 @@ export async function matchHistoryQuery(opts: {
             matchDataTable.teamMode,
             matchDataTable.teamCount,
             matchDataTable.teamTotal,
+            matchDataTable.teamId,
             matchDataTable.createdAt,
             matchDataTable.timeAlive,
             matchDataTable.rank,
             matchDataTable.kills,
+            matchDataTable.assists,
             matchDataTable.damageDealt,
             matchDataTable.damageTaken,
+            matchDataTable.username,
+            matchDataTable.playerId,
             usersTable.slug,
         )
         .leftJoin(

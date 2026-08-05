@@ -83,6 +83,7 @@ export const Comp: MapDef = {
             win: 2,
             timeSurvived: 0, 
         },
+        impactWeight: 1,
     },
     /* STRIP_FROM_PROD_CLIENT:START */
     gameConfig: {

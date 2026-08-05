@@ -5,6 +5,7 @@ import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
 import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
+import { computeImpactScore } from "../../../shared/impactScore.ts";
 import * as net from "../../../shared/net/net";
 import type { Loadout } from "../../../shared/utils/loadout";
 import { math } from "../../../shared/utils/math";
@@ -998,7 +999,27 @@ export class Game {
 
         const mapId = this.advancedSettings ? MapId.Custom : this.map.mapId;
 
+        // Impact score only applies to team modes, and only on maps that opt in
+        // (MapDef.gameMode.impactWeight, 0/unset = disabled).
+        const impactWeight = this.isTeamMode
+            ? this.map.mapDef.gameMode.impactWeight
+            : undefined;
+
         const values: SaveGameBody["matchData"] = players.map(({ player, rank }) => {
+            const impact = computeImpactScore(
+                {
+                    kills: player.kills,
+                    damageDealt: player.damageDealt,
+                    damageTaken: player.damageTaken,
+                    assists: player.assists,
+                    revives: player.revives,
+                    teammateSaves: player.teammateSaves,
+                    timesDowned: player.downedCount,
+                    timesNeededSaving: player.timesNeededSaving,
+                },
+                impactWeight,
+            );
+
             return {
                 // *NOTE: userId is optional; we save the game stats for non logged users too
                 userId: !player.spectator ? player.userId : null,
@@ -1028,6 +1049,12 @@ export class Game {
                 rank: rank,
                 ip: player.ip,
                 findGameIp: player.findGameIp,
+                revives: player.revives,
+                teammateSaves: player.teammateSaves,
+                timesDowned: player.downedCount,
+                timesNeededSaving: player.timesNeededSaving,
+                impactScore: impact?.score ?? null,
+                impactBreakdown: impact?.breakdown ?? null,
             };
         });
 

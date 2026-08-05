@@ -33,6 +33,10 @@ matchDataRouter.post(
                 equipped_cosmetics: matchDataTable.equippedCosmetics,
                 loadout_private: usersTable.loadoutPrivate,
                 role: matchDataTable.role,
+                revives: matchDataTable.revives,
+                teammate_saves: matchDataTable.teammateSaves,
+                impact_score: matchDataTable.impactScore,
+                impact_breakdown: matchDataTable.impactBreakdown,
             })
             .from(matchDataTable)
             .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
