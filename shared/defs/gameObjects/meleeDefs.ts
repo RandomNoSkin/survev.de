@@ -8,6 +8,7 @@ export interface MeleeDef {
     /** When true, this item can appear in the Golden Fries daily shop. */
     shop?: boolean;
     perk?: string;
+    creatorDiscordId?: number;
     quality: number;
     autoAttack: boolean;
     switchDelay: number;
@@ -1408,6 +1409,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     karambit_blazing: defineMeleeSkin("karambit", { // above design
         name: "Karambit Blazing",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1507,6 +1509,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     bayonet_case_hardened: defineMeleeSkin("bayonet", {
         name: "Bayonet Case Hardened",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1518,6 +1521,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     bayonet_m9_autotronic: defineMeleeSkin("bayonet", {
         name: "Bayonet M9 Autotronic",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1529,6 +1533,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     bayonet_m9_vanilla: defineMeleeSkin("bayonet", {
         name: "Bayonet M9 Vanilla",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1540,6 +1545,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     bayonet_m9_pink_crystal: defineMeleeSkin("bayonet", {
         name: "Bayonet M9 Pink Crystal",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1650,6 +1656,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     flip_technical: defineMeleeSkin("flip", { // above OC design
         name: "Flip Knife Technical",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Rare,
         noPotatoSwap: false,
         lootImg: { sprite: "loot-melee-flip-technical.img" },
@@ -1659,6 +1666,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     flip_pyrotechnical: defineMeleeSkin("flip", { // above OC design
         name: "Flip Knife Pyrotechnical",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Rare,
         noPotatoSwap: false,
         lootImg: { sprite: "loot-melee-flip-pyrotechnical.img" },
@@ -1668,6 +1676,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     flip_eclipse: defineMeleeSkin("flip", { // above OC design, suggested by v0dka and Mikael
         name: "Flip Knife Eclipse",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Rare,
         noPotatoSwap: false,
         lootImg: { sprite: "loot-melee-flip-eclipse.img" },
@@ -1677,6 +1686,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     ursus_rugged: defineMeleeSkin("ursus", { // above OC design
         name: "Ursus Knife Rugged",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Rare,
         noPotatoSwap: false,
         lootImg: { sprite: "loot-melee-ursus-rugged.img" },
@@ -1686,6 +1696,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     ursus_jade: defineMeleeSkin("ursus", { // above OC design
         name: "Ursus Knife Jade",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Rare,
         noPotatoSwap: false,
         lootImg: { sprite: "loot-melee-ursus-jade.img" },
@@ -1695,6 +1706,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     ursus_safari: defineMeleeSkin("ursus", { // above OC design
         name: "Ursus Knife Safari",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Rare,
         noPotatoSwap: false,
         lootImg: { sprite: "loot-melee-ursus-safari.img" },
