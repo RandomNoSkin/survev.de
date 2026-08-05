@@ -988,10 +988,36 @@ export class Game {
          */
         const teamTotal = new Set(players.map(({ player }) => player.teamId)).size;
 
+        const teamSizes = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+
         const teamKills = players.reduce(
             (acc, curr) => {
                 acc[curr.player.teamId] =
                     (acc[curr.player.teamId] ?? 0) + curr.player.kills;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+
+        // Impact score: how many times *any* teammate went down / needed saving this
+        // match — the actual number of revive/save opportunities that existed, so a
+        // player isn't scored against chances that never came up.
+        const teamDowns = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.downedCount;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamNeededSaving = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.timesNeededSaving;
                 return acc;
             },
             {} as Record<string, number>,
@@ -1013,9 +1039,16 @@ export class Game {
                     damageTaken: player.damageTaken,
                     assists: player.assists,
                     revives: player.revives,
+                    covers: player.covers,
                     teammateSaves: player.teammateSaves,
                     timesDowned: player.downedCount,
                     timesNeededSaving: player.timesNeededSaving,
+                    enemyCount: players.length - teamSizes[player.teamId],
+                    // Exclude self: you can't revive/save yourself, so your own downs/
+                    // need-saving don't count as opportunities you could've converted.
+                    reviveOpportunities: teamDowns[player.teamId] - player.downedCount,
+                    saveOpportunities:
+                        teamNeededSaving[player.teamId] - player.timesNeededSaving,
                 },
                 impactWeight,
             );

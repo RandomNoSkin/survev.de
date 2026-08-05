@@ -13,6 +13,10 @@ export interface ImpactStats {
     damageTaken: number;
     assists: number;
     revives: number;
+    /** Times this player was covering (nearby + actively fighting) when a teammate
+     *  completed a revive — counted the same as a revive in the share below, since
+     *  holding an angle while someone revives is just as valuable as reviving. */
+    covers: number;
     teammateSaves: number;
     /** Times this player was downed this match (liability signal). */
     timesDowned: number;
@@ -20,6 +24,19 @@ export interface ImpactStats {
      *  (see `teammateSaves` in player.ts) — a noisier liability signal than a down,
      *  since drawing fire on purpose (baiting/tanking) looks the same. */
     timesNeededSaving: number;
+    /** Number of enemy players in the match (full lobby minus own team). Used to scale
+     *  kill points — a kill is worth less when the lobby has more enemies to find and
+     *  worth more in a small lobby, so raw kill count alone isn't comparable across
+     *  match sizes (e.g. duo vs squad comp lobbies). */
+    enemyCount: number;
+    /** Times a teammate (excluding self) went down this match — the total number of
+     *  revives that were actually possible. Revive points are this player's share of
+     *  that total, not a raw count, so a quiet match with few downs doesn't lock them
+     *  out of a max score, and a chaotic one doesn't let raw revive count alone hit it. */
+    reviveOpportunities: number;
+    /** Times a teammate (excluding self) needed saving this match — the save-points
+     *  equivalent of `reviveOpportunities`. */
+    saveOpportunities: number;
 }
 
 export interface ImpactCategory {
@@ -43,15 +60,20 @@ export const IMPACT_WEIGHTS = {
         max: 60,
         pointsPerKill: 8,
         maxKillPoints: 24,
+        // pointsPerKill above is tuned for a lobby with this many enemies (e.g. two
+        // 4-player squads facing off); pointsPerKill scales down as the enemy count
+        // rises above it and up as it drops below, so a kill counts for as much in a
+        // 6-enemy duo lobby as in a 4-enemy squad one.
+        referenceEnemyCount: 4,
         damagePerPoint: 25,
         maxDamagePoints: 24,
         maxEfficiencyPoints: 12,
     },
     support: {
         max: 40,
-        pointsPerRevive: 8,
+        // Revive/save points are awarded as a share of reviveOpportunities/
+        // saveOpportunities (see computeImpactScore), not a flat rate per revive/save.
         maxRevivePoints: 16,
-        pointsPerSave: 4,
         maxSavePoints: 12,
         pointsPerAssist: 3,
         maxAssistPoints: 12,
@@ -107,9 +129,19 @@ export function computeImpactScore(
 
     const w = IMPACT_WEIGHTS;
 
-    const killPoints = clamp(stats.kills * w.combat.pointsPerKill, 0, w.combat.maxKillPoints);
+    // More enemies in the lobby means more targets to find kills/damage on, so both
+    // are scaled down as enemyCount rises above the reference (and up below it) —
+    // otherwise a big lobby would make combat points trivially easy to max out.
+    const enemyCount = Math.max(stats.enemyCount, 1);
+    const lobbyScale = w.combat.referenceEnemyCount / enemyCount;
+
+    const killPoints = clamp(
+        stats.kills * w.combat.pointsPerKill * lobbyScale,
+        0,
+        w.combat.maxKillPoints,
+    );
     const damagePoints = clamp(
-        stats.damageDealt / w.combat.damagePerPoint,
+        (stats.damageDealt / w.combat.damagePerPoint) * lobbyScale,
         0,
         w.combat.maxDamagePoints,
     );
@@ -117,16 +149,26 @@ export function computeImpactScore(
     const efficiencyPoints = clamp((efficiencyRatio - 1) * 6, 0, w.combat.maxEfficiencyPoints);
     const combatPoints = clamp(killPoints + damagePoints + efficiencyPoints, 0, w.combat.max);
 
-    const revivePoints = clamp(
-        stats.revives * w.support.pointsPerRevive,
-        0,
-        w.support.maxRevivePoints,
-    );
-    const savePoints = clamp(
-        stats.teammateSaves * w.support.pointsPerSave,
-        0,
-        w.support.maxSavePoints,
-    );
+    // Score as a share of the opportunities that actually existed this match. No
+    // opportunities (nobody went down / needed saving) means nothing was missed, so
+    // award full points rather than locking the player out of a max score.
+    const revivePoints =
+        stats.reviveOpportunities > 0
+            ? clamp(
+                  ((stats.revives + stats.covers) / stats.reviveOpportunities) *
+                      w.support.maxRevivePoints,
+                  0,
+                  w.support.maxRevivePoints,
+              )
+            : w.support.maxRevivePoints;
+    const savePoints =
+        stats.saveOpportunities > 0
+            ? clamp(
+                  (stats.teammateSaves / stats.saveOpportunities) * w.support.maxSavePoints,
+                  0,
+                  w.support.maxSavePoints,
+              )
+            : w.support.maxSavePoints;
     const assistPoints = clamp(
         stats.assists * w.support.pointsPerAssist,
         0,
@@ -161,7 +203,7 @@ export function computeImpactScore(
         support: {
             points: Math.round(supportPoints),
             max: w.support.max,
-            detail: `${stats.revives} revives, ${stats.teammateSaves} saves, ${stats.assists} assists${penaltyDetail}`,
+            detail: `${stats.revives} revives${stats.covers ? ` (+${stats.covers} covering)` : ""}, ${stats.teammateSaves} saves, ${stats.assists} assists${penaltyDetail}`,
         },
     };
 
