@@ -8,7 +8,6 @@ export interface MeleeDef {
     /** When true, this item can appear in the Golden Fries daily shop. */
     shop?: boolean;
     perk?: string;
-    creatorDiscordId?: number;
     quality: number;
     autoAttack: boolean;
     switchDelay: number;
@@ -381,6 +380,114 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-huntsman-rugged.img",
+            pos: {
+                x: 2.5,
+                y: -35.5,
+            },
+            rot: 0.82,
+            scale: {
+                x: 0.35,
+                y: 0.35,
+            },
+            tint: 0xffffff,
+        },
+    },
+    ursus: {
+        name: "Ursus Knife",
+        type: "melee",
+        quality: 0,
+        autoAttack: false,
+        switchDelay: 0.25,
+        damage: 24,
+        obstacleDamage: 1,
+        noPotatoSwap: true,
+        noDropOnDeath: true,
+        attack: {
+            offset: {
+                x: 1.35,
+                y: 0,
+            },
+            rad: 0.9,
+            damageTimes: [0.1],
+            cooldownTime: 0.25,
+        },
+        speed: {
+            equip: 1,
+        },
+        anim: {
+            idlePose: "fists",
+            attackAnims: ["cut", "thrust"],
+        },
+        sound: {
+            pickup: "frag_pickup_01",
+            swing: "knife_swing_01",
+            deploy: "knife_deploy_01",
+            playerHit: "knife_hit_01",
+        },
+        lootImg: {
+            sprite: "loot-melee-ursus-rugged.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-02.img",
+            borderTint: 0xffffff,
+            scale: 0.3,
+            rot: 0.785,
+        },
+        worldImg: {
+            sprite: "loot-melee-ursus-rugged.img",
+            pos: {
+                x: 1,
+                y: -25.5,
+            },
+            rot: 0.82,
+            scale: {
+                x: 0.38,
+                y: 0.38,
+            },
+            tint: 0xffffff,
+        },
+    },
+    flip: {
+        name: "Flip Knife",
+        type: "melee",
+        quality: 0,
+        autoAttack: false,
+        switchDelay: 0.25,
+        damage: 24,
+        obstacleDamage: 1,
+        noPotatoSwap: true,
+        noDropOnDeath: true,
+        attack: {
+            offset: {
+                x: 1.35,
+                y: 0,
+            },
+            rad: 0.9,
+            damageTimes: [0.1],
+            cooldownTime: 0.25,
+        },
+        speed: {
+            equip: 1,
+        },
+        anim: {
+            idlePose: "fists",
+            attackAnims: ["cut", "thrust"],
+        },
+        sound: {
+            pickup: "frag_pickup_01",
+            swing: "knife_swing_01",
+            deploy: "knife_deploy_01",
+            playerHit: "knife_hit_01",
+        },
+        lootImg: {
+            sprite: "loot-melee-flip-technical.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-02.img",
+            borderTint: 0xffffff,
+            scale: 0.3,
+            rot: 0.785,
+        },
+        worldImg: {
+            sprite: "loot-melee-flip-technical.img",
             pos: {
                 x: 2.5,
                 y: -35.5,
@@ -1299,6 +1406,17 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-karambit-fade.img",
         },
     }),
+    karambit_blazing: defineMeleeSkin("karambit", { // above design
+        name: "Karambit Blazing",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-karambit-blazing.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-karambit-blazing.img",
+        },
+    }),
     karambit_dotexe: defineMeleeSkin("karambit", {
         name: "Karambit Dotexe",
         rarity: Rarity.Epic,
@@ -1385,6 +1503,50 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-bayonet-fade.img",
+        },
+    }),
+    bayonet_case_hardened: defineMeleeSkin("bayonet", {
+        name: "Bayonet Case Hardened",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bayonet-case-hardened.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bayonet-case-hardened.img",
+        },
+    }),
+    bayonet_m9_autotronic: defineMeleeSkin("bayonet", {
+        name: "Bayonet M9 Autotronic",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bayonet-m9-autotronic.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bayonet-m9-autotronic.img",
+        },
+    }),
+    bayonet_m9_vanilla: defineMeleeSkin("bayonet", {
+        name: "Bayonet M9 Vanilla",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bayonet-m9-vanilla.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bayonet-m9-vanilla.img",
+        },
+    }),
+    bayonet_m9_pink_crystal: defineMeleeSkin("bayonet", {
+        name: "Bayonet M9 Pink Crystal",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-bayonet-m9-pink-crystal.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-bayonet-m9-pink-crystal.img",
         },
     }),
     wakizashi_rust: defineMeleeSkin("wakizashi", {
@@ -1486,6 +1648,61 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-huntsman-pink.img",
         },
     }),
+    flip_technical: defineMeleeSkin("flip", { // above OC design
+        name: "Flip Knife Technical",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: { sprite: "loot-melee-flip-technical.img" },
+        worldImg: {
+            sprite: "loot-melee-flip-technical.img",
+        },
+    }),
+    flip_pyrotechnical: defineMeleeSkin("flip", { // above OC design
+        name: "Flip Knife Pyrotechnical",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: { sprite: "loot-melee-flip-pyrotechnical.img" },
+        worldImg: {
+            sprite: "loot-melee-flip-pyrotechnical.img",
+        },
+    }),
+    flip_eclipse: defineMeleeSkin("flip", { // above OC design, suggested by v0dka and Mikael
+        name: "Flip Knife Eclipse",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: { sprite: "loot-melee-flip-eclipse.img" },
+        worldImg: {
+            sprite: "loot-melee-flip-eclipse.img",
+        },
+    }),
+    ursus_rugged: defineMeleeSkin("ursus", { // above OC design
+        name: "Ursus Knife Rugged",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: { sprite: "loot-melee-ursus-rugged.img" },
+        worldImg: {
+            sprite: "loot-melee-ursus-rugged.img",
+        },
+    }),
+    ursus_jade: defineMeleeSkin("ursus", { // above OC design
+        name: "Ursus Knife Jade",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: { sprite: "loot-melee-ursus-jade.img" },
+        worldImg: {
+            sprite: "loot-melee-ursus-jade.img",
+        },
+    }),
+    ursus_safari: defineMeleeSkin("ursus", { // above OC design
+        name: "Ursus Knife Safari",
+        rarity: Rarity.Rare,
+        noPotatoSwap: false,
+        lootImg: { sprite: "loot-melee-ursus-safari.img" },
+        worldImg: {
+            sprite: "loot-melee-ursus-safari.img",
+        },
+    }),
+
     bowie_vintage: defineMeleeSkin("bowie", {
         name: "Bowie Vintage",
         rarity: Rarity.Rare,
