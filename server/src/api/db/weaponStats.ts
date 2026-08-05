@@ -5,6 +5,7 @@ import {
     ALL_MAPS,
     ALL_TEAM_MODES,
     WEAPON_STATS_MAX_RESULTS,
+    WEAPON_STATS_MIN_GAMES_FOR_PER_GAME,
     type WeaponStatsResponse,
     type WeaponStatsSortBy,
 } from "../../../../shared/types/stats.ts";
@@ -72,7 +73,15 @@ export async function weaponStatsSqlQuery(
         kills_per_game: "avgKillsPerGame",
     };
     const key = sortKey[sortBy];
-    entries.sort((a, b) => b[key] - a[key]);
 
-    return entries.slice(0, WEAPON_STATS_MAX_RESULTS);
+    // Per-game averages need a minimum sample size, or a weapon used once with a
+    // lucky game tops the ranking. Raw totals (games/damage/kills) have no such filter.
+    const isPerGameSort = sortBy === "damage_per_game" || sortBy === "kills_per_game";
+    const qualified = isPerGameSort
+        ? entries.filter((e) => e.gamesUsed >= WEAPON_STATS_MIN_GAMES_FOR_PER_GAME)
+        : entries;
+
+    qualified.sort((a, b) => b[key] - a[key]);
+
+    return qualified.slice(0, WEAPON_STATS_MAX_RESULTS);
 }

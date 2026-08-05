@@ -165,6 +165,11 @@ export const WEAPON_STATS_SORT_BY = [
 /** Top N rows returned per request, ranked by `sortBy`. */
 export const WEAPON_STATS_MAX_RESULTS = 100;
 
+/** Minimum games a weapon needs to qualify when ranking by a per-game average
+ *  (`damage_per_game`/`kills_per_game`), so a weapon used once with a lucky game
+ *  can't top the ranking. Doesn't apply to the raw-total sorts (games/damage/kills). */
+export const WEAPON_STATS_MIN_GAMES_FOR_PER_GAME = 10;
+
 export const zWeaponStatsRequest = z.object({
     /** ISO date (YYYY-MM-DD), inclusive. */
     from: z.string(),
