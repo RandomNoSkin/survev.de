@@ -69,6 +69,13 @@ const SAVE_WINDOW_MS = 2000;
 /** Impact score "teammate save": min time between credits for the same (attacker,
  *  enemy) pair, so sustained fire in one engagement only credits once. */
 const SAVE_CREDIT_COOLDOWN_MS = 3000;
+/** Impact score "cover": how close a teammate must be to a completing revive to
+ *  count as covering it. Wider than reviveRange/medicReviveRange (5-6) since covering
+ *  means holding a nearby angle, not standing on top of the downed teammate. */
+const COVER_RANGE = 15;
+/** Impact score "cover": how recently the covering teammate must have dealt or taken
+ *  damage for their presence to count as active fighting rather than idling nearby. */
+const COVER_COMBAT_WINDOW_MS = GameConfig.player.reviveDuration * 1000;
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -1883,6 +1890,13 @@ export class Player extends BaseGameObject {
     assists = 0;
     /** Impact score: teammates this player revived this match (excludes self-revives). */
     revives = 0;
+    /** Impact score: times this player was nearby and actively fighting (dealt or
+     *  took damage) while a teammate completed a revive nearby — credited the same as
+     *  a revive itself, since holding an angle while someone revives is just as
+     *  valuable as doing the reviving. See completion of `GameConfig.Action.Revive`. */
+    covers = 0;
+    /** Timestamp of this player's last dealt-damage tick, used to judge `covers`. */
+    lastDamageDealtTime = 0;
     /** Impact score: enemies this player damaged while that enemy was actively
      *  damaging one of this player's teammates (peel/save), see `damage()`. */
     teammateSaves = 0;
@@ -2474,7 +2488,10 @@ export class Player extends BaseGameObject {
 
                         // Impact score: only counts reviving a teammate, not the
                         // self_revive perk path (where target === this).
-                        if (target !== this) this.revives++;
+                        if (target !== this) {
+                            this.revives++;
+                            this.creditCovers(target);
+                        }
 
                         // checks 2 conditions in one, player has pan AND has it selected
                         if (target.weapons[target.curWeapIdx].type === "pan") {
@@ -3677,6 +3694,7 @@ export class Player extends BaseGameObject {
         if (playerSource && params.source !== this && !this.downed) {
             if (playerSource.groupId !== this.groupId) {
                 playerSource.damageDealt += finalDamage;
+                playerSource.lastDamageDealtTime = Date.now();
 
                 // Impact score: credit a "save" when this shot lands on an enemy who
                 // recently damaged one of playerSource's teammates (peeling them off a
@@ -4566,6 +4584,33 @@ export class Player extends BaseGameObject {
                 playerToRevive.__id,
             );
             this.playAnim(GameConfig.Anim.Revive, GameConfig.player.reviveDuration);
+        }
+    }
+
+    /** Impact score "cover": credits nearby teammates who were actively fighting
+     *  (dealt or took damage within the last `reviveDuration`) when this revive
+     *  completed — same team value as doing the revive itself. Excludes the reviver
+     *  and the revived player, who are already credited via `revives`. */
+    creditCovers(revived: Player) {
+        if (!this.group) return;
+        const now = Date.now();
+        for (const teammate of this.group.players) {
+            if (teammate === this || teammate === revived) continue;
+            if (teammate.dead || teammate.downed) continue;
+            if (!util.sameLayer(teammate.layer, this.layer)) continue;
+            if (v2.lengthSqr(v2.sub(teammate.pos, this.pos)) > COVER_RANGE * COVER_RANGE) {
+                continue;
+            }
+
+            const dealtRecently = now - teammate.lastDamageDealtTime < COVER_COMBAT_WINDOW_MS;
+            const tookRecently =
+                teammate.damageHistory.length > 0 &&
+                now -
+                    teammate.damageHistory[teammate.damageHistory.length - 1].realTime <
+                    COVER_COMBAT_WINDOW_MS;
+            if (dealtRecently || tookRecently) {
+                teammate.covers++;
+            }
         }
     }
 
