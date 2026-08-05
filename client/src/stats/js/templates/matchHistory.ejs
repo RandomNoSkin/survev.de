@@ -40,7 +40,7 @@
                         <%= timeDiff %>
                     </div>
                 </div>
-                <div class='col-3'>
+                <div class='col-2'>
                     <div class='match-link-stat'>
                         <%
                             var modeText = env.games[i].summary.team_mode;
@@ -65,13 +65,15 @@
                             <div class='match-link-stat-name match-link-stat-name-md'>Assists</div>
                             <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.assists || 0 %></div>
                         </div>
+                    </div>
+                    <div class='hide-xs col-md-1'>
                         <div class='match-link-stat'>
                             <div class='match-link-stat-name match-link-stat-name-md'>Team Kills</div>
                             <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.team_kills || 0 %></div>
                         </div>
                     </div>
                 <% } %>
-                <div class='col-2 col-md-1 <%= env.games[i].summary.team_mode == 'solo' ? 'offset-md-1' : '' %>'>
+                <div class='col-2 col-md-1 <%= env.games[i].summary.team_mode == 'solo' ? 'offset-md-2' : '' %>'>
                     <div class='match-link-stat'>
                         <div class='match-link-stat-name match-link-stat-name-md'>Damage Dealt</div>
                         <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.damage_dealt %></div>
