@@ -204,6 +204,13 @@
       "when": 1785885996682,
       "tag": "0026_illegal_blonde_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785943806597,
+      "tag": "0027_gigantic_iceman",
+      "breakpoints": true
     }
   ]
 }

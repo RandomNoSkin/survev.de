@@ -5,6 +5,7 @@
       <th class='header-player' scope="col" data-l10n='stats-weapon' data-caps='true'>WEAPON</th>
       <th class='header-stat' scope="col" data-l10n='stats-total-damage' data-caps='true'>TOTAL DAMAGE</th>
       <th class='header-stat' scope="col" data-l10n='stats-avg-damage-per-game' data-caps='true'>AVG DMG/GAME</th>
+      <th class='header-stat' scope="col" data-l10n='stats-most-damage-per-game' data-caps='true'>MOST DMG/GAME</th>
       <th class='header-games' scope="col" data-l10n='stats-kills' data-caps='true'>KILLS</th>
       <th class='header-games' scope="col" data-l10n='stats-avg-kills-per-game' data-caps='true'>AVG KILLS/GAME</th>
       <th class='header-games' scope="col" data-l10n='stats-games' data-caps='true'>GAMES</th>
@@ -13,7 +14,7 @@
   <tbody class='leaderboard-values'>
     <% if (!env.data.length) { %>
       <tr class='main single-player'>
-        <td colspan="7" class='data-rank' data-l10n='stats-no-data'>No data for this range.</td>
+        <td colspan="8" class='data-rank' data-l10n='stats-no-data'>No data for this range.</td>
       </tr>
     <% } %>
     <% for (var i = 0, data = env.data; i < data.length; i++) { %>
@@ -24,6 +25,7 @@
         </td>
         <td><%= data[i].totalDamage %></td>
         <td><%= data[i].avgDamagePerGame %></td>
+        <td><%= data[i].mostDamage %></td>
         <td><%= data[i].kills %></td>
         <td><%= data[i].avgKillsPerGame %></td>
         <td><%= data[i].gamesUsed %></td>
