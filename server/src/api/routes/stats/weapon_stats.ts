@@ -12,9 +12,9 @@ weaponStatsRouter.post(
     rateLimitMiddleware(40, 60 * 1000),
     validateParams(zWeaponStatsRequest),
     async (c) => {
-        const { from, to, mapIdFilter, teamModeFilter } = c.req.valid("json");
+        const { from, to, mapIdFilter, teamModeFilter, sortBy } = c.req.valid("json");
 
-        const data = await weaponStatsSqlQuery(from, to, mapIdFilter, teamModeFilter);
+        const data = await weaponStatsSqlQuery(from, to, mapIdFilter, teamModeFilter, sortBy);
 
         return c.json<WeaponStatsResponse>(data, 200);
     },
