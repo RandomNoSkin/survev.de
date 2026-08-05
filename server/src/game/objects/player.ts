@@ -63,6 +63,13 @@ import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
 
+/** Impact score "teammate save": how recently the enemy must have hit a teammate
+ *  for damaging them back to count as peeling them off that teammate. */
+const SAVE_WINDOW_MS = 2000;
+/** Impact score "teammate save": min time between credits for the same (attacker,
+ *  enemy) pair, so sustained fire in one engagement only credits once. */
+const SAVE_CREDIT_COOLDOWN_MS = 3000;
+
 type MoveObjsMode = {
     enabled: boolean;
     selectedObj?: Loot | Obstacle | Building;
@@ -1874,6 +1881,17 @@ export class Player extends BaseGameObject {
     kills = 0;
     timeAlive = 0;
     assists = 0;
+    /** Impact score: teammates this player revived this match (excludes self-revives). */
+    revives = 0;
+    /** Impact score: enemies this player damaged while that enemy was actively
+     *  damaging one of this player's teammates (peel/save), see `damage()`. */
+    teammateSaves = 0;
+    /** Impact score liability signal: times a teammate got a `teammateSaves` credit
+     *  for peeling an enemy off THIS player, see `damage()`. */
+    timesNeededSaving = 0;
+    /** Per-enemy cooldown for `teammateSaves`, so sustained fire on the same enemy
+     *  during one engagement only credits once every `SAVE_CREDIT_COOLDOWN_MS`. */
+    saveCooldowns: Map<number, number> = new Map();
     /** Bullets fired (each pellet); paired with `bulletHits` for replay/game-view accuracy. */
     shotsFired = 0;
     /** Gun-bullet damage instances dealt to other players. */
@@ -2453,6 +2471,10 @@ export class Player extends BaseGameObject {
                         target.downedBy = undefined;
                         target.downedDamageTicker = 0;
                         target.health = GameConfig.player.reviveHealth;
+
+                        // Impact score: only counts reviving a teammate, not the
+                        // self_revive perk path (where target === this).
+                        if (target !== this) this.revives++;
 
                         // checks 2 conditions in one, player has pan AND has it selected
                         if (target.weapons[target.curWeapIdx].type === "pan") {
@@ -3655,6 +3677,31 @@ export class Player extends BaseGameObject {
         if (playerSource && params.source !== this && !this.downed) {
             if (playerSource.groupId !== this.groupId) {
                 playerSource.damageDealt += finalDamage;
+
+                // Impact score: credit a "save" when this shot lands on an enemy who
+                // recently damaged one of playerSource's teammates (peeling them off a
+                // teammate under fire). Cooldown per (attacker, enemy) pair so sustained
+                // fire on the same target during one engagement only credits once.
+                if (this.game.isTeamMode && playerSource.group) {
+                    const lastCredit = playerSource.saveCooldowns.get(this.__id) ?? 0;
+                    const now = Date.now();
+                    if (now - lastCredit > SAVE_CREDIT_COOLDOWN_MS) {
+                        const savedTeammate = playerSource.group.players.find(
+                            (teammate) =>
+                                teammate !== playerSource &&
+                                teammate.damageHistory.some(
+                                    (h) =>
+                                        h.sourceId === this.__id &&
+                                        now - h.realTime < SAVE_WINDOW_MS,
+                                ),
+                        );
+                        if (savedTeammate) {
+                            playerSource.teammateSaves++;
+                            savedTeammate.timesNeededSaving++;
+                            playerSource.saveCooldowns.set(this.__id, now);
+                        }
+                    }
+                }
 
                 // Weapon-ranking stats: only count damage actually dealt by a weapon
                 // (excludes gas/bleeding/airdrop/etc, which use other DamageTypes).

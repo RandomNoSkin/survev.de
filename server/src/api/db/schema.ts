@@ -18,6 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { table } from "node:console";
 import { TeamMode } from "../../../../shared/gameConfig.ts";
+import type { ImpactBreakdown } from "../../../../shared/impactScore.ts";
 import type { OAuthAppStatus, OAuthScope } from "../../../../shared/types/oauth.ts";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
@@ -338,6 +339,14 @@ export const matchDataTable = pgTable(
         killerId: integer("killer_id").notNull(),
         killedIds: integer("killed_ids").array().notNull(),
         assistedIds: integer("assisted_ids").array().notNull().default([]),
+        revives: integer("revives").notNull().default(0),
+        teammateSaves: integer("teammate_saves").notNull().default(0),
+        timesDowned: integer("times_downed").notNull().default(0),
+        timesNeededSaving: integer("times_needed_saving").notNull().default(0),
+        // Impact score (0-100, team modes only, only on maps with MapDef.gameMode.impactWeight
+        // set) plus its per-category breakdown; null when the match/map doesn't participate.
+        impactScore: integer("impact_score"),
+        impactBreakdown: json("impact_breakdown").$type<ImpactBreakdown>(),
         encodedIp: text("encoded_ip").notNull().default(""),
         // Set true when a moderator marks this player's participation in the game as
         // "botted": voided rows are excluded from EVERY XP aggregation (reconcile,

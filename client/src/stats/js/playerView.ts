@@ -3,6 +3,7 @@ import { EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs.ts";
 import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig.ts";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GameConfig, MapId, type TeamMode } from "../../../../shared/gameConfig.ts";
+import { getImpactRank } from "../../../../shared/impactScore.ts";
 import {
     ALL_MAPS,
     ALL_TEAM_MODES,
@@ -158,10 +159,9 @@ function getPlayerCardData(
     for (let i = 0; i < userData.modes.length; i++) {
         const mode = userData.modes[i];
 
-        // Overall rank / rating not available yet
         const mid: { name: string; val: string }[] = [];
-        addStat(mid, "Rating", "-");
-        addStat(mid, "Rank", "-");
+        addStat(mid, "Rating", mode.rating !== null && mode.rating !== undefined ? String(mode.rating) : "-");
+        addStat(mid, "Rank", getImpactRank(mode.rating) ?? "-");
 
         const bot: { name: string; val: string }[] = [];
         addStat(bot, "Wins", mode.wins);

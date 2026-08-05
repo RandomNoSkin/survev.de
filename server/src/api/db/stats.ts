@@ -56,6 +56,9 @@ export async function userStatsSqlQuery(
                 avg_time_alive: sql`ROUND(AVG(${matchDataTable.timeAlive}))`.as(
                     "avg_time_alive",
                 ),
+                // AVG() ignores NULL rows on its own, so matches without an impact
+                // score (solo, or maps that don't opt in) don't skew this.
+                rating: sql`ROUND(AVG(${matchDataTable.impactScore}))`.as("rating"),
             })
             .from(matchDataTable)
             .where(
@@ -96,7 +99,8 @@ export async function userStatsSqlQuery(
                     'kpg', "mode_stats".kpg,
                     'winPct', "mode_stats".winPct,
                     'mostKills', "mode_stats".most_kills,
-                    'games', "mode_stats".games
+                    'games', "mode_stats".games,
+                    'rating', "mode_stats".rating
                 )
             END
         ), '[]')`,

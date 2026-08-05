@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MapId, TeamMode } from "../gameConfig.ts";
+import type { ImpactBreakdown } from "../impactScore.ts";
 
 //
 // Match History
@@ -80,6 +81,11 @@ export type MatchData = {
     /** Non-default cosmetics this player had equipped for the match ([] when private). */
     equipped_cosmetics: string[];
     role: string;
+    revives: number;
+    teammate_saves: number;
+    /** Impact score (0-100), null in solo or on maps that don't opt in. */
+    impact_score: number | null;
+    impact_breakdown: ImpactBreakdown | null;
 };
 
 //
@@ -123,6 +129,8 @@ export interface Mode {
     kpg: string;
     avgDamage: number;
     avgTimeAlive: number;
+    /** Average impact score across this mode's matches that had one (null = none, e.g. solo). */
+    rating: number | null;
 }
 
 //

@@ -62,6 +62,10 @@
                 <% if (env.games[i].summary.team_mode != 'solo') { %>
                     <div class='hide-xs col-md-1'>
                         <div class='match-link-stat'>
+                            <div class='match-link-stat-name match-link-stat-name-md'>Assists</div>
+                            <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.assists || 0 %></div>
+                        </div>
+                        <div class='match-link-stat'>
                             <div class='match-link-stat-name match-link-stat-name-md'>Team Kills</div>
                             <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.team_kills || 0 %></div>
                         </div>
