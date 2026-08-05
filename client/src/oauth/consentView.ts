@@ -3,6 +3,8 @@ import type { OAuthScope } from "../../../shared/types/oauth";
 const SCOPE_LABELS: Record<OAuthScope, string> = {
     "read:discord": "See whether your account is linked to Discord, and your Discord user ID.",
     "read:stats": "Read your match stats (kills, damage, wins, time alive, ...).",
+    "read:inventory": "Read your full item inventory, including trade history, value, and lore.",
+    "read:market": "Read your daily and weekly market offers and Golden Fries balance.",
 };
 
 function escapeHtml(value: string): string {

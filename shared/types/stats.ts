@@ -23,6 +23,13 @@ export const zMatchHistoryRequest = z.object({
 
 export type MatchHistoryParams = z.infer<typeof zMatchHistoryRequest>;
 
+/** Another player on the same team in that match. */
+export interface MatchHistoryTeammate {
+    username: string;
+    /** null when the teammate wasn't a logged-in account (guest). */
+    slug: string | null;
+}
+
 export type MatchHistory = {
     guid: string;
     region: string;
@@ -30,13 +37,20 @@ export type MatchHistory = {
     team_mode: number;
     team_count: number;
     team_total: number;
+    /** This match's team id (shared with every entry in `teammates`). */
+    team_id: number;
     end_time: string | Date;
     time_alive: number;
     rank: number;
     kills: number;
+    assists: number;
     team_kills: number;
     damage_dealt: number;
     damage_taken: number;
+    /** Display name used for this specific match (can differ from the account's
+     *  current username if it was changed since). */
+    username: string;
+    teammates: MatchHistoryTeammate[];
 };
 export type MatchHistoryResponse = MatchHistory[];
 
@@ -91,6 +105,7 @@ export type UserStatsResponse = {
     banned: boolean;
     wins: number;
     kills: number;
+    assists: number;
     games: number;
     kpg: string;
     modes: Mode[];
@@ -101,6 +116,7 @@ export interface Mode {
     games: number;
     wins: number;
     kills: number;
+    assists: number;
     winPct: string;
     mostKills: number;
     mostDamage: number;

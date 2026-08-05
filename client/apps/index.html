@@ -49,7 +49,7 @@
                     <pre class="oauth-code">GET https://survev.de/oauth-authorize
     ?client_id=YOUR_CLIENT_ID
     &amp;redirect_uri=https://yourapp.example/callback
-    &amp;scope=read:discord read:stats
+    &amp;scope=read:discord read:stats read:inventory read:market
     &amp;state=RANDOM_OPAQUE_STRING</pre>
                     <p>
                         <code>redirect_uri</code> must exactly match one of the URIs you
@@ -122,7 +122,7 @@ Content-Type: application/json
 
 { "interval": "alltime", "mapIdFilter": "-1" }
 
-→ { "slug": "...", "username": "...", "games": 42, "wins": 3, "kills": 210, "kpg": "5.0",
+→ { "slug": "...", "username": "...", "games": 42, "wins": 3, "kills": 210, "assists": 87, "kpg": "5.0",
     "modes": [ { "teamMode": 4, "games": 10, "avgDamage": 233, "avgTimeAlive": 187, ... } ] }
     (requires scope read:stats — teamMode 1/2/4 = solo/duo/squad, use it to filter e.g. 4-player squad games)
 
@@ -136,8 +136,9 @@ Content-Type: application/json
 
 → [
     { "guid": "...", "region": "eu", "map_id": 1, "team_mode": 4, "team_count": 4, "team_total": 12,
-      "end_time": "2026-01-15T18:22:41.000Z", "time_alive": 812, "rank": 2, "kills": 4,
-      "team_kills": 9, "damage_dealt": 620, "damage_taken": 340 },
+      "team_id": 7, "end_time": "2026-01-15T18:22:41.000Z", "time_alive": 812, "rank": 2, "kills": 4,
+      "assists": 2, "team_kills": 9, "damage_dealt": 620, "damage_taken": 340, "username": "SomePlayer",
+      "teammates": [ { "username": "teammate1", "slug": "teammate1" }, { "username": "GuestPlayer", "slug": null } ] },
     ...
   ]
     (requires scope read:stats — one row per game the user played, newest first.
@@ -146,7 +147,39 @@ Content-Type: application/json
     1/2/4/7 = solo/duo/squad/all (default 7). `withSlugs` (max 10) filters to games
     where every listed slug also has a row — handy for "our 4v4 games together"; it
     doesn't require them on the same team, just the same game. `count` defaults to 50,
-    capped at 200 per page; use `offset` to page through more.)</pre>
+    capped at 200 per page; use `offset` to page through more. Each row also has
+    `assists`, `username` (the name used in that match), `team_id`, and `teammates`
+    (other players on the same team that match: `{ username, slug }`, `slug` is null
+    for guests).)
+
+POST https://survev.de/api/external/inventory
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+→ { "slug": "...", "username": "...",
+    "items": [
+      { "id": 123, "type": "outfitBase", "name": "Basic Outfit", "rarity": 0,
+        "lore": "Pure and simple.", "value": 0, "pricePaid": null, "previousOwners": [],
+        "timeAcquired": 1735689600000, "source": "unlock_new_account",
+        "games": 12, "wins": 1, "kills": 8, "damage": 940 },
+      ...
+    ] }
+    (requires scope read:inventory — every cosmetic item the account owns (not just
+    what's equipped), one entry per owned copy. `value` is the item's current Golden
+    Fries shop value (0 for non-shoppable/Stock items); `pricePaid` is what the current
+    owner actually paid for that copy (null if unknown). `previousOwners` lists prior
+    owners' slugs, oldest first, for items acquired via trading/market/gifting. Unlike
+    the public stats-page loadout viewer, this ignores the user's "hide loadout"
+    setting, since they explicitly granted your app access to it.)
+
+POST https://survev.de/api/external/market
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+→ { "success": true, "day": "2026-01-15", "week": "w2026-01-12", "resetTime": 1768521600000,
+    "weeklyResetTime": 1768694400000, "balance": 1200,
+    "offers": [ { "slot": 0, "items": [ { "type": "...", "price": 300 } ], "price": 300, "purchased": false }, ... ] }
+    (requires scope read:market — the user's daily (slots 0/1) and weekly (slots 2/3)
+    rotating shop offers, purchase status per offer, and their Golden Fries balance.
+    Read-only — there's no external endpoint to buy an offer on the user's behalf.)</pre>
                     <p class="oauth-muted">
                         401 <code>invalid_token</code> means the token doesn't exist (typo,
                         or the user revoked access). 403 <code>insufficient_scope</code>
@@ -159,7 +192,7 @@ Content-Type: application/json
                     <h2 class="oauth-doc-h2">Notes</h2>
                     <ul class="oauth-doc-list">
                         <li>Re-running the consent flow for a user who already authorized your app replaces their previous token (old one stops working).</li>
-                        <li>Both endpoints are rate-limited per application, not per IP — a busy bot won't get throttled because of other apps' traffic.</li>
+                        <li>All endpoints are rate-limited per application, not per IP — a busy bot won't get throttled because of other apps' traffic.</li>
                         <li>Rotating your client secret (in "My apps") immediately invalidates the old one — update it everywhere before rotating in production.</li>
                     </ul>
                 </div>

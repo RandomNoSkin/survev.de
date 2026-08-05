@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TeamMode } from "../gameConfig.ts";
 import { ALL_TEAM_MODES } from "./stats.ts";
 
-export const OAUTH_SCOPES = ["read:discord", "read:stats"] as const;
+export const OAUTH_SCOPES = ["read:discord", "read:stats", "read:inventory", "read:market"] as const;
 export type OAuthScope = (typeof OAUTH_SCOPES)[number];
 export const zOAuthScope = z.enum(OAUTH_SCOPES);
 
@@ -148,6 +148,43 @@ export type DiscordLinkResponse = {
     /** The survev.de account's identity — always present regardless of `linked`. */
     slug: string;
     username: string;
+};
+
+/** One owned cosmetic instance, with its trade history and current value (scope
+ *  `read:inventory`). */
+export type InventoryItem = {
+    /** Inventory instance id (absent for virtual default-unlock items). */
+    id?: number;
+    type: string;
+    /** Display name from the item's definition (not localized). */
+    name: string;
+    rarity: number;
+    lore?: string;
+    /** Current Golden Fries shop value (0 for non-shoppable/Stock items). */
+    value: number;
+    /** Golden Fries the current owner paid to acquire this instance (null = unknown,
+     *  e.g. default unlocks). */
+    pricePaid: number | null;
+    /** Ownership history (slugs), oldest first — present for traded items. */
+    previousOwners: string[];
+    timeAcquired: number;
+    source: string;
+    /** Lifetime match stats accrued by this instance while equipped. */
+    games: number;
+    wins: number;
+    kills: number;
+    damage: number;
+};
+
+/** The account's full owned-item inventory (scope `read:inventory`) — every cosmetic
+ *  copy the user owns, not just what's currently equipped. Unlike the public
+ *  `/api/user_loadout` (slug-based) endpoint, this ignores `loadoutPrivate` — the user
+ *  explicitly granted this app access, so their public-visibility preference doesn't
+ *  apply to it. */
+export type InventoryResponse = {
+    slug: string;
+    username: string;
+    items: InventoryItem[];
 };
 
 export const zExternalMatchHistoryRequest = z
