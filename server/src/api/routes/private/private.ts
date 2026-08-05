@@ -120,13 +120,24 @@ async function attributeWeaponStats(
 
     // Collapse per-player entries down to one row per weapon: multiple players can use
     // the same weapon in one match, and a single INSERT's ON CONFLICT DO UPDATE can't
-    // touch the same (day, weapon, map, mode) row twice.
-    const byWeapon = new Map<string, { damage: number; kills: number; games: number }>();
+    // touch the same (day, weapon, map, mode) row twice. maxDamage is the highest single
+    // player's damage with this weapon THIS match (not summed), feeding the running max
+    // kept in the DB via GREATEST below.
+    const byWeapon = new Map<
+        string,
+        { damage: number; kills: number; games: number; maxDamage: number }
+    >();
     for (const e of entries) {
-        const agg = byWeapon.get(e.weaponType) ?? { damage: 0, kills: 0, games: 0 };
+        const agg = byWeapon.get(e.weaponType) ?? {
+            damage: 0,
+            kills: 0,
+            games: 0,
+            maxDamage: 0,
+        };
         agg.damage += e.damage;
         agg.kills += e.kills;
         agg.games += 1;
+        agg.maxDamage = Math.max(agg.maxDamage, e.damage);
         byWeapon.set(e.weaponType, agg);
     }
 
@@ -146,6 +157,7 @@ async function attributeWeaponStats(
                     damageDealt: agg.damage,
                     kills: agg.kills,
                     gamesUsed: agg.games,
+                    maxDamage: agg.maxDamage,
                 })),
             )
             .onConflictDoUpdate({
@@ -159,6 +171,7 @@ async function attributeWeaponStats(
                     damageDealt: sql`${weaponStatsDailyTable.damageDealt} + excluded.damage_dealt`,
                     kills: sql`${weaponStatsDailyTable.kills} + excluded.kills`,
                     gamesUsed: sql`${weaponStatsDailyTable.gamesUsed} + excluded.games_used`,
+                    maxDamage: sql`GREATEST(${weaponStatsDailyTable.maxDamage}, excluded.max_damage)`,
                 },
             });
     } catch (err) {

@@ -158,6 +158,7 @@ export const WEAPON_STATS_SORT_BY = [
     "games",
     "damage",
     "damage_per_game",
+    "most_damage",
     "kills",
     "kills_per_game",
 ] as const;
@@ -195,6 +196,7 @@ export interface WeaponStatsEntry {
     kills: number;
     gamesUsed: number;
     avgDamagePerGame: number;
+    mostDamage: number;
     avgKillsPerGame: number;
 }
 export type WeaponStatsResponse = WeaponStatsEntry[];

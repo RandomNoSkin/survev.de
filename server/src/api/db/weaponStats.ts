@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql, sum } from "drizzle-orm";
+import { and, eq, gte, lte, max, sql, sum } from "drizzle-orm";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { TeamMode } from "../../../../shared/gameConfig.ts";
 import {
@@ -33,6 +33,7 @@ export async function weaponStatsSqlQuery(
             totalDamage: sum(weaponStatsDailyTable.damageDealt).mapWith(Number),
             kills: sum(weaponStatsDailyTable.kills).mapWith(Number),
             gamesUsed: sum(weaponStatsDailyTable.gamesUsed).mapWith(Number),
+            mostDamage: max(weaponStatsDailyTable.maxDamage).mapWith(Number),
         })
         .from(weaponStatsDailyTable)
         .where(
@@ -60,15 +61,23 @@ export async function weaponStatsSqlQuery(
             kills: row.kills,
             gamesUsed: row.gamesUsed,
             avgDamagePerGame: row.gamesUsed > 0 ? round1(row.totalDamage / row.gamesUsed) : 0,
+            mostDamage: row.mostDamage,
             avgKillsPerGame: row.gamesUsed > 0 ? round1(row.kills / row.gamesUsed) : 0,
         };
     });
 
-    type NumericKey = "gamesUsed" | "totalDamage" | "avgDamagePerGame" | "kills" | "avgKillsPerGame";
+    type NumericKey =
+        | "gamesUsed"
+        | "totalDamage"
+        | "avgDamagePerGame"
+        | "mostDamage"
+        | "kills"
+        | "avgKillsPerGame";
     const sortKey: Record<WeaponStatsSortBy, NumericKey> = {
         games: "gamesUsed",
         damage: "totalDamage",
         damage_per_game: "avgDamagePerGame",
+        most_damage: "mostDamage",
         kills: "kills",
         kills_per_game: "avgKillsPerGame",
     };

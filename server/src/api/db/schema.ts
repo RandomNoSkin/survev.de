@@ -391,6 +391,9 @@ export const weaponStatsDailyTable = pgTable(
         damageDealt: bigint("damage_dealt", { mode: "number" }).notNull().default(0),
         kills: integer("kills").notNull().default(0),
         gamesUsed: integer("games_used").notNull().default(0),
+        // Highest single-game damage total dealt with this weapon seen so far (running
+        // max across every upsert), for the "most damage in a game" ranking.
+        maxDamage: integer("max_damage").notNull().default(0),
     },
     (table) => [
         primaryKey({
