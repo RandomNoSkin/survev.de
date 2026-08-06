@@ -29,18 +29,28 @@ export interface ImpactStats {
      *  across match sizes (e.g. duo vs squad comp lobbies) — 2 kills is a team wipe in
      *  a duo mirror match but a quarter of the enemy team in a full squad match. */
     enemyCount: number;
-    /** Total damage dealt by every player in the match (both teams). Damage points are
-     *  this player's share of that total, so raw damage dealt alone isn't comparable
-     *  across matches that ran hotter or colder. */
-    totalRoundDamage: number;
-    /** Times a teammate (excluding self) went down this match — the total number of
-     *  revives that were actually possible. Revive points are this player's share of
-     *  that total, not a raw count, so a quiet match with few downs doesn't lock them
-     *  out of a max score, and a chaotic one doesn't let raw revive count alone hit it. */
+    /** Total damage dealt by this player's own team (self included). Damage points are
+     *  this player's share of that total — the damage equivalent of enemyCount for
+     *  kills — so raw damage dealt alone isn't comparable across matches that ran
+     *  hotter or colder, or teammates who chipped in more or less. */
+    teamDamageDealt: number;
+    /** Times a teammate went down within actual response range while this player was
+     *  alive and not downed themselves — the number of revives that were actually
+     *  possible *for this player specifically* (see `nearbyRespondingTeammates` in
+     *  player.ts), not just "a teammate went down somewhere". Revive points are this
+     *  player's share of that total, not a raw count, so a quiet match — or one where
+     *  they simply weren't in position — doesn't lock them out of a max score, and a
+     *  chaotic one doesn't let raw revive count alone hit it. */
     reviveOpportunities: number;
-    /** Times a teammate (excluding self) needed saving this match — the save-points
-     *  equivalent of `reviveOpportunities`. */
+    /** Times a teammate needed saving within actual response range of this player —
+     *  the save-points equivalent of `reviveOpportunities`. */
     saveOpportunities: number;
+    /** Whether this player died this match. Gates the reviveOpportunities/
+     *  saveOpportunities==0 fallback below: a survivor with zero opportunities genuinely
+     *  had nothing to do and shouldn't be penalized for it, but a player who died
+     *  (especially early, having done nothing) had their shot and didn't take it — no
+     *  free pass just because no opportunity happened to come up before they died. */
+    died: boolean;
 }
 
 export interface ImpactCategory {
@@ -67,8 +77,8 @@ export const IMPACT_WEIGHTS = {
         // kill points — e.g. 2 of 4 enemies in a squad match, 2 of 3 in a trio one.
         targetKillShare: 0.5,
         maxDamagePoints: 24,
-        // Fraction of the match's total damage output (see totalRoundDamage) a player
-        // must be responsible for to earn full damage points.
+        // Fraction of their own team's total damage output (see teamDamageDealt) a
+        // player must be responsible for to earn full damage points.
         targetDamageShare: 0.5,
         maxEfficiencyPoints: 12,
     },
@@ -142,9 +152,9 @@ export function computeImpactScore(
         0,
         w.combat.maxKillPoints,
     );
-    const totalRoundDamage = Math.max(stats.totalRoundDamage, 1);
+    const teamDamageDealt = Math.max(stats.teamDamageDealt, 1);
     const damagePoints = clamp(
-        (stats.damageDealt / (totalRoundDamage * w.combat.targetDamageShare)) *
+        (stats.damageDealt / (teamDamageDealt * w.combat.targetDamageShare)) *
             w.combat.maxDamagePoints,
         0,
         w.combat.maxDamagePoints,
@@ -154,8 +164,10 @@ export function computeImpactScore(
     const combatPoints = clamp(killPoints + damagePoints + efficiencyPoints, 0, w.combat.max);
 
     // Score as a share of the opportunities that actually existed this match. No
-    // opportunities (nobody went down / needed saving) means nothing was missed, so
-    // award full points rather than locking the player out of a max score.
+    // opportunities (nobody went down / needed saving in range) means nothing was
+    // missed, so award full points — but only for survivors; a player who died had
+    // their shot at the match and gets no free pass for opportunities that simply
+    // never arrived before they went out.
     const revivePoints =
         stats.reviveOpportunities > 0
             ? clamp(
@@ -164,7 +176,9 @@ export function computeImpactScore(
                   0,
                   w.support.maxRevivePoints,
               )
-            : w.support.maxRevivePoints;
+            : stats.died
+              ? 0
+              : w.support.maxRevivePoints;
     const savePoints =
         stats.saveOpportunities > 0
             ? clamp(
@@ -172,7 +186,9 @@ export function computeImpactScore(
                   0,
                   w.support.maxSavePoints,
               )
-            : w.support.maxSavePoints;
+            : stats.died
+              ? 0
+              : w.support.maxSavePoints;
     const assistPoints = clamp(
         stats.assists * w.support.pointsPerAssist,
         0,
