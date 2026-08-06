@@ -284,9 +284,16 @@ export const PrivateRouter = new Hono<Context>()
 
         await leaderboardCache.invalidateCache(matchData);
 
-        // Hash each player's IP and store it alongside the match data for permanent IP history
+        // Hash each player's IP and store it alongside the match data for permanent IP history.
+        // createdAt crossed the game-server -> API RPC call as JSON, so a Date on the sending
+        // side arrives here as an ISO string — re-hydrate it, or drizzle's timestamp column
+        // (which expects a real Date to call .toISOString() on) throws on insert.
         await db.insert(matchDataTable).values(
-            matchData.map((d) => ({ ...d, encodedIp: hashIp(d.ip) })),
+            matchData.map((d) => ({
+                ...d,
+                encodedIp: hashIp(d.ip),
+                createdAt: d.createdAt ? new Date(d.createdAt) : undefined,
+            })),
         );
         await logPlayerIPs(matchData);
         if (data.cosmeticStats?.length) {
