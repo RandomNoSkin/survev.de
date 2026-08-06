@@ -24,11 +24,15 @@ export interface ImpactStats {
      *  (see `teammateSaves` in player.ts) — a noisier liability signal than a down,
      *  since drawing fire on purpose (baiting/tanking) looks the same. */
     timesNeededSaving: number;
-    /** Number of enemy players in the match (full lobby minus own team). Used to scale
-     *  kill points — a kill is worth less when the lobby has more enemies to find and
-     *  worth more in a small lobby, so raw kill count alone isn't comparable across
-     *  match sizes (e.g. duo vs squad comp lobbies). */
+    /** Number of enemy players in the match (full lobby minus own team). Kill points
+     *  are this player's share of that pool, so raw kill count alone isn't comparable
+     *  across match sizes (e.g. duo vs squad comp lobbies) — 2 kills is a team wipe in
+     *  a duo mirror match but a quarter of the enemy team in a full squad match. */
     enemyCount: number;
+    /** Total damage dealt by every player in the match (both teams). Damage points are
+     *  this player's share of that total, so raw damage dealt alone isn't comparable
+     *  across matches that ran hotter or colder. */
+    totalRoundDamage: number;
     /** Times a teammate (excluding self) went down this match — the total number of
      *  revives that were actually possible. Revive points are this player's share of
      *  that total, not a raw count, so a quiet match with few downs doesn't lock them
@@ -58,15 +62,14 @@ export interface ImpactResult {
 export const IMPACT_WEIGHTS = {
     combat: {
         max: 60,
-        pointsPerKill: 8,
         maxKillPoints: 24,
-        // pointsPerKill above is tuned for a lobby with this many enemies (e.g. two
-        // 4-player squads facing off); pointsPerKill scales down as the enemy count
-        // rises above it and up as it drops below, so a kill counts for as much in a
-        // 6-enemy duo lobby as in a 4-enemy squad one.
-        referenceEnemyCount: 4,
-        damagePerPoint: 25,
+        // Fraction of the enemy team a player must personally eliminate to earn full
+        // kill points — e.g. 2 of 4 enemies in a squad match, 2 of 3 in a trio one.
+        targetKillShare: 0.5,
         maxDamagePoints: 24,
+        // Fraction of the match's total damage output (see totalRoundDamage) a player
+        // must be responsible for to earn full damage points.
+        targetDamageShare: 0.5,
         maxEfficiencyPoints: 12,
     },
     support: {
@@ -129,19 +132,20 @@ export function computeImpactScore(
 
     const w = IMPACT_WEIGHTS;
 
-    // More enemies in the lobby means more targets to find kills/damage on, so both
-    // are scaled down as enemyCount rises above the reference (and up below it) —
-    // otherwise a big lobby would make combat points trivially easy to max out.
+    // Both scored as this player's share of a match-specific pool (enemies on the
+    // field / total damage dealt by anyone), not a flat rate — so a raw kill or damage
+    // count means as much in a small lobby as in a large one, and hitting the target
+    // share (not a fixed count) is what earns full points.
     const enemyCount = Math.max(stats.enemyCount, 1);
-    const lobbyScale = w.combat.referenceEnemyCount / enemyCount;
-
     const killPoints = clamp(
-        stats.kills * w.combat.pointsPerKill * lobbyScale,
+        (stats.kills / (enemyCount * w.combat.targetKillShare)) * w.combat.maxKillPoints,
         0,
         w.combat.maxKillPoints,
     );
+    const totalRoundDamage = Math.max(stats.totalRoundDamage, 1);
     const damagePoints = clamp(
-        (stats.damageDealt / w.combat.damagePerPoint) * lobbyScale,
+        (stats.damageDealt / (totalRoundDamage * w.combat.targetDamageShare)) *
+            w.combat.maxDamagePoints,
         0,
         w.combat.maxDamagePoints,
     );
