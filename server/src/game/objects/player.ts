@@ -69,6 +69,10 @@ const SAVE_WINDOW_MS = 2000;
 /** Impact score "teammate save": min time between credits for the same (attacker,
  *  enemy) pair, so sustained fire in one engagement only credits once. */
 const SAVE_CREDIT_COOLDOWN_MS = 3000;
+/** Impact score "teammate save": the teammate must be below this health for peeling
+ *  an enemy off them to count as a save — otherwise every stray hit followed by
+ *  return fire would count, even when the teammate was never in real danger. */
+const SAVE_HEALTH_THRESHOLD = 50;
 /** Impact score "cover": how close a teammate must be to a completing revive to
  *  count as covering it. Wider than reviveRange/medicReviveRange (5-6) since covering
  *  means holding a nearby angle, not standing on top of the downed teammate. */
@@ -81,6 +85,13 @@ const COVER_COMBAT_WINDOW_MS = GameConfig.player.reviveDuration * 1000;
  *  to respond. Wider than COVER_RANGE — this is "in the same fight", not "holding an
  *  angle right next to it". */
 const RESPONSE_RANGE = 60;
+/** Impact score "knock/death penalty": base points lost for getting downed, scaled by
+ *  pendingKillWeight (see down()). Smaller than BASE_DEATH_PENALTY since a down is
+ *  still recoverable via revive. */
+const BASE_KNOCK_PENALTY = 3;
+/** Impact score "knock/death penalty": base points lost for actually dying, scaled by
+ *  the same pendingKillWeight that was snapshotted when the fatal down happened. */
+const BASE_DEATH_PENALTY = 6;
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -1891,6 +1902,26 @@ export class Player extends BaseGameObject {
     killedIndex = Infinity;
 
     kills = 0;
+    /** Impact score: this player's kills, weighted by how outnumbered their team was
+     *  at the moment of each knock (see `pendingKillWeight`/`down()`) — a kill landed
+     *  while your team was outnumbered counts for more than a mop-up kill landed
+     *  while your team already had the numbers advantage. Used instead of raw `kills`
+     *  in the kill/assist share (see game.ts); `kills` itself stays the plain count
+     *  for leaderboards/stats. */
+    weightedKills = 0;
+    /** Impact score: kill-weight multiplier snapshotted when THIS player was downed
+     *  (see `down()`), based on both teams' living player counts at that instant —
+     *  1x if the downer's team had the numbers advantage, 1.5x if even, 2x if the
+     *  downer's team was outnumbered. Applied to the downer's `weightedKills` if this
+     *  down becomes an actual kill; cleared without credit if this player is revived
+     *  instead. Also drives `lossPenalty` below, which — unlike the kill credit —
+     *  isn't undone by a revive. */
+    pendingKillWeight: number | undefined;
+    /** Impact score liability: points lost for being knocked and/or killed this
+     *  match, scaled by `pendingKillWeight` each time — losing a fight your team
+     *  should have been winning costs more than losing one you were already
+     *  outnumbered in. See `down()`/`kill()`. */
+    lossPenalty = 0;
     timeAlive = 0;
     assists = 0;
     /** Impact score: teammates this player revived this match (excludes self-revives). */
@@ -2519,6 +2550,10 @@ export class Player extends BaseGameObject {
                             }
                         }
                         target.pendingReviveResponders = [];
+                        // Revived, so this down never becomes a kill — discard the
+                        // pending weight (the knock penalty above already applied and
+                        // isn't undone by the revive).
+                        target.pendingKillWeight = undefined;
 
                         // checks 2 conditions in one, player has pan AND has it selected
                         if (target.weapons[target.curWeapIdx].type === "pan") {
@@ -3734,6 +3769,7 @@ export class Player extends BaseGameObject {
                         const savedTeammate = playerSource.group.players.find(
                             (teammate) =>
                                 teammate !== playerSource &&
+                                teammate.health < SAVE_HEALTH_THRESHOLD &&
                                 teammate.damageHistory.some(
                                     (h) =>
                                         h.sourceId === this.__id &&
@@ -3980,6 +4016,18 @@ export class Player extends BaseGameObject {
             downedMsg.killCreditId = this.lastDamagedBy.__id;
         }
 
+        // Impact score: snapshot the kill-weight for this down from both teams'
+        // living player counts right now — see pendingKillWeight doc above.
+        if (this.game.isTeamMode && this.downedBy?.group && this.group) {
+            const downerAlive = this.downedBy.group.livingPlayers.length;
+            const victimAlive = this.group.livingPlayers.length;
+            this.pendingKillWeight =
+                downerAlive === victimAlive ? 1.5 : downerAlive < victimAlive ? 2 : 1;
+            this.lossPenalty += this.pendingKillWeight * BASE_KNOCK_PENALTY;
+        } else {
+            this.pendingKillWeight = undefined;
+        }
+
         this.game.broadcastMsg(net.MsgType.Kill, downedMsg);
 
         if (this.downedBy) {
@@ -4014,6 +4062,12 @@ export class Player extends BaseGameObject {
             this.rank = 999;
         }
         this.dead = true;
+        // Impact score: death penalty, scaled by the kill-weight snapshotted at the
+        // down that led here (or 1x if this player died without ever going down,
+        // e.g. an instant kill or a whole-team wipe).
+        if (this.game.isTeamMode) {
+            this.lossPenalty += (this.pendingKillWeight ?? 1) * BASE_DEATH_PENALTY;
+        }
         this.killedIndex = this.game.playerBarn.nextKilledNumber++;
         this.boost = 0;
         this.actionType = GameConfig.Action.None;
@@ -4067,6 +4121,9 @@ export class Player extends BaseGameObject {
             if (killCreditSource !== this && killCreditSource.teamId !== this.teamId) {
                 killCreditSource.killedIds.push(this.matchDataId);
                 killCreditSource.kills++;
+                // Impact score: weighted by the kill-weight snapshotted when this
+                // victim went down (undiscarded, i.e. they weren't revived first).
+                killCreditSource.weightedKills += this.pendingKillWeight ?? 1;
                 const weapon = params.gameSourceType ?? params.mapSourceType ?? "unknown";
                 this.game.logKillFeedEntry({
                     ts: Date.now(),

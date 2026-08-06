@@ -997,6 +997,16 @@ export class Game {
             {} as Record<string, number>,
         );
 
+        // Impact score: player count per team, so share targets can scale relative to
+        // an even split (see ImpactStats.teamSize) instead of a fixed fraction.
+        const teamSizes = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+
         // Impact score: totals per team this match, so kill/assist, damage, and revive
         // points can all be scored as this player's share of their own team's output.
         const teamDamage = players.reduce(
@@ -1008,7 +1018,8 @@ export class Game {
         );
         const teamKillsAndAssists = players.reduce(
             (acc, { player }) => {
-                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.kills + player.assists;
+                acc[player.teamId] =
+                    (acc[player.teamId] ?? 0) + player.weightedKills + player.assists;
                 return acc;
             },
             {} as Record<string, number>,
@@ -1040,18 +1051,20 @@ export class Game {
             const impact = computeImpactScore(
                 {
                     kills: player.kills,
+                    weightedKills: player.weightedKills,
                     assists: player.assists,
                     damageDealt: player.damageDealt,
                     damageTaken: player.damageTaken,
                     revives: player.revives,
                     covers: player.covers,
                     teammateSaves: player.teammateSaves,
+                    teamSize: teamSizes[player.teamId],
                     teamKillsAndAssists: teamKillsAndAssists[player.teamId],
                     teamDamageDealt: teamDamage[player.teamId],
                     teamReviveContribution: teamReviveContribution[player.teamId],
                     teamSaves: teamSaves[player.teamId],
+                    lossPenalty: player.lossPenalty,
                     missedRevives: player.missedRevives,
-                    died: player.dead,
                 },
                 impactWeight,
             );
