@@ -8,7 +8,14 @@
  */
 
 export interface ImpactStats {
+    /** Raw kill count — display only. Scoring uses weightedKills instead. */
     kills: number;
+    /** Kills weighted by how outnumbered this player's team was at the moment of each
+     *  knock (1x team had the advantage, 1.5x even, 2x team was outnumbered) — see
+     *  `pendingKillWeight` in player.ts. Used instead of `kills` in the kill/assist
+     *  share below, so a clutch kill while outnumbered counts for more than a mop-up
+     *  kill while already ahead. */
+    weightedKills: number;
     assists: number;
     damageDealt: number;
     damageTaken: number;
@@ -18,16 +25,26 @@ export interface ImpactStats {
      *  holding an angle while someone revives is just as valuable as reviving. */
     covers: number;
     /** Enemies this player damaged while that enemy was actively damaging a teammate
-     *  (peel/save). Pure bonus, no penalty counterpart — landing a save takes a lucky
-     *  angle/timing that not everyone gets, so missing one isn't held against anyone,
-     *  unlike a missed revive where just standing nearby is enough. */
+     *  who was below half health (peel/save). Pure bonus, no penalty counterpart —
+     *  landing a save takes a lucky angle/timing that not everyone gets, so missing
+     *  one isn't held against anyone, unlike a missed revive where just standing
+     *  nearby is enough. */
     teammateSaves: number;
-    /** Total kills + assists by this player's own team (self included). Kill/assist
-     *  points are this player's share of that total — being credited with half of
-     *  your team's combined kills+assists earns full marks, so raw count alone isn't
-     *  comparable across matches with different lobby sizes or teammates who carried
-     *  more or less. Assists count the same as kills here since kill credit always
-     *  goes to whoever lands the down, not whoever did the damage. */
+    /** Number of players on this player's own team (self included). Every share
+     *  target below (kills+assists, damage, revives+covers, saves) is relative to
+     *  1/teamSize — an even split — not a fixed fraction, so a duo player and a
+     *  squad player need the same *relative* level of over-performance to max a
+     *  category, instead of a flat 50% share that's trivial in duos (an even 2-way
+     *  split already hits it) and unreachable by an average player in squads (an
+     *  even 4-way split is only 25%). */
+    teamSize: number;
+    /** Total weightedKills + assists by this player's own team (self included).
+     *  Kill/assist points are this player's share of that total — being credited
+     *  with half of your team's combined weighted-kills+assists earns full marks, so
+     *  raw count alone isn't comparable across matches with different lobby sizes or
+     *  teammates who carried more or less. Assists count the same as an unweighted
+     *  kill here since kill credit always goes to whoever lands the down, not
+     *  whoever did the damage. */
     teamKillsAndAssists: number;
     /** Total damage dealt by this player's own team (self included). Damage points
      *  are this player's share of that total, the damage equivalent of
@@ -43,16 +60,13 @@ export interface ImpactStats {
     /** Times this player was within actual response range when a teammate went down
      *  and that teammate was later revived, but this player neither performed the
      *  revive nor got cover credit for it — i.e. they were in a position to help and
-     *  did nothing. The only liability signal left in this category; going down
-     *  yourself, or needing a save, isn't penalized on its own. See
-     *  `nearbyRespondingTeammates` in player.ts. */
+     *  did nothing. See `nearbyRespondingTeammates` in player.ts. */
     missedRevives: number;
-    /** Whether this player died this match. Gates the teamReviveContribution==0
-     *  fallback below: a survivor whose team never needed a revive genuinely had
-     *  nothing to do and shouldn't be penalized for it, but a player who died
-     *  (especially early, having done nothing) had their shot and didn't take it — no
-     *  free pass just because the match never got that far for them. */
-    died: boolean;
+    /** Points lost this match for being knocked and/or killed, weighted by how
+     *  outnumbered this player's own team was at each moment (see `lossPenalty` in
+     *  player.ts) — losing a fight your team should have been winning costs more
+     *  than one you were already outnumbered in. Deducted straight from combat. */
+    lossPenalty: number;
 }
 
 export interface ImpactCategory {
@@ -72,49 +86,75 @@ export interface ImpactResult {
 }
 
 export const IMPACT_WEIGHTS = {
+    // Every share category's target is relativeShareTarget/teamSize — this many times
+    // an even split earns full points, for kills+assists, damage, revives+covers, and
+    // saves alike. 1.5 is a first guess: an even 4-way squad split (25% each) lands at
+    // share/target = 0.25/0.375 = 67% of that category's points, and reaching 1.5x
+    // your fair share (37.5% in a squad, 75% in a duo) maxes it out. Revisit if this
+    // still clusters scores too tightly or spreads them too wide in practice.
+    relativeShareTarget: 1.5,
     // Combat is the whole 0-100 scale, and can reach all 100 on its own — kills/
-    // assists/damage/efficiency sub-maxes already sum to 100 (45+40+15). Support
-    // (revive+save, below) only backfills whatever combat *didn't* fill; it never adds
-    // separate headroom on top. targetKillAssistShare/targetDamageShare at 0.5 are a
-    // first guess for this — revisit if combat maxes out too easily/rarely in practice.
+    // assists/damage/efficiency sub-maxes already sum to 100 (45+40+15) at exactly
+    // their target share. Support (revive+save, below) only backfills whatever combat
+    // *didn't* fill; it never adds separate headroom on top.
     combat: {
         max: 100,
         maxKillAssistPoints: 45,
-        // Fraction of the team's combined kills+assists a player must be responsible
-        // for to earn full kill/assist points (see teamKillsAndAssists).
-        targetKillAssistShare: 0.5,
         maxDamagePoints: 40,
-        // Fraction of their own team's total damage output (see teamDamageDealt) a
-        // player must be responsible for to earn full damage points.
-        targetDamageShare: 0.5,
         maxEfficiencyPoints: 15,
+        // Dealt/taken ratio for full efficiency points. Unlike the share categories
+        // above, efficiency is hard-capped here (no growth past this ratio) — it's a
+        // secondary signal, not something that should be able to dominate the score.
+        targetEfficiencyRatio: 2,
+        // Damage dealt needed for the ratio above to count at full strength — below
+        // this it scales down proportionally, so winning one or two small skirmishes
+        // by a good margin doesn't earn the same efficiency credit as sustaining a
+        // good ratio across real volume. A player who barely fought shouldn't get a
+        // maxed-out "good fighter" signal off a tiny sample.
+        efficiencyVolumeThreshold: 100,
     },
     // Support only ever fills the gap combat left under combat.max — see
-    // computeImpactScore. Its own max here just bounds how much a player can earn
-    // from it, not a separate slice of the final score.
+    // computeImpactScore. Its own max here just bounds display, not a separate slice
+    // of the final score.
     support: {
-        max: 28,
+        max: 20,
         maxRevivePoints: 8,
-        // Fraction of the team's combined revives+covers a player must be
-        // responsible for to earn full revive points (see teamReviveContribution).
-        targetReviveShare: 0.5,
         // Penalty for being in position to help a revive and doing neither — see
         // missedRevives. Capped at maxRevivePoints so a bad revive-response streak
         // can only zero out the revive points, not the save points.
         pointsPerMissedRevive: 4,
         maxMissedRevivePenalty: 8,
-        // Weighted above revives: landing a save is the harder, more opportunistic
-        // play (right angle, right timing), so it's worth more than just being in
-        // range for a revive.
-        maxSavePoints: 20,
-        // Fraction of the team's combined teammateSaves a player must be responsible
-        // for to earn full save points (see teamSaves).
-        targetSaveShare: 0.5,
+        // Same weight as revives — landing a save is harder/more opportunistic, but
+        // not so much that it should outweigh actually reviving a teammate.
+        maxSavePoints: 8,
     },
 } as const;
 
 function clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * Points for a share (numerator/denominator) of a pool, uncapped past `target` — no
+ * individual category has its own hard ceiling. Reaching `target` share earns
+ * `maxPoints` exactly (e.g. half your team's kills+assists = full kill/assist
+ * points); every share point beyond that keeps adding more at the same `maxPoints`-
+ * per-100%-share rate, so one category dominating (e.g. 90% of the team's damage
+ * with 0 kills) can still carry the score well past what that category's "max" would
+ * otherwise suggest. The real ceiling is the overall combat.max clamp applied once
+ * everything's summed, not this function.
+ */
+function shareScore(
+    numerator: number,
+    denominator: number,
+    target: number,
+    maxPoints: number,
+): number {
+    const share = numerator / Math.max(denominator, 1);
+    if (share <= target) {
+        return (share / target) * maxPoints;
+    }
+    return maxPoints + (share - target) * maxPoints;
 }
 
 /** Impact-score letter ranks, worst → best, as even ~11-point bands over the 0-100
@@ -156,62 +196,86 @@ export function computeImpactScore(
 
     const w = IMPACT_WEIGHTS;
 
+    // Every share category targets this many times an even split (1/teamSize) — see
+    // relativeShareTarget doc above.
+    const targetShare = w.relativeShareTarget / Math.max(stats.teamSize, 1);
+
     // Combat is scored as this player's share of their own team's output (kills+
     // assists, damage), not a flat rate — so it's comparable across matches with
     // different lobby sizes or teammates who carried more or less. A team with zero
     // of a stat means everyone (including this player) also has zero of it, so the
     // share is naturally 0 with no special-casing needed.
-    const teamKillsAndAssists = Math.max(stats.teamKillsAndAssists, 1);
-    const killAssistPoints = clamp(
-        ((stats.kills + stats.assists) /
-            (teamKillsAndAssists * w.combat.targetKillAssistShare)) *
+    const killAssistPoints = Math.max(
+        shareScore(
+            stats.weightedKills + stats.assists,
+            stats.teamKillsAndAssists,
+            targetShare,
             w.combat.maxKillAssistPoints,
+        ),
         0,
-        w.combat.maxKillAssistPoints,
     );
-    const teamDamageDealt = Math.max(stats.teamDamageDealt, 1);
-    const damagePoints = clamp(
-        (stats.damageDealt / (teamDamageDealt * w.combat.targetDamageShare)) *
+    const damagePoints = Math.max(
+        shareScore(
+            stats.damageDealt,
+            stats.teamDamageDealt,
+            targetShare,
             w.combat.maxDamagePoints,
+        ),
         0,
-        w.combat.maxDamagePoints,
     );
     const efficiencyRatio = stats.damageDealt / Math.max(stats.damageTaken, 1);
-    const efficiencyPoints = clamp((efficiencyRatio - 1) * 6, 0, w.combat.maxEfficiencyPoints);
-    // Individually-clamped sub-maxes sum to 100 (combat.max) on their own — support
-    // below only fills whatever gap is left, which can be zero.
-    const combatPoints = killAssistPoints + damagePoints + efficiencyPoints;
+    const efficiencyRate =
+        w.combat.maxEfficiencyPoints / (w.combat.targetEfficiencyRatio - 1);
+    const efficiencyVolume = Math.min(
+        stats.damageDealt / w.combat.efficiencyVolumeThreshold,
+        1,
+    );
+    const efficiencyPoints =
+        clamp((efficiencyRatio - 1) * efficiencyRate, 0, w.combat.maxEfficiencyPoints) *
+        efficiencyVolume;
+    // Kill/assist and damage have no per-category cap — a player can carry combat
+    // through either one of those alone. Efficiency does stay hard-capped (above).
+    // lossPenalty (getting knocked/killed) comes straight off combat, not support.
+    // The overall ceiling (combat.max) is applied once, below, after summing.
+    const combatPointsRaw =
+        killAssistPoints + damagePoints + efficiencyPoints - stats.lossPenalty;
+    const combatPoints = clamp(combatPointsRaw, 0, w.combat.max);
 
-    // Revive points: share of the team's combined revives+covers. No team revive
-    // activity at all means nothing was there to convert, so award full points to
-    // survivors (see died doc above) rather than penalizing a quiet match.
+    // Revive points: share of the team's combined revives+covers. Revive points
+    // aren't required to reach combat.max (100) on their own, so there's no fairness
+    // case for a fallback here — no team revive activity just means 0, same as any
+    // other empty share.
     const revivePoints =
         stats.teamReviveContribution > 0
-            ? clamp(
-                  ((stats.revives + stats.covers) /
-                      (stats.teamReviveContribution * w.support.targetReviveShare)) *
+            ? Math.max(
+                  shareScore(
+                      stats.revives + stats.covers,
+                      stats.teamReviveContribution,
+                      targetShare,
                       w.support.maxRevivePoints,
+                  ),
                   0,
-                  w.support.maxRevivePoints,
               )
-            : stats.died
-              ? 0
-              : w.support.maxRevivePoints;
+            : 0;
     const missedRevivePenalty = clamp(
         stats.missedRevives * w.support.pointsPerMissedRevive,
         0,
         w.support.maxMissedRevivePenalty,
     );
-    // Save points: pure bonus, share of the team's combined saves. No fallback for a
-    // team with zero saves — unlike revives there's no penalty to be fair about here,
-    // so "nobody saved anyone" just contributes nothing, same as it would for a save
-    // share of 0 either way.
-    const teamSaves = Math.max(stats.teamSaves, 1);
+    // Save points: pure bonus, share of the team's combined saves, hard-capped at
+    // maxSavePoints (no overflow past targetShare, unlike the other categories). No
+    // fallback for a team with zero saves — unlike revives there's no penalty to be
+    // fair about here, so "nobody saved anyone" just contributes nothing, same as it
+    // would for a save share of 0 either way.
     const savePoints =
         stats.teamSaves > 0
             ? clamp(
-                  (stats.teammateSaves / (teamSaves * w.support.targetSaveShare)) *
+                  shareScore(
+                      stats.teammateSaves,
+                      stats.teamSaves,
+                      targetShare,
                       w.support.maxSavePoints,
+                  ),
                   0,
                   w.support.maxSavePoints,
               )
@@ -228,12 +292,15 @@ export function computeImpactScore(
     const missedDetail = stats.missedRevives
         ? ` (−${Math.round(missedRevivePenalty)} for ${stats.missedRevives}x not helping a nearby revive)`
         : "";
+    const lossDetail = stats.lossPenalty
+        ? ` (−${Math.round(stats.lossPenalty)} for being knocked/killed)`
+        : "";
 
     const breakdown: ImpactBreakdown = {
         combat: {
             points: Math.round(combatPoints),
             max: w.combat.max,
-            detail: `${stats.kills} kills, ${stats.assists} assists, ${Math.round(stats.damageDealt)} dmg dealt (${Math.round(stats.damageTaken)} taken)`,
+            detail: `${stats.kills} kills, ${stats.assists} assists, ${Math.round(stats.damageDealt)} dmg dealt (${Math.round(stats.damageTaken)} taken)${lossDetail}`,
         },
         support: {
             points: Math.round(supportPoints),
