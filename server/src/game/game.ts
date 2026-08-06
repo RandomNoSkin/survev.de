@@ -988,14 +988,6 @@ export class Game {
          */
         const teamTotal = new Set(players.map(({ player }) => player.teamId)).size;
 
-        const teamSizes = players.reduce(
-            (acc, { player }) => {
-                acc[player.teamId] = (acc[player.teamId] ?? 0) + 1;
-                return acc;
-            },
-            {} as Record<string, number>,
-        );
-
         const teamKills = players.reduce(
             (acc, curr) => {
                 acc[curr.player.teamId] =
@@ -1005,11 +997,32 @@ export class Game {
             {} as Record<string, number>,
         );
 
-        // Impact score: total damage dealt per team this match, so damage points can be
-        // scored as this player's share of their own team's combat output.
+        // Impact score: totals per team this match, so kill/assist, damage, and revive
+        // points can all be scored as this player's share of their own team's output.
         const teamDamage = players.reduce(
             (acc, { player }) => {
                 acc[player.teamId] = (acc[player.teamId] ?? 0) + player.damageDealt;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamKillsAndAssists = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.kills + player.assists;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamReviveContribution = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.revives + player.covers;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamSaves = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.teammateSaves;
                 return acc;
             },
             {} as Record<string, number>,
@@ -1027,18 +1040,17 @@ export class Game {
             const impact = computeImpactScore(
                 {
                     kills: player.kills,
+                    assists: player.assists,
                     damageDealt: player.damageDealt,
                     damageTaken: player.damageTaken,
-                    assists: player.assists,
                     revives: player.revives,
                     covers: player.covers,
                     teammateSaves: player.teammateSaves,
-                    timesDowned: player.downedCount,
-                    timesNeededSaving: player.timesNeededSaving,
-                    enemyCount: players.length - teamSizes[player.teamId],
+                    teamKillsAndAssists: teamKillsAndAssists[player.teamId],
                     teamDamageDealt: teamDamage[player.teamId],
-                    reviveOpportunities: player.reviveOpportunities,
-                    saveOpportunities: player.saveOpportunities,
+                    teamReviveContribution: teamReviveContribution[player.teamId],
+                    teamSaves: teamSaves[player.teamId],
+                    missedRevives: player.missedRevives,
                     died: player.dead,
                 },
                 impactWeight,
