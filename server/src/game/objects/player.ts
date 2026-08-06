@@ -1902,24 +1902,27 @@ export class Player extends BaseGameObject {
     covers = 0;
     /** Timestamp of this player's last dealt-damage tick, used to judge `covers`. */
     lastDamageDealtTime = 0;
-    /** Impact score: enemies this player damaged while that enemy was actively
-     *  damaging one of this player's teammates (peel/save), see `damage()`. */
+    /** Impact score bonus (see impactScore.ts): enemies this player damaged while that
+     *  enemy was actively damaging one of this player's teammates (peel/save), see
+     *  `damage()`. Pure bonus, no penalty counterpart. */
     teammateSaves = 0;
-    /** Impact score liability signal: times a teammate got a `teammateSaves` credit
-     *  for peeling an enemy off THIS player, see `damage()`. */
+    /** Times a teammate got a `teammateSaves` credit for peeling an enemy off THIS
+     *  player, see `damage()`. Stats-page trivia only — doesn't affect the impact
+     *  score (nobody is penalized for needing a save). */
     timesNeededSaving = 0;
     /** Per-enemy cooldown for `teammateSaves`, so sustained fire on the same enemy
      *  during one engagement only credits once every `SAVE_CREDIT_COOLDOWN_MS`. */
     saveCooldowns: Map<number, number> = new Map();
-    /** Impact score: times a teammate went down within `RESPONSE_RANGE` of this player
-     *  while they were alive and not downed themselves — i.e. times this player was
-     *  actually in a position to attempt a revive, not just "a teammate went down
-     *  somewhere on the map". See `down()`. */
-    reviveOpportunities = 0;
-    /** Impact score: times a teammate needed saving within `RESPONSE_RANGE` of this
-     *  player while they were alive and not downed themselves — the save-points
-     *  equivalent of `reviveOpportunities`. See `damage()`. */
-    saveOpportunities = 0;
+    /** Impact score: teammates who were within `RESPONSE_RANGE` when this player went
+     *  down and were alive/not-downed at that moment — i.e. who was actually in a
+     *  position to attempt a revive, not just "somewhere on the team". Snapshotted in
+     *  `down()`, resolved (and cleared) when this down is revived — see `missedRevives`
+     *  on those responders and the revive-completion block in `updateAction`. */
+    pendingReviveResponders: Player[] = [];
+    /** Impact score liability: times this player was in `pendingReviveResponders` for
+     *  a teammate's down, that down was later revived, and this player neither
+     *  performed the revive nor got `covers` credit for it. */
+    missedRevives = 0;
     /** Bullets fired (each pellet); paired with `bulletHits` for replay/game-view accuracy. */
     shotsFired = 0;
     /** Gun-bullet damage instances dealt to other players. */
@@ -2504,8 +2507,18 @@ export class Player extends BaseGameObject {
                         // self_revive perk path (where target === this).
                         if (target !== this) {
                             this.revives++;
-                            this.creditCovers(target);
+                            const covered = this.creditCovers(target);
+                            // Anyone who was in position to help (pendingReviveResponders,
+                            // snapshotted in down()) but neither revived nor got cover
+                            // credit for this specific down missed it.
+                            const helped = new Set<Player>([this, ...covered]);
+                            for (const responder of target.pendingReviveResponders) {
+                                if (!helped.has(responder)) {
+                                    responder.missedRevives++;
+                                }
+                            }
                         }
+                        target.pendingReviveResponders = [];
 
                         // checks 2 conditions in one, player has pan AND has it selected
                         if (target.weapons[target.curWeapIdx].type === "pan") {
@@ -3731,12 +3744,6 @@ export class Player extends BaseGameObject {
                             playerSource.teammateSaves++;
                             savedTeammate.timesNeededSaving++;
                             playerSource.saveCooldowns.set(this.__id, now);
-                            // Impact score: only teammates actually in position (this
-                            // includes playerSource, who just made the save) get
-                            // credited with the opportunity to save savedTeammate.
-                            for (const teammate of savedTeammate.nearbyRespondingTeammates()) {
-                                teammate.saveOpportunities++;
-                            }
                         }
                     }
                 }
@@ -3902,13 +3909,12 @@ export class Player extends BaseGameObject {
     down(params: DamageParams): void {
         this.downed = true;
         this.downedCount++;
-        // Impact score: only teammates actually in position get credited with the
-        // opportunity to revive this down.
-        if (this.game.isTeamMode) {
-            for (const teammate of this.nearbyRespondingTeammates()) {
-                teammate.reviveOpportunities++;
-            }
-        }
+        // Impact score: snapshot who was actually in position to respond to this down,
+        // resolved (missedRevives for anyone not among the responders/coverers) when
+        // it's revived — see the Action.Revive completion below.
+        this.pendingReviveResponders = this.game.isTeamMode
+            ? this.nearbyRespondingTeammates()
+            : [];
         // Freeze the assist window here: only damage recorded before the down counts.
         this.downedAtHistoryLen = this.damageHistory.length;
         this.downedDamageTicker = GameConfig.player.downedDamageBuffer;
@@ -4616,9 +4622,8 @@ export class Player extends BaseGameObject {
 
     /** Impact score "opportunity": this player's living, non-downed teammates within
      *  `RESPONSE_RANGE` right now — i.e. who was actually close enough to respond,
-     *  not just "on the same team somewhere on the map". Used to credit
-     *  `reviveOpportunities`/`saveOpportunities` on the responding teammates when this
-     *  player goes down or needs saving. */
+     *  not just "on the same team somewhere on the map". Snapshotted into
+     *  `pendingReviveResponders` when this player goes down. */
     nearbyRespondingTeammates(): Player[] {
         if (!this.group) return [];
         return this.group.players.filter(
@@ -4635,10 +4640,13 @@ export class Player extends BaseGameObject {
     /** Impact score "cover": credits nearby teammates who were actively fighting
      *  (dealt or took damage within the last `reviveDuration`) when this revive
      *  completed — same team value as doing the revive itself. Excludes the reviver
-     *  and the revived player, who are already credited via `revives`. */
-    creditCovers(revived: Player) {
-        if (!this.group) return;
+     *  and the revived player, who are already credited via `revives`. Returns the
+     *  credited teammates so the caller can resolve `missedRevives` for anyone who
+     *  had the opportunity (see `pendingReviveResponders`) but wasn't among them. */
+    creditCovers(revived: Player): Player[] {
+        if (!this.group) return [];
         const now = Date.now();
+        const covered: Player[] = [];
         for (const teammate of this.group.players) {
             if (teammate === this || teammate === revived) continue;
             if (teammate.dead || teammate.downed) continue;
@@ -4655,8 +4663,10 @@ export class Player extends BaseGameObject {
                     COVER_COMBAT_WINDOW_MS;
             if (dealtRecently || tookRecently) {
                 teammate.covers++;
+                covered.push(teammate);
             }
         }
+        return covered;
     }
 
     isAffectedByAOE(medic: Player): boolean {
