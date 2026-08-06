@@ -69,6 +69,10 @@ const SAVE_WINDOW_MS = 2000;
 /** Impact score "teammate save": min time between credits for the same (attacker,
  *  enemy) pair, so sustained fire in one engagement only credits once. */
 const SAVE_CREDIT_COOLDOWN_MS = 3000;
+/** Impact score "teammate save": the teammate must be below this health for peeling
+ *  an enemy off them to count as a save — otherwise every stray hit followed by
+ *  return fire would count, even when the teammate was never in real danger. */
+const SAVE_HEALTH_THRESHOLD = 50;
 /** Impact score "cover": how close a teammate must be to a completing revive to
  *  count as covering it. Wider than reviveRange/medicReviveRange (5-6) since covering
  *  means holding a nearby angle, not standing on top of the downed teammate. */
@@ -3734,6 +3738,7 @@ export class Player extends BaseGameObject {
                         const savedTeammate = playerSource.group.players.find(
                             (teammate) =>
                                 teammate !== playerSource &&
+                                teammate.health < SAVE_HEALTH_THRESHOLD &&
                                 teammate.damageHistory.some(
                                     (h) =>
                                         h.sourceId === this.__id &&
