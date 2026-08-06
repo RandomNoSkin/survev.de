@@ -76,6 +76,11 @@ const COVER_RANGE = 15;
 /** Impact score "cover": how recently the covering teammate must have dealt or taken
  *  damage for their presence to count as active fighting rather than idling nearby. */
 const COVER_COMBAT_WINDOW_MS = GameConfig.player.reviveDuration * 1000;
+/** Impact score "opportunity": how close a teammate must be, at the moment another
+ *  teammate goes down or needs saving, to count as having actually been in a position
+ *  to respond. Wider than COVER_RANGE — this is "in the same fight", not "holding an
+ *  angle right next to it". */
+const RESPONSE_RANGE = 60;
 
 type MoveObjsMode = {
     enabled: boolean;
@@ -1906,6 +1911,15 @@ export class Player extends BaseGameObject {
     /** Per-enemy cooldown for `teammateSaves`, so sustained fire on the same enemy
      *  during one engagement only credits once every `SAVE_CREDIT_COOLDOWN_MS`. */
     saveCooldowns: Map<number, number> = new Map();
+    /** Impact score: times a teammate went down within `RESPONSE_RANGE` of this player
+     *  while they were alive and not downed themselves — i.e. times this player was
+     *  actually in a position to attempt a revive, not just "a teammate went down
+     *  somewhere on the map". See `down()`. */
+    reviveOpportunities = 0;
+    /** Impact score: times a teammate needed saving within `RESPONSE_RANGE` of this
+     *  player while they were alive and not downed themselves — the save-points
+     *  equivalent of `reviveOpportunities`. See `damage()`. */
+    saveOpportunities = 0;
     /** Bullets fired (each pellet); paired with `bulletHits` for replay/game-view accuracy. */
     shotsFired = 0;
     /** Gun-bullet damage instances dealt to other players. */
@@ -3717,6 +3731,12 @@ export class Player extends BaseGameObject {
                             playerSource.teammateSaves++;
                             savedTeammate.timesNeededSaving++;
                             playerSource.saveCooldowns.set(this.__id, now);
+                            // Impact score: only teammates actually in position (this
+                            // includes playerSource, who just made the save) get
+                            // credited with the opportunity to save savedTeammate.
+                            for (const teammate of savedTeammate.nearbyRespondingTeammates()) {
+                                teammate.saveOpportunities++;
+                            }
                         }
                     }
                 }
@@ -3882,6 +3902,13 @@ export class Player extends BaseGameObject {
     down(params: DamageParams): void {
         this.downed = true;
         this.downedCount++;
+        // Impact score: only teammates actually in position get credited with the
+        // opportunity to revive this down.
+        if (this.game.isTeamMode) {
+            for (const teammate of this.nearbyRespondingTeammates()) {
+                teammate.reviveOpportunities++;
+            }
+        }
         // Freeze the assist window here: only damage recorded before the down counts.
         this.downedAtHistoryLen = this.damageHistory.length;
         this.downedDamageTicker = GameConfig.player.downedDamageBuffer;
@@ -4585,6 +4612,24 @@ export class Player extends BaseGameObject {
             );
             this.playAnim(GameConfig.Anim.Revive, GameConfig.player.reviveDuration);
         }
+    }
+
+    /** Impact score "opportunity": this player's living, non-downed teammates within
+     *  `RESPONSE_RANGE` right now — i.e. who was actually close enough to respond,
+     *  not just "on the same team somewhere on the map". Used to credit
+     *  `reviveOpportunities`/`saveOpportunities` on the responding teammates when this
+     *  player goes down or needs saving. */
+    nearbyRespondingTeammates(): Player[] {
+        if (!this.group) return [];
+        return this.group.players.filter(
+            (teammate) =>
+                teammate !== this &&
+                !teammate.dead &&
+                !teammate.downed &&
+                util.sameLayer(teammate.layer, this.layer) &&
+                v2.lengthSqr(v2.sub(teammate.pos, this.pos)) <=
+                    RESPONSE_RANGE * RESPONSE_RANGE,
+        );
     }
 
     /** Impact score "cover": credits nearby teammates who were actively fighting
