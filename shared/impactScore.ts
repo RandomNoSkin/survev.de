@@ -72,29 +72,41 @@ export interface ImpactResult {
 }
 
 export const IMPACT_WEIGHTS = {
+    // Combat is the whole 0-100 scale, and can reach all 100 on its own — kills/
+    // assists/damage/efficiency sub-maxes already sum to 100 (45+40+15). Support
+    // (revive+save, below) only backfills whatever combat *didn't* fill; it never adds
+    // separate headroom on top. targetKillAssistShare/targetDamageShare at 0.5 are a
+    // first guess for this — revisit if combat maxes out too easily/rarely in practice.
     combat: {
-        max: 80,
-        maxKillAssistPoints: 36,
+        max: 100,
+        maxKillAssistPoints: 45,
         // Fraction of the team's combined kills+assists a player must be responsible
         // for to earn full kill/assist points (see teamKillsAndAssists).
         targetKillAssistShare: 0.5,
-        maxDamagePoints: 32,
+        maxDamagePoints: 40,
         // Fraction of their own team's total damage output (see teamDamageDealt) a
         // player must be responsible for to earn full damage points.
         targetDamageShare: 0.5,
-        maxEfficiencyPoints: 12,
+        maxEfficiencyPoints: 15,
     },
+    // Support only ever fills the gap combat left under combat.max — see
+    // computeImpactScore. Its own max here just bounds how much a player can earn
+    // from it, not a separate slice of the final score.
     support: {
         max: 28,
-        maxRevivePoints: 20,
+        maxRevivePoints: 8,
         // Fraction of the team's combined revives+covers a player must be
         // responsible for to earn full revive points (see teamReviveContribution).
         targetReviveShare: 0.5,
         // Penalty for being in position to help a revive and doing neither — see
-        // missedRevives.
-        pointsPerMissedRevive: 5,
-        maxMissedRevivePenalty: 20,
-        maxSavePoints: 8,
+        // missedRevives. Capped at maxRevivePoints so a bad revive-response streak
+        // can only zero out the revive points, not the save points.
+        pointsPerMissedRevive: 4,
+        maxMissedRevivePenalty: 8,
+        // Weighted above revives: landing a save is the harder, more opportunistic
+        // play (right angle, right timing), so it's worth more than just being in
+        // range for a revive.
+        maxSavePoints: 20,
         // Fraction of the team's combined teammateSaves a player must be responsible
         // for to earn full save points (see teamSaves).
         targetSaveShare: 0.5,
@@ -166,11 +178,9 @@ export function computeImpactScore(
     );
     const efficiencyRatio = stats.damageDealt / Math.max(stats.damageTaken, 1);
     const efficiencyPoints = clamp((efficiencyRatio - 1) * 6, 0, w.combat.maxEfficiencyPoints);
-    const combatPoints = clamp(
-        killAssistPoints + damagePoints + efficiencyPoints,
-        0,
-        w.combat.max,
-    );
+    // Individually-clamped sub-maxes sum to 100 (combat.max) on their own — support
+    // below only fills whatever gap is left, which can be zero.
+    const combatPoints = killAssistPoints + damagePoints + efficiencyPoints;
 
     // Revive points: share of the team's combined revives+covers. No team revive
     // activity at all means nothing was there to convert, so award full points to
@@ -206,6 +216,9 @@ export function computeImpactScore(
                   w.support.maxSavePoints,
               )
             : 0;
+    // What this player earned from revive/save, independent of whether combat left
+    // any room for it — shown as-is in the breakdown; the final score clamp below is
+    // what actually enforces "only counts if combat isn't already full".
     const supportPoints = clamp(
         revivePoints + savePoints - missedRevivePenalty,
         0,
@@ -229,10 +242,12 @@ export function computeImpactScore(
         },
     };
 
+    // Support only ever backfills the gap combat left under combat.max — never adds
+    // separate headroom on top of a combat performance that already maxed it out.
     const score = clamp(
         Math.round((combatPoints + supportPoints) * impactWeight),
         0,
-        100,
+        w.combat.max,
     );
 
     return { score, breakdown };
