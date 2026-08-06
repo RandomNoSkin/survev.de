@@ -1023,6 +1023,13 @@ export class Game {
             {} as Record<string, number>,
         );
 
+        // Impact score: total damage dealt by anyone this match, so damage points
+        // can be scored as this player's share of the match's actual combat output.
+        const totalRoundDamage = players.reduce(
+            (acc, { player }) => acc + player.damageDealt,
+            0,
+        );
+
         const mapId = this.advancedSettings ? MapId.Custom : this.map.mapId;
 
         // Impact score only applies to team modes, and only on maps that opt in
@@ -1044,6 +1051,7 @@ export class Game {
                     timesDowned: player.downedCount,
                     timesNeededSaving: player.timesNeededSaving,
                     enemyCount: players.length - teamSizes[player.teamId],
+                    totalRoundDamage,
                     // Exclude self: you can't revive/save yourself, so your own downs/
                     // need-saving don't count as opportunities you could've converted.
                     reviveOpportunities: teamDowns[player.teamId] - player.downedCount,
@@ -1054,6 +1062,9 @@ export class Game {
             );
 
             return {
+                // Match start time, not save time (this runs at game end) — so API
+                // consumers filtering by time range aren't off by a game's duration.
+                createdAt: new Date(this.start),
                 // *NOTE: userId is optional; we save the game stats for non logged users too
                 userId: !player.spectator ? player.userId : null,
                 region: Config.gameServer.thisRegion,
