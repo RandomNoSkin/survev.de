@@ -1,4 +1,5 @@
 import $ from "jquery";
+import slugify from "slugify";
 import { EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs.ts";
 import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig.ts";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
@@ -832,6 +833,7 @@ export class PlayerView {
                 loading: this.matchHistory.inProgress,
                 error: this.matchHistory.error,
                 formatTime: helpers.formatTime,
+                slugify,
             });
         }
 
