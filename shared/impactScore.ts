@@ -100,7 +100,15 @@ export const IMPACT_WEIGHTS = {
     combat: {
         max: 100,
         maxKillAssistPoints: 45,
+        // Weighted kills+assists needed for the share above to count at full
+        // strength — below this it scales down proportionally. Without this, being
+        // your team's *only* kill (common on a team that barely fought) is a trivial
+        // 100% share and blows straight past maxKillAssistPoints via the overflow
+        // above, even though 1 kill is 1 kill in absolute terms.
+        killAssistVolumeThreshold: 3,
         maxDamagePoints: 40,
+        // Same idea as killAssistVolumeThreshold, for damage share.
+        damageVolumeThreshold: 200,
         maxEfficiencyPoints: 15,
         // Dealt/taken ratio for full efficiency points. Unlike the share categories
         // above, efficiency is hard-capped here (no growth past this ratio) — it's a
@@ -205,24 +213,34 @@ export function computeImpactScore(
     // different lobby sizes or teammates who carried more or less. A team with zero
     // of a stat means everyone (including this player) also has zero of it, so the
     // share is naturally 0 with no special-casing needed.
-    const killAssistPoints = Math.max(
-        shareScore(
-            stats.weightedKills + stats.assists,
-            stats.teamKillsAndAssists,
-            targetShare,
-            w.combat.maxKillAssistPoints,
-        ),
-        0,
+    const killAssistVolume = Math.min(
+        (stats.weightedKills + stats.assists) / w.combat.killAssistVolumeThreshold,
+        1,
     );
-    const damagePoints = Math.max(
-        shareScore(
-            stats.damageDealt,
-            stats.teamDamageDealt,
-            targetShare,
-            w.combat.maxDamagePoints,
-        ),
-        0,
+    const killAssistPoints =
+        Math.max(
+            shareScore(
+                stats.weightedKills + stats.assists,
+                stats.teamKillsAndAssists,
+                targetShare,
+                w.combat.maxKillAssistPoints,
+            ),
+            0,
+        ) * killAssistVolume;
+    const damageVolume = Math.min(
+        stats.damageDealt / w.combat.damageVolumeThreshold,
+        1,
     );
+    const damagePoints =
+        Math.max(
+            shareScore(
+                stats.damageDealt,
+                stats.teamDamageDealt,
+                targetShare,
+                w.combat.maxDamagePoints,
+            ),
+            0,
+        ) * damageVolume;
     const efficiencyRatio = stats.damageDealt / Math.max(stats.damageTaken, 1);
     const efficiencyRate =
         w.combat.maxEfficiencyPoints / (w.combat.targetEfficiencyRatio - 1);
