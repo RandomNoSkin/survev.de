@@ -433,6 +433,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <option value="wins">Wins</option>
         <option value="kpg">K / Game</option>
         <option value="most_damage_dealt">Max Damage</option>
+        <option value="avg_rating">Rating</option>
       </select>
       <select id="lb-mode" title="Team mode" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
         <option value="1">Solo</option>
@@ -2048,7 +2049,7 @@ document.addEventListener('click', function (e) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 let lbLoadToken = 0;
-const LB_TYPE_LABEL = { kills: 'Kills', wins: 'Wins', kpg: 'K/G', most_damage_dealt: 'Max Dmg' };
+const LB_TYPE_LABEL = { kills: 'Kills', wins: 'Wins', kpg: 'K/G', most_damage_dealt: 'Max Dmg', avg_rating: 'Rating' };
 
 async function loadLeaderboard() {
   const container = document.getElementById('lb-container');
@@ -2197,6 +2198,13 @@ document.addEventListener('click', function (e) {
 });
 
 document.getElementById('lb-refresh-btn').addEventListener('click', loadLeaderboard);
+// Rating only exists for team modes — Solo would just be an empty table. Must run
+// before the generic loadLeaderboard listener below (registration order), so the
+// mode is already fixed up by the time that listener fires.
+document.getElementById('lb-type').addEventListener('change', function () {
+  const modeSel = document.getElementById('lb-mode');
+  if (this.value === 'avg_rating' && modeSel.value === '1') modeSel.value = '2';
+});
 ['lb-type', 'lb-mode', 'lb-interval', 'lb-map'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', loadLeaderboard);
 });

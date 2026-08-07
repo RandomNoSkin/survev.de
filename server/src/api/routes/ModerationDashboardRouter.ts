@@ -2658,6 +2658,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 wins: "COUNT(CASE WHEN match_data.rank = 1 THEN 1 END)",
                 kpg: "ROUND(SUM(match_data.kills) * 1.0 / COUNT(DISTINCT match_data.game_id), 2)",
                 most_damage_dealt: "MAX(match_data.damage_dealt)",
+                // AVG() already ignores NULLs (non-impact-scored matches), see the
+                // impactScore IS NOT NULL cond below for why that alone isn't enough.
+                avg_rating: "ROUND(AVG(match_data.impact_score)::numeric, 1)",
             } as Record<string, string>
         )[type] ?? "SUM(match_data.kills)";
 
@@ -2671,6 +2674,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
             conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '1 day'`));
         } else if (interval === "weekly") {
             conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '7 days'`));
+        }
+        if (type === "avg_rating") {
+            // Without this, "games" below (count of ALL games) would overcount vs. the
+            // actual rating sample size, and a player with zero impact-scored games
+            // would still show a (NULL) row.
+            conds.push(sql`${matchDataTable.impactScore} IS NOT NULL`);
         }
 
         const rows = await db
