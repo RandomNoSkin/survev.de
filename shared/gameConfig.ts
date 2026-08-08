@@ -355,6 +355,12 @@ export const GameConfig = {
                     end: "2026-07-26T23:59:59",
                     boost: 3,
                 },
+                "Fiance said it's double time": {
+                    maps: ["local", "comp"],
+                    start: "2026-08-08T23:30:00",
+                    end: "2026-08-09T23:59:59",
+                    boost: 2,
+                },
             },
         } as Record<
             string,
