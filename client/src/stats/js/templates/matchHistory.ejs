@@ -40,7 +40,7 @@
                         <%= timeDiff %>
                     </div>
                 </div>
-                <div class='col-3'>
+                <div class='col-2'>
                     <div class='match-link-stat'>
                         <%
                             var modeText = env.games[i].summary.team_mode;
@@ -62,12 +62,18 @@
                 <% if (env.games[i].summary.team_mode != 'solo') { %>
                     <div class='hide-xs col-md-1'>
                         <div class='match-link-stat'>
+                            <div class='match-link-stat-name match-link-stat-name-md'>Assists</div>
+                            <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.assists || 0 %></div>
+                        </div>
+                    </div>
+                    <div class='hide-xs col-md-1'>
+                        <div class='match-link-stat'>
                             <div class='match-link-stat-name match-link-stat-name-md'>Team Kills</div>
                             <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.team_kills || 0 %></div>
                         </div>
                     </div>
                 <% } %>
-                <div class='col-2 col-md-1 <%= env.games[i].summary.team_mode == 'solo' ? 'offset-md-1' : '' %>'>
+                <div class='col-2 col-md-1 <%= env.games[i].summary.team_mode == 'solo' ? 'offset-md-2' : '' %>'>
                     <div class='match-link-stat'>
                         <div class='match-link-stat-name match-link-stat-name-md'>Damage Dealt</div>
                         <div class='match-link-stat-value match-link-stat-value-md'><%= env.games[i].summary.damage_dealt %></div>
@@ -97,7 +103,7 @@
                 </div>
                 <!-- Game view + Expand/Unexpand icon -->
                 <div class='offset-0 col-1 pl-0 pr-0 match-link-actions'>
-                    <a class='gv-match-btn' href='/stats/?game=<%= env.games[i].summary.guid %>&region=<%= env.games[i].summary.region %>&player=<%= env.games[i].summary.slug %>' onclick='event.stopPropagation()' title='Detailed game view (movement + damage)'>Game View</a>
+                    <a class='gv-match-btn' href='/stats/?game=<%= env.games[i].summary.guid %>&region=<%= env.games[i].summary.region %>&player=<%= env.slugify(env.games[i].summary.username) %>' onclick='event.stopPropagation()' title='Detailed game view (movement + damage)'>Game View</a>
                     <div class='match-link-expand <%= env.games[i].expanded ? 'match-link-expand-up' : 'match-link-expand-down' %>'>
                     </div>
                 </div>

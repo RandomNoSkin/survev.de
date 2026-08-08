@@ -5,6 +5,7 @@ import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
 import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
+import { computeImpactScore } from "../../../shared/impactScore.ts";
 import * as net from "../../../shared/net/net";
 import type { Loadout } from "../../../shared/utils/loadout";
 import { math } from "../../../shared/utils/math";
@@ -996,8 +997,82 @@ export class Game {
             {} as Record<string, number>,
         );
 
+        // Impact score: player count per team, so share targets can scale relative to
+        // an even split (see ImpactStats.teamSize) instead of a fixed fraction.
+        const teamSizes = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+
+        // Impact score: totals per team this match, so kill/assist, damage, and revive
+        // points can all be scored as this player's share of their own team's output.
+        const teamDamage = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.damageDealt;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamKillsAndAssists = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] =
+                    (acc[player.teamId] ?? 0) + player.weightedKills + player.assists;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamReviveContribution = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.revives + player.covers;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+        const teamSaves = players.reduce(
+            (acc, { player }) => {
+                acc[player.teamId] = (acc[player.teamId] ?? 0) + player.teammateSaves;
+                return acc;
+            },
+            {} as Record<string, number>,
+        );
+
+        const mapId = this.advancedSettings ? MapId.Custom : this.map.mapId;
+
+        // Impact score only applies to team modes, and only on maps that opt in
+        // (MapDef.gameMode.impactWeight, 0/unset = disabled).
+        const impactWeight = this.isTeamMode
+            ? this.map.mapDef.gameMode.impactWeight
+            : undefined;
+
         const values: SaveGameBody["matchData"] = players.map(({ player, rank }) => {
+            const impact = computeImpactScore(
+                {
+                    kills: player.kills,
+                    weightedKills: player.weightedKills,
+                    assists: player.assists,
+                    damageDealt: player.damageDealt,
+                    damageTaken: player.damageTaken,
+                    revives: player.revives,
+                    covers: player.covers,
+                    teammateSaves: player.teammateSaves,
+                    teamSize: teamSizes[player.teamId],
+                    teamKillsAndAssists: teamKillsAndAssists[player.teamId],
+                    teamDamageDealt: teamDamage[player.teamId],
+                    teamReviveContribution: teamReviveContribution[player.teamId],
+                    teamSaves: teamSaves[player.teamId],
+                    lossPenalty: player.lossPenalty,
+                    missedRevives: player.missedRevives,
+                },
+                impactWeight,
+            );
+
             return {
+                // Match start time, not save time (this runs at game end) — so API
+                // consumers filtering by time range aren't off by a game's duration.
+                createdAt: new Date(this.start),
                 // *NOTE: userId is optional; we save the game stats for non logged users too
                 userId: !player.spectator ? player.userId : null,
                 region: Config.gameServer.thisRegion,
@@ -1019,13 +1094,19 @@ export class Game {
                 damageTaken: Math.round(player.damageTaken),
                 killerId: player.killedBy?.matchDataId || 0,
                 gameId: this.id,
-                mapId: this.advancedSettings ? MapId.Custom : this.map.mapId,
+                mapId,
                 mapSeed: this.map.seed,
                 killedIds: player.killedIds,
                 assistedIds: player.assistedIds,
                 rank: rank,
                 ip: player.ip,
                 findGameIp: player.findGameIp,
+                revives: player.revives,
+                teammateSaves: player.teammateSaves,
+                timesDowned: player.downedCount,
+                timesNeededSaving: player.timesNeededSaving,
+                impactScore: impact?.score ?? null,
+                impactBreakdown: impact?.breakdown ?? null,
             };
         });
 
@@ -1044,6 +1125,22 @@ export class Game {
                 types: player.equippedCosmetics,
             }));
 
+        // Per weapon a player dealt damage with this match: fuel for the weapon-ranking
+        // stats page's daily rollup (see attributeWeaponStats in private.ts). Not tied to
+        // a user account, so spectators/bots/guests all still contribute.
+        const weaponStatsEntries = players
+            .filter(({ player }) => player.weaponDamageDealt.size > 0)
+            .flatMap(({ player }) =>
+                [...player.weaponDamageDealt.entries()].map(([weaponType, damage]) => ({
+                    weaponType,
+                    damage: Math.round(damage),
+                    kills: player.weaponKills.get(weaponType) ?? 0,
+                })),
+            );
+        const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length
+            ? { mapId, teamMode: this.teamMode, entries: weaponStatsEntries }
+            : undefined;
+
         // only save the game if it has more than 2 players lol
         if (values.length < 2) return;
 
@@ -1057,6 +1154,7 @@ export class Game {
                 json: {
                     matchData: values,
                     cosmeticStats,
+                    weaponStats,
                 },
             });
         } catch (err) {

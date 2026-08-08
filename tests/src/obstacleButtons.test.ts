@@ -1,10 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
+import { MapObjectDefs } from "../../shared/defs/register.ts";
 import { ObjectType } from "../../shared/net/objectSerializeFns.ts";
 import { Obstacle } from "../../server/src/game/objects/obstacle.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 
 describe("Obstacle button interactions", () => {
-    test("delayed buttons reject repeat interactions until the effect runs", () => {
+    test("buttons flip state immediately and reject repeat interactions", () => {
         vi.useFakeTimers();
 
         try {
@@ -35,12 +36,15 @@ describe("Obstacle button interactions", () => {
             Obstacle.prototype.useButton.call(buttonObstacle as any);
             Obstacle.prototype.useButton.call(buttonObstacle as any);
 
+            // the press registers right away (that's the client's only feedback), and the
+            // second press is rejected while the button is on cooldown
+            expect(buttonObstacle.button.seq).toBe(2);
+            expect(buttonObstacle.button.onOff).toBe(true);
             expect(buttonObstacle.button.canUse).toBe(false);
-            expect(buttonObstacle.button.seq).toBe(1);
 
             vi.advanceTimersByTime(250);
             expect(buttonObstacle.button.canUse).toBe(false);
-            expect(buttonObstacle.button.seq).toBe(1);
+            expect(buttonObstacle.button.seq).toBe(2);
 
             vi.advanceTimersByTime(500);
             expect(buttonObstacle.button.canUse).toBe(true);
@@ -124,4 +128,58 @@ describe("Obstacle button interactions", () => {
             vi.useRealTimers();
         }
     });*/
+
+    // The weapon bench's effect is a 3s Modify action that draws its own progress bar,
+    // so a useDelay in front of it was a dead pause between the click sound and any
+    // visible feedback — the bench's useImg is its normal sprite, so nothing changes
+    // during it either. Unlike an airdrop, whose useDelay drives the destroy timer.
+    test("the weapon bench starts its action on the press", () => {
+        vi.useFakeTimers();
+
+        try {
+            const benchDef = MapObjectDefs.typeToDef("table_04", "obstacle");
+            expect(benchDef.button?.useDelay).toBe(0);
+
+            const doAction = vi.fn();
+            const player = {
+                activeWeapon: "mac10", // has an `upgraded` entry
+                weaponManager: { curWeapIdx: 0 },
+                invManager: { get: () => 99 }, // enough construction items
+                msgsToSend: [] as unknown[],
+                doAction,
+            };
+
+            const bench = {
+                button: {
+                    onOff: false,
+                    canUse: true,
+                    seq: 1,
+                    useOnce: false,
+                    useType: "weapon_upgrade_bench",
+                    useDelay: benchDef.button!.useDelay,
+                    useDir: v2.create(0, -1),
+                    useImg: "",
+                    sound: { on: "", off: "" },
+                },
+                parentBuilding: undefined,
+                isButton: true,
+                isPuzzlePiece: false,
+                setDirty: vi.fn(),
+                kill: vi.fn(),
+                interactedBy: player,
+                pos: v2.create(0, 0),
+                type: "table_04",
+            };
+
+            Obstacle.prototype.useButton.call(bench as any);
+
+            // No timer advance: the upgrade action must already be running.
+            expect(doAction).toHaveBeenCalledTimes(1);
+            expect(doAction.mock.calls[0][0]).toBe("modified_mac10");
+            // And the bench stays usable — nothing is pending behind a delay.
+            expect(bench.button.canUse).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

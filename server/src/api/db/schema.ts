@@ -1,8 +1,8 @@
-import { table } from "node:console";
 import { sql } from "drizzle-orm";
 import {
     bigint,
     boolean,
+    date,
     index,
     integer,
     json,
@@ -16,7 +16,10 @@ import {
     uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
+import { table } from "node:console";
 import { TeamMode } from "../../../../shared/gameConfig.ts";
+import type { ImpactBreakdown } from "../../../../shared/impactScore.ts";
+import type { OAuthAppStatus, OAuthScope } from "../../../../shared/types/oauth.ts";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
 export const sessionTable = pgTable("session", {
@@ -336,6 +339,14 @@ export const matchDataTable = pgTable(
         killerId: integer("killer_id").notNull(),
         killedIds: integer("killed_ids").array().notNull(),
         assistedIds: integer("assisted_ids").array().notNull().default([]),
+        revives: integer("revives").notNull().default(0),
+        teammateSaves: integer("teammate_saves").notNull().default(0),
+        timesDowned: integer("times_downed").notNull().default(0),
+        timesNeededSaving: integer("times_needed_saving").notNull().default(0),
+        // Impact score (0-100, team modes only, only on maps with MapDef.gameMode.impactWeight
+        // set) plus its per-category breakdown; null when the match/map doesn't participate.
+        impactScore: integer("impact_score"),
+        impactBreakdown: json("impact_breakdown").$type<ImpactBreakdown>(),
         encodedIp: text("encoded_ip").notNull().default(""),
         // Set true when a moderator marks this player's participation in the game as
         // "botted": voided rows are excluded from EVERY XP aggregation (reconcile,
@@ -374,6 +385,34 @@ export const matchDataTable = pgTable(
 );
 
 export type MatchDataTable = typeof matchDataTable.$inferInsert;
+
+// Daily rollup of per-weapon damage/kills/usage, aggregated at game-save time (see
+// attributeWeaponStats in routes/private/private.ts) instead of storing one row per
+// match+weapon. Bounded row growth (days x weapons x maps x modes) keeps this cheap to
+// query for the weapon-ranking stats page even as match volume grows.
+export const weaponStatsDailyTable = pgTable(
+    "weapon_stats_daily",
+    {
+        day: date("day").notNull(),
+        weaponType: text("weapon_type").notNull(),
+        mapId: integer("map_id").notNull(),
+        teamMode: integer("team_mode").$type<TeamMode>().notNull(),
+        damageDealt: bigint("damage_dealt", { mode: "number" }).notNull().default(0),
+        kills: integer("kills").notNull().default(0),
+        gamesUsed: integer("games_used").notNull().default(0),
+        // Highest single-game damage total dealt with this weapon seen so far (running
+        // max across every upsert), for the "most damage in a game" ranking.
+        maxDamage: integer("max_damage").notNull().default(0),
+    },
+    (table) => [
+        primaryKey({
+            columns: [table.day, table.weaponType, table.mapId, table.teamMode],
+        }),
+        index("idx_weapon_stats_daily_day").on(table.day),
+    ],
+);
+
+export type WeaponStatsDailyTable = typeof weaponStatsDailyTable.$inferInsert;
 
 //
 // LOGS
@@ -498,9 +537,13 @@ export type BanHistoryTable = typeof banHistoryTable.$inferSelect;
 /**
  * Per-(game, player) moderation flag, set from the XP-gain "Games" view.
  *
- *   status = "sus"    → watchlist label only, no effect on XP.
- *   status = "botted" → the XP this player gained in this game, plus the pass
- *                       cosmetics and Golden Fries earned from it, are revoked.
+ *   status = "sus"      → watchlist label only, no effect on XP.
+ *   status = "botted"   → the XP this player gained in this game, plus the pass
+ *                         cosmetics and Golden Fries earned from it, are revoked.
+ *   status = "resolved" → a sus report an admin has handled. Kept (rather than
+ *                         deleted like a "clear") so the reporting moderator can see
+ *                         the outcome, with `resolveNote` saying what was decided.
+ *                         `markedBy`/`note` still name the original reporter.
  *
  * Reversible: the exact per-pass XP amount removed is stored in `xpDeltas`, so
  * clearing a "botted" flag adds it back (and the idempotent grant helpers restore
@@ -511,10 +554,14 @@ export const gameModerationTable = pgTable(
     {
         gameId: uuid("game_id").notNull(),
         userId: text("user_id").notNull(),
-        status: text("status").notNull(), // "sus" | "botted" | "removed"
+        status: text("status").notNull(), // "sus" | "botted" | "removed" | "resolved"
         note: text("note").notNull().default(""),
         markedBy: text("marked_by").notNull(), // admin slug
         markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+        // Set only for status = "resolved": who closed the report and why.
+        resolvedBy: text("resolved_by"),
+        resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+        resolveNote: text("resolve_note").notNull().default(""),
         // For "botted": the exact XP removed per pass, so a later un-bott restores it
         // precisely. Empty for "sus".
         xpDeltas: json("xp_deltas")
@@ -525,6 +572,10 @@ export const gameModerationTable = pgTable(
     (table) => [
         primaryKey({ columns: [table.gameId, table.userId] }),
         index("game_moderation_user_idx").on(table.userId),
+        // The Sus tab lists by status, newest first, and a moderator's own page filters
+        // by who raised the flag on top of that.
+        index("game_moderation_status_idx").on(table.status, table.markedAt),
+        index("game_moderation_marked_by_idx").on(table.markedBy, table.markedAt),
     ],
 );
 
@@ -711,3 +762,148 @@ export const blocksTable = pgTable(
 );
 
 export type BlocksTable = typeof blocksTable.$inferSelect;
+
+//
+// THIRD-PARTY OAUTH APPS
+//
+// Lightweight, custom OAuth2-style authorization server: users self-register an
+// "application" (e.g. a Discord bot), an admin must approve it before it can be used
+// (see `status`), and other users individually consent per-app to share specific
+// scopes (`oauthGrantsTable`). See the redirect-flow (`oauthAuthCodesTable`) and
+// device-flow (`oauthDeviceCodesTable`) issuance tables below.
+//
+
+// Self-registered third-party applications. `id` doubles as the OAuth client_id.
+export const oauthApplicationsTable = pgTable(
+    "oauth_applications",
+    {
+        id: text("id").notNull().primaryKey(),
+        ownerId: text("owner_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        name: text("name").notNull(),
+        description: text("description").notNull().default(""),
+        redirectUris: json("redirect_uris").$type<string[]>().notNull().default([]),
+        // sha256 hex of the client secret, same store-only-the-hash pattern as
+        // sessionTable.id — the raw secret is only ever shown once, at creation/rotation.
+        clientSecretHash: text("client_secret_hash").notNull(),
+        secretLastFour: text("secret_last_four").notNull().default(""),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        secretRotatedAt: timestamp("secret_rotated_at", { withTimezone: true }),
+        // pending | approved | rejected | suspended — new apps start unusable (both
+        // consent flows reject them) until an admin reviews them on the moderation
+        // dashboard's Apps tab.
+        status: text("status").$type<OAuthAppStatus>().notNull().default("pending"),
+        reviewedBy: text("reviewed_by"), // admin slug
+        reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+        reviewNote: text("review_note").notNull().default(""),
+    },
+    (table) => [
+        index("oauth_applications_owner_idx").on(table.ownerId),
+        index("oauth_applications_status_idx").on(table.status, table.createdAt),
+    ],
+);
+
+export type OAuthApplicationSelect = typeof oauthApplicationsTable.$inferSelect;
+export type OAuthApplicationInsert = typeof oauthApplicationsTable.$inferInsert;
+
+// One row per (user, app) consent. Holds the long-lived, revocable access token for
+// that grant. Re-authorizing an already-granted app upserts this row (rotating the
+// token), mirroring the composite-PK upsert pattern used for userXpTable.
+export const oauthGrantsTable = pgTable(
+    "oauth_grants",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        // sha256 hex of the raw access token (same pattern as sessionTable.id).
+        accessTokenHash: text("access_token_hash").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    },
+    (table) => [
+        primaryKey({ columns: [table.userId, table.applicationId] }),
+        uniqueIndex("oauth_grants_token_hash_idx").on(table.accessTokenHash),
+        index("oauth_grants_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthGrantSelect = typeof oauthGrantsTable.$inferSelect;
+
+// Short-lived, single-use codes for the redirect (classic OAuth2) consent flow.
+export const oauthAuthCodesTable = pgTable(
+    "oauth_auth_codes",
+    {
+        id: text("id").notNull().primaryKey(), // sha256 hex of the raw code
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        // Exact redirect_uri from /authorize, re-checked at /token (defense in depth).
+        redirectUri: text("redirect_uri").notNull(),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        index("oauth_auth_codes_expires_idx").on(table.expiresAt),
+        index("oauth_auth_codes_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthAuthCodeSelect = typeof oauthAuthCodesTable.$inferSelect;
+
+// Short-lived device-flow codes (RFC 8628-flavored, not spec-exact). A bot backend
+// requests one, shows `userCode` to its user, and polls /api/oauth/token with
+// `deviceCode` until the user approves/denies it on survev.de/link.
+export const oauthDeviceCodesTable = pgTable(
+    "oauth_device_codes",
+    {
+        id: text("id").notNull().primaryKey(), // sha256 hex of the raw device_code
+        userCode: text("user_code").notNull(), // short human-typed code, e.g. "ABCD-1234"
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        status: text("status").notNull().default("pending"), // pending | approved | denied
+        userId: text("user_id").references(() => usersTable.id, {
+            onDelete: "cascade",
+            onUpdate: "cascade",
+        }), // set once the user approves/denies via /link
+        pollIntervalSec: integer("poll_interval_sec").notNull().default(5),
+        lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("oauth_device_codes_user_code_idx").on(table.userCode),
+        index("oauth_device_codes_expires_idx").on(table.expiresAt),
+        index("oauth_device_codes_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthDeviceCodeSelect = typeof oauthDeviceCodesTable.$inferSelect;

@@ -19,6 +19,8 @@ export type ProfileResponse =
               username: string;
               usernameSet: boolean;
               linked: boolean;
+              /** Whether this account is specifically linked to Discord (vs. Google). */
+              linkedDiscord: boolean;
               usernameChangeTime: number;
               goldenFries: number;
           };

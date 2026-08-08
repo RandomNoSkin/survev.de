@@ -195,6 +195,8 @@ export interface MapDef {
             timeSurvived: number;
         };
 
+        impactWeight?: number; // multiplier applied to the final impact score (team modes only), 0 = disabled || default: 0
+
     };
     gameConfig: {
         planes: {

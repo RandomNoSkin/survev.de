@@ -46,6 +46,7 @@ export interface OutfitDef {
     /** When true, this item can appear in the Golden Fries daily shop. */
     shop?: boolean;
     lore?: string;
+    creatorDiscordId?: number;
     noDrop?: boolean;
     obstacleType?: string;
     baseScale?: number;

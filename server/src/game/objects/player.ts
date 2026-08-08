@@ -63,6 +63,36 @@ import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
 
+/** Impact score "teammate save": how recently the enemy must have hit a teammate
+ *  for damaging them back to count as peeling them off that teammate. */
+const SAVE_WINDOW_MS = 2000;
+/** Impact score "teammate save": min time between credits for the same (attacker,
+ *  enemy) pair, so sustained fire in one engagement only credits once. */
+const SAVE_CREDIT_COOLDOWN_MS = 3000;
+/** Impact score "teammate save": the teammate must be below this health for peeling
+ *  an enemy off them to count as a save — otherwise every stray hit followed by
+ *  return fire would count, even when the teammate was never in real danger. */
+const SAVE_HEALTH_THRESHOLD = 50;
+/** Impact score "cover": how close a teammate must be to a completing revive to
+ *  count as covering it. Wider than reviveRange/medicReviveRange (5-6) since covering
+ *  means holding a nearby angle, not standing on top of the downed teammate. */
+const COVER_RANGE = 15;
+/** Impact score "cover": how recently the covering teammate must have dealt or taken
+ *  damage for their presence to count as active fighting rather than idling nearby. */
+const COVER_COMBAT_WINDOW_MS = GameConfig.player.reviveDuration * 1000;
+/** Impact score "opportunity": how close a teammate must be, at the moment another
+ *  teammate goes down or needs saving, to count as having actually been in a position
+ *  to respond. Wider than COVER_RANGE — this is "in the same fight", not "holding an
+ *  angle right next to it". */
+const RESPONSE_RANGE = 60;
+/** Impact score "knock/death penalty": base points lost for getting downed, scaled by
+ *  pendingKillWeight (see down()). Smaller than BASE_DEATH_PENALTY since a down is
+ *  still recoverable via revive. */
+const BASE_KNOCK_PENALTY = 3;
+/** Impact score "knock/death penalty": base points lost for actually dying, scaled by
+ *  the same pendingKillWeight that was snapshotted when the fatal down happened. */
+const BASE_DEATH_PENALTY = 6;
+
 type MoveObjsMode = {
     enabled: boolean;
     selectedObj?: Loot | Obstacle | Building;
@@ -102,7 +132,12 @@ export class PlayerBarn {
     newPlayers: Player[] = [];
     deletedPlayers: number[] = [];
     killedPlayers: Player[] = [];
-    groupIdAllocator = new IDAllocator(8);
+    /**
+     * 255 is the wire limit: groupId and teamId both go out as writeUint8. Solo modes hand
+     * out one ID per player (there are no groups), so this has to cover maxPlayers, and
+     * removePlayer gives IDs back so long-lived arena games don't exhaust it either.
+     */
+    groupIdAllocator = new IDAllocator(255);
     aliveCountDirty = false;
 
     socketIdToPlayer = new Map<string, Player>();
@@ -524,9 +559,14 @@ export class PlayerBarn {
             player.group.removePlayer(player);
 
             if (player.group.players.length <= 0) {
+                this.groupIdAllocator.give(player.group.id);
                 util.removeFrom(this.groups, player.group);
                 this.groupsByHash.delete(player.group.hash);
             }
+        } else if (player.groupId) {
+            // No group means activatePlayer allocated this ID for the player alone (solo
+            // modes and spectators), so it's free the moment they leave.
+            this.groupIdAllocator.give(player.groupId);
         }
         if (this.game.isTeamMode) {
             this.livingPlayers.sort((a, b) => a.teamId - b.teamId);
@@ -1095,6 +1135,12 @@ export class Player extends BaseGameObject {
     frozenTicker = 0;
     frozen = false;
     frozenOri = 0;
+    /**
+     * Explosion type the client looks up for the frozen sprites, "" when the freeze has no
+     * visual. Must always be a string: it goes through writeGameType while frozen, and
+     * typeToId throws on undefined.
+     */
+    frozenType = "";
     frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
 
     private _hasteTicker = 0;
@@ -1856,8 +1902,58 @@ export class Player extends BaseGameObject {
     killedIndex = Infinity;
 
     kills = 0;
+    /** Impact score: this player's kills, weighted by how outnumbered their team was
+     *  at the moment of each knock (see `pendingKillWeight`/`down()`) — a kill landed
+     *  while your team was outnumbered counts for more than a mop-up kill landed
+     *  while your team already had the numbers advantage. Used instead of raw `kills`
+     *  in the kill/assist share (see game.ts); `kills` itself stays the plain count
+     *  for leaderboards/stats. */
+    weightedKills = 0;
+    /** Impact score: kill-weight multiplier snapshotted when THIS player was downed
+     *  (see `down()`), based on both teams' living player counts at that instant —
+     *  1x if the downer's team had the numbers advantage, 1.5x if even, 2x if the
+     *  downer's team was outnumbered. Applied to the downer's `weightedKills` if this
+     *  down becomes an actual kill; cleared without credit if this player is revived
+     *  instead. Also drives `lossPenalty` below, which — unlike the kill credit —
+     *  isn't undone by a revive. */
+    pendingKillWeight: number | undefined;
+    /** Impact score liability: points lost for being knocked and/or killed this
+     *  match, scaled by `pendingKillWeight` each time — losing a fight your team
+     *  should have been winning costs more than losing one you were already
+     *  outnumbered in. See `down()`/`kill()`. */
+    lossPenalty = 0;
     timeAlive = 0;
     assists = 0;
+    /** Impact score: teammates this player revived this match (excludes self-revives). */
+    revives = 0;
+    /** Impact score: times this player was nearby and actively fighting (dealt or
+     *  took damage) while a teammate completed a revive nearby — credited the same as
+     *  a revive itself, since holding an angle while someone revives is just as
+     *  valuable as doing the reviving. See completion of `GameConfig.Action.Revive`. */
+    covers = 0;
+    /** Timestamp of this player's last dealt-damage tick, used to judge `covers`. */
+    lastDamageDealtTime = 0;
+    /** Impact score bonus (see impactScore.ts): enemies this player damaged while that
+     *  enemy was actively damaging one of this player's teammates (peel/save), see
+     *  `damage()`. Pure bonus, no penalty counterpart. */
+    teammateSaves = 0;
+    /** Times a teammate got a `teammateSaves` credit for peeling an enemy off THIS
+     *  player, see `damage()`. Stats-page trivia only — doesn't affect the impact
+     *  score (nobody is penalized for needing a save). */
+    timesNeededSaving = 0;
+    /** Per-enemy cooldown for `teammateSaves`, so sustained fire on the same enemy
+     *  during one engagement only credits once every `SAVE_CREDIT_COOLDOWN_MS`. */
+    saveCooldowns: Map<number, number> = new Map();
+    /** Impact score: teammates who were within `RESPONSE_RANGE` when this player went
+     *  down and were alive/not-downed at that moment — i.e. who was actually in a
+     *  position to attempt a revive, not just "somewhere on the team". Snapshotted in
+     *  `down()`, resolved (and cleared) when this down is revived — see `missedRevives`
+     *  on those responders and the revive-completion block in `updateAction`. */
+    pendingReviveResponders: Player[] = [];
+    /** Impact score liability: times this player was in `pendingReviveResponders` for
+     *  a teammate's down, that down was later revived, and this player neither
+     *  performed the revive nor got `covers` credit for it. */
+    missedRevives = 0;
     /** Bullets fired (each pellet); paired with `bulletHits` for replay/game-view accuracy. */
     shotsFired = 0;
     /** Gun-bullet damage instances dealt to other players. */
@@ -2438,6 +2534,27 @@ export class Player extends BaseGameObject {
                         target.downedDamageTicker = 0;
                         target.health = GameConfig.player.reviveHealth;
 
+                        // Impact score: only counts reviving a teammate, not the
+                        // self_revive perk path (where target === this).
+                        if (target !== this) {
+                            this.revives++;
+                            const covered = this.creditCovers(target);
+                            // Anyone who was in position to help (pendingReviveResponders,
+                            // snapshotted in down()) but neither revived nor got cover
+                            // credit for this specific down missed it.
+                            const helped = new Set<Player>([this, ...covered]);
+                            for (const responder of target.pendingReviveResponders) {
+                                if (!helped.has(responder)) {
+                                    responder.missedRevives++;
+                                }
+                            }
+                        }
+                        target.pendingReviveResponders = [];
+                        // Revived, so this down never becomes a kill — discard the
+                        // pending weight (the knock penalty above already applied and
+                        // isn't undone by the revive).
+                        target.pendingKillWeight = undefined;
+
                         // checks 2 conditions in one, player has pan AND has it selected
                         if (target.weapons[target.curWeapIdx].type === "pan") {
                             target.wearingPan = false;
@@ -2513,6 +2630,7 @@ export class Player extends BaseGameObject {
             if (this.frozenTicker <= 0) {
                 this.frozenTicker = 0;
                 this.frozen = false;
+                this.frozenType = "";
                 this.frozenSpeedPenalty = GameConfig.player.frozenSpeedPenalty;
                 this.setDirty();
             }
@@ -3527,6 +3645,15 @@ export class Player extends BaseGameObject {
      * doesn't care about kill credit or anything, simply the last player to damage you (excludes yourself)
      */
     lastDamagedBy: Player | undefined;
+
+    /** Per-weapon damage this player has dealt this match (attacker-side), for the
+     *  weapon-ranking stats page. Keyed by gameSourceType/mapSourceType, gun/melee/
+     *  throwable only (see the gate in damage()). */
+    weaponDamageDealt: Map<string, number> = new Map();
+    /** Per-weapon down-credits this match, using the same weapon key as weaponDamageDealt
+     *  and the same "downer gets credit" convention as `kills`. */
+    weaponKills: Map<string, number> = new Map();
+
     damageHistory: {
         source: GameObject;
         /** Source player's object id (0 for non-player sources like gas), for replay/game-view. */
@@ -3629,6 +3756,54 @@ export class Player extends BaseGameObject {
         if (playerSource && params.source !== this && !this.downed) {
             if (playerSource.groupId !== this.groupId) {
                 playerSource.damageDealt += finalDamage;
+                playerSource.lastDamageDealtTime = Date.now();
+
+                // Impact score: credit a "save" when this shot lands on an enemy who
+                // recently damaged one of playerSource's teammates (peeling them off a
+                // teammate under fire). Cooldown per (attacker, enemy) pair so sustained
+                // fire on the same target during one engagement only credits once.
+                if (this.game.isTeamMode && playerSource.group) {
+                    const lastCredit = playerSource.saveCooldowns.get(this.__id) ?? 0;
+                    const now = Date.now();
+                    if (now - lastCredit > SAVE_CREDIT_COOLDOWN_MS) {
+                        const savedTeammate = playerSource.group.players.find(
+                            (teammate) =>
+                                teammate !== playerSource &&
+                                teammate.health < SAVE_HEALTH_THRESHOLD &&
+                                teammate.damageHistory.some(
+                                    (h) =>
+                                        h.sourceId === this.__id &&
+                                        now - h.realTime < SAVE_WINDOW_MS,
+                                ),
+                        );
+                        if (savedTeammate) {
+                            playerSource.teammateSaves++;
+                            savedTeammate.timesNeededSaving++;
+                            playerSource.saveCooldowns.set(this.__id, now);
+                        }
+                    }
+                }
+
+                // Weapon-ranking stats: only count damage actually dealt by a weapon
+                // (excludes gas/bleeding/airdrop/etc, which use other DamageTypes).
+                if (params.damageType === GameConfig.DamageType.Player) {
+                    const weaponKey = params.gameSourceType ?? params.mapSourceType ?? "";
+                    const weaponDef = GameObjectDefs.typeToDefSafe(weaponKey) as
+                        | { type?: string }
+                        | undefined;
+                    if (
+                        weaponKey &&
+                        (weaponDef?.type === "gun" ||
+                            weaponDef?.type === "melee" ||
+                            weaponDef?.type === "throwable")
+                    ) {
+                        playerSource.weaponDamageDealt.set(
+                            weaponKey,
+                            (playerSource.weaponDamageDealt.get(weaponKey) ?? 0) +
+                                finalDamage,
+                        );
+                    }
+                }
             }
             if (playerSource.teamId !== this.teamId) {
                 this.lastDamagedBy = playerSource;
@@ -3770,6 +3945,12 @@ export class Player extends BaseGameObject {
     down(params: DamageParams): void {
         this.downed = true;
         this.downedCount++;
+        // Impact score: snapshot who was actually in position to respond to this down,
+        // resolved (missedRevives for anyone not among the responders/coverers) when
+        // it's revived — see the Action.Revive completion below.
+        this.pendingReviveResponders = this.game.isTeamMode
+            ? this.nearbyRespondingTeammates()
+            : [];
         // Freeze the assist window here: only damage recorded before the down counts.
         this.downedAtHistoryLen = this.damageHistory.length;
         this.downedDamageTicker = GameConfig.player.downedDamageBuffer;
@@ -3809,10 +3990,42 @@ export class Player extends BaseGameObject {
             this.downedBy = params.source;
             downedMsg.killerId = params.source.__id;
             downedMsg.killCreditId = params.source.__id;
+
+            // Weapon-ranking stats: attribute the down-credit to the weapon that
+            // caused it (only when the down came directly from a weapon hit, not a
+            // lastDamagedBy fallback where the triggering damage may be non-weapon).
+            const weaponKey = params.gameSourceType ?? params.mapSourceType ?? "";
+            const weaponDef = GameObjectDefs.typeToDefSafe(weaponKey) as
+                | { type?: string }
+                | undefined;
+            if (
+                weaponKey &&
+                (weaponDef?.type === "gun" ||
+                    weaponDef?.type === "melee" ||
+                    weaponDef?.type === "throwable")
+            ) {
+                const source = params.source as Player;
+                source.weaponKills.set(
+                    weaponKey,
+                    (source.weaponKills.get(weaponKey) ?? 0) + 1,
+                );
+            }
         } else if (this.lastDamagedBy) {
             this.downedBy = this.lastDamagedBy;
             downedMsg.killerId = this.lastDamagedBy.__id;
             downedMsg.killCreditId = this.lastDamagedBy.__id;
+        }
+
+        // Impact score: snapshot the kill-weight for this down from both teams'
+        // living player counts right now — see pendingKillWeight doc above.
+        if (this.game.isTeamMode && this.downedBy?.group && this.group) {
+            const downerAlive = this.downedBy.group.livingPlayers.length;
+            const victimAlive = this.group.livingPlayers.length;
+            this.pendingKillWeight =
+                downerAlive === victimAlive ? 1.5 : downerAlive < victimAlive ? 2 : 1;
+            this.lossPenalty += this.pendingKillWeight * BASE_KNOCK_PENALTY;
+        } else {
+            this.pendingKillWeight = undefined;
         }
 
         this.game.broadcastMsg(net.MsgType.Kill, downedMsg);
@@ -3849,6 +4062,12 @@ export class Player extends BaseGameObject {
             this.rank = 999;
         }
         this.dead = true;
+        // Impact score: death penalty, scaled by the kill-weight snapshotted at the
+        // down that led here (or 1x if this player died without ever going down,
+        // e.g. an instant kill or a whole-team wipe).
+        if (this.game.isTeamMode) {
+            this.lossPenalty += (this.pendingKillWeight ?? 1) * BASE_DEATH_PENALTY;
+        }
         this.killedIndex = this.game.playerBarn.nextKilledNumber++;
         this.boost = 0;
         this.actionType = GameConfig.Action.None;
@@ -3902,6 +4121,9 @@ export class Player extends BaseGameObject {
             if (killCreditSource !== this && killCreditSource.teamId !== this.teamId) {
                 killCreditSource.killedIds.push(this.matchDataId);
                 killCreditSource.kills++;
+                // Impact score: weighted by the kill-weight snapshotted when this
+                // victim went down (undiscarded, i.e. they weren't revived first).
+                killCreditSource.weightedKills += this.pendingKillWeight ?? 1;
                 const weapon = params.gameSourceType ?? params.mapSourceType ?? "unknown";
                 this.game.logKillFeedEntry({
                     ts: Date.now(),
@@ -4455,6 +4677,55 @@ export class Player extends BaseGameObject {
         }
     }
 
+    /** Impact score "opportunity": this player's living, non-downed teammates within
+     *  `RESPONSE_RANGE` right now — i.e. who was actually close enough to respond,
+     *  not just "on the same team somewhere on the map". Snapshotted into
+     *  `pendingReviveResponders` when this player goes down. */
+    nearbyRespondingTeammates(): Player[] {
+        if (!this.group) return [];
+        return this.group.players.filter(
+            (teammate) =>
+                teammate !== this &&
+                !teammate.dead &&
+                !teammate.downed &&
+                util.sameLayer(teammate.layer, this.layer) &&
+                v2.lengthSqr(v2.sub(teammate.pos, this.pos)) <=
+                    RESPONSE_RANGE * RESPONSE_RANGE,
+        );
+    }
+
+    /** Impact score "cover": credits nearby teammates who were actively fighting
+     *  (dealt or took damage within the last `reviveDuration`) when this revive
+     *  completed — same team value as doing the revive itself. Excludes the reviver
+     *  and the revived player, who are already credited via `revives`. Returns the
+     *  credited teammates so the caller can resolve `missedRevives` for anyone who
+     *  had the opportunity (see `pendingReviveResponders`) but wasn't among them. */
+    creditCovers(revived: Player): Player[] {
+        if (!this.group) return [];
+        const now = Date.now();
+        const covered: Player[] = [];
+        for (const teammate of this.group.players) {
+            if (teammate === this || teammate === revived) continue;
+            if (teammate.dead || teammate.downed) continue;
+            if (!util.sameLayer(teammate.layer, this.layer)) continue;
+            if (v2.lengthSqr(v2.sub(teammate.pos, this.pos)) > COVER_RANGE * COVER_RANGE) {
+                continue;
+            }
+
+            const dealtRecently = now - teammate.lastDamageDealtTime < COVER_COMBAT_WINDOW_MS;
+            const tookRecently =
+                teammate.damageHistory.length > 0 &&
+                now -
+                    teammate.damageHistory[teammate.damageHistory.length - 1].realTime <
+                    COVER_COMBAT_WINDOW_MS;
+            if (dealtRecently || tookRecently) {
+                teammate.covers++;
+                covered.push(teammate);
+            }
+        }
+        return covered;
+    }
+
     isAffectedByAOE(medic: Player): boolean {
         const effectRange =
             medic.actionType == GameConfig.Action.Revive
@@ -4668,7 +4939,11 @@ export class Player extends BaseGameObject {
 
                         let iterations = 0;
                         let idx = this.curWeapIdx;
+                        // NOTE: `iterations` MUST be incremented — without it this loops
+                        // forever if no slot holds a weapon, freezing the game process
+                        // (and with it every game running on that process).
                         while (iterations < GameConfig.WeaponSlot.Count * 2) {
+                            iterations++;
                             idx = absMod(idx + toAdd, GameConfig.WeaponSlot.Count);
                             if (this.weapons[idx].type) {
                                 break;
@@ -5002,7 +5277,9 @@ export class Player extends BaseGameObject {
         )
             return;
 
-        if (this.pickupTicker > 0) return;
+        // Pickup cooldown intentionally disabled: it dropped any loot input that landed
+        // inside the window, which is what made picking things up feel delayed.
+        // if (this.pickupTicker > 0) return;
         this.pickupTicker = 0.1;
         let amountLeft = 0;
         let lootToAdd = obj.type;
@@ -5871,10 +6148,12 @@ export class Player extends BaseGameObject {
         frozenOri: number,
         duration: number,
         freezeAmount: number = GameConfig.player.frozenSpeedPenalty,
+        frozenType = "",
     ): void {
         this.frozenTicker = duration;
         this.frozen = true;
         this.frozenOri = frozenOri;
+        this.frozenType = frozenType;
         this.frozenSpeedPenalty = freezeAmount;
         this.setDirty();
     }

@@ -183,6 +183,48 @@
       "when": 1784748593263,
       "tag": "0023_role_and_user_quest",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785611795969,
+      "tag": "0024_medical_kid_colt",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785863645681,
+      "tag": "0025_icy_captain_universe",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785885996682,
+      "tag": "0026_illegal_blonde_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785943806597,
+      "tag": "0027_gigantic_iceman",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785960912959,
+      "tag": "0028_unusual_fixer",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785964313360,
+      "tag": "0029_milky_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

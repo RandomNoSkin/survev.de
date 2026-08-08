@@ -10,7 +10,7 @@ interface ChannelDef {
     volume: number;
     maxRange: number;
     list: string;
-    type: "sound" | "music";
+    type: "sound" | "music" | "gameMusic";
 }
 
 export interface ReverbDef {
@@ -1689,11 +1689,6 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             loadPriority: 1,
         },
-        piano_music_01: {
-            path: "audio/ambient/piano_music_01.mp3",
-            volume: 1,
-            preload: false,
-        },
         ambient_wind_02: {
             path: "audio/ambient/ambient_wind_02.mp3",
             volume: 1,
@@ -1702,31 +1697,6 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         ambient_steam_01: {
             path: "audio/ambient/ambient_steam_01.mp3",
             volume: 1,
-            preload: false,
-        },
-        club_music_01: {
-            path: "audio/ambient/club_music_01.mp3",
-            volume: 1,
-            preload: false,
-        },
-        club_music_02: {
-            path: "audio/ambient/club_music_02.mp3",
-            volume: 1,
-            preload: false,
-        },
-        daniel_club_music_01: {
-            path: "audio/ambient/daniel_club_music_01.mp3",
-            volume: 0.3,
-            preload: false,
-        },
-        reserve_music_01: {
-            path: "audio/ambient/reserve_music_01.mp3",
-            volume: 0.66,
-            preload: false,
-        },
-        reserve_music_02: {
-            path: "audio/ambient/reserve_music_02.mp3",
-            volume: 0.66,
             preload: false,
         },
         ambient_lab_01: {
@@ -1992,6 +1962,38 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             loadPriority: 2,
         },
     },
+    gameMusic: {
+        piano_music_01: {
+            path: "audio/ambient/piano_music_01.mp3",
+            volume: 1,
+            preload: false,
+        },
+        club_music_01: {
+            path: "audio/ambient/club_music_01.mp3",
+            volume: 1,
+            preload: false,
+        },
+        club_music_02: {
+            path: "audio/ambient/club_music_02.mp3",
+            volume: 1,
+            preload: false,
+        },
+        daniel_club_music_01: {
+            path: "audio/ambient/daniel_club_music_01.mp3",
+            volume: 0.3,
+            preload: false,
+        },
+        reserve_music_01: {
+            path: "audio/ambient/reserve_music_01.mp3",
+            volume: 0.66,
+            preload: false,
+        },
+        reserve_music_02: {
+            path: "audio/ambient/reserve_music_02.mp3",
+            volume: 0.66,
+            preload: false,
+        },
+    },
 };
 const Groups: Record<string, { channel: string; sounds: string[] }> = {
     footstep_grass: {
@@ -2217,6 +2219,12 @@ const Channels: Record<string, ChannelDef> = {
         maxRange: 1,
         list: "music",
         type: "music",
+    },
+    gameMusic: {
+        volume: 1,
+        maxRange: 1,
+        list: "gameMusic",
+        type: "gameMusic",
     },
 };
 const Reverbs: Record<string, ReverbDef> = {

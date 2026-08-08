@@ -10,6 +10,7 @@ export class Ambiance {
         sound: string;
         channel: string;
         immediateMode: boolean;
+        loop: boolean;
         inst: SoundHandle | null;
         instSound: string;
         filter: string;
@@ -28,12 +29,14 @@ export class Ambiance {
             sound: string,
             channel: string,
             immediateMode: boolean,
+            loop: boolean,
         ) => {
             this.tracks.push({
                 name,
                 sound,
                 channel,
                 immediateMode,
+                loop,
                 inst: null,
                 instSound: "",
                 filter: "",
@@ -43,12 +46,12 @@ export class Ambiance {
             this.trackToIdx[name] = this.tracks.length - 1;
         };
         // Added in order of weight from least to greatest
-        addTrack("music", "menu_music", "music", false);
-        addTrack("wind", "ambient_wind_01", "ambient", false);
-        addTrack("river", "ambient_stream_01", "ambient", false);
-        addTrack("waves", "ambient_waves_01", "ambient", false);
-        addTrack("interior_0", "", "ambient", true);
-        addTrack("interior_1", "", "ambient", true);
+        addTrack("music", "menu_music", "music", false, false);
+        addTrack("wind", "ambient_wind_01", "ambient", false, true);
+        addTrack("river", "ambient_stream_01", "ambient", false, true);
+        addTrack("waves", "ambient_waves_01", "ambient", false, true);
+        addTrack("interior_0", "", "gameMusic", true, true);
+        addTrack("interior_1", "", "gameMusic", true, true);
         this.initTime = Date.now();
     }
 
@@ -96,7 +99,7 @@ export class Ambiance {
                 track.inst = audioManager.playSound(track.sound, {
                     channel: track.channel,
                     startSilent: true,
-                    loop: track.channel == "ambient",
+                    loop: track.loop,
                     forceStart: true,
                     filter: track.filter,
                     forceFilter: true,

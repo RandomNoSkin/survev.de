@@ -25,24 +25,11 @@
  *   GET  /moderation/api/events                    → SSE stream for live updates
  *   GET  /moderation/api/game/:region/:id/players  → live player list for a game
  *   POST /moderation/api/game/:region/:id/cmd      → execute admin command on a game
+ *   GET  /moderation/api/apps                       → OAuth apps (optionally ?status=pending|approved|rejected|suspended)
+ *   POST /moderation/api/apps/review                → approve/reject a pending OAuth app
  */
 
-import {
-    and,
-    asc,
-    desc,
-    eq,
-    gt,
-    gte,
-    ilike,
-    inArray,
-    isNull,
-    lte,
-    notInArray,
-    or,
-    type SQL,
-    sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
@@ -57,8 +44,9 @@ import {
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
-import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
+import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
+import { OAUTH_APP_STATUSES, type OAuthAppStatus, zAppReviewRequest } from "../../../../shared/types/oauth.ts";
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
@@ -70,10 +58,12 @@ import { RevertError, revertLedgerEntry } from "../db/friesRevert";
 import {
     deleteGame,
     removeUserFromGame,
+    resolveSusFlag,
     restoreUserToGame,
     setGamePlayerModeration,
 } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
+import { listApps, reviewApp } from "../db/oauth";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
@@ -112,6 +102,12 @@ function escapeLike(term: string): string {
 /** Upper bound for a moderation window (the Games tab's "All time"), also the clamp
  *  that keeps a silly `?window=` from producing an out-of-range cutoff date. */
 const MAX_WINDOW_MS = 3650 * 24 * 60 * 60 * 1000;
+
+/** How many already-resolved sus reports the Sus tab keeps around, newest first. */
+const SOLVED_SUS_LIMIT = 10;
+
+/** Recordings per region the Replays tab loads when it doesn't ask for a specific count. */
+const REPLAY_LIST_DEFAULT_LIMIT = 200;
 
 /**
  * Length of a moderation time window, parsed from `<n>h` / `<n>d`.
@@ -193,6 +189,12 @@ const MODERATOR_ALLOWED_PATHS = new Set([
     "/api/replays/sus",
     "/api/xp-gain",
     "/api/xp-gain/games",
+    // Their own report list. The route scopes the rows to flags they raised, so this
+    // never exposes another staff member's queue.
+    "/api/sus",
+    // The Games tab, so a report can be written from the game roster. Read-only: the
+    // only write it reaches is /moderate, which is sus-only for them (see below).
+    "/api/games/search",
 ]);
 
 /** Dynamic (parameterised) sub-paths a moderator may hit — see MODERATOR_ALLOWED_PATHS. */
@@ -204,8 +206,8 @@ const MODERATOR_ALLOWED_PATTERNS: RegExp[] = [
 
 function moderatorMayAccess(subPath: string): boolean {
     return (
-        MODERATOR_ALLOWED_PATHS.has(subPath) ||
-        MODERATOR_ALLOWED_PATTERNS.some((re) => re.test(subPath))
+        MODERATOR_ALLOWED_PATHS.has(subPath)
+        || MODERATOR_ALLOWED_PATTERNS.some((re) => re.test(subPath))
     );
 }
 
@@ -414,18 +416,18 @@ async function resolveXpExclusions(tags: string[]): Promise<{
     const [modRows, bannedRows] = await Promise.all([
         statuses.length
             ? db
-                  .select({
-                      gameId: gameModerationTable.gameId,
-                      userId: gameModerationTable.userId,
-                  })
-                  .from(gameModerationTable)
-                  .where(inArray(gameModerationTable.status, statuses))
+                .select({
+                    gameId: gameModerationTable.gameId,
+                    userId: gameModerationTable.userId,
+                })
+                .from(gameModerationTable)
+                .where(inArray(gameModerationTable.status, statuses))
             : [],
         tags.includes("banned")
             ? db
-                  .select({ id: usersTable.id })
-                  .from(usersTable)
-                  .where(eq(usersTable.banned, true))
+                .select({ id: usersTable.id })
+                .from(usersTable)
+                .where(eq(usersTable.banned, true))
             : [],
     ]);
 
@@ -446,9 +448,9 @@ function xpRowExcluded(
     userId: string,
 ): boolean {
     return (
-        ex.bannedIds.has(userId) ||
-        ex.modGameIds.has(gameId) ||
-        ex.modKeys.has(`${gameId}|${userId}`)
+        ex.bannedIds.has(userId)
+        || ex.modGameIds.has(gameId)
+        || ex.modKeys.has(`${gameId}|${userId}`)
     );
 }
 
@@ -518,12 +520,10 @@ async function withStaffFlags(players: any[]): Promise<any[]> {
 
 export const ModerationDashboardRouter = new Hono<Context>()
     .use(adminGuard)
-
     // ── Serve the SPA HTML (auth already checked by adminGuard above) ──────
     .get("/", (c) => {
         return c.html(dashboardHtml);
     })
-
     // ── Current user info (for the frontend to display "logged in as ...") ─
     .get("/api/me", (c) => {
         const user = c.get("user")!;
@@ -535,7 +535,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             moderator: !!user.moderator,
         });
     })
-
     // ─────────────────────────────────────────────────────────────────────────
     // BAN MANAGEMENT
     // ─────────────────────────────────────────────────────────────────────────
@@ -544,7 +543,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/bans", async (c) => {
         return c.json(await fetchAllBans());
     })
-
     /** Creates an IP ban. Also bans any account linked to this IP. Broadcasts to all admins. */
     .post(
         "/api/ban/ip",
@@ -623,7 +621,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /** Creates an account ban (permanent or time-limited). Broadcasts updated bans. */
     .post(
         "/api/ban/account",
@@ -676,7 +673,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /** Creates a chat ban. Broadcasts updated bans. */
     .post(
         "/api/ban/chat",
@@ -732,7 +728,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /** Removes an IP ban. Also unbans any account that was linked to this IP. Broadcasts updated bans. */
     .post("/api/unban/ip", validateParams(z.object({ ip: z.string() })), async (c) => {
         const admin = c.get("user")!;
@@ -768,7 +763,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         broadcastBans();
         return c.json({ ok: true });
     })
-
     /** Removes an account ban. Broadcasts updated bans. */
     .post(
         "/api/unban/account",
@@ -793,7 +787,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /** Removes a chat ban. Broadcasts updated bans. */
     .post("/api/unban/chat", validateParams(z.object({ ip: z.string() })), async (c) => {
         const admin = c.get("user")!;
@@ -811,7 +804,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         broadcastBans();
         return c.json({ ok: true });
     })
-
     // ─────────────────────────────────────────────────────────────────────────
     // IP / PLAYER LOOKUP
     // ─────────────────────────────────────────────────────────────────────────
@@ -846,7 +838,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         }
         return c.json({ recent });
     })
-
     /**
      * Returns all names + accounts that ever used this encoded IP, plus the ISP.
      * Recent names (≤30 days) come directly from ip_logs.
@@ -961,7 +952,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             banHistory,
         });
     })
-
     /**
      * Returns chat history for a player, looked up by username or encoded IP.
      * Query param: ?by=name (default) or ?by=ip
@@ -994,7 +984,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ messages: rows });
     })
-
     /**
      * Global chat log for the Chat Log tab.
      * Without ?search: the most recent messages across ALL games (newest first).
@@ -1005,12 +994,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const search = (c.req.query("search") ?? "").trim();
         const limit = Math.min(Math.max(Number(c.req.query("limit")) || 500, 1), 1000);
         const channelParam = c.req.query("channel");
-        const channel =
-            channelParam !== undefined &&
-            channelParam !== "" &&
-            Number.isFinite(Number(channelParam))
-                ? Number(channelParam)
-                : undefined;
+        const channel = channelParam !== undefined
+                && channelParam !== ""
+                && Number.isFinite(Number(channelParam))
+            ? Number(channelParam)
+            : undefined;
 
         const rows = await db
             .select({
@@ -1026,7 +1014,15 @@ export const ModerationDashboardRouter = new Hono<Context>()
             .from(chatLogsTable)
             .where(
                 and(
-                    search ? ilike(chatLogsTable.message, `%${search}%`) : undefined,
+                    // One box, two things staff search for: the wording of a message, and
+                    // the game a report names. game_id is stored as text, so an id pasted
+                    // in whole or in part matches with the same ilike.
+                    search
+                        ? or(
+                            ilike(chatLogsTable.message, `%${search}%`),
+                            ilike(chatLogsTable.gameId, `%${search}%`),
+                        )
+                        : undefined,
                     channel !== undefined
                         ? eq(chatLogsTable.channel, channel)
                         : undefined,
@@ -1038,7 +1034,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ messages: rows });
     })
-
     /**
      * Full chat history for a single game, oldest first — used to show a clicked
      * message together with its surrounding context (the whole game's chat).
@@ -1065,7 +1060,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ messages: rows });
     })
-
     /**
      * Returns all IP hashes + ISP a player used, looked up by display name.
      */
@@ -1128,34 +1122,32 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const slugs = [
             ...new Set(ips.map((i) => i.slug).filter((s): s is string => !!s)),
         ];
-        const banHistory =
-            hashes.length || slugs.length
-                ? await db
-                      .select()
-                      .from(banHistoryTable)
-                      .where(
-                          or(
-                              hashes.length
-                                  ? and(
-                                        inArray(banHistoryTable.banType, ["ip", "chat"]),
-                                        inArray(banHistoryTable.banTarget, hashes),
-                                    )
-                                  : undefined,
-                              slugs.length
-                                  ? and(
-                                        eq(banHistoryTable.banType, "account"),
-                                        inArray(banHistoryTable.banTarget, slugs),
-                                    )
-                                  : undefined,
-                          ),
-                      )
-                      .orderBy(desc(banHistoryTable.bannedAt))
-                      .limit(100)
-                : [];
+        const banHistory = hashes.length || slugs.length
+            ? await db
+                .select()
+                .from(banHistoryTable)
+                .where(
+                    or(
+                        hashes.length
+                            ? and(
+                                inArray(banHistoryTable.banType, ["ip", "chat"]),
+                                inArray(banHistoryTable.banTarget, hashes),
+                            )
+                            : undefined,
+                        slugs.length
+                            ? and(
+                                eq(banHistoryTable.banType, "account"),
+                                inArray(banHistoryTable.banTarget, slugs),
+                            )
+                            : undefined,
+                    ),
+                )
+                .orderBy(desc(banHistoryTable.bannedAt))
+                .limit(100)
+            : [];
 
         return c.json({ name, ips, banHistory });
     })
-
     /**
      * Account "session" lookup by slug — shows every name and IP the account has
      * played under (aggregated from ip_logs, keyed by the account's userId), plus
@@ -1211,9 +1203,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     ),
                     hashes.length
                         ? and(
-                              inArray(banHistoryTable.banType, ["ip", "chat"]),
-                              inArray(banHistoryTable.banTarget, hashes),
-                          )
+                            inArray(banHistoryTable.banType, ["ip", "chat"]),
+                            inArray(banHistoryTable.banTarget, hashes),
+                        )
                         : undefined,
                 ),
             )
@@ -1239,7 +1231,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             banHistory,
         });
     })
-
     // ─────────────────────────────────────────────────────────────────────────
     // BAN COMMENTS
     // ─────────────────────────────────────────────────────────────────────────
@@ -1262,7 +1253,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ comments });
     })
-
     /** Adds a comment to a ban's thread. */
     .post(
         "/api/ban-comments",
@@ -1287,7 +1277,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     // ─────────────────────────────────────────────────────────────────────────
     // SSE – LIVE EVENT STREAM
     // ─────────────────────────────────────────────────────────────────────────
@@ -1338,37 +1327,37 @@ export const ModerationDashboardRouter = new Hono<Context>()
             // Periodic player list updates for the watched game (every 3 s)
             const playerTimer = gameId
                 ? setInterval(async () => {
-                      const players = await withStaffFlags(
-                          await server.getDashboardGamePlayers(regionId, gameId),
-                      );
-                      await push("players", { players });
-                  }, 3_000)
+                    const players = await withStaffFlags(
+                        await server.getDashboardGamePlayers(regionId, gameId),
+                    );
+                    await push("players", { players });
+                }, 3_000)
                 : null;
 
             // Periodic kill+chat feed updates for the watched game (every 3 s)
             let lastFeedAt = new Date();
             const feedTimer = gameId
                 ? setInterval(async () => {
-                      const entries = await db
-                          .select({
-                              id: chatLogsTable.id,
-                              createdAt: chatLogsTable.createdAt,
-                              username: chatLogsTable.username,
-                              channel: chatLogsTable.channel,
-                              message: chatLogsTable.message,
-                          })
-                          .from(chatLogsTable)
-                          .where(
-                              and(
-                                  eq(chatLogsTable.gameId, gameId),
-                                  gt(chatLogsTable.createdAt, lastFeedAt),
-                              ),
-                          )
-                          .orderBy(asc(chatLogsTable.createdAt))
-                          .limit(50);
-                      lastFeedAt = new Date();
-                      if (entries.length) await push("feed", { entries });
-                  }, 3_000)
+                    const entries = await db
+                        .select({
+                            id: chatLogsTable.id,
+                            createdAt: chatLogsTable.createdAt,
+                            username: chatLogsTable.username,
+                            channel: chatLogsTable.channel,
+                            message: chatLogsTable.message,
+                        })
+                        .from(chatLogsTable)
+                        .where(
+                            and(
+                                eq(chatLogsTable.gameId, gameId),
+                                gt(chatLogsTable.createdAt, lastFeedAt),
+                            ),
+                        )
+                        .orderBy(asc(chatLogsTable.createdAt))
+                        .limit(50);
+                    lastFeedAt = new Date();
+                    if (entries.length) await push("feed", { entries });
+                }, 3_000)
                 : null;
 
             // Keep the stream open until the client disconnects
@@ -1385,7 +1374,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             activeSseStreams.delete(stream);
         });
     })
-
     // ─────────────────────────────────────────────────────────────────────────
     // LIVE SERVER VIEW (kept for direct REST access)
     // ─────────────────────────────────────────────────────────────────────────
@@ -1394,7 +1382,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/servers", async (c) => {
         return c.json(await fetchServers());
     })
-
     /** Sends an announcement to every running game across all regions. */
     .post(
         "/api/servers/announce",
@@ -1416,9 +1403,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     await Promise.all(
                         games
                             .filter((g: any) => !g.stopped)
-                            .map((g: any) =>
-                                server.sendDashboardGameCmd(regionId, g.id, cmd),
-                            ),
+                            .map((g: any) => server.sendDashboardGameCmd(regionId, g.id, cmd)),
                     );
                 }),
             );
@@ -1426,7 +1411,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /**
      * Returns a spectate token for a specific game so the dashboard can open the
      * game client in spectator mode. Calls the game server via the existing
@@ -1438,7 +1422,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const data = await server.findGameById(regionId, gameId, true /* admin */);
         return c.json(data);
     })
-
     // ─────────────────────────────────────────────────────────────────────────
     // REPLAYS
     // ─────────────────────────────────────────────────────────────────────────
@@ -1452,44 +1435,51 @@ export const ModerationDashboardRouter = new Hono<Context>()
      * Batched into three queries regardless of how many games are listed.
      */
     .get("/api/replays", async (c) => {
+        // Bounded by default: a game host keeps recordings until a size/age cap, so the
+        // full archive is thousands of meta.json reads plus an equally large match_data
+        // lookup below. The tab shows at most a page of them anyway and asks for more
+        // only when the user picks a bigger view.
+        const limitParam = Number(c.req.query("limit"));
+        const limit = Number.isFinite(limitParam) && limitParam > 0
+            ? Math.min(limitParam, 5000)
+            : REPLAY_LIST_DEFAULT_LIMIT;
+
         const regions = await Promise.all(
             Object.entries(server.regions).map(async ([regionId, region]) => {
-                const recordings = await region.listReplays().catch(() => []);
+                const recordings = await region.listReplays(limit).catch(() => []);
                 return { regionId, recordings };
             }),
         );
 
         const gameIds = [
             ...new Set(
-                regions.flatMap((r) =>
-                    (r.recordings as any[]).map((rec) => rec.gameId).filter(Boolean),
-                ),
+                regions.flatMap((r) => (r.recordings as any[]).map((rec) => rec.gameId).filter(Boolean)),
             ),
         ];
 
         const [rows, mods] = await Promise.all([
             gameIds.length
                 ? db
-                      .select({
-                          gameId: matchDataTable.gameId,
-                          username: matchDataTable.username,
-                          userId: matchDataTable.userId,
-                          removedUserId: matchDataTable.removedUserId,
-                          playerId: matchDataTable.playerId,
-                      })
-                      .from(matchDataTable)
-                      .where(inArray(matchDataTable.gameId, gameIds))
+                    .select({
+                        gameId: matchDataTable.gameId,
+                        username: matchDataTable.username,
+                        userId: matchDataTable.userId,
+                        removedUserId: matchDataTable.removedUserId,
+                        playerId: matchDataTable.playerId,
+                    })
+                    .from(matchDataTable)
+                    .where(inArray(matchDataTable.gameId, gameIds))
                 : [],
             // Existing flags, so the tab can show what was already raised.
             gameIds.length
                 ? db
-                      .select({
-                          gameId: gameModerationTable.gameId,
-                          userId: gameModerationTable.userId,
-                          status: gameModerationTable.status,
-                      })
-                      .from(gameModerationTable)
-                      .where(inArray(gameModerationTable.gameId, gameIds))
+                    .select({
+                        gameId: gameModerationTable.gameId,
+                        userId: gameModerationTable.userId,
+                        status: gameModerationTable.status,
+                    })
+                    .from(gameModerationTable)
+                    .where(inArray(gameModerationTable.gameId, gameIds))
                 : [],
         ]);
 
@@ -1501,13 +1491,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
         ];
         const users = accountIds.length
             ? await db
-                  .select({
-                      id: usersTable.id,
-                      slug: usersTable.slug,
-                      banned: usersTable.banned,
-                  })
-                  .from(usersTable)
-                  .where(inArray(usersTable.id, accountIds))
+                .select({
+                    id: usersTable.id,
+                    slug: usersTable.slug,
+                    banned: usersTable.banned,
+                })
+                .from(usersTable)
+                .where(inArray(usersTable.id, accountIds))
             : [];
 
         const userById = new Map(users.map((u) => [u.id, u]));
@@ -1536,8 +1526,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                         const modKey = user
                             ? accountId
                             : row
-                              ? guestModKey(row.playerId)
-                              : "";
+                            ? guestModKey(row.playerId)
+                            : "";
                         return {
                             ...p,
                             slug: user?.slug ?? null,
@@ -1554,7 +1544,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             })),
         });
     })
-
     /**
      * Mints a short-lived replay token so the dashboard can open the game client at
      * `CLIENT_URL/?replay=<token>` (same idea as the spectate token above).
@@ -1568,7 +1557,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         // Game-scoped token: lets the viewer switch between every POV of this game.
         return c.json({ token: signReplayToken({ region, gameId }) });
     })
-
     /**
      * Flags a replay as suspicious straight from the Replays tab — a moderator's main
      * action. Without `playerName` the whole GAME is flagged; with it, that one POV is
@@ -1628,8 +1616,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                         value: !playerName
                             ? "—"
                             : isGuestModKey(modKey)
-                              ? "guest (no account)"
-                              : modKey,
+                            ? "guest (no account)"
+                            : modKey,
                     },
                     { name: "Reason", value: reason },
                     { name: "By", value: adminTag(admin) },
@@ -1640,28 +1628,48 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, modKey, guest: isGuestModKey(modKey) });
         },
     )
-
     /**
      * "Sus" tab (admin-only): every game/player currently flagged suspicious, newest
      * first, with the reason and the staff member who raised it. Rows with an empty
      * user id are game-level flags (raised from the Replays tab).
      */
     .get("/api/sus", async (c) => {
-        const rows = await db
-            .select()
-            .from(gameModerationTable)
-            .where(eq(gameModerationTable.status, "sus"))
-            .orderBy(desc(gameModerationTable.markedAt))
-            .limit(500);
+        const user = c.get("user")!;
+        // A moderator's Sus page is their own report list: the flags they raised, plus
+        // how an admin resolved them. Admins see everyone's.
+        const ownOnly = !user.admin
+            ? eq(gameModerationTable.markedBy, user.slug)
+            : undefined;
 
-        if (!rows.length) return c.json({ entries: [] });
+        const [openRows, solvedRows] = await Promise.all([
+            db
+                .select()
+                .from(gameModerationTable)
+                .where(and(eq(gameModerationTable.status, "sus"), ownOnly))
+                .orderBy(desc(gameModerationTable.markedAt))
+                .limit(500),
+            // Closed reports are history, not a worklist — only the newest few are shown.
+            db
+                .select()
+                .from(gameModerationTable)
+                .where(and(eq(gameModerationTable.status, "resolved"), ownOnly))
+                .orderBy(desc(gameModerationTable.resolvedAt))
+                .limit(SOLVED_SUS_LIMIT),
+        ]);
+
+        const rows = [...openRows, ...solvedRows];
+        if (!rows.length) return c.json({ entries: [], solved: [] });
 
         const gameIds = [...new Set(rows.map((r) => r.gameId))];
         // Guest keys name a player slot, not an account — resolved separately below.
         const flaggedIds = [
             ...new Set(rows.map((r) => r.userId).filter((id) => id && !isGuestModKey(id))),
         ];
-        const markerSlugs = [...new Set(rows.map((r) => r.markedBy).filter(Boolean))];
+        const markerSlugs = [
+            ...new Set(
+                rows.flatMap((r) => [r.markedBy, r.resolvedBy ?? ""]).filter(Boolean),
+            ),
+        ];
         const flaggedPlayerIds = [
             ...new Set(
                 rows
@@ -1676,27 +1684,27 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const [flagged, markers, metas, detail] = await Promise.all([
             flaggedIds.length
                 ? db
-                      .select({
-                          id: usersTable.id,
-                          slug: usersTable.slug,
-                          username: usersTable.username,
-                          banned: usersTable.banned,
-                      })
-                      .from(usersTable)
-                      .where(inArray(usersTable.id, flaggedIds))
+                    .select({
+                        id: usersTable.id,
+                        slug: usersTable.slug,
+                        username: usersTable.username,
+                        banned: usersTable.banned,
+                    })
+                    .from(usersTable)
+                    .where(inArray(usersTable.id, flaggedIds))
                 : [],
             // The staff member who raised the flag is stored as a slug; resolve their
             // display name + role so the tab can show who (and what) flagged it.
             markerSlugs.length
                 ? db
-                      .select({
-                          slug: usersTable.slug,
-                          username: usersTable.username,
-                          admin: usersTable.admin,
-                          moderator: usersTable.moderator,
-                      })
-                      .from(usersTable)
-                      .where(inArray(usersTable.slug, markerSlugs))
+                    .select({
+                        slug: usersTable.slug,
+                        username: usersTable.username,
+                        admin: usersTable.admin,
+                        moderator: usersTable.moderator,
+                    })
+                    .from(usersTable)
+                    .where(inArray(usersTable.slug, markerSlugs))
                 : [],
             db
                 .select({
@@ -1715,37 +1723,37 @@ export const ModerationDashboardRouter = new Hono<Context>()
             // that game — the target an IP ban needs, and the only IP a guest has.
             needsPlayerDetail
                 ? db
-                      .select({
-                          gameId: matchDataTable.gameId,
-                          userId: matchDataTable.userId,
-                          removedUserId: matchDataTable.removedUserId,
-                          playerId: matchDataTable.playerId,
-                          username: matchDataTable.username,
-                          encodedIp: matchDataTable.encodedIp,
-                      })
-                      .from(matchDataTable)
-                      .where(
-                          and(
-                              inArray(matchDataTable.gameId, gameIds),
-                              or(
-                                  flaggedIds.length
-                                      ? inArray(matchDataTable.userId, flaggedIds)
-                                      : undefined,
-                                  flaggedIds.length
-                                      ? inArray(
-                                            matchDataTable.removedUserId,
-                                            flaggedIds,
-                                        )
-                                      : undefined,
-                                  flaggedPlayerIds.length
-                                      ? inArray(
-                                            matchDataTable.playerId,
-                                            flaggedPlayerIds,
-                                        )
-                                      : undefined,
-                              ),
-                          ),
-                      )
+                    .select({
+                        gameId: matchDataTable.gameId,
+                        userId: matchDataTable.userId,
+                        removedUserId: matchDataTable.removedUserId,
+                        playerId: matchDataTable.playerId,
+                        username: matchDataTable.username,
+                        encodedIp: matchDataTable.encodedIp,
+                    })
+                    .from(matchDataTable)
+                    .where(
+                        and(
+                            inArray(matchDataTable.gameId, gameIds),
+                            or(
+                                flaggedIds.length
+                                    ? inArray(matchDataTable.userId, flaggedIds)
+                                    : undefined,
+                                flaggedIds.length
+                                    ? inArray(
+                                        matchDataTable.removedUserId,
+                                        flaggedIds,
+                                    )
+                                    : undefined,
+                                flaggedPlayerIds.length
+                                    ? inArray(
+                                        matchDataTable.playerId,
+                                        flaggedPlayerIds,
+                                    )
+                                    : undefined,
+                            ),
+                        ),
+                    )
                 : [],
         ]);
 
@@ -1763,48 +1771,54 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }),
         );
 
+        const toEntry = (r: (typeof rows)[number]) => {
+            const guest = isGuestModKey(r.userId);
+            const u = r.userId && !guest ? userById.get(r.userId) : undefined;
+            const marker = markerBySlug.get(r.markedBy);
+            const resolver = r.resolvedBy ? markerBySlug.get(r.resolvedBy) : undefined;
+            const meta = metaByGame.get(r.gameId);
+            const mapId = meta ? Number(meta.mapId) : null;
+            const det = r.userId
+                ? detailByKey.get(`${r.gameId}|${r.userId}`)
+                : undefined;
+            return {
+                resolvedBy: r.resolvedBy,
+                resolvedByName: resolver?.username || r.resolvedBy,
+                resolvedAt: r.resolvedAt,
+                resolveNote: r.resolveNote,
+                gameId: r.gameId,
+                // "" ⇒ the game as a whole; guest: ⇒ a player with no account.
+                scope: !r.userId ? "game" : guest ? "guest" : "player",
+                userId: r.userId,
+                slug: u?.slug ?? null,
+                username: guest ? (det?.username ?? null) : u?.username || null,
+                // The IP this player used in this game — an IP ban's target, and
+                // for a guest the only handle there is.
+                encodedIp: det?.encodedIp || null,
+                banned: u?.banned ?? false,
+                reason: r.note,
+                markedBy: r.markedBy,
+                markedByName: marker?.username || r.markedBy,
+                markedByRole: marker?.admin
+                    ? "admin"
+                    : marker?.moderator
+                    ? "moderator"
+                    : null,
+                markedAt: r.markedAt,
+                region: meta?.region ?? null,
+                mapId,
+                mapName: mapId != null ? (MAP_ID_TO_NAME[mapId] ?? String(mapId)) : null,
+                teamMode: meta ? Number(meta.teamMode) : null,
+                players: meta ? Number(meta.players) : null,
+                playedAt: meta?.createdAt ?? null,
+            };
+        };
+
         return c.json({
-            entries: rows.map((r) => {
-                const guest = isGuestModKey(r.userId);
-                const u = r.userId && !guest ? userById.get(r.userId) : undefined;
-                const marker = markerBySlug.get(r.markedBy);
-                const meta = metaByGame.get(r.gameId);
-                const mapId = meta ? Number(meta.mapId) : null;
-                const det = r.userId
-                    ? detailByKey.get(`${r.gameId}|${r.userId}`)
-                    : undefined;
-                return {
-                    gameId: r.gameId,
-                    // "" ⇒ the game as a whole; guest: ⇒ a player with no account.
-                    scope: !r.userId ? "game" : guest ? "guest" : "player",
-                    userId: r.userId,
-                    slug: u?.slug ?? null,
-                    username: guest ? (det?.username ?? null) : u?.username || null,
-                    // The IP this player used in this game — an IP ban's target, and
-                    // for a guest the only handle there is.
-                    encodedIp: det?.encodedIp || null,
-                    banned: u?.banned ?? false,
-                    reason: r.note,
-                    markedBy: r.markedBy,
-                    markedByName: marker?.username || r.markedBy,
-                    markedByRole: marker?.admin
-                        ? "admin"
-                        : marker?.moderator
-                          ? "moderator"
-                          : null,
-                    markedAt: r.markedAt,
-                    region: meta?.region ?? null,
-                    mapId,
-                    mapName:
-                        mapId != null ? (MAP_ID_TO_NAME[mapId] ?? String(mapId)) : null,
-                    teamMode: meta ? Number(meta.teamMode) : null,
-                    players: meta ? Number(meta.players) : null,
-                    playedAt: meta?.createdAt ?? null,
-                };
-            }),
+            entries: openRows.map(toEntry),
+            solved: solvedRows.map(toEntry),
         });
     })
-
     /**
      * XP-gain leaderboard for the "XP Gain" tab — surfaces accounts that earned a lot
      * of XP within a recent time window, to spot account boosting.
@@ -1886,14 +1900,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const [users, regionRows] = await Promise.all([
             userIds.length
                 ? db
-                      .select({
-                          id: usersTable.id,
-                          slug: usersTable.slug,
-                          username: usersTable.username,
-                          banned: usersTable.banned,
-                      })
-                      .from(usersTable)
-                      .where(inArray(usersTable.id, userIds))
+                    .select({
+                        id: usersTable.id,
+                        slug: usersTable.slug,
+                        username: usersTable.username,
+                        banned: usersTable.banned,
+                    })
+                    .from(usersTable)
+                    .where(inArray(usersTable.id, userIds))
                 : [],
             db
                 .selectDistinct({ region: matchDataTable.region })
@@ -1924,8 +1938,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     banned: u?.banned ?? false,
                     xpGained: Math.round(r.xpGained * 100) / 100,
                     games: r.games,
-                    xpPerGame:
-                        r.games > 0 ? Math.round((r.xpGained / r.games) * 100) / 100 : 0,
+                    xpPerGame: r.games > 0 ? Math.round((r.xpGained / r.games) * 100) / 100 : 0,
                     spark: [...r.spark.entries()]
                         .sort((a, b) => (a[0] < b[0] ? -1 : 1))
                         .map(([d, xp]) => ({ d, xp: Math.round(xp * 100) / 100 })),
@@ -1933,7 +1946,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }),
         });
     })
-
     /**
      * Per-game XP breakdown for one account in a time window — the drill-down behind
      * a row on the XP-gain leaderboard. Returns every game (one row per game, same
@@ -2006,13 +2018,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 };
             })
             .sort(
-                (a, b) =>
-                    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+                (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
             );
 
-        const totalXp =
-            Math.round(games.reduce((sum, g) => sum + (g.removed ? 0 : g.xp), 0) * 100) /
-            100;
+        const totalXp = Math.round(games.reduce((sum, g) => sum + (g.removed ? 0 : g.xp), 0) * 100)
+            / 100;
 
         return c.json({
             userId,
@@ -2024,7 +2034,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             games,
         });
     })
-
     /**
      * XP-gain "Games" sub-tab: one entry per (player, game) in the window, sorted by
      * the XP that player gained in that game (desc). Same one-row-per-game dedupe as
@@ -2040,8 +2049,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const excludeRegions = parseCsvParam(c.req.query("excludeRegions"));
         const excludeTags = parseCsvParam(c.req.query("excludeTags"));
         const limitRaw = Number(c.req.query("limit") ?? "200");
-        const limit =
-            Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 200;
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 200;
         const cutoff = new Date(Date.now() - windowToMs(windowParam));
 
         const exclusions = await resolveXpExclusions(excludeTags);
@@ -2051,8 +2059,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
             sql`${matchDataTable.userId} <> ''`,
         ];
         if (regionParam) conds.push(eq(matchDataTable.region, regionParam));
-        if (excludeRegions.length)
+        if (excludeRegions.length) {
             conds.push(notInArray(matchDataTable.region, excludeRegions));
+        }
 
         const stats = await db
             .select({
@@ -2110,35 +2119,35 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const gameIds = [...new Set(entries.map((e) => e.gameId))];
         const users = userIds.length
             ? await db
-                  .select({
-                      id: usersTable.id,
-                      slug: usersTable.slug,
-                      username: usersTable.username,
-                      banned: usersTable.banned,
-                  })
-                  .from(usersTable)
-                  .where(inArray(usersTable.id, userIds))
+                .select({
+                    id: usersTable.id,
+                    slug: usersTable.slug,
+                    username: usersTable.username,
+                    banned: usersTable.banned,
+                })
+                .from(usersTable)
+                .where(inArray(usersTable.id, userIds))
             : [];
         const mods = gameIds.length
             ? await db
-                  .select({
-                      gameId: gameModerationTable.gameId,
-                      userId: gameModerationTable.userId,
-                      status: gameModerationTable.status,
-                  })
-                  .from(gameModerationTable)
-                  .where(inArray(gameModerationTable.gameId, gameIds))
+                .select({
+                    gameId: gameModerationTable.gameId,
+                    userId: gameModerationTable.userId,
+                    status: gameModerationTable.status,
+                })
+                .from(gameModerationTable)
+                .where(inArray(gameModerationTable.gameId, gameIds))
             : [];
         // Distinct player-slot count per shown game (low counts = likely bot lobby).
         const counts = gameIds.length
             ? await db
-                  .select({
-                      gameId: matchDataTable.gameId,
-                      n: sql<number>`count(distinct ${matchDataTable.playerId})`,
-                  })
-                  .from(matchDataTable)
-                  .where(inArray(matchDataTable.gameId, gameIds))
-                  .groupBy(matchDataTable.gameId)
+                .select({
+                    gameId: matchDataTable.gameId,
+                    n: sql<number>`count(distinct ${matchDataTable.playerId})`,
+                })
+                .from(matchDataTable)
+                .where(inArray(matchDataTable.gameId, gameIds))
+                .groupBy(matchDataTable.gameId)
             : [];
         const regionRows = await db
             .selectDistinct({ region: matchDataTable.region })
@@ -2174,7 +2183,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }),
         });
     })
-
     /**
      * Game-level search for the "Games" tab. Returns one summary row per game so the
      * moderator can drill into the full roster (all per-player actions + delete). An
@@ -2195,8 +2203,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const conds = [gte(matchDataTable.createdAt, cutoff)];
         if (region) conds.push(eq(matchDataTable.region, region));
         if (mapIdParam) conds.push(eq(matchDataTable.mapId, Number(mapIdParam)));
-        if (teamModeParam)
+        if (teamModeParam) {
             conds.push(eq(matchDataTable.teamMode, Number(teamModeParam) as TeamMode));
+        }
 
         // Restrict to games a specific player appeared in. The one box matches BOTH an
         // exact account slug and the in-game name (substring, case-insensitive), and
@@ -2226,8 +2235,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     ),
                 );
             const gids = gidRows.map((r) => r.gameId);
-            if (!gids.length)
+            if (!gids.length) {
                 return c.json({ games: [], maps: [], regions: [], unknownPlayer: true });
+            }
             conds.push(inArray(matchDataTable.gameId, gids));
         }
 
@@ -2255,9 +2265,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const gameIds = rows.map((r) => r.gameId);
         const modRows = gameIds.length
             ? await db
-                  .selectDistinct({ gameId: gameModerationTable.gameId })
-                  .from(gameModerationTable)
-                  .where(inArray(gameModerationTable.gameId, gameIds))
+                .selectDistinct({ gameId: gameModerationTable.gameId })
+                .from(gameModerationTable)
+                .where(inArray(gameModerationTable.gameId, gameIds))
             : [];
         const flagged = new Set(modRows.map((m) => m.gameId));
 
@@ -2298,7 +2308,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             })),
         });
     })
-
     /**
      * Full player roster for one game (the expandable detail in the "Games" sub-tab):
      * every participant with their stats, the XP they earned, and their per-player
@@ -2352,13 +2361,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const userIds = [...new Set(rows.map(effId).filter(Boolean))];
         const users = userIds.length
             ? await db
-                  .select({
-                      id: usersTable.id,
-                      slug: usersTable.slug,
-                      banned: usersTable.banned,
-                  })
-                  .from(usersTable)
-                  .where(inArray(usersTable.id, userIds))
+                .select({
+                    id: usersTable.id,
+                    slug: usersTable.slug,
+                    banned: usersTable.banned,
+                })
+                .from(usersTable)
+                .where(inArray(usersTable.id, userIds))
             : [];
         const userById = new Map(users.map((u) => [u.id, u]));
         const modByUser = new Map(mods.map((m) => [m.userId, m.status]));
@@ -2366,12 +2375,12 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const first = rows[0];
         const meta = first
             ? {
-                  region: first.region,
-                  mapId: first.mapId,
-                  mapName: MAP_ID_TO_NAME[first.mapId] ?? String(first.mapId),
-                  teamMode: first.teamMode,
-                  createdAt: first.createdAt,
-              }
+                region: first.region,
+                mapId: first.mapId,
+                mapName: MAP_ID_TO_NAME[first.mapId] ?? String(first.mapId),
+                teamMode: first.teamMode,
+                createdAt: first.createdAt,
+            }
             : null;
 
         return c.json({
@@ -2416,7 +2425,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }),
         });
     })
-
     /**
      * Sets/clears the moderation status of ONE player in ONE game. "botted" revokes
      * that player's XP (plus the pass cosmetics and Golden Fries earned from the game)
@@ -2457,15 +2465,15 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 const playerId = guestPlayerId(userId);
                 const found = Number.isFinite(playerId)
                     ? await db
-                          .select({ playerId: matchDataTable.playerId })
-                          .from(matchDataTable)
-                          .where(
-                              and(
-                                  eq(matchDataTable.gameId, gameId),
-                                  eq(matchDataTable.playerId, playerId),
-                              ),
-                          )
-                          .limit(1)
+                        .select({ playerId: matchDataTable.playerId })
+                        .from(matchDataTable)
+                        .where(
+                            and(
+                                eq(matchDataTable.gameId, gameId),
+                                eq(matchDataTable.playerId, playerId),
+                            ),
+                        )
+                        .limit(1)
                     : [];
                 if (!found.length) return c.json({ error: "guest_not_in_game" }, 404);
             }
@@ -2492,12 +2500,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     { name: "Status", value: result.status ?? "cleared" },
                     {
                         name: "XP",
-                        value:
-                            status === "botted"
-                                ? `-${Math.round(removedXp * 100) / 100}`
-                                : status === "clear"
-                                  ? "restored"
-                                  : "—",
+                        value: status === "botted"
+                            ? `-${Math.round(removedXp * 100) / 100}`
+                            : status === "clear"
+                            ? "restored"
+                            : "—",
                     },
                     { name: "By admin", value: adminTag(admin) },
                 ],
@@ -2507,7 +2514,44 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, ...result });
         },
     )
+    /**
+     * Closes a sus report with a written outcome. Unlike "clear" (which deletes the row
+     * and leaves no trace) the flag is kept as "resolved", so the moderator who raised it
+     * sees on their own Sus page what was decided and why.
+     *
+     * Admin-only: this route is deliberately absent from MODERATOR_ALLOWED_PATHS — judging
+     * a report is not something the reporter does.
+     */
+    .post(
+        "/api/game/:gameId/resolve",
+        validateParams(
+            z.object({
+                userId: z.string(),
+                reason: z.string().min(1).max(500),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const gameId = c.req.param("gameId");
+            const { userId, reason } = c.req.valid("json");
 
+            const ok = await resolveSusFlag(gameId, userId, admin.slug, reason);
+            if (!ok) return c.json({ error: "not_a_sus_flag" }, 404);
+
+            void logModerationAction(
+                "✅ Sus report resolved",
+                [
+                    { name: "Game", value: gameId },
+                    { name: "Player", value: userId || "— whole game —" },
+                    { name: "Outcome", value: reason },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x22aa55,
+            );
+
+            return c.json({ ok: true });
+        },
+    )
     /**
      * Permanently deletes a game: revokes the XP (+ cosmetics + Golden Fries) every
      * account gained from it, then hard-deletes its match rows and moderation flags.
@@ -2534,7 +2578,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ ok: true, ...result });
     })
-
     /**
      * Removes ONE player from a game (without deleting the game): blanks their user_id
      * so the game vanishes from that account's stats AND the leaderboard, and revokes
@@ -2573,7 +2616,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, ...result });
         },
     )
-
     /** Undoes /remove-user: re-attaches the player to the game and restores their XP. */
     .post(
         "/api/game/:gameId/restore-user",
@@ -2596,7 +2638,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, ...result });
         },
     )
-
     /**
      * Competitive leaderboard for the moderation dashboard — mirrors the public stats
      * leaderboard (rank players by kills / wins / KPG / max damage, filtered by team
@@ -2611,15 +2652,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const mapIdParam = c.req.query("mapId");
 
         // Whitelisted stat expressions (same semantics as the public leaderboard).
-        const valExpr =
-            (
-                {
-                    kills: "SUM(match_data.kills)",
-                    wins: "COUNT(CASE WHEN match_data.rank = 1 THEN 1 END)",
-                    kpg: "ROUND(SUM(match_data.kills) * 1.0 / COUNT(DISTINCT match_data.game_id), 2)",
-                    most_damage_dealt: "MAX(match_data.damage_dealt)",
-                } as Record<string, string>
-            )[type] ?? "SUM(match_data.kills)";
+        const valExpr = (
+            {
+                kills: "SUM(match_data.kills)",
+                wins: "COUNT(CASE WHEN match_data.rank = 1 THEN 1 END)",
+                kpg: "ROUND(SUM(match_data.kills) * 1.0 / COUNT(DISTINCT match_data.game_id), 2)",
+                most_damage_dealt: "MAX(match_data.damage_dealt)",
+                // AVG() already ignores NULLs (non-impact-scored matches), see the
+                // impactScore IS NOT NULL cond below for why that alone isn't enough.
+                avg_rating: "ROUND(AVG(match_data.impact_score)::numeric, 1)",
+            } as Record<string, string>
+        )[type] ?? "SUM(match_data.kills)";
 
         const conds = [
             sql`${matchDataTable.userId} <> ''`,
@@ -2627,10 +2670,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
             eq(matchDataTable.teamMode, teamMode as TeamMode),
         ];
         if (mapIdParam) conds.push(eq(matchDataTable.mapId, Number(mapIdParam)));
-        if (interval === "daily")
+        if (interval === "daily") {
             conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '1 day'`));
-        else if (interval === "weekly")
+        } else if (interval === "weekly") {
             conds.push(gte(matchDataTable.createdAt, sql`NOW() - INTERVAL '7 days'`));
+        }
+        if (type === "avg_rating") {
+            // Without this, "games" below (count of ALL games) would overcount vs. the
+            // actual rating sample size, and a player with zero impact-scored games
+            // would still show a (NULL) row.
+            conds.push(sql`${matchDataTable.impactScore} IS NOT NULL`);
+        }
 
         const rows = await db
             .select({
@@ -2689,7 +2739,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             })),
         });
     })
-
     /**
      * Warnings tab — surfaces suspicious behaviour in a recent window:
      *   1. sharedIpGames    — one IP joined the same game 2+ times (players OR
@@ -2705,7 +2754,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         // Distinct real-account count for an ip_logs group (ignores guests/spectators
         // whose user_id is empty/null).
-        const distinctAccounts = sql<number>`count(distinct ${ipLogsTable.userId}) filter (where ${ipLogsTable.userId} is not null and ${ipLogsTable.userId} <> '')`;
+        const distinctAccounts = sql<
+            number
+        >`count(distinct ${ipLogsTable.userId}) filter (where ${ipLogsTable.userId} is not null and ${ipLogsTable.userId} <> '')`;
 
         const [sharedIpGames, sharedIpAccounts, xpStats] = await Promise.all([
             // 1) Same IP appearing more than once in a single game.
@@ -2819,8 +2870,9 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const xpPerGame = u.games ? u.xp / u.games : 0;
             const reasons: string[] = [];
             if (u.games >= minGames) reasons.push(`${u.games} games`);
-            if (u.games >= 5 && xpPerGame >= farmThreshold)
+            if (u.games >= 5 && xpPerGame >= farmThreshold) {
                 reasons.push(`high XP/game (${Math.round(xpPerGame)})`);
+            }
             if (reasons.length) {
                 flagged.push({
                     userId,
@@ -2838,14 +2890,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const userIds = xpSpikes.map((s) => s.userId);
         const users = userIds.length
             ? await db
-                  .select({
-                      id: usersTable.id,
-                      slug: usersTable.slug,
-                      username: usersTable.username,
-                      banned: usersTable.banned,
-                  })
-                  .from(usersTable)
-                  .where(inArray(usersTable.id, userIds))
+                .select({
+                    id: usersTable.id,
+                    slug: usersTable.slug,
+                    username: usersTable.username,
+                    banned: usersTable.banned,
+                })
+                .from(usersTable)
+                .where(inArray(usersTable.id, userIds))
             : [];
         const userById = new Map(users.map((u) => [u.id, u]));
 
@@ -2883,7 +2935,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }),
         });
     })
-
     /**
      * Returns the live player list for a specific running game.
      * Calls the game server via HTTP, which uses IPC to query the game process.
@@ -2896,7 +2947,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
         );
         return c.json({ players });
     })
-
     /**
      * Executes an admin command on a running game.
      * Supported actions: stop | freeze | unfreeze | verify | kick | announce | announce_player | chat
@@ -2934,7 +2984,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /** Returns chat logs for a specific game since a given timestamp (for the feed). */
     .get("/api/game/:region/:id/chat", async (c) => {
         const gameId = c.req.param("id");
@@ -2959,17 +3008,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
             .limit(100);
         return c.json({ messages });
     })
-
     .post("/api/servers/:region/verify", async (c) => {
         await server.setServerVerified(c.req.param("region"), true);
         return c.json({ ok: true });
     })
-
     .post("/api/servers/:region/unverify", async (c) => {
         await server.setServerVerified(c.req.param("region"), false);
         return c.json({ ok: true });
     })
-
     /** Returns all registered accounts with per-pass levels, creation date, and last IP. */
     .get("/api/accounts", async (c) => {
         // 1. All users
@@ -3019,7 +3065,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({ accounts, passTypes });
     })
-
     /** Grants (or, with a negative amount, removes) Golden Fries for an account. */
     .post(
         "/api/account/golden-fries",
@@ -3057,7 +3102,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, balance });
         },
     )
-
     /**
      * Grants or revokes the limited "moderator" staff role (replays-only access to this
      * dashboard). Admin-only — this route isn't in MODERATOR_ALLOWED_PATHS, so a
@@ -3093,7 +3137,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, moderator });
         },
     )
-
     /** Full account detail: identity (incl. discord id), per-pass XP, owned items grouped by source, recent matches. */
     .get("/api/account/:slug", async (c) => {
         const slug = c.req.param("slug");
@@ -3176,7 +3219,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             matches: prettyMatches,
         });
     })
-
     /**
      * Golden Fries (GP) ledger for one account, for the account-detail "GP History".
      * `?filter=earned` (amount > 0) or `?filter=spent` (amount < 0); default all.
@@ -3192,18 +3234,21 @@ export const ModerationDashboardRouter = new Hono<Context>()
         });
         if (!user) return c.json({ error: "not found" }, 404);
 
-        const amountCond =
-            filter === "earned"
-                ? sql`${goldenFriesLedgerTable.amount} > 0`
-                : filter === "spent"
-                  ? sql`${goldenFriesLedgerTable.amount} < 0`
-                  : undefined;
+        const amountCond = filter === "earned"
+            ? sql`${goldenFriesLedgerTable.amount} > 0`
+            : filter === "spent"
+            ? sql`${goldenFriesLedgerTable.amount} < 0`
+            : undefined;
 
         const [totals, entries] = await Promise.all([
             db
                 .select({
-                    earned: sql<number>`coalesce(sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} > 0), 0)::int`,
-                    spent: sql<number>`coalesce(-sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} < 0), 0)::int`,
+                    earned: sql<
+                        number
+                    >`coalesce(sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} > 0), 0)::int`,
+                    spent: sql<
+                        number
+                    >`coalesce(-sum(${goldenFriesLedgerTable.amount}) filter (where ${goldenFriesLedgerTable.amount} < 0), 0)::int`,
                     count: sql<number>`count(*)::int`,
                 })
                 .from(goldenFriesLedgerTable)
@@ -3258,13 +3303,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
             const partyRows = partyIds.size
                 ? await db
-                      .select({
-                          id: usersTable.id,
-                          slug: usersTable.slug,
-                          username: usersTable.username,
-                      })
-                      .from(usersTable)
-                      .where(inArray(usersTable.id, [...partyIds]))
+                    .select({
+                        id: usersTable.id,
+                        slug: usersTable.slug,
+                        username: usersTable.username,
+                    })
+                    .from(usersTable)
+                    .where(inArray(usersTable.id, [...partyIds]))
                 : [];
             const partyById = new Map(partyRows.map((p) => [p.id, p]));
             for (const l of listings) {
@@ -3316,13 +3361,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
             const partyRows = partyIds.size
                 ? await db
-                      .select({
-                          id: usersTable.id,
-                          slug: usersTable.slug,
-                          username: usersTable.username,
-                      })
-                      .from(usersTable)
-                      .where(inArray(usersTable.id, [...partyIds]))
+                    .select({
+                        id: usersTable.id,
+                        slug: usersTable.slug,
+                        username: usersTable.username,
+                    })
+                    .from(usersTable)
+                    .where(inArray(usersTable.id, [...partyIds]))
                 : [];
             const partyById = new Map(partyRows.map((p) => [p.id, p]));
             for (const r of rows) {
@@ -3373,13 +3418,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
             }
             const partyRows = partyIds.size
                 ? await db
-                      .select({
-                          id: usersTable.id,
-                          slug: usersTable.slug,
-                          username: usersTable.username,
-                      })
-                      .from(usersTable)
-                      .where(inArray(usersTable.id, [...partyIds]))
+                    .select({
+                        id: usersTable.id,
+                        slug: usersTable.slug,
+                        username: usersTable.username,
+                    })
+                    .from(usersTable)
+                    .where(inArray(usersTable.id, [...partyIds]))
                 : [];
             const partyById = new Map(partyRows.map((p) => [p.id, p]));
             for (const r of rows) {
@@ -3428,14 +3473,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
             if (Number.isInteger(n)) revertedIds.add(n);
         }
         const isRevertableReason = (reason: string) =>
-            reason.startsWith("pass:") ||
-            reason.startsWith("shop:") ||
-            reason.startsWith("admin_grant") ||
-            /^market:(buy|sell):\d+$/.test(reason) ||
+            reason.startsWith("pass:")
+            || reason.startsWith("shop:")
+            || reason.startsWith("admin_grant")
+            || /^market:(buy|sell):\d+$/.test(reason)
             // Only the sale row reverts an auction (it undoes the winning bid + item too).
-            /^auction:sell:\d+$/.test(reason) ||
-            /^offer:(buy|sell):\d+$/.test(reason) ||
-            /^gift:(send|recv):/.test(reason);
+            || /^auction:sell:\d+$/.test(reason)
+            || /^offer:(buy|sell):\d+$/.test(reason)
+            || /^gift:(send|recv):/.test(reason);
 
         const entriesOut = entries.map((e) => {
             const reverted = revertedIds.has(e.id);
@@ -3446,13 +3491,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const auInfo = au ? auctionInfoById.get(Number(au[2])) : undefined;
             const auction = au
                 ? {
-                      kind: au[1] as "bid" | "refund" | "sell",
-                      item: auInfo?.type ?? null,
-                      sellerSlug: auInfo?.sellerSlug ?? null,
-                      sellerName: auInfo?.sellerName ?? null,
-                      winnerSlug: auInfo?.winnerSlug ?? null,
-                      winnerName: auInfo?.winnerName ?? null,
-                  }
+                    kind: au[1] as "bid" | "refund" | "sell",
+                    item: auInfo?.type ?? null,
+                    sellerSlug: auInfo?.sellerSlug ?? null,
+                    sellerName: auInfo?.sellerName ?? null,
+                    winnerSlug: auInfo?.winnerSlug ?? null,
+                    winnerName: auInfo?.winnerName ?? null,
+                }
                 : null;
 
             // Buy-offer rows (buy = fries went to the seller; sell = came from the buyer).
@@ -3460,33 +3505,30 @@ export const ModerationDashboardRouter = new Hono<Context>()
             const ofInfo = of ? offerInfoById.get(Number(of[2])) : undefined;
             const offer = of
                 ? {
-                      direction: of[1] as "buy" | "sell",
-                      item: ofInfo?.type ?? null,
-                      counterpartySlug:
-                          of[1] === "buy"
-                              ? (ofInfo?.sellerSlug ?? null)
-                              : (ofInfo?.buyerSlug ?? null),
-                      counterpartyName:
-                          of[1] === "buy"
-                              ? (ofInfo?.sellerName ?? null)
-                              : (ofInfo?.buyerName ?? null),
-                  }
+                    direction: of[1] as "buy" | "sell",
+                    item: ofInfo?.type ?? null,
+                    counterpartySlug: of[1] === "buy"
+                        ? (ofInfo?.sellerSlug ?? null)
+                        : (ofInfo?.buyerSlug ?? null),
+                    counterpartyName: of[1] === "buy"
+                        ? (ofInfo?.sellerName ?? null)
+                        : (ofInfo?.buyerName ?? null),
+                }
                 : null;
 
             // Golden Fries gift rows: counterparty slug is in the reason.
             const g = /^gift:(send|recv):(.+)$/.exec(e.reason);
             const gift = g
                 ? {
-                      direction: g[1] as "send" | "recv",
-                      counterpartySlug: g[2],
-                      counterpartyName:
-                          giftNameBySlug.get(g[2].trim().toLowerCase()) ?? g[2],
-                  }
+                    direction: g[1] as "send" | "recv",
+                    counterpartySlug: g[2],
+                    counterpartyName: giftNameBySlug.get(g[2].trim().toLowerCase()) ?? g[2],
+                }
                 : null;
 
             const m = /^market:(buy|sell):(\d+)$/.exec(e.reason);
             const info = m ? marketById.get(Number(m[2])) : undefined;
-            if (!m || !info)
+            if (!m || !info) {
                 return {
                     ...e,
                     market: null,
@@ -3496,6 +3538,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     reverted,
                     revertable,
                 };
+            }
             const direction = m[1] as "buy" | "sell";
             return {
                 ...e,
@@ -3509,10 +3552,8 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     item: info.type,
                     // Buyer's row → counterparty is the seller (fries went to them);
                     // seller's row → counterparty is the buyer (fries came from them).
-                    counterpartySlug:
-                        direction === "buy" ? info.sellerSlug : info.buyerSlug,
-                    counterpartyName:
-                        direction === "buy" ? info.sellerName : info.buyerName,
+                    counterpartySlug: direction === "buy" ? info.sellerSlug : info.buyerSlug,
+                    counterpartyName: direction === "buy" ? info.sellerName : info.buyerName,
                 },
             };
         });
@@ -3529,7 +3570,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             entries: entriesOut,
         });
     })
-
     /**
      * Reverts a single Golden Fries ledger entry (pass reward, shop buy, or market
      * trade). Type-specific rollback lives in {@link revertLedgerEntry}; blocked with a
@@ -3553,7 +3593,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ error: code }, 400);
         }
     })
-
     /** Sets a pass's level + xp absolutely, then grants the corresponding unlocks. */
     .post(
         "/api/account/set-xp",
@@ -3578,8 +3617,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
             // One shared cascade: sets xp + derived level, anchors the reconcile so
             // the value sticks, and lines up owned cosmetics AND Golden Fries.
-            const { level, granted, revoked, friesGranted, friesRevoked } =
-                await setPassXp(user.id, passType, xp);
+            const { level, granted, revoked, friesGranted, friesRevoked } = await setPassXp(user.id, passType, xp);
 
             void logModerationAction(
                 "⭐ XP set",
@@ -3604,7 +3642,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             });
         },
     )
-
     /** Grants a single cosmetic (or, with item:"all", every missing allowed cosmetic). */
     .post(
         "/api/account/give-item",
@@ -3684,7 +3721,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, given: 1 });
         },
     )
-
     /** Removes a single owned cosmetic by type (default-unlock items are protected). */
     .post(
         "/api/account/remove-item",
@@ -3720,7 +3756,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, removed: res.length });
         },
     )
-
     /** Removes every owned item with the given source (e.g. all of one season's pass unlocks). */
     .post(
         "/api/account/remove-item-source",
@@ -3762,7 +3797,6 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, removed: res.length });
         },
     )
-
     /**
      * Permanently deletes an account. The user row delete cascades to items, XP,
      * sessions, pass grants, shop purchases, market listings and the golden-fries
@@ -3808,9 +3842,40 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true });
         },
     )
-
     /** Reconciles pass XP + item unlocks + Golden Fries for ALL passes for all users. */
     .post("/api/reconcile_pass_xp", async (c) => {
         const result = await reconcileAllPasses();
         return c.json({ ok: true, ...result });
+    })
+    // ─────────────────────────────────────────────────────────────────────────
+    // OAUTH APP REVIEW (admin-only — deliberately absent from MODERATOR_ALLOWED_PATHS)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Returns third-party OAuth apps for the Apps tab — every app by default, or a
+     *  single status via `?status=pending|approved|rejected|suspended`. */
+    .get("/api/apps", async (c) => {
+        const statusParam = c.req.query("status");
+        const status = (OAUTH_APP_STATUSES as readonly string[]).includes(statusParam ?? "")
+            ? (statusParam as OAuthAppStatus)
+            : undefined;
+        return c.json(await listApps(status));
+    })
+    /** Approves or rejects a pending OAuth app registration. */
+    .post("/api/apps/review", validateParams(zAppReviewRequest), async (c) => {
+        const admin = c.get("user")!;
+        const { applicationId, decision, note } = c.req.valid("json");
+
+        const ok = await reviewApp(applicationId, admin.slug, decision, note);
+        if (!ok) return c.json({ error: "not_found" }, 404);
+
+        void logModerationAction(
+            decision === "approve" ? "✅ OAuth app approved" : "❌ OAuth app rejected",
+            [
+                { name: "Application ID", value: applicationId },
+                { name: "Note", value: note || "–" },
+                { name: "By admin", value: adminTag(admin) },
+            ],
+        );
+
+        return c.json({ success: true });
     });

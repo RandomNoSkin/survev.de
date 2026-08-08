@@ -11,6 +11,7 @@ import {
     MARKET_LISTING_TTL_MS,
 } from "../../../shared/defs/shopConfig";
 import { EmoteSlot, Rarity } from "../../../shared/gameConfig";
+import type { OAuthGrantEntry } from "../../../shared/types/oauth";
 import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { ItemStatus } from "../../../shared/utils/loadout";
 import { type Crosshair, type Loadout, loadout } from "../../../shared/utils/loadout";
@@ -79,13 +80,18 @@ function sortAcquired(a: Item, b: Item) {
     return b.timeAcquired - a.timeAcquired;
 }
 
+// Both sides use the safe lookup and tolerate a missing def: half of this was already
+// converted, and leaving the other half on the throwing typeToDef meant one unknown item
+// type would take down the whole category render (see the emote-slot note in selectCat).
 function sortAlphabetical(a: Item, b: Item) {
-    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef;
-    const defB = GameObjectDefs.typeToDef(b.type) as EmoteDef;
-    if (defA.name! < defB.name!) {
+    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef | undefined;
+    const defB = GameObjectDefs.typeToDefSafe(b.type) as EmoteDef | undefined;
+    const nameA = defA?.name ?? "";
+    const nameB = defB?.name ?? "";
+    if (nameA < nameB) {
         return -1;
     }
-    if (defA.name! > defB.name!) {
+    if (nameA > nameB) {
         return 1;
     }
     return 0;
@@ -101,9 +107,9 @@ function sortRarity(a: Item, b: Item) {
 }
 
 function sortSubcat(a: Item, b: Item) {
-    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef;
-    const defB = GameObjectDefs.typeToDef(b.type) as EmoteDef;
-    if (!defA.category || !defB.category || defA.category == defB.category) {
+    const defA = GameObjectDefs.typeToDefSafe(a.type) as EmoteDef | undefined;
+    const defB = GameObjectDefs.typeToDefSafe(b.type) as EmoteDef | undefined;
+    if (!defA?.category || !defB?.category || defA.category == defB.category) {
         return sortAlphabetical(a, b);
     }
     return defA.category - defB.category;
@@ -911,6 +917,67 @@ export class LoadoutMenu {
         );
         $("#loadout-settings-status").text("");
         $("#loadout-settings-panel").css("display", "block");
+
+        $("#loadout-discord-status").text(
+            this.account.profile.linkedDiscord ? "Linked ✓" : "Not linked",
+        );
+        this.loadConnectedApps();
+    }
+
+    /** Fetches + renders the "Connected apps" list (with per-app revoke buttons). */
+    private loadConnectedApps() {
+        const list = $("#loadout-connected-apps-list");
+        list.html('<div class="loadout-setting-desc">Loading…</div>');
+        this.account.listConnectedApps((err, apps) => {
+            if (!this.settingsOpen) return; // panel was closed before this resolved
+            if (err) {
+                list.html('<div class="loadout-setting-desc">Failed to load.</div>');
+                return;
+            }
+            this.renderConnectedApps(apps ?? []);
+        });
+    }
+
+    private renderConnectedApps(apps: OAuthGrantEntry[]) {
+        const list = $("#loadout-connected-apps-list");
+        list.empty();
+        if (!apps.length) {
+            list.html('<div class="loadout-setting-desc">No apps connected yet.</div>');
+            return;
+        }
+        for (const app of apps) {
+            const row = $("<div/>", { class: "loadout-connected-app-row" });
+            const text = $("<div/>", { class: "loadout-setting-text" });
+            text.append($("<div/>", { class: "loadout-setting-name", text: app.appName }));
+            text.append(
+                $("<div/>", {
+                    class: "loadout-connected-app-scopes",
+                    text: app.scopes.join(", "),
+                }),
+            );
+            const revoke = $("<button/>", {
+                class: "loadout-connected-app-revoke",
+                text: "Revoke",
+                type: "button",
+            });
+            revoke.on("click", () => {
+                revoke.prop("disabled", true).text("Revoking…");
+                this.account.revokeConnectedApp(app.applicationId, (err) => {
+                    if (err) {
+                        revoke.prop("disabled", false).text("Revoke");
+                        return;
+                    }
+                    row.remove();
+                    if (!list.children().length) {
+                        list.html(
+                            '<div class="loadout-setting-desc">No apps connected yet.</div>',
+                        );
+                    }
+                });
+            });
+            row.append(text, revoke);
+            list.append(row);
+        }
     }
 
     /** Restores the item list + deselects the Settings tab (when switching to a cosmetic tab). */
@@ -1592,12 +1659,20 @@ export class LoadoutMenu {
             for (let T = 0; T < this.loadout.emotes.length; T++) {
                 this.equippedItems.push({} as EquippedItem);
                 const emote = this.loadout.emotes[T];
-                if (GameObjectDefs.typeToDef(emote)) {
-                    const svg = helpers.getSvgFromGameType(emote);
-                    const imgCss = `url(${svg})`;
-                    const domElem = emoteSlotToDomElem(T);
-                    this.updateSlotData(domElem, imgCss, emote);
-                }
+                // An empty slot is normal: the Win and Death slots are "" in
+                // GameConfig.defaultEmoteLoadout, and validateWithAvailableItems blanks
+                // any slot holding something the player no longer owns. This fork's
+                // typeToDef THROWS on an empty type, which aborted the whole Emotes
+                // render right before setItemListeners/setCategoryAlerts — so the list
+                // never re-bound its click handlers (emotes unselectable) and the "new"
+                // tags were never acknowledged.
+                //
+                // updateSlotData does its own safe lookup and clears the slot for an
+                // empty type, so hand every slot to it — that also drops the stale image
+                // a slot used to keep after its emote was unequipped.
+                const domElem = emoteSlotToDomElem(T);
+                const imgCss = emote ? `url(${helpers.getSvgFromGameType(emote)})` : "";
+                this.updateSlotData(domElem, imgCss, emote);
             }
         }
 

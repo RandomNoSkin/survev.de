@@ -8,6 +8,7 @@ import {
     type ParsedTracks,
     parseTracks,
 } from "../../../../shared/net/replay";
+import type { ImpactBreakdown } from "../../../../shared/impactScore";
 import type { MatchDataRequest, MatchDataResponse } from "../../../../shared/types/stats";
 import { api } from "../../api";
 import { helpers } from "../../helpers";
@@ -83,6 +84,10 @@ export class GameView {
     private map: GameMapFile | null = null;
     /** Cosmetics each player had equipped in this match, keyed by name (see `fetchLoadouts`). */
     private loadouts = new Map<string, string[]>();
+    /** Impact score + breakdown per player name, from `/api/match_data` (see `fetchLoadouts`). */
+    private impact = new Map<string, { score: number; breakdown: ImpactBreakdown }>();
+    /** Account slug per player name, null for guests (see `fetchLoadouts`). */
+    private slugs = new Map<string, string | null>();
     private meta = new Map<number, PlayerMeta>();
     private paths = new Map<number, PathPoint[]>();
     private deaths = new Map<number, PathPoint>();
@@ -167,10 +172,11 @@ export class GameView {
     }
 
     /**
-     * Per-player match loadouts, from the DB rather than the replay side-files. The damage
-     * file numbers players by `__id` and match_data by `matchDataId`, so the two rosters are
-     * joined by name — the same key the subject lookup uses. A name that isn't unique within
-     * the match is dropped rather than risk attributing the wrong loadout to a player.
+     * Per-player match loadouts (and impact score, and account slug), from the DB rather
+     * than the replay side-files. The damage file numbers players by `__id` and match_data
+     * by `matchDataId`, so the two rosters are joined by name — the same key the subject
+     * lookup uses. A name that isn't unique within the match is dropped rather than risk
+     * attributing the wrong loadout/slug to a player.
      * Loadouts of accounts marked private come back empty and simply show no button.
      */
     private async fetchLoadouts(gameId: string) {
@@ -186,8 +192,19 @@ export class GameView {
             for (const r of rows) {
                 if (this.loadouts.has(r.username)) ambiguous.add(r.username);
                 this.loadouts.set(r.username, r.equipped_cosmetics ?? []);
+                this.slugs.set(r.username, r.slug);
+                if (r.impact_score !== null && r.impact_breakdown) {
+                    this.impact.set(r.username, {
+                        score: r.impact_score,
+                        breakdown: r.impact_breakdown,
+                    });
+                }
             }
-            for (const name of ambiguous) this.loadouts.delete(name);
+            for (const name of ambiguous) {
+                this.loadouts.delete(name);
+                this.impact.delete(name);
+                this.slugs.delete(name);
+            }
         } catch {
             /* loadouts are optional — the rest of the view works without them */
         }
@@ -539,20 +556,53 @@ export class GameView {
         if (!this.stats.length) return '<div class="gv-empty">No stats</div>';
         // Older matches predate loadout recording — drop the column entirely for them.
         const anyLoadout = [...this.loadouts.values()].some((c) => c.length);
+        // Impact score only exists for team-mode matches on maps that opted in.
+        const anyImpact = this.impact.size > 0;
+        const totalCols = 9 + (anyLoadout ? 1 : 0) + (anyImpact ? 1 : 0);
         const rows = [...this.stats]
             .sort((a, b) => (a.rank || 999) - (b.rank || 999))
             .map((p) => {
+                const isYou = this.subjectId === p.id;
                 const acc =
                     p.shots > 0 ? `${Math.round((p.hits / p.shots) * 100)}%` : "—";
-                const hl = this.subjectId === p.id ? " gv-stats-you" : "";
+                const hl = isYou ? " gv-stats-you" : "";
                 const loadout = !anyLoadout
                     ? ""
                     : this.loadouts.get(p.name)?.length
                       ? `<td><span class="gv-loadout-btn" data-pid="${p.id}">View</span></td>`
                       : `<td class="gv-loadout-none">—</td>`;
+                const slug = this.slugs.get(p.name);
+                const nameCell = slug
+                    ? `<a class="gv-player-link" href="/stats/?slug=${encodeURIComponent(slug)}">${esc(p.name)}</a>`
+                    : esc(p.name);
+                let impact = "";
+                let impactDetailRow = "";
+                if (anyImpact) {
+                    const imp = this.impact.get(p.name);
+                    if (imp) {
+                        const b = imp.breakdown;
+                        const title = esc(
+                            `Combat: ${b.combat.points}/${b.combat.max} (${b.combat.detail}) · Support: ${b.support.points}/${b.support.max} (${b.support.detail})`,
+                        );
+                        impact = `<td><span class="gv-impact-score" title="${title}">${imp.score}</span></td>`;
+                        // Full breakdown, always visible (not hover) — but only under
+                        // your own row, so other players' rows stay compact.
+                        if (isYou) {
+                            impactDetailRow = `<tr class="gv-stats-you gv-impact-detail-row"><td colspan="${totalCols}">
+                                <div class="gv-impact-detail">
+                                    <div class="gv-impact-detail-total">Your Impact score: <strong>${imp.score}</strong> / 100</div>
+                                    <div><strong>Combat ${b.combat.points}/${b.combat.max}</strong> — ${esc(b.combat.detail)}</div>
+                                    <div><strong>Support ${b.support.points}/${b.support.max}</strong> — ${esc(b.support.detail)}</div>
+                                </div>
+                            </td></tr>`;
+                        }
+                    } else {
+                        impact = `<td class="gv-loadout-none">—</td>`;
+                    }
+                }
                 return `<tr class="${hl}">
                     <td>#${p.rank || "—"}</td>
-                    <td class="gv-stats-name">${esc(p.name)}</td>
+                    <td class="gv-stats-name">${nameCell}</td>
                     <td>${p.kills}</td>
                     <td>${p.damageDealt}</td>
                     <td>${p.damageTaken}</td>
@@ -561,11 +611,12 @@ export class GameView {
                     <td>${p.hits}</td>
                     <td>${acc}</td>
                     ${loadout}
-                </tr>`;
+                    ${impact}
+                </tr>${impactDetailRow}`;
             })
             .join("");
         return `<table class="gv-stats-table"><thead><tr>
-            <th>#</th><th>Player</th><th>K</th><th>Dmg</th><th>Took</th><th>Alive</th><th>Shots</th><th>Hits</th><th>Acc</th>${anyLoadout ? "<th>Loadout</th>" : ""}
+            <th>#</th><th>Player</th><th>K</th><th>Dmg</th><th>Took</th><th>Alive</th><th>Shots</th><th>Hits</th><th>Acc</th>${anyLoadout ? "<th>Loadout</th>" : ""}${anyImpact ? "<th>Impact</th>" : ""}
         </tr></thead><tbody>${rows}</tbody></table>`;
     }
 

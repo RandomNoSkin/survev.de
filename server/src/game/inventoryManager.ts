@@ -237,9 +237,11 @@ export class InventoryManager {
             }
             case "ammo": {
                 // automatically reloads gun if inventory has 0 ammo and ammo is picked up
-                const weaponInfo = GameObjectDefs.typeToDef(this.player.activeWeapon);
+                // typeToDefSafe: the active slot can be empty (typeToDef throws on "")
+                // and this runs from the game tick via perks/refunds
+                const weaponInfo = GameObjectDefs.typeToDefSafe(this.player.activeWeapon);
                 if (
-                    weaponInfo.type === "gun"
+                    weaponInfo?.type === "gun"
                     && this.player.weapons[this.player.curWeapIdx].ammo <= 0
                     && weaponInfo.ammo === item
                 ) {

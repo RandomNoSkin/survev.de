@@ -22,19 +22,19 @@ export const Comp: MapDef = {
     },
     assets: {
         audio: [
-            { name: "club_music_01", channel: "ambient" },
-            { name: "daniel_club_music_01", channel: "ambient" },
+            { name: "club_music_01", channel: "gameMusic" },
+            { name: "daniel_club_music_01", channel: "gameMusic" },
             { name: "ambient_steam_01", channel: "ambient" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
-            { name: "reserve_music_01", channel: "ambient" },
-            { name: "reserve_music_02", channel: "ambient" },
+            { name: "reserve_music_01", channel: "gameMusic" },
+            { name: "reserve_music_02", channel: "gameMusic" },
             { name: "piano_02", channel: "sfx" },
             { name: "log_03", channel: "sfx" },
             { name: "log_04", channel: "sfx" },
             { name: "coconut_01", channel: "sfx" },
             { name: "potato_pickup_01", channel: "ui" },
-            { name: "piano_music_01", channel: "ambient" },
+            { name: "piano_music_01", channel: "gameMusic" },
         ],
         atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
     },
@@ -83,6 +83,7 @@ export const Comp: MapDef = {
             win: 2,
             timeSurvived: 0, 
         },
+        impactWeight: 1,
     },
     /* STRIP_FROM_PROD_CLIENT:START */
     gameConfig: {
@@ -1256,7 +1257,7 @@ export const Comp: MapDef = {
             },
         ],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
-        spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
+        spawnOnRiver: ["club_complex_01", "reserve_complex_01", "warehouse_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };

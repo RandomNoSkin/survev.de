@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My applications — survev.de</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css?family=Roboto+Condensed:400,700" rel="stylesheet">
+</head>
+<body class="oauth-page">
+    <div class="oauth-header oauth-header-wide">
+        <a href="/">survev.de</a>
+        <span class="oauth-muted">Developer dashboard</span>
+    </div>
+    <div class="oauth-layout">
+        <nav class="oauth-sidebar">
+            <button type="button" class="oauth-sidebar-tab oauth-sidebar-tab-active" data-tab="myapps">My apps</button>
+            <button type="button" class="oauth-sidebar-tab" data-tab="docs">Documentation</button>
+        </nav>
+        <div class="oauth-content">
+            <div id="oauth-tab-myapps" class="oauth-tab-pane">
+                <div id="oauth-root">
+                    <div class="oauth-card"><p class="oauth-muted">Loading…</p></div>
+                </div>
+            </div>
+
+            <div id="oauth-tab-docs" class="oauth-tab-pane" hidden>
+                <div class="oauth-card">
+                    <h1>Integration guide</h1>
+                    <p class="oauth-muted">
+                        How to let your application (e.g. a Discord bot) read a survev.de
+                        user's Discord link and match stats, with the user's explicit consent.
+                    </p>
+
+                    <h2 class="oauth-doc-h2">1. Register your app, wait for approval</h2>
+                    <p>
+                        Create an application in "My apps" to get a <code>client_id</code> and
+                        <code>client_secret</code>. New apps start as <span class="oauth-badge oauth-badge-pending">Pending review</span>
+                        — an admin has to approve it before either flow below will work. Keep
+                        the client secret private; it's only ever shown once.
+                    </p>
+
+                    <h2 class="oauth-doc-h2">2. Get the user's consent</h2>
+                    <p>Pick whichever flow fits your app. Both end with the same thing: an access token for that one user.</p>
+
+                    <h3 class="oauth-doc-h3">Option A — Redirect flow (you have a web backend)</h3>
+                    <p>Send the user's browser to:</p>
+                    <pre class="oauth-code">GET https://survev.de/oauth-authorize
+    ?client_id=YOUR_CLIENT_ID
+    &amp;redirect_uri=https://yourapp.example/callback
+    &amp;scope=read:discord read:stats read:inventory read:market
+    &amp;state=RANDOM_OPAQUE_STRING</pre>
+                    <p>
+                        <code>redirect_uri</code> must exactly match one of the URIs you
+                        registered for the app. <code>state</code> is yours — round-tripped
+                        unchanged, use it to prevent CSRF and to correlate the callback with
+                        the request that started it.
+                    </p>
+                    <p>
+                        After the user approves, their browser is redirected to your
+                        <code>redirect_uri</code> with a one-time code:
+                    </p>
+                    <pre class="oauth-code">GET https://yourapp.example/callback?code=AUTH_CODE&amp;state=RANDOM_OPAQUE_STRING</pre>
+                    <p>Exchange that code server-side, within a few minutes (it's single-use and short-lived):</p>
+                    <pre class="oauth-code">POST https://survev.de/api/oauth/token
+Content-Type: application/json
+
+{
+  "grantType": "authorization_code",
+  "clientId": "YOUR_CLIENT_ID",
+  "clientSecret": "YOUR_CLIENT_SECRET",
+  "code": "AUTH_CODE",
+  "redirectUri": "https://yourapp.example/callback"
+}
+
+→ { "accessToken": "...", "tokenType": "bearer", "scope": ["read:discord", "read:stats"] }</pre>
+
+                    <h3 class="oauth-doc-h3">Option B — Device flow (bots without a web backend)</h3>
+                    <p>Request a code server-side:</p>
+                    <pre class="oauth-code">POST https://survev.de/api/oauth/device/code
+Content-Type: application/json
+
+{ "clientId": "YOUR_CLIENT_ID", "clientSecret": "YOUR_CLIENT_SECRET", "scope": ["read:discord", "read:stats"] }
+
+→ {
+    "deviceCode": "...",
+    "userCode": "ABCD-1234",
+    "verificationUri": "https://survev.de/link",
+    "verificationUriComplete": "https://survev.de/link?code=ABCD-1234",
+    "expiresIn": 600,
+    "interval": 5
+  }</pre>
+                    <p>
+                        Tell the user to open <code>verificationUri</code> and enter
+                        <code>userCode</code> (or just link them straight to
+                        <code>verificationUriComplete</code>). Meanwhile, poll for the
+                        result — no faster than every <code>interval</code> seconds:
+                    </p>
+                    <pre class="oauth-code">POST https://survev.de/api/oauth/token
+Content-Type: application/json
+
+{ "grantType": "device_code", "clientId": "YOUR_CLIENT_ID", "clientSecret": "YOUR_CLIENT_SECRET", "deviceCode": "..." }
+
+→ 400 { "error": "authorization_pending" }   — user hasn't decided yet, keep polling
+→ 400 { "error": "slow_down" }               — you're polling too fast, back off
+→ 400 { "error": "access_denied" }           — user declined; stop polling
+→ 400 { "error": "expired_token" }           — the code expired unused; start over
+→ 200 { "accessToken": "...", "tokenType": "bearer", "scope": [...] }  — success</pre>
+
+                    <h2 class="oauth-doc-h2">3. Call the API with the access token</h2>
+                    <p>Send it as a bearer token on every request. It's long-lived — no refresh/expiry to handle:</p>
+                    <pre class="oauth-code">POST https://survev.de/api/external/discord_link
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+→ { "linked": true, "discordUserId": "123456789012345678", "slug": "someplayer", "username": "SomePlayer" }
+    (requires scope read:discord — slug/username identify the survev.de account and are always present, even if linked is false)
+
+POST https://survev.de/api/external/stats
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+
+{ "interval": "alltime", "mapIdFilter": "-1" }
+
+→ { "slug": "...", "username": "...", "games": 42, "wins": 3, "kills": 210, "assists": 87, "kpg": "5.0",
+    "modes": [ { "teamMode": 4, "games": 10, "avgDamage": 233, "avgTimeAlive": 187, ... } ] }
+    (requires scope read:stats — teamMode 1/2/4 = solo/duo/squad, use it to filter e.g. 4-player squad games)
+
+POST https://survev.de/api/external/match_history
+Authorization: Bearer YOUR_ACCESS_TOKEN
+Content-Type: application/json
+
+{ "teamModeFilter": 4, "count": 20 }                          ← just the last 20 squad games
+{ "from": 1735689600000, "to": 1738368000000 }                ← everything in a specific date range
+{ "withSlugs": ["teammate1", "teammate2"], "count": 20 }      ← only games all of these also played
+
+→ [
+    { "guid": "...", "region": "eu", "map_id": 1, "team_mode": 4, "team_count": 4, "team_total": 12,
+      "team_id": 7, "end_time": "2026-01-15T18:22:41.000Z", "time_alive": 812, "rank": 2, "kills": 4,
+      "assists": 2, "team_kills": 9, "damage_dealt": 620, "damage_taken": 340, "username": "SomePlayer",
+      "teammates": [ { "username": "teammate1", "slug": "teammate1" }, { "username": "GuestPlayer", "slug": null } ] },
+    ...
+  ]
+    (requires scope read:stats — one row per game the user played, newest first.
+    `from`/`to` (epoch ms, inclusive) are both optional — omit either or both to drop
+    that bound, e.g. omit both for just "the last `count` games". `teamModeFilter` is
+    1/2/4/7 = solo/duo/squad/all (default 7). `withSlugs` (max 10) filters to games
+    where every listed slug also has a row — handy for "our 4v4 games together"; it
+    doesn't require them on the same team, just the same game. `count` defaults to 50,
+    capped at 200 per page; use `offset` to page through more. Each row also has
+    `assists`, `username` (the name used in that match), `team_id`, and `teammates`
+    (other players on the same team that match: `{ username, slug }`, `slug` is null
+    for guests).)
+
+POST https://survev.de/api/external/inventory
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+→ { "slug": "...", "username": "...",
+    "items": [
+      { "id": 123, "type": "outfitBase", "name": "Basic Outfit", "rarity": 0,
+        "lore": "Pure and simple.", "value": 0, "pricePaid": null, "previousOwners": [],
+        "timeAcquired": 1735689600000, "source": "unlock_new_account",
+        "games": 12, "wins": 1, "kills": 8, "damage": 940 },
+      ...
+    ] }
+    (requires scope read:inventory — every cosmetic item the account owns (not just
+    what's equipped), one entry per owned copy. `value` is the item's current Golden
+    Fries shop value (0 for non-shoppable/Stock items); `pricePaid` is what the current
+    owner actually paid for that copy (null if unknown). `previousOwners` lists prior
+    owners' slugs, oldest first, for items acquired via trading/market/gifting. Unlike
+    the public stats-page loadout viewer, this ignores the user's "hide loadout"
+    setting, since they explicitly granted your app access to it.)
+
+POST https://survev.de/api/external/market
+Authorization: Bearer YOUR_ACCESS_TOKEN
+
+→ { "success": true, "day": "2026-01-15", "week": "w2026-01-12", "resetTime": 1768521600000,
+    "weeklyResetTime": 1768694400000, "balance": 1200,
+    "offers": [ { "slot": 0, "items": [ { "type": "...", "price": 300 } ], "price": 300, "purchased": false }, ... ] }
+    (requires scope read:market — the user's daily (slots 0/1) and weekly (slots 2/3)
+    rotating shop offers, purchase status per offer, and their Golden Fries balance.
+    Read-only — there's no external endpoint to buy an offer on the user's behalf.)</pre>
+                    <p class="oauth-muted">
+                        401 <code>invalid_token</code> means the token doesn't exist (typo,
+                        or the user revoked access). 403 <code>insufficient_scope</code>
+                        means the user didn't grant that particular scope. A user can revoke
+                        your app at any time from their account settings — your next call
+                        then fails immediately, so handle 401s gracefully instead of caching
+                        tokens as "valid forever".
+                    </p>
+
+                    <h2 class="oauth-doc-h2">Notes</h2>
+                    <ul class="oauth-doc-list">
+                        <li>Re-running the consent flow for a user who already authorized your app replaces their previous token (old one stops working).</li>
+                        <li>All endpoints are rate-limited per application, not per IP — a busy bot won't get throttled because of other apps' traffic.</li>
+                        <li>Rotating your client secret (in "My apps") immediately invalidates the old one — update it everywhere before rotating in production.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/src/apps/js/app.ts"></script>
+</body>
+</html>

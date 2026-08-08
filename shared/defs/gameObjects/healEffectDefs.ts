@@ -8,6 +8,7 @@ export interface HealEffectDef {
     shop?: boolean;
     texture: string;
     emitter: string;
+    creatorDiscordId?: number;
 }
 
 export const HealEffectDefs: Record<string, HealEffectDef> = {

@@ -8,6 +8,7 @@ export interface MeleeDef {
     /** When true, this item can appear in the Golden Fries daily shop. */
     shop?: boolean;
     perk?: string;
+    creatorDiscordId?: number;
     quality: number;
     autoAttack: boolean;
     switchDelay: number;
@@ -1262,6 +1263,17 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-karambit-prismatic.img",
+        },
+    }),
+    combat_banana: defineMeleeSkin("karambit", {
+        name: "Combat Banana",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-combat-banana.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-combat-banana.img",
         },
     }),
     karambit_drowned: defineMeleeSkin("karambit", {

@@ -15361,7 +15361,11 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         interactionText: "game-modify-weapon",
         useOnce: false,
         useType: "weapon_upgrade_bench",
-        useDelay: 1,
+        // No animation delay: the upgrade itself is a 3s Modify action with its own
+        // progress bar, and useImg equals the normal sprite, so a delay here was a dead
+        // pause between the click sound and the timer appearing. 0 makes the action (and
+        // the "not enough resources" feedback) start on the press.
+        useDelay: 0,
         useDir: v2.create(0, -1),
         useImg: "map-table-04.img",
         sound: {
@@ -17108,8 +17112,6 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         extents: v2.create(1, 3.5),
         img: { sprite: "map-door-02.img" },
         door: {
-            canUse: false,
-            locked: true,
             interactionRad: 1.5,
             openSpeed: 0.23,
             openOneWay: -1,
@@ -17156,7 +17158,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     tint: 0xffffff,
                 },
                 {
-                    sprite: "map-bunker-chrys-compartment-floor-01d.img",
+                    sprite: "map-bunker-chrys-compartment-floor-01b.img",
                     pos: v2.create(3.5, 2),
                     scale: 0.5,
                     alpha: 1,
@@ -17250,84 +17252,24 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 pos: v2.create(1.5, 5),
                 scale: 1,
                 ori: 0,
-                // puzzlePiece: "rice",
             },
             {
                 type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }),
                 pos: v2.create(1.5, 0),
                 scale: 1,
                 ori: 0,
-                // puzzlePiece: "priest",
             },
             {
                 type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }),
                 pos: v2.create(6.5, 5),
                 scale: 1,
                 ori: 0,
-                // puzzlePiece: "harmony",
             },
             {
                 type: randomObstacleType({ crate_01: 2, crate_04: 1, crate_08: 1 }), 
                 pos: v2.create(6.5, 0),
                 scale: 1,
                 ori: 0,
-                puzzlePiece: "leaves",
-            },
-            {
-                type: randomObstacleType({ planter_07: 1, "": 1 }),
-                pos: v2.create(-0.5, 4),
-                scale: 1,
-                ori: 0,
-                // puzzlePiece: "gods",
-            },
-            {
-                type: randomObstacleType({ planter_07: 1, "": 1 }),
-                pos: v2.create(8.5, 4),
-                scale: 1,
-                ori: 0,
-                // puzzlePiece: "growth",
-            },
-            {
-                type: "planter_04",
-                pos: v2.create(-0.5, 1),
-                scale: 1,
-                ori: 0,
-                puzzlePiece: "frost",
-            },
-            {
-                type: randomObstacleType({ planter_07: 1, "": 1 }),
-                pos: v2.create(8.5, 1),
-                scale: 1,
-                ori: 0,
-                // puzzlePiece: "book",
-            },
-            {
-                type: randomObstacleType({ planter_07: 1, "": 1 }),
-                pos: v2.create(-0.5, -2),
-                scale: 1,
-                ori: 0,
-                // puzzlePiece: "water",
-            },
-            {
-                type: "planter_04",
-                pos: v2.create(2.5, -2),
-                scale: 1,
-                ori: 0,
-                puzzlePiece: "flower",
-            },
-            {
-                type: "planter_04",
-                pos: v2.create(5.5, -2),
-                scale: 1,
-                ori: 0,
-                puzzlePiece: "moon",
-            },
-            {
-                type: randomObstacleType({ planter_07: 1, "": 1 }),
-                pos: v2.create(8.5, -2),
-                scale: 1,
-                ori: 0,
-                // puzzlePiece: "clothes",
             },
             {
                 type: "vault_door_chrys_01",
@@ -17335,18 +17277,12 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 scale: 1,
                 ori: 3,
             },
-            {
-                type: "recorder_05",
-                pos: v2.create(-7.75, -1.75),
-                scale: 1,
-                ori: 0,
-            },
-            {
+            /*{
                 type: "loot_tier_chrys_01",
                 pos: v2.create(12, -5.5),
                 scale: 1,
                 ori: 0,
-            },
+            },*/
         ],
     },
     bunker_chrys_compartment_01b: {
@@ -17886,7 +17822,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 1,
             },
             {
-                type: "case_06",
+                type: "crate_01",
                 pos: v2.create(0, 4.75),
                 scale: 0.9,
                 ori: 0,
@@ -28808,7 +28744,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({case_07: 8, case_07de: 2 }),
+                    type: randomObstacleType({case_07: 3, case_07de: 1 }),
                     pos: v2.create(0, 5.25),
                     scale: 1,
                     ori: 0,
@@ -29609,7 +29545,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({case_07: 8, case_07de: 2 }),
+                    type: randomObstacleType({case_07: 3, case_07de: 1 }),
                     pos: v2.create(-7.25, 5),
                     scale: 1,
                     ori: 0,
