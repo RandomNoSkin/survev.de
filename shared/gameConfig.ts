@@ -458,7 +458,7 @@ export const GameConfig = {
                 painkiller: 0,
                 "1xscope": 1,
                 "2xscope": 0,
-                "4xscope": 0,
+                "4xscope": 1,
                 "8xscope": 0,
                 "15xscope": 0,
             },

@@ -109,10 +109,11 @@ export class RiverCreator {
         }
     }
 
-    create(isFactionRiver: boolean): Vec2[] {
-        const start = this.getStartPoint(isFactionRiver);
-        const end = this.getEndPoint(start, isFactionRiver);
-
+    private createRiverPoints(
+        start: Vec2,
+        end: Vec2,
+        isFactionRiver: boolean,
+    ): Vec2[] {
         const slope = (end.y - start.y) / (end.x - start.x);
         const slopeAngle = Math.atan(slope);
         // river points need to be offset a bit to provide variation in the river
@@ -129,9 +130,6 @@ export class RiverCreator {
                 const nextPoint = riverPoints[j];
 
                 let midPoint: Vec2;
-                // not the cleanest but forces the factionRiver to be straight...
-                // since the first midpoint of the river determines its overall structure
-                // will replace will a cleaner solution when i figure out one lmao
                 if (isFactionRiver && i == 0) {
                     midPoint = v2.midpoint(lastPoint, nextPoint);
                 } else {
@@ -139,13 +137,10 @@ export class RiverCreator {
                 }
                 this.map.clampToMapBounds(midPoint);
                 riverPoints.splice(j, 0, midPoint);
-                // skip over point we just added
                 j++;
             }
         }
 
-        // if too many points are inside the ocean
-        // discard the river because its most likely "sliding" along the map boundaries
         let maxPointsOutside = math.max(
             (this.map.shoreInset + this.map.grassInset) / 9,
             3,
@@ -177,8 +172,37 @@ export class RiverCreator {
         }
 
         this.handleIntersection(riverPoints);
-
         return riverPoints;
+    }
+
+    create(isFactionRiver: boolean): Vec2[] {
+        const start = this.getStartPoint(isFactionRiver);
+        const end = this.getEndPoint(start, isFactionRiver);
+        return this.createRiverPoints(start, end, isFactionRiver);
+    }
+
+    createLakeConnection(
+        lake: ReturnType<RiverCreator["createLake"]>,
+        lakeDef: MapDef["mapGen"]["map"]["rivers"]["lakes"][number],
+    ): Vec2[] {
+        const width = lakeDef.riverConnectionWidth ?? Math.max(
+            4,
+            Math.min(16, Math.round((lakeDef.outerRad - lakeDef.innerRad) / 2)),
+        );
+
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const startIndex = Math.floor(
+                this.randomGenerator(0, lake.points.length - 1),
+            );
+            const start = lake.points[startIndex];
+            const end = this.map.randomPointOnMapEdge(this.randomGenerator);
+            const riverPoints = this.createRiverPoints(start, end, false);
+            if (riverPoints.length >= 12) {
+                return riverPoints;
+            }
+        }
+
+        return [];
     }
 
     createLake(lake: MapDef["mapGen"]["map"]["rivers"]["lakes"][number]) {

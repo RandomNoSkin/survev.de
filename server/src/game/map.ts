@@ -696,7 +696,31 @@ export class GameMap {
                     }
                 }
 
-                this.riverDescs.push(lake);
+                if (lakeDef.riverConnection) {
+                    this.riverDescs.push(lake);
+                    const connectionPoints = riverCreator.createLakeConnection(
+                        lake,
+                        lakeDef,
+                    );
+                    if (connectionPoints.length < 12) {
+                        this.riverDescs.pop();
+                        return false;
+                    }
+                    this.riverDescs.push({
+                        width: lakeDef.riverConnectionWidth ?? Math.max(
+                            4,
+                            Math.min(
+                                16,
+                                Math.round((lakeDef.outerRad - lakeDef.innerRad) / 2),
+                            ),
+                        ),
+                        points: connectionPoints,
+                        looped: false,
+                    });
+                } else {
+                    this.riverDescs.push(lake);
+                }
+
                 this.lakeObjs.push(lakeDef.centerObj ?? "");
                 return true;
             });

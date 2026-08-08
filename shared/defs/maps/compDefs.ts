@@ -64,7 +64,7 @@ export const Comp: MapDef = {
     gameMode: {
         maxPlayers: 8,
         killLeaderEnabled: true,
-        freezeTime: 10,
+        freezeTime: 0,
         joinTime: 10, // time until players can move after game start
         airdropMinDistance: 0.72, // minimum distance between airdrops as multiplier of gas radius (has to be between 0 and 1)
         betterSpawn: true,
@@ -1098,7 +1098,19 @@ export const Comp: MapDef = {
             shoreInset: 48,
             grassInset: 18,
             rivers: {
-                lakes: [],
+                lakes: [
+                    {
+                        odds: 0.05,
+                        innerRad: 22,
+                        outerRad: 36,
+                        centerObj: "teapavilion_01comp",
+                        riverConnection: true,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 200,
+                        },
+                    },
+                ],
                 weights: [
                     { weight: 0.1, widths: [4] },
                     { weight: 0.15, widths: [8] },

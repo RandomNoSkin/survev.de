@@ -309,6 +309,8 @@ export interface MapDef {
                     outerRad: number;
                     centerObj?: string;
                     riverMaskRad?: number;
+                    riverConnection?: boolean;
+                    riverConnectionWidth?: number;
                     spawnBound: {
                         pos: Vec2;
                         rad: number;

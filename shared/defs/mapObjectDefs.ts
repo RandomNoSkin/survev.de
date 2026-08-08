@@ -25639,6 +25639,9 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         left_loot: "pot_03b",
         right_loot: "pot_03c",
     }),
+    teapavilion_01comp: createTeaPavilion({
+        center_loot: "case_06",
+    }),
     teahouse_complex_01s: createTeaHouseComplex({}),
     teahouse_complex_01su: createTeaHouseComplex({
         grass_color: 0x629522,
