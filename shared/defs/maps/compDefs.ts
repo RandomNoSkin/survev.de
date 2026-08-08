@@ -1100,7 +1100,7 @@ export const Comp: MapDef = {
             rivers: {
                 lakes: [
                     {
-                        odds: 0.05,
+                        odds: 1,
                         innerRad: 22,
                         outerRad: 36,
                         centerObj: "teapavilion_01comp",
@@ -1108,6 +1108,21 @@ export const Comp: MapDef = {
                         spawnBound: {
                             pos: v2.create(0.5, 0.5),
                             rad: 200,
+                        },
+                    },
+                    {
+                        odds: 1,
+                        innerRad: 10,
+                        outerRad: 20,
+                        centerObj: "oasis_01comp",
+                        riverConnection: false,
+                        riverMaskRad: 48,
+                        lakeRiverbankColor: 0xcdb35b,
+                        lakeWaterColor: 0x2f93b7,
+                        lakeWaterRippleColor: 0xb3f0ff,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 300,
                         },
                     },
                 ],

@@ -696,8 +696,17 @@ export class GameMap {
                     }
                 }
 
+                this.riverDescs.push({
+                    width: lake.width,
+                    looped: lake.looped,
+                    points: lake.points,
+                    aabb: lake.aabb,
+                    lakeRiverbankColor: lakeDef.lakeRiverbankColor,
+                    lakeWaterColor: lakeDef.lakeWaterColor,
+                    lakeWaterRippleColor: lakeDef.lakeWaterRippleColor,
+                });
+
                 if (lakeDef.riverConnection) {
-                    this.riverDescs.push(lake);
                     const connectionPoints = riverCreator.createLakeConnection(
                         lake,
                         lakeDef,
@@ -717,8 +726,13 @@ export class GameMap {
                         points: connectionPoints,
                         looped: false,
                     });
-                } else {
-                    this.riverDescs.push(lake);
+                }
+
+                if (lakeDef.riverMaskRad && lakeDef.riverMaskRad > 0) {
+                    this.riverMasks.push({
+                        pos: lake.center,
+                        rad: lakeDef.riverMaskRad,
+                    });
                 }
 
                 this.lakeObjs.push(lakeDef.centerObj ?? "");

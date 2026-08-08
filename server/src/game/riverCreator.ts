@@ -71,12 +71,21 @@ export class RiverCreator {
         return v2.create(this.map.width / 2, this.map.height);
     }
 
-    private getMidPoint(lastPoint: Vec2, nextPoint: Vec2, offsetDir: Vec2): Vec2 {
+    private getMidPoint(
+        lastPoint: Vec2,
+        nextPoint: Vec2,
+        offsetDir: Vec2,
+        forceOffsetSide?: 1 | -1,
+    ): Vec2 {
         const segmentDistance = v2.distance(lastPoint, nextPoint);
         // the closer the points are, the less offset there is to make the river look smoother
         let offsetDistance = (this.randomGenerator(0, 1) * segmentDistance) / 7;
         // prevents rivers from straying off too far in one direction, need to stay relatively aligned to original start/end
-        if (this.randomGenerator(0, 1) < 0.5) offsetDistance *= -1;
+        if (forceOffsetSide === undefined) {
+            if (this.randomGenerator(0, 1) < 0.5) offsetDistance *= -1;
+        } else if (forceOffsetSide < 0) {
+            offsetDistance *= -1;
+        }
 
         const offset = v2.mul(offsetDir, offsetDistance);
         const midpoint = v2.midpoint(lastPoint, nextPoint);
@@ -112,7 +121,9 @@ export class RiverCreator {
     private createRiverPoints(
         start: Vec2,
         end: Vec2,
+        width: number,
         isFactionRiver: boolean,
+        forceOffsetSide?: 1 | -1,
     ): Vec2[] {
         const slope = (end.y - start.y) / (end.x - start.x);
         const slopeAngle = Math.atan(slope);
@@ -133,7 +144,7 @@ export class RiverCreator {
                 if (isFactionRiver && i == 0) {
                     midPoint = v2.midpoint(lastPoint, nextPoint);
                 } else {
-                    midPoint = this.getMidPoint(lastPoint, nextPoint, offsetDir);
+                    midPoint = this.getMidPoint(lastPoint, nextPoint, offsetDir, forceOffsetSide);
                 }
                 this.map.clampToMapBounds(midPoint);
                 riverPoints.splice(j, 0, midPoint);
@@ -165,7 +176,7 @@ export class RiverCreator {
             const mask = this.map.riverMasks[i];
             for (let j = 0; j < riverPoints.length; j++) {
                 const point = riverPoints[j];
-                if (coldet.testCircleCircle(point, 0.01, mask.pos, mask.rad)) {
+                if (coldet.testCircleCircle(point, width, mask.pos, mask.rad)) {
                     return [];
                 }
             }
@@ -178,7 +189,8 @@ export class RiverCreator {
     create(isFactionRiver: boolean): Vec2[] {
         const start = this.getStartPoint(isFactionRiver);
         const end = this.getEndPoint(start, isFactionRiver);
-        return this.createRiverPoints(start, end, isFactionRiver);
+        const width = isFactionRiver ? 16 : 8;
+        return this.createRiverPoints(start, end, width, isFactionRiver);
     }
 
     createLakeConnection(
@@ -196,7 +208,10 @@ export class RiverCreator {
             );
             const start = lake.points[startIndex];
             const end = this.map.randomPointOnMapEdge(this.randomGenerator);
-            const riverPoints = this.createRiverPoints(start, end, false);
+            const direction = v2.sub(end, start);
+            const lakeNormal = v2.normalize(v2.sub(start, lake.center));
+            const side = v2.dot(direction, lakeNormal) > 0 ? 1 : -1;
+            const riverPoints = this.createRiverPoints(start, end, width, false, side);
             if (riverPoints.length >= 12) {
                 return riverPoints;
             }

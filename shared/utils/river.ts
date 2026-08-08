@@ -15,6 +15,9 @@ export class River {
     waterWidths: number[];
     shoreWidths: number[];
     aabb: AABB;
+    lakeRiverbankColor?: number;
+    lakeWaterColor?: number;
+    lakeWaterRippleColor?: number;
 
     constructor(
         splinePts: Vec2[],
