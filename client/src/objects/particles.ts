@@ -3451,7 +3451,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         ignoreValueAdjust: true,
     },
-    boost_blitzgruen: {
+    boost_blitz: {
         image: ["part-boost-blitzgruen.img"],
         life: new Range(0.6, 0.9),
         drag: 0,
@@ -3935,8 +3935,8 @@ const EmitterDefs: Record<string, EmitterDef> = {
         rot: 0,
         maxCount: Number.MAX_VALUE,
     },
-    boost_blitzgruen: {
-        particle: "boost_blitzgruen",
+    boost_blitz: {
+        particle: "boost_blitz",
         rate: new Range(0.3, 0.35),
         radius: 1.5,
         speed: new Range(1.5, 2),

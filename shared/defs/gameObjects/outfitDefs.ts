@@ -1196,7 +1196,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0xffffff,
         },
     }),
-    outfitMarblePink: defineOutfitSkin("outfitBase", {
+    outfitMarblepink: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Marble Pink",
         rarity: Rarity.Uncommon,
