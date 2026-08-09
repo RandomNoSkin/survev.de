@@ -325,14 +325,17 @@ export const Comp: MapDef = {
         tier_eye_02: [{ name: "stonehammer", count: 1, weight: 1 }],
         tier_eye_block: [
             { name: "supply_flare_gun", count: 1, weight: 0.08 }, 
-            { name: "scorpion", count: 1, weight: 0.14 }, 
+            { name: "scorpion", count: 1, weight: 0.13 }, 
             { name: "an94", count: 1, weight: 0.12 }, 
-            { name: "tier_hawk", count: 1, weight: 0.16 }, 
+            { name: "tier_hawk", count: 1, weight: 0.14 }, 
             { name: "sv98", count: 1, weight: 0.1 }, 
             { name: "usas", count: 1, weight: 0.08 }, 
-            { name: "pkp", count: 1, weight: 0.11 }, 
+            { name: "pkp", count: 1, weight: 0.08 }, 
             { name: "awc", count: 1, weight: 0.15 }, 
-            { name: "pkm", count: 1, weight: 0.06 }, 
+            { name: "pkm", count: 1, weight: 0.06 },
+            { name: "ash12", count: 1, weight: 0.02 },
+            { name: "sw500", count: 1, weight: 0.02 },
+            { name: "barrett", count: 1, weight: 0.02 }, 
         ],
         tier_eye_stone: [
             { name: "vector45", count: 1, weight: 1 },
@@ -978,6 +981,9 @@ export const Comp: MapDef = {
             { name: "flare_gun", count: 1, weight: 1 },
             { name: "supply_flare_gun", count: 1, weight: 1 },
             { name: "ak74", count: 1, weight: 1 },
+            { name: "ash12", count: 1, weight: 1 },
+            { name: "sw500", count: 1, weight: 1 },
+            { name: "barrett", count: 1, weight: 1 },
         ],
         tier_xp_uncommon: [
             { name: "xp_book_tallow", count: 1, weight: 1 },
@@ -1260,7 +1266,7 @@ export const Comp: MapDef = {
                 bunker_structure_03: 1, // storm bunker
                 bunker_structure_04: 1, // sea bunker
                 bunker_structure_05: 1, // river bunker
-                warehouse_complex_01: 2, // docks
+                warehouse_complex_01: 1, // docks
                 chest_01: 1,
                 chest_03: { odds: 0.35 }, // river chest
                 mil_crate_02: { odds: 0.2 }, // ot chest

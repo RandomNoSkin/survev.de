@@ -5192,6 +5192,498 @@ function createBarn<T extends BuildingDef>(e: Partial<T>): T {
     };
     return util.mergeDeep(t, e || {});
 }
+function createBarnComp<T extends BuildingDef>(e: Partial<T>): T {
+    const t = {
+        type: "building",
+        map: {
+            display: true,
+            shapes: [
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, 12),
+                        v2.create(5, 2),
+                    ),
+                    color: 0xbbb287,
+                },
+                {
+                    collider: collider.createAabbExtents(
+                        v2.create(0, -2),
+                        v2.create(24.5, 12.8),
+                    ),
+                    color: 0x3a3d23,
+                },
+            ],
+        },
+        terrain: { grass: true, beach: false },
+        mapObstacleBounds: [
+            collider.createAabbExtents(v2.create(0, -2), v2.create(28, 16.5)),
+            collider.createAabbExtents(v2.create(0, 14), v2.create(7, 5)),
+        ],
+        zIdx: 1,
+        floor: {
+            surfaces: [
+                {
+                    type: "house",
+                    collision: [
+                        collider.createAabbExtents(v2.create(0, -2), v2.create(25, 13.2)),
+                        collider.createAabbExtents(v2.create(0, 12), v2.create(5.5, 2.5)),
+                    ],
+                },
+            ],
+            imgs: [
+                {
+                    sprite: "map-building-barn-floor-01.img",
+                    scale: 0.5,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+            ],
+        },
+        ceiling: {
+            zoomRegions: [
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(0, -2),
+                        v2.create(24.5, 12.8),
+                    ),
+                },
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(0, 12),
+                        v2.create(5.5, 2.5),
+                    ),
+                    zoomOut: collider.createAabbExtents(
+                        v2.create(0, 0),
+                        v2.create(5.5, 18.5),
+                    ),
+                },
+            ],
+            vision: {
+                dist: 5.5,
+                width: 2.75,
+                linger: 0.5,
+                fadeRate: 6,
+            },
+            imgs: [
+                {
+                    sprite: "map-building-barn-ceiling-01.img",
+                    pos: v2.create(0, -2),
+                    scale: 1,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+                {
+                    sprite: "map-building-barn-ceiling-02.img",
+                    pos: v2.create(0, 13.2),
+                    scale: 0.667,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+            ],
+        },
+        mapObjects: [
+            {
+                type: "brick_wall_ext_4",
+                pos: v2.create(-24.5, 9),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_3",
+                pos: v2.create(-22.5, 10.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_12",
+                pos: v2.create(-24.5, -2),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_4",
+                pos: v2.create(-24.5, -13),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_3",
+                pos: v2.create(-22.5, -14.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-24.75, 5.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-24.75, -9.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-19.5, 10.75),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(-19.5, -14.75),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_16",
+                pos: v2.create(-10, 10.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_16",
+                pos: v2.create(10, 10.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_16",
+                pos: v2.create(-10, -14.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_6",
+                pos: v2.create(5, -14.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_4",
+                pos: v2.create(-5.5, 13),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_4",
+                pos: v2.create(5.5, 13),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_3",
+                pos: v2.create(-3.5, 14.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_3",
+                pos: v2.create(3.5, 14.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(9.5, -14.75),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(2, 14.75),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-2, -14.75),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "brick_wall_ext_4",
+                pos: v2.create(24.5, 9),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_3",
+                pos: v2.create(22.5, 10.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_13",
+                pos: v2.create(17.5, -14.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "brick_wall_ext_19",
+                pos: v2.create(24.5, -5.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "brick_wall_ext_1",
+                pos: v2.create(23.5, -1.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(24.75, 5.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "house_window_01",
+                pos: v2.create(19.5, 10.75),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: e.bonus_room || "panicroom_01",
+                pos: v2.create(19.5, -8),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_wall_int_6",
+                pos: v2.create(-21, 0.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_wall_int_6",
+                pos: v2.create(-21, -4.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_wall_int_5",
+                pos: v2.create(-11.5, 0.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_wall_int_2",
+                pos: v2.create(-13, -4.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_wall_int_7",
+                pos: v2.create(-6.5, -4.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_wall_int_8",
+                pos: v2.create(-11.5, -10),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_wall_int_8",
+                pos: v2.create(-7.5, 6),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_wall_int_5",
+                pos: v2.create(-3.5, -11.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_wall_int_7",
+                pos: v2.create(10.5, 0.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_wall_int_5",
+                pos: v2.create(14.5, 7.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_wall_int_13",
+                pos: v2.create(14.5, -7.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_wall_int_4",
+                pos: v2.create(17, -1.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-18, -4.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-18, 0.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(-3.5, -5),
+                scale: 1,
+                ori: 2,
+            },
+            {
+                type: "house_door_01",
+                pos: v2.create(14.5, 1),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: e.bonus_door,
+                pos: v2.create(23, -1.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barn_column_1",
+                pos: v2.create(-8, 1),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_column_1",
+                pos: v2.create(-11, -5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "barn_column_1",
+                pos: v2.create(15, 0),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ toilet_01: 5, toilet_02: 1 }),
+                pos: v2.create(-7.5, -12),
+                scale: 1,
+                ori: 2,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 7, drawers_02: 1 }),
+                pos: v2.create(-12.5, 8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 7, drawers_02: 1 }),
+                pos: v2.create(-5.5, 7.25),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 7, drawers_02: 1 }),
+                pos: v2.create(-13.5, -9.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "stand_01",
+                pos: v2.create(16.5, 8.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "stand_01",
+                pos: v2.create(3.5, 12.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "table_01",
+                pos: v2.create(8, -8),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "oven_01",
+                pos: v2.create(12.25, -1.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "refrigerator_01",
+                pos: v2.create(8.75, -1.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "bush_02",
+                pos: v2.create(-22, -2),
+                scale: 1,
+                ori: 0,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: "bush_02",
+                pos: v2.create(12, 8),
+                scale: 1,
+                ori: 0,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: randomObstacleType({ loot_tier_1: 1, "": 1 }),
+                pos: v2.create(-19, -9.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: randomObstacleType({ loot_tier_1: 1, "": 1 }),
+                pos: v2.create(-19, 5.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "loot_tier_1",
+                pos: v2.create(0, 5.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: e.porch_01 || "",
+                pos: v2.create(-4, 17),
+                scale: 0.9,
+                ori: 2,
+            },
+            {
+                type: e.porch_01 || "",
+                pos: v2.create(4, 17),
+                scale: 0.9,
+                ori: 2,
+            },
+            {
+                type: "sandbags_02",
+                pos: v2.create(-5, -17),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barrel_01",
+                pos: v2.create(8.5, 13),
+                scale: 1,
+                ori: 0,
+            },
+        ],
+    };
+    return util.mergeDeep(t, e || {});
+}
 function createBarnBasement<T extends BuildingDef>(e: Partial<T>): T {
     const t = {
         type: "building",
@@ -23872,7 +24364,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         },
         bonus_door: "house_door_02",
     } as unknown as Partial<BuildingDef>),
-    barn_02: createBarn({
+    barn_02: createBarnComp({
         bonus_room: "barn_basement_structure_01",
         bonus_door: "",
         map: { displayType: "barn_01" },
@@ -29079,7 +29571,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     ori: 0,
                 },
                 {
-                    type: randomObstacleType({case_07: 3, case_07de: 1 }),
+                    type: randomObstacleType({case_07: 4, case_07de: 1 }),
                     pos: v2.create(0, 5.25),
                     scale: 1,
                     ori: 0,
@@ -30177,7 +30669,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 3,
             },
             {
-                type: "crate_07",
+                type: randomObstacleType({ crate_07: 5, crate_17: 1 }),
                 pos: v2.create(0, -4.5),
                 scale: 1,
                 ori: 0,
@@ -32820,15 +33312,22 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 inheritOri: false,
             },
             {
-                type: "crate_01",
+                type: "crate_04",
                 pos: v2.create(-7.5, -9.5),
                 scale: 1,
                 ori: 0,
                 ignoreMapSpawnReplacement: true,
             },
             {
-                type: "crate_01",
-                pos: v2.create(-2.5, -9.5),
+                type: "crate_06",
+                pos: v2.create(3, -10.5),
+                scale: 1,
+                ori: 0,
+                ignoreMapSpawnReplacement: true,
+            },
+            {
+                type: "crate_04",
+                pos: v2.create(-2.25, -9.5),
                 scale: 1,
                 ori: 0,
                 ignoreMapSpawnReplacement: true,
