@@ -1402,7 +1402,8 @@ export class Player extends BaseGameObject {
 
         // Reset camper tracking to avoid false positives right after spawning
         this.camperAnchorPos = v2.copy(this.pos);
-        this.currentTime = Date.now();
+        this.campStartTime = Date.now();
+        this.lastCamperPingTime = -Infinity;
 
         this.game.grid.updateObject(this);
         this.setDirty();
@@ -1460,7 +1461,8 @@ export class Player extends BaseGameObject {
 
         // Reset camper tracking to avoid false positives right after spawning
         this.camperAnchorPos = v2.copy(this.pos);
-        this.currentTime = this.game.startedTime;
+        this.campStartTime = this.game.startedTime;
+        this.lastCamperPingTime = -Infinity;
 
         this.game.grid.updateObject(this);
         this.setDirty();
@@ -1966,9 +1968,11 @@ export class Player extends BaseGameObject {
 
     lastPos = v2.create(0, 0);
     camperAnchorPos = v2.create(0, 0);
-    currentTime = Date.now();
-    punishmentTime = this.game.startedTime;
+    campStartTime = Date.now();
+    lastCamperPingTime = -Infinity;
     camper = false;
+    // multiplier applied to boost decay while camping; reset every tick, see anti-camp logic in update()
+    camperBoostDecayMult = 1;
     distanceMoved = 0;
 
     ticks = 0;
@@ -2246,6 +2250,10 @@ export class Player extends BaseGameObject {
             this.game.map.mapDef.gameMode.camperPunishment ??
             GameConfig.player.camperPunishment;
 
+        // reset every tick; the block below sets it back to the accelerated
+        // value while the player is actively camping
+        this.camperBoostDecayMult = 1;
+
         if (antiCamp) {
             const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
 
@@ -2256,78 +2264,72 @@ export class Player extends BaseGameObject {
             const camperPunishmentDistance =
                 this.game.map.mapDef.gameMode.camperPunishmentDistance ??
                 GameConfig.player.camperPunishmentDistance;
+            // time stationary under cover before boost starts decaying faster
             const camperDecayTime =
                 this.game.map.mapDef.gameMode.camperDecayTime ??
                 GameConfig.player.camperDecayTime;
-            const camperPunishmentTime =
-                this.game.map.mapDef.gameMode.camperPunishmentTime ??
-                GameConfig.player.camperPunishmentTime;
+            // extra time after that before the player gets revealed via a map ping
+            const camperRevealDelay =
+                this.game.map.mapDef.gameMode.camperRevealDelay ??
+                GameConfig.player.camperRevealDelay;
+            // how often the reveal ping refreshes while the player keeps camping
+            const camperPingInterval =
+                this.game.map.mapDef.gameMode.camperPingInterval ??
+                GameConfig.player.camperPingInterval;
 
             const now = this.game.startedTime;
 
-            // Allow a short grace period at spawn so players who start under cover
-            // won't be immediately flagged as campers.
-            if (this.game.startedTime < camperGracePeriode + freezeTime) {
+            const resetCamperState = () => {
+                this.camperAnchorPos = v2.copy(this.pos);
+                this.campStartTime = now;
                 if (this.camper) {
                     this.camper = false;
                     if (this.role === "camper") this.removeRole();
                     if (this.game.map.mapDef.gameMode.indicator)
                         this.promoteToRole("arena");
                 }
-                this.camperAnchorPos = v2.copy(this.pos);
-                this.currentTime = now;
+            };
+
+            // Allow a short grace period at spawn so players who start under cover
+            // won't be immediately flagged as campers.
+            if (this.game.startedTime < camperGracePeriode + freezeTime) {
+                resetCamperState();
             } else {
                 // Determine how far the player has strayed from the last “anchor” point.
                 // This is more stable than accumulating movement deltas (which can jitter).
                 const distFromAnchor = v2.distance(this.pos, this.camperAnchorPos);
                 this.distanceMoved = distFromAnchor;
 
-                // Reset the timer/anchor if the player moves far enough.
-
-                if (distFromAnchor > camperPunishmentDistance) {
-                    this.camperAnchorPos = v2.copy(this.pos);
-                    this.currentTime = now;
-                    if (this.camper && this.punishmentTime + camperPunishmentTime < now) {
-                        this.camper = false;
-                        if (this.role === "camper") this.removeRole();
-                        if (this.game.map.mapDef.gameMode.indicator)
-                            this.promoteToRole("arena");
-                    }
-                }
-
-                // check if enough time has passed to evaluate camping state
-                if (
+                const brokeCamp =
+                    distFromAnchor > camperPunishmentDistance ||
                     !this.isUnderCover() ||
                     this.actionType === GameConfig.Action.UseItem ||
                     this.actionType === GameConfig.Action.Revive ||
-                    this.downed
-                ) {
-                    this.currentTime = now;
-                } else if (
-                    this.currentTime + camperDecayTime < now ||
-                    (this.camper && this.punishmentTime + camperPunishmentTime < now)
-                ) {
-                    // if player is using a heal item or reviving also skip the decay
-                    if (distFromAnchor < camperPunishmentDistance) {
+                    this.downed;
+
+                if (brokeCamp) {
+                    resetCamperState();
+                } else {
+                    const campTime = now - this.campStartTime;
+
+                    if (campTime >= camperDecayTime) {
+                        this.camperBoostDecayMult = GameConfig.player.camperBoostDecayMult;
+                        // tag/announce the camper as soon as boost starts decaying
+                        // faster; the map ping reveal itself still waits longer
                         this.camper = true;
-                        this.punishmentTime = this.game.startedTime;
                     }
 
-                    // restart the timer / anchor
-                    this.camperAnchorPos = v2.copy(this.pos);
-                    this.currentTime = now;
+                    // still camping well past the boost-decay threshold: reveal the
+                    // player on the map via a ping instead of a live position, and
+                    // keep refreshing it at camperPingInterval while they stay put
+                    if (
+                        campTime >= camperDecayTime + camperRevealDelay &&
+                        now - this.lastCamperPingTime >= camperPingInterval
+                    ) {
+                        this.game.playerBarn.addMapPing("ping_camper", this.pos, this.__id);
+                        this.lastCamperPingTime = now;
+                    }
                 }
-            }
-
-            if (
-                this.camper &&
-                !this.isUnderCover() &&
-                this.punishmentTime + camperPunishmentTime < now
-            ) {
-                // if the player leaves cover while marked as camper, remove the role
-                this.camper = false;
-                if (this.role === "camper") this.removeRole();
-                if (this.game.map.mapDef.gameMode.indicator) this.promoteToRole("arena");
             }
 
             if (this.camper) {
@@ -2354,7 +2356,8 @@ export class Player extends BaseGameObject {
                 this.health += healAmount!.heal * dt;
 
                 if (this.boost > this.minBoost && !unlimitedAdren) {
-                    this.boost -= GameConfig.player.boostDecay * dt;
+                    this.boost -=
+                        GameConfig.player.boostDecay * this.camperBoostDecayMult * dt;
                 }
             }
         } else {

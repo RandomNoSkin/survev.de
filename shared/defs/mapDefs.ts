@@ -157,11 +157,12 @@ export interface MapDef {
         minPosSpawnRad?: number, // spawn radius away from other spawn points |default: 100
         spawnCenter?: boolean, // spawn in the center of the map
 
-        camperPunishmentDistance?: number, // distance player has to move to not get punished || default: 10
-        camperDecayTime?: number, // time in ms until punishment || default: 6000
-        camperPunishment?: boolean, // enables camper bunishment || default false
-        camperPunishmentTime?: number, // time in ms how long punishment lasts || default: 5000
-        camperGracePeriod?: number, // time in ms after spawn before camping checks start || default: 40000
+        camperPunishmentDistance?: number, // distance player has to move to reset the camping timer || default: 15
+        camperDecayTime?: number, // seconds stationary under cover before boost decays faster || default: 5
+        camperPunishment?: boolean, // enables the anti-camp boost decay + map ping reveal || default false
+        camperRevealDelay?: number, // extra seconds after boost decay starts before being revealed via a ping || default: 10
+        camperPingInterval?: number, // seconds between reveal ping refreshes while still camping || default: 5
+        camperGracePeriod?: number, // seconds after spawn before camping checks start || default: 40
 
         announceTeams?: boolean;
         enableChat?: boolean;

@@ -1285,7 +1285,9 @@ export class UiManager {
             if (pingDef.mapEvent) {
                 // Map-event pings free themselves after they are finished;
                 // there's no limit to the number that an occur simultaneously.
-                const scale = (device.uiLayout == device.UiLayout.Sm ? 0.15 : 0.2) * 1.5;
+                const scale =
+                    (device.uiLayout == device.UiLayout.Sm ? 0.15 : 0.2) *
+                    (pingDef.mapScale ?? 1.5);
                 createPingSprite(scale, pingDef.tint!).release();
 
                 createPulseSprite(pingDef.tint!).release();

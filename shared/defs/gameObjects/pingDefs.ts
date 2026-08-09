@@ -10,6 +10,8 @@ export interface PingDef {
     mapEvent?: boolean;
     worldDisplay?: boolean;
     tint?: number;
+    // scale multiplier applied to mapEvent pings on the map; defaults to 1.5 if unset
+    mapScale?: number;
 }
 
 export const PingDefs: Record<string, PingDef> = {
@@ -96,6 +98,19 @@ export const PingDefs: Record<string, PingDef> = {
         mapEvent: true,
         worldDisplay: false,
         tint: 0x12ff00,
+    },
+    ping_camper: {
+        type: "ping",
+        texture: "ping-team-danger.img",
+        mapTexture: "ping-map-danger.img",
+        sound: "ping_danger_01",
+        pingMap: true,
+        pingLife: 5,
+        mapLife: 10,
+        mapEvent: true,
+        worldDisplay: false,
+        tint: 0xff0000,
+        mapScale: 1,
     },
     ping_unlock: {
         type: "ping",
