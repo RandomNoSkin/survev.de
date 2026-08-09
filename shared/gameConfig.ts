@@ -421,7 +421,7 @@ export const GameConfig = {
         // camper's position instead of a live tracker
         camperPunishmentDistance: 15, // distance player has to move to reset the camping timer
         camperDecayTime: 5, // time in *seconds* stationary under cover before boost decays faster
-        camperBoostDecayMult: 2, // boost decay rate multiplier while camping
+        camperBoostDecayMult: 3.5, // boost decay rate multiplier while camping
         camperPunishment: false, // if true, enables the anti-camp boost decay + map ping reveal
         camperRevealDelay: 10, // extra time in *seconds* after boost starts decaying faster before being revealed via a ping
         camperPingInterval: 5, // how often (in *seconds*) the reveal ping refreshes while the player keeps camping
