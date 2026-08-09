@@ -2219,8 +2219,8 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                         v2.create(23, 20),
                     ),
                     zoomOut: collider.createAabbExtents(
-                        v2.create(9, 24.5),
-                        v2.create(8, 2),
+                        v2.create(9, 23.5),
+                        v2.create(8, 1),
                     ),
                     zoom: 36,
                 },
@@ -2234,23 +2234,23 @@ function createReserve<T extends BuildingDef>(e: Partial<T>): T {
                 // Ramp / Loading Bay
                 {
                     zoomIn: collider.createAabbExtents(
-                        v2.create(46, 26.5),
-                        v2.create(13, 4),
+                        v2.create(48.5, 24.75),
+                        v2.create(9.5, 2.25),
                     ),
                     zoomOut: collider.createAabbExtents(
-                        v2.create(46, 28),
-                        v2.create(14.5, 4.5),
+                        v2.create(48.5, 25.5),
+                        v2.create(10.5, 3),
                     ),
                 },
                 // Main Entrance
                 {
                     zoomIn: collider.createAabbExtents(
-                        v2.create(0, -25.5),
-                        v2.create(18, 8),
+                        v2.create(0, -25),
+                        v2.create(17, 7.5),
                     ),
                     zoomOut: collider.createAabbExtents(
-                        v2.create(0, -27),
-                        v2.create(20, 8.5),
+                        v2.create(0, -26.5),
+                        v2.create(19, 8),
                     ),
                 },
             ],
@@ -5874,7 +5874,7 @@ function createCabin<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 type: e.cabin_mount
                     || randomObstacleType({
                         gun_mount_01: 50,
-                        gun_mount_05: 50,
+                        gun_mount_08: 50,
                         gun_mount_04: 1,
                         gun_mount_02: 10,
                         gun_mount_03: 10,
@@ -6280,25 +6280,25 @@ function createLargeHut<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 1,
             },
             {
-                type: randomObstacleType({ barrel_02: 1, barrel_05: 1 }),
+                type: "barrel_02",
                 pos: v2.create(4.25, 8),
                 scale: 0.9,
                 ori: 1,
             },
             {
-                type: randomObstacleType({ barrel_02: 1, barrel_05: 1 }),
+                type: "barrel_02",
                 pos: v2.create(7, 6.25),
                 scale: 0.9,
                 ori: 1,
             },
             {
-                type: "pot_01",
+                type: randomObstacleType({ pot_01: 24, pot_01purple : 1 }),
                 pos: v2.create(-7, 8),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: "pot_01",
+                type: randomObstacleType({ pot_01: 24, pot_01purple : 1 }),
                 pos: v2.create(-12.5, -3.5),
                 scale: 1,
                 ori: 1,
@@ -6316,7 +6316,7 @@ function createLargeHut<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 1,
             },
             {
-                type: "gun_mount_06",
+                type: "gun_mount_10",
                 pos: v2.create(-6.1, 3),
                 scale: 1,
                 ori: -1,
@@ -8589,6 +8589,12 @@ function createOasis<T extends BuildingDef>(e: Partial<T>): T {
                 volume: 1,
             },
         ],
+        healRegions: [
+            {
+                collision: collider.createCircle(v2.create(0, 0), 25),
+                healRate: 1,
+            },
+        ],
         mapObjects: [
             //
             // Central Island
@@ -8798,6 +8804,12 @@ function createOasisComp<T extends BuildingDef>(e: Partial<T>): T {
                 range: { min: 15, max: 35 },
                 falloff: 1,
                 volume: 1,
+            },
+        ],
+        healRegions: [
+            {
+                collision: collider.createCircle(v2.create(0, 0), 25),
+                healRate: 1,
             },
         ],
         mapObjects: [
@@ -9160,8 +9172,13 @@ function createTeaPavilion<T extends BuildingDef>(e: Partial<T>): T {
         },
         terrain: { grass: true, beach: false },
         mapObstacleBounds: [
-            collider.createAabbExtents(v2.create(0, 0), v2.create(11, 11)),
-            collider.createAabbExtents(v2.create(0, -20), v2.create(4, 12)),
+            collider.createAabbExtents(v2.create(0, 0), v2.create(10, 10)),
+            collider.createAabbExtents(v2.create(0, -14), v2.create(4, 4)),
+            collider.createAabbExtents(v2.create(-12, -5), v2.create(2.5, 2.5)),
+            collider.createAabbExtents(v2.create(-4, 12), v2.create(2.5, 2.5)),
+            collider.createAabbExtents(v2.create(14, 3), v2.create(2.5, 2.5)),
+            collider.createAabbExtents(v2.create(-5, -12), v2.create(2.5, 2.5)),
+            collider.createAabbExtents(v2.create(-15, 7), v2.create(4, 4)),
         ],
         ori: 0,
         floor: {
@@ -9263,6 +9280,12 @@ function createTeaPavilion<T extends BuildingDef>(e: Partial<T>): T {
             {
                 type: e.right_loot || "pot_03",
                 pos: v2.create(-4.5, 4.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "gun_mount_09",
+                pos: v2.create(0, 5.4),
                 scale: 1,
                 ori: 0,
             },
@@ -12560,7 +12583,7 @@ function createWorkshop<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 2,
             },
             {
-                type: randomObstacleType({ gun_mount_07: 3, gun_mount_05: 2, gun_mount_03: 1 }),
+                type: randomObstacleType({ gun_mount_07: 3, gun_mount_08: 2, gun_mount_03: 1 }),
                 pos: v2.create(-23.75, 12),
                 scale: 1,
                 ori: 1,
@@ -13196,6 +13219,13 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-case-chrys-01.img" },
         loot: [tierLoot("tier_chest_sniper_tea", 1, 1), tierLoot("tier_chest_ar", 2, 2), tierLoot("tier_chest_armor", 0 , 2), 
             tierLoot("tier_chrys_case", 1, 1)],
+        hitParticle: "blackChip",
+        map: { display: false, color: 0x6b3500, scale: 0.85 },
+    }),
+    case_06_noMelee: createCase({
+        health: 140,
+        img: { sprite: "map-case-chrys-01.img" },
+        loot: [tierLoot("tier_chest_sniper_tea", 1, 1), tierLoot("tier_chest_ar", 2, 2), tierLoot("tier_chest_armor", 0 , 2)],
         hitParticle: "blackChip",
         map: { display: false, color: 0x6b3500, scale: 0.85 },
     }),
@@ -14902,7 +14932,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-gun-mount-04.img" },
     }),
     gun_mount_05: createGunMount({
-        loot: [autoLoot("spas12", 1)],
+        loot: [autoLoot("m1100", 1)],
         img: { sprite: "map-gun-mount-05.img" },
     }),
     gun_mount_06: createGunMount({
@@ -14912,6 +14942,18 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     gun_mount_07: createGunMount({
         loot: [autoLoot("spas16", 1)],
         img: { sprite: "map-gun-mount-07.img" },
+    }),
+    gun_mount_08: createGunMount({
+        loot: [autoLoot("spas12", 1)],
+        img: { sprite: "map-gun-mount-08.img" },
+    }),
+    gun_mount_09: createGunMount({
+        loot: [autoLoot("katana_orchid", 1)],
+        img: { sprite: "map-gun-mount-09.img" },
+    }),
+    gun_mount_10: createGunMount({
+        loot: [autoLoot("cutlass", 1)],
+        img: { sprite: "map-gun-mount-10.img" },
     }),
     locker_01: createLocker({
         img: { sprite: "map-locker-01.img" },
@@ -25930,7 +25972,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         right_loot: "pot_03c",
     }),
     teapavilion_01comp: createTeaPavilion({
-        center_loot: "case_06",
+        center_loot: "case_06_noMelee",
     }),
     teahouse_complex_01s: createTeaHouseComplex({}),
     teahouse_complex_01su: createTeaHouseComplex({

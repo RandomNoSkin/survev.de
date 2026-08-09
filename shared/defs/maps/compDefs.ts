@@ -597,7 +597,7 @@ export const Comp: MapDef = {
         ],
         tier_noir_outfit: [{ name: "outfitNoir", count: 1, weight: 1 }],
         tier_khaki_outfit: [{ name: "outfitKhaki", count: 1, weight: 1 }],
-        tier_pirate_melee: [{ name: "hook", count: 1, weight: 1 }],
+        tier_pirate_melee: [{ name: ""/*""*/, count: 1, weight: 1 }],
         tier_hatchet: [
             { name: "vector", count: 1, weight: 0.7 },
             { name: "mosin", count: 1, weight: 0.03 },
@@ -1247,6 +1247,7 @@ export const Comp: MapDef = {
                 hut_01: 3, // huts
                 hut_02: 2, // spas hut
                 hut_03: 1, // scout hut
+                hut_04: 1,
                 shack_03a: 3, // small river / sea cabins
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
