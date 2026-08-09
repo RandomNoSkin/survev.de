@@ -224,7 +224,7 @@
   "index-pickup-ctrl": "F",
   "index-pickup-extra-modified_mac10": "- Bullet slow enemies \n- Heightened accuracy\n- Bullets accelerate",
   "index-pickup-extra-modified_scorpion": "- Extremely fast 2 bullet reload\n- Mag size reduced",
-  "index-pickup-extra-modified_vss": "- Shoots 2 bullets at once\n- Slightly reduced firerate",
+  "index-pickup-extra-modified_vss": "- Shoots a 2x damage splitting bullet\n- Slightly reduced firerate",
   "index-pickup-extra-modified_famas": "- Every 3rd shot is empowered dealing 1.5x damage",
   "index-pickup-extra-modified_hk416": "- Higher accuracy but lower firerate\n- Alternate Mode: Shoot primed grenades",
   "index-pickup-extra-modified_m4a1": "- Splitting bullets with extreme bullet speed\n- Hitting Enemies with the main bullet will also hit them with the splinters",

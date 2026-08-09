@@ -25,7 +25,7 @@ const ChestDefs: Record<string, ChestDef> = {
         name: "Level 1 Vest",
         type: "chest",
         level: 1,
-        damageReduction: 0.25,
+        damageReduction: 0.26,
         skinImg: {
             baseTint: 0xb4b4b4,
             baseSprite: "player-armor-base-01.img",
@@ -45,7 +45,7 @@ const ChestDefs: Record<string, ChestDef> = {
         name: "Level 2 Vest",
         type: "chest",
         level: 2,
-        damageReduction: 0.38,
+        damageReduction: 0.39,
         skinImg: {
             baseTint: 4934475,
             baseSprite: "player-armor-base-01.img",
@@ -65,7 +65,7 @@ const ChestDefs: Record<string, ChestDef> = {
         name: "Level 3 Vest",
         type: "chest",
         level: 3,
-        damageReduction: 0.45,
+        damageReduction: 0.52,
         skinImg: {
             baseTint: 0,
             baseSprite: "player-armor-base-01.img",
@@ -131,7 +131,7 @@ const HelmetDefs: Record<string, HelmetDef> = {
         name: "Level 1 Helmet",
         type: "helmet",
         level: 1,
-        damageReduction: 0.25,
+        damageReduction: 0.233,
         skinImg: {
             baseTint: 0x317fff,
             baseTintRed: 0xa76b6b,
@@ -153,7 +153,7 @@ const HelmetDefs: Record<string, HelmetDef> = {
         name: "Level 2 Helmet",
         type: "helmet",
         level: 2,
-        damageReduction: 0.4,
+        damageReduction: 0.383,
         skinImg: {
             baseTint: 0xc6c6c6,
             baseTintRed: 0x990000,
@@ -175,7 +175,7 @@ const HelmetDefs: Record<string, HelmetDef> = {
         name: "Level 3 Helmet",
         type: "helmet",
         level: 3,
-        damageReduction: 0.55,
+        damageReduction: 0.433,
         skinImg: {
             baseTint: 0x252525,
             baseTintRed: 0x260404,

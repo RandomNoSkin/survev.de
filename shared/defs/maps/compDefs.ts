@@ -222,7 +222,7 @@ export const Comp: MapDef = {
             { name: "soda", count: 1, weight: 1},
         ],
         tier_adren: [
-            { name: "soda", count: 2, weight: 1},
+            { name: "tier_soda", count: 1, weight: 1},
             { name: "painkiller", count: 1, weight: 1},
         ],
         tier_throwables: [
@@ -1106,7 +1106,7 @@ export const Comp: MapDef = {
             rivers: {
                 lakes: [
                     {
-                        odds: 1,
+                        odds: 0.2,
                         innerRad: 22,
                         outerRad: 36,
                         centerObj: "teapavilion_01comp",
@@ -1117,7 +1117,7 @@ export const Comp: MapDef = {
                         },
                     },
                     {
-                        odds: 1,
+                        odds: 0.2,
                         innerRad: 10,
                         outerRad: 20,
                         centerObj: "oasis_01comp",
@@ -1253,7 +1253,7 @@ export const Comp: MapDef = {
                 hut_01: 3, // huts
                 hut_02: 2, // spas hut
                 hut_03: 1, // scout hut
-                hut_04: 1,
+                hut_04: { odds: 0.2 },
                 shack_03a: 3, // small river / sea cabins
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
@@ -1284,14 +1284,15 @@ export const Comp: MapDef = {
         ],
         spawnReplacements: [
             {
+                // Odds not actually realistic due to it rerolling after every spawn attempt and reserve having a harder time spawning in
                 club_complex_01: [
-                    { type: "club_complex_01", weight: 0.4 },
-                    { type: "reserve_complex_01", weight: 0.6 },
+                    { type: "club_complex_01", weight: 0.1 },
+                    { type: "reserve_complex_01", weight: 0.9 },
                 ],
             },
         ],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
-        spawnOnRiver: ["club_complex_01", "reserve_complex_01", "warehouse_complex_01"],
+        spawnOnRiver: ["club_complex_01"/*, "reserve_complex_01"*/, "warehouse_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };
