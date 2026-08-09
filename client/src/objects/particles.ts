@@ -1875,6 +1875,25 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return 0x330066;
         },
     },
+    pixelExplosionDeath: {
+        image: ["part-pixel-explosion-01.img", ],
+        life: new Range(1.0, 1.5),
+        drag: new Range(5.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.1, 0.2),
+            end: new Range(0.3, 0.5),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.8, 1),
+        },
+        color: function () {
+            return 0x330066;
+        },
+    },
     magicSparkDeath: {
         image: [
             "part-magic-spark-01.img",
@@ -1922,6 +1941,92 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return 0xffffff;
         },
     },
+    xpOrbDeath: {
+        image: [
+            "part-xp-orb-1.img",
+            "part-xp-orb-2.img",
+            "part-xp-orb-3.img",
+            "part-xp-orb-4.img",
+            "part-xp-orb-5.img",
+            "part-xp-orb-6.img",
+        ],
+        life: new Range(2, 2.5),
+        drag: new Range(1, 1.5),
+        rotVel: 0,
+        scale: {
+            start: 0.3,
+            end: 0.2,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    bubbleDeath: {
+        image: ["bubble-death.img",],
+        life: new Range(0.7, 1.1),
+        drag: new Range(0.5, 1.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.2, 0.7),
+            end: new Range(0.2, 0.7),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 0.8,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            const colors = [0xADF5FF, 0xFFDEFE, 0xAEFF9C, 0xFFFCD4, 0xD8D4FF];
+            return colors[Math.floor(util.random(0, colors.length))];
+        },
+    },
+    dropCellphoneDeath: {
+        image: ["drop-cellphone.img",],
+        life: 4,
+        drag: new Range(4.5, 8.2),
+        rotVel: 0,
+        scale: {
+            start: 0.2,
+            end: 0.2,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            const colors = [0x32374A, 0xF77E2D, 0xF5F5F5];
+            return colors[Math.floor(util.random(0, colors.length))];
+        },
+    },
+    touhouDeath: {
+        image: ["touhou-death.img",],
+        life: new Range(1.0, 1.8),
+        drag: new Range(2.0, 7.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.60, 0.65),
+            end: new Range(0.50, 0.55),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+
     whiteChip: {
         image: ["part-spark-02.img"],
         life: 0.5,
