@@ -2303,7 +2303,6 @@ export class Player extends BaseGameObject {
                 const brokeCamp =
                     distFromAnchor > camperPunishmentDistance ||
                     !this.isUnderCover() ||
-                    this.actionType === GameConfig.Action.UseItem ||
                     this.actionType === GameConfig.Action.Revive ||
                     this.downed;
 
