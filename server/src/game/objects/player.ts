@@ -1487,6 +1487,22 @@ export class Player extends BaseGameObject {
     }
 
     /**
+     * Clears the anti-camp timer/anchor and un-marks the player as a camper
+     * if they currently are one. Called both when camping is broken (moved,
+     * left cover, went down) and when a heal/boost item finishes successfully
+     * — starting one doesn't reset the timer, only completing it does.
+     */
+    resetCamperState(): void {
+        this.camperAnchorPos = v2.copy(this.pos);
+        this.campStartTime = this.game.startedTime;
+        if (this.camper) {
+            this.camper = false;
+            if (this.role === "camper") this.removeRole();
+            if (this.game.map.mapDef.gameMode.indicator) this.promoteToRole("arena");
+        }
+    }
+
+    /**
      * Determines whether the player is currently standing under cover.
      * This is used by the anti-camp logic to only trigger when the player
      * is hiding under trees/tables/bushes (etc.), not when standing in the open.
@@ -2279,21 +2295,10 @@ export class Player extends BaseGameObject {
 
             const now = this.game.startedTime;
 
-            const resetCamperState = () => {
-                this.camperAnchorPos = v2.copy(this.pos);
-                this.campStartTime = now;
-                if (this.camper) {
-                    this.camper = false;
-                    if (this.role === "camper") this.removeRole();
-                    if (this.game.map.mapDef.gameMode.indicator)
-                        this.promoteToRole("arena");
-                }
-            };
-
             // Allow a short grace period at spawn so players who start under cover
             // won't be immediately flagged as campers.
             if (this.game.startedTime < camperGracePeriode + freezeTime) {
-                resetCamperState();
+                this.resetCamperState();
             } else {
                 // Determine how far the player has strayed from the last “anchor” point.
                 // This is more stable than accumulating movement deltas (which can jitter).
@@ -2307,26 +2312,39 @@ export class Player extends BaseGameObject {
                     this.downed;
 
                 if (brokeCamp) {
-                    resetCamperState();
+                    this.resetCamperState();
                 } else {
                     const campTime = now - this.campStartTime;
 
-                    if (campTime >= camperDecayTime) {
-                        this.camperBoostDecayMult = GameConfig.player.camperBoostDecayMult;
-                        // tag/announce the camper as soon as boost starts decaying
-                        // faster; the map ping reveal itself still waits longer
-                        this.camper = true;
-                    }
+                    // While actively healing/boosting, the timer keeps running in the
+                    // background but consequences are held off — finishing the item
+                    // resets the timer entirely (see the UseItem completion branch
+                    // above); if it gets cancelled instead, nothing was reset, so the
+                    // accumulated campTime immediately applies here on the very next
+                    // tick, catching up retroactively instead of granting a free pass.
+                    if (this.actionType !== GameConfig.Action.UseItem) {
+                        if (campTime >= camperDecayTime) {
+                            this.camperBoostDecayMult =
+                                GameConfig.player.camperBoostDecayMult;
+                            // tag/announce the camper as soon as boost starts decaying
+                            // faster; the map ping reveal itself still waits longer
+                            this.camper = true;
+                        }
 
-                    // still camping well past the boost-decay threshold: reveal the
-                    // player on the map via a ping instead of a live position, and
-                    // keep refreshing it at camperPingInterval while they stay put
-                    if (
-                        campTime >= camperDecayTime + camperRevealDelay &&
-                        now - this.lastCamperPingTime >= camperPingInterval
-                    ) {
-                        this.game.playerBarn.addMapPing("ping_camper", this.pos, this.__id);
-                        this.lastCamperPingTime = now;
+                        // still camping well past the boost-decay threshold: reveal the
+                        // player on the map via a ping instead of a live position, and
+                        // keep refreshing it at camperPingInterval while they stay put
+                        if (
+                            campTime >= camperDecayTime + camperRevealDelay &&
+                            now - this.lastCamperPingTime >= camperPingInterval
+                        ) {
+                            this.game.playerBarn.addMapPing(
+                                "ping_camper",
+                                this.pos,
+                                this.__id,
+                            );
+                            this.lastCamperPingTime = now;
+                        }
                     }
                 }
             }
@@ -2523,6 +2541,9 @@ export class Player extends BaseGameObject {
                         });
                     }
                     this.invManager.take(this.actionItem as InventoryItem, 1);
+                    // successfully finishing a heal/boost item resets the anti-camp
+                    // timer; merely starting one (and possibly cancelling it) doesn't
+                    this.resetCamperState();
                 } else if (this.isReloading()) {
                     this.weaponManager.reload();
                 } else if (
