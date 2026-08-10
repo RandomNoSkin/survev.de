@@ -11,7 +11,16 @@ import { type RatingTiersTable, ratingTiersTable, regionGroupsTable } from "./sc
  * S/F cutoffs. Below this, an account still gets a tier via the same cutoffs (see
  * `getRatingTier`), just isn't part of what defines them.
  */
-const MIN_GAMES = 50;
+const MIN_GAMES = 30;
+
+/**
+ * Minimum qualifying (>=MIN_GAMES) accounts a (teamMode, region) cohort needs before it gets
+ * percentile tiers at all. Below this, splitting by mode+region leaves too few people for
+ * NTILE(9) to mean anything (e.g. a handful of accounts a few points apart getting spread
+ * across F..S by rank alone) — the cohort falls back to the static IMPACT_RANKS ladder
+ * instead (see `getRatingTier`) until enough accounts qualify.
+ */
+const MIN_COHORT_SIZE = 20;
 
 /** Number of percentile buckets, matching IMPACT_RANKS' F..S ladder. */
 const TIER_COUNT = IMPACT_RANKS.length;
@@ -150,25 +159,44 @@ export async function computeRatingTiers(): Promise<void> {
         GROUP BY team_mode, region, bucket
     `);
 
-    const newCache = new Map<string, RatingTier[]>();
-    const rows: RatingTiersTable[] = [];
+    // Group buckets by cohort first so undersized cohorts (see MIN_COHORT_SIZE) can be
+    // dropped as a whole — otherwise they'd get a token entry in rating_tiers/cache and
+    // getRatingTier would use it instead of falling back to the static ladder.
+    const byCohort = new Map<
+        string,
+        { teamMode: number; region: string; buckets: RatingTiersTable[]; totalSize: number }
+    >();
     for (const row of buckets.rows) {
         const tierName = IMPACT_RANKS[row.bucket - 1]?.name;
         if (!tierName) continue; // NTILE can't exceed TIER_COUNT, but guard anyway
         const key = cacheKey(row.team_mode, row.region);
-        const tiers = newCache.get(key) ?? [];
-        tiers.push({ name: tierName, min: Number(row.min_score) });
-        newCache.set(key, tiers);
-        rows.push({
+        const cohort = byCohort.get(key) ?? {
+            teamMode: row.team_mode,
+            region: row.region,
+            buckets: [],
+            totalSize: 0,
+        };
+        const sampleSize = Number(row.sample_size);
+        cohort.buckets.push({
             teamMode: row.team_mode,
             region: row.region,
             tierName,
             minScore: Number(row.min_score),
-            sampleSize: Number(row.sample_size),
+            sampleSize,
         });
+        cohort.totalSize += sampleSize;
+        byCohort.set(key, cohort);
     }
-    for (const tiers of newCache.values()) {
-        tiers.sort((a, b) => a.min - b.min);
+
+    const newCache = new Map<string, RatingTier[]>();
+    const rows: RatingTiersTable[] = [];
+    for (const [key, cohort] of byCohort) {
+        if (cohort.totalSize < MIN_COHORT_SIZE) continue;
+        const tiers = cohort.buckets
+            .map((b) => ({ name: b.tierName, min: b.minScore }))
+            .sort((a, b) => a.min - b.min);
+        newCache.set(key, tiers);
+        rows.push(...cohort.buckets);
     }
 
     await db.transaction(async (tx) => {
