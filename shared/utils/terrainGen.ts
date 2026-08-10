@@ -10,6 +10,9 @@ export interface MapRiverData {
     looped: boolean;
     points: Vec2[];
     aabb?: AABB;
+    lakeRiverbankColor?: number;
+    lakeWaterColor?: number;
+    lakeWaterRippleColor?: number;
 }
 
 export function generateJaggedAabbPoints(
@@ -123,6 +126,9 @@ export function generateTerrain(
     for (let i = 0; i < riverDescs.length; i++) {
         const desc = riverDescs[i];
         const river = new River(desc.points, desc.width, desc.looped, rivers, mapBounds);
+        river.lakeRiverbankColor = desc.lakeRiverbankColor;
+        river.lakeWaterColor = desc.lakeWaterColor;
+        river.lakeWaterRippleColor = desc.lakeWaterRippleColor;
         rivers.push(river);
     }
 

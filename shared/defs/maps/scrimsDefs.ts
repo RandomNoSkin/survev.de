@@ -1056,7 +1056,34 @@ export const mapDef: PartialMapDef = {
             shoreInset: 48,
             grassInset: 18,
             rivers: {
-                lakes: [],
+                lakes: [
+                    {
+                        odds: 1,
+                        innerRad: 22,
+                        outerRad: 36,
+                        centerObj: "teapavilion_01comp",
+                        riverConnection: true,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 200,
+                        },
+                    },
+                    {
+                        odds: 1,
+                        innerRad: 10,
+                        outerRad: 20,
+                        centerObj: "oasis_01comp",
+                        riverConnection: false,
+                        riverMaskRad: 48,
+                        lakeRiverbankColor: 0xcdb35b,
+                        lakeWaterColor: 0x2f93b7,
+                        lakeWaterRippleColor: 0xb3f0ff,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 300,
+                        },
+                    },
+                ],
                 weights: [
                     { weight: 0.1, widths: [4] },
                     { weight: 0.15, widths: [8] },
@@ -1191,6 +1218,7 @@ export const mapDef: PartialMapDef = {
                 hut_01: 14, // huts
                 hut_02: 3, // spas hut
                 hut_03: 2, // scout hut
+                hut_04: 1,
                 shack_03a: 7, // small river / sea cabins
                 shack_03b: { small: 7, large: 7,}, // small river / sea cabins
                 greenhouse_01: { small: 2, large: 2,}, // greenhouses

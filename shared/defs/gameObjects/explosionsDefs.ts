@@ -32,7 +32,7 @@ export const ExplosionDefs: Record<string, ExplosionDef> = {
     },
     explosion_dynamite: {
         type: "explosion",
-        damage: 40,
+        damage: 50,
         obstacleDamage: 5,
         rad: { min: 4, max: 7 },
         shrapnelCount: 4,
