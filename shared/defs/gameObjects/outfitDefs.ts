@@ -46,7 +46,8 @@ export interface OutfitDef {
     /** When true, this item can appear in the Golden Fries daily shop. */
     shop?: boolean;
     lore?: string;
-    creatorDiscordId?: number;
+    // Discord snowflake as a string - a JS number would lose precision.
+    creatorDiscordId?: string;
     noDrop?: boolean;
     obstacleType?: string;
     baseScale?: number;
