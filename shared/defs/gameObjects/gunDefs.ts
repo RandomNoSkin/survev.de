@@ -4257,7 +4257,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_m870: defineGunSkin("m870", {
         name: "M870 [+]",
         bulletCount: 16,
-        moveSpread: 8,
+        moveSpread: 9.5,
         shotSpread: 12,
         bulletType: "bullet_buckshot_modified",
         bulletTypeMix: [
@@ -4297,7 +4297,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         fireMode: "auto",
         maxClip: 15,
         maxReload: 15,
-        fireDelay: 0.138,
+        fireDelay: 0.14,
         upgraded: undefined,
         modifiedSound: "mk12_01",
         lootImg: {
