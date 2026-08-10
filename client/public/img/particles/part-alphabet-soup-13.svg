@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="64"
+   height="64"
+   viewBox="0 0 64 64"
+   version="1.1"
+   xml:space="preserve"
+   style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;"
+   id="svg5"
+   sodipodi:docname="part-alphabet-soup-13.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+   id="namedview5"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="12.609375"
+   inkscape:cx="31.960347"
+   inkscape:cy="32"
+   inkscape:window-width="1920"
+   inkscape:window-height="1009"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg5" />
+    <g
+   transform="matrix(1,0,0,1,-2.096985,-2.32381)"
+   id="g1">
+        <path
+   d="M9.446,39.66C9.63,33.243 9.381,24.383 11.762,16.636C12.714,13.538 23.563,12.217 30.446,16.032C32.808,17.341 39.06,14.027 42.661,13.798C47.086,13.517 55.777,15.059 56.992,15.936C61.254,19.009 57.295,29.67 57.367,35.447C57.426,40.194 58.351,50.078 53.68,54.624C49.87,58.332 37.148,55.035 34.097,54.976C27.93,54.858 17.569,58.437 14.395,54.602C8.527,47.512 9.271,45.728 9.446,39.66Z"
+   style="fill:url(#_Linear1);"
+   id="path1" />
+    </g>
+    <g
+   id="H"
+   transform="matrix(1,0,0,1,-5.595192,-2.702638)">
+        <text
+   x="17.279px"
+   y="49.321px"
+   style="font-family:'Calibri-Bold', 'Calibri', sans-serif;font-weight:700;font-size:46.489px;fill:url(#_Linear2);"
+   id="text1">M</text>
+    </g>
+    <defs
+   id="defs5">
+        <linearGradient
+   id="_Linear1"
+   x1="0"
+   y1="0"
+   x2="1"
+   y2="0"
+   gradientUnits="userSpaceOnUse"
+   gradientTransform="matrix(34.754308,0,0,38.387771,15.193302,32.359328)"><stop
+     offset="0"
+     style="stop-color:rgb(255,75,0);stop-opacity:1"
+     id="stop1" /><stop
+     offset="1"
+     style="stop-color:rgb(232,78,16);stop-opacity:1"
+     id="stop2" /></linearGradient>
+        <linearGradient
+   id="_Linear2"
+   x1="0"
+   y1="0"
+   x2="1"
+   y2="0"
+   gradientUnits="userSpaceOnUse"
+   gradientTransform="matrix(27.042684,0,0,29.645515,17.853633,34.63454)"><stop
+     offset="0"
+     style="stop-color:rgb(201,138,9);stop-opacity:1"
+     id="stop3" /><stop
+     offset="0.37"
+     style="stop-color:rgb(255,201,117);stop-opacity:1"
+     id="stop4" /><stop
+     offset="1"
+     style="stop-color:rgb(255,155,0);stop-opacity:1"
+     id="stop5" /></linearGradient>
+    </defs>
+</svg>
