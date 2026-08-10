@@ -74,6 +74,11 @@ export const usersTable = pgTable("users", {
         .$type<number[]>()
         .notNull()
         .default([]),
+    // Geographic region group (see regionGroupsTable) this account plays most of its rated
+    // (impact-scored) matches in — recomputed daily by computeRatingTiers(). Empty string
+    // until the user has at least one rated match. Scopes the Rating/Rank shown on the stats
+    // page to a same-region cohort instead of comparing across regions with different pools.
+    primaryRegion: text("primary_region").notNull().default(""),
 });
 
 export type UsersTableInsert = typeof usersTable.$inferInsert;
@@ -402,6 +407,42 @@ export const matchDataTable = pgTable(
 );
 
 export type MatchDataTable = typeof matchDataTable.$inferInsert;
+
+// Maps a raw match_data.region key (one per game-server instance, e.g. "eu-1") to its
+// geographic group (e.g. "eu") — mirrors Config.regions[key].group from configType.ts, which
+// isn't queryable from SQL directly since it's deployment-only config. Kept in sync by
+// syncRegionGroups() (see db/ratingTiers.ts) on every daily rating-tier recompute, so
+// region-scoped rating queries can just JOIN this instead of re-deriving the mapping. Regions
+// removed from config but still referenced by old match_data rows get a self-mapped row here
+// so they don't silently drop out of a cohort.
+export const regionGroupsTable = pgTable("region_groups", {
+    region: text("region").primaryKey(),
+    groupName: text("group_name").notNull(),
+});
+
+export type RegionGroupsTable = typeof regionGroupsTable.$inferInsert;
+
+// Cached percentile-tier cutoffs for the impact-score Rating, recomputed daily (00:00 cron,
+// see computeRatingTiers() in db/ratingTiers.ts) so /api/user_stats never has to compute
+// percentiles live. One row per (teamMode, region group, tier letter); region here is always
+// a regionGroupsTable.groupName value, not a raw match_data.region key.
+export const ratingTiersTable = pgTable(
+    "rating_tiers",
+    {
+        teamMode: integer("team_mode").$type<TeamMode>().notNull(),
+        region: text("region").notNull(),
+        tierName: text("tier_name").notNull(),
+        // The tier's lower cutoff — a rating >= this (and < the next tier's minScore) lands
+        // in this tier. Numeric because it's an AVG()-derived percentile cutoff, not an int.
+        minScore: numeric("min_score", { mode: "number" }).notNull(),
+        // Qualifying (>=50 region-scoped rated games) accounts in this cohort when computed —
+        // informational only (e.g. to flag a cohort too small to trust), not used in lookups.
+        sampleSize: integer("sample_size").notNull(),
+    },
+    (table) => [primaryKey({ columns: [table.teamMode, table.region, table.tierName] })],
+);
+
+export type RatingTiersTable = typeof ratingTiersTable.$inferInsert;
 
 // Daily rollup of per-weapon damage/kills/usage, aggregated at game-save time (see
 // attributeWeaponStats in routes/private/private.ts) instead of storing one row per

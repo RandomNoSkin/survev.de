@@ -109,6 +109,10 @@ export type UserStatsResponse = {
     username: string;
     player_icon: string;
     banned: boolean;
+    /** Geographic region group (e.g. "eu", "as") this account plays most of its rated matches
+     *  in — null until it has at least one impact-scored match. Scopes `rating`/`tier` below
+     *  to a same-region cohort; recomputed daily. */
+    primaryRegion: string | null;
     wins: number;
     kills: number;
     assists: number;
@@ -129,8 +133,12 @@ export interface Mode {
     kpg: string;
     avgDamage: number;
     avgTimeAlive: number;
-    /** Average impact score across this mode's matches that had one (null = none, e.g. solo). */
+    /** Average impact score across this mode's matches played in the account's primary
+     *  region (null = none, e.g. solo-only or no rated matches in that region yet). */
     rating: number | null;
+    /** Letter tier (F..S) for `rating`, from the daily-computed percentile cutoffs for this
+     *  (teamMode, primaryRegion) cohort — null when `rating` is null. */
+    tier: string | null;
 }
 
 //

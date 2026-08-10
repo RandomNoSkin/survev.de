@@ -165,9 +165,13 @@ function shareScore(
     return maxPoints + (share - target) * maxPoints;
 }
 
-/** Impact-score letter ranks, worst → best, as even ~11-point bands over the 0-100
- *  score. First-guess thresholds — revisit once real rating distributions are
- *  observed (players may cluster more in some bands than others). */
+/** Impact-score letter ranks, worst → best, as even ~11-point bands over the 0-100 score.
+ *
+ *  These are no longer the live source of truth for the "Rank" shown on the stats page —
+ *  that's now a percentile-based tier computed daily per (teamMode, region) cohort, see
+ *  `computeRatingTiers`/`getRatingTier` in `server/src/api/db/ratingTiers.ts`. This static
+ *  ladder only remains as `getRatingTier`'s fallback for a cohort with no cached percentile
+ *  data yet (e.g. right after deploy). */
 export const IMPACT_RANKS = [
     { name: "F", min: 0 },
     { name: "E", min: 11 },
@@ -180,8 +184,9 @@ export const IMPACT_RANKS = [
     { name: "S", min: 88 },
 ] as const;
 
-/** Maps an impact score (0-100) to its letter rank. Null in/out (no games with a
- *  score yet, e.g. solo-only or a filter with no matching matches). */
+/** Maps an impact score (0-100) to its static letter rank. Null in/out (no games with a
+ *  score yet, e.g. solo-only or a filter with no matching matches). Only used as a fallback
+ *  by `getRatingTier` — see the note on `IMPACT_RANKS` above. */
 export function getImpactRank(score: number | null | undefined): string | null {
     if (score === null || score === undefined) return null;
     let rank: string = IMPACT_RANKS[0].name;

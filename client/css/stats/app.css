@@ -423,6 +423,19 @@ a.nav-link-bright:hover {
   flex: 0 1 auto;
 }
 
+.card-player-region-badge {
+  flex: none;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  color: #d8d8d8;
+  background-color: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  text-shadow: 1px 1px 1px black;
+}
+
 /* Icon-only, styled like #btn-customize next to the main menu name input. */
 .view-loadout-btn {
   flex: none;

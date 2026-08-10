@@ -18,7 +18,12 @@
           </div>
           <div class='col-md-5 col-sm-10 col-9'>
               <div class='card-player-name-row <%= env.profile.banned ? "" : "mt-3"%>'>
-                <div class='card-player-name ml-md-5 ml-sm-1 ml-xs-1'><%= env.profile.username %></div>
+                <% if (env.profile.region) { %>
+                  <div class='card-player-region-badge ml-md-5 ml-sm-1 ml-xs-1'><%= env.profile.region.toUpperCase() %></div>
+                  <div class='card-player-name ml-2'><%= env.profile.username %></div>
+                <% } else { %>
+                  <div class='card-player-name ml-md-5 ml-sm-1 ml-xs-1'><%= env.profile.username %></div>
+                <% } %>
                 <div class='view-loadout-btn ml-2' title='View Loadout'></div>
               </div>
               <% if (env.profile.banned) { %>
@@ -71,7 +76,7 @@
       </select>
     </div>
     <div class='offset-6 col-2 col-rating-help'>
-      <div class='rating-help'>What is Rating?<div class='rating-help-desc'>Average Impact Score across your Duo/Squad matches (team modes only, some maps excluded) &mdash; combat (kills, damage) plus teamplay (revives, saving teammates, assists), out of 100. Rank is the letter grade for that score: F, E, D, C, B-, B, A-, A, S (worst to best) &mdash; recalculated live as your average changes.</div></div>
+      <div class='rating-help'>What is Rating?<div class='rating-help-desc'>Average Impact Score across your Duo/Squad matches in your primary region (team modes only, some maps excluded) &mdash; combat (kills, damage) plus teamplay (revives, saving teammates, assists), out of 100. Rank is a percentile tier (F, E, D, C, B-, B, A-, A, S, worst to best) relative to other players in your region with at least 50 rated games, recomputed daily.</div></div>
     </div>
   </div>
 </div>

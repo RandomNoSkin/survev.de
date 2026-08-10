@@ -39,6 +39,7 @@ import { grantCreatorItems } from "./db/creatorGrants";
 import { cleanupExpiredOAuthArtifacts } from "./db/oauth";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
+import { computeRatingTiers, warmRatingTiers } from "./db/ratingTiers";
 import type { OAuthGrantSelect, SessionTableSelect, UsersTableSelect } from "./db/schema";
 import { verifyReplayToken } from "./replayToken";
 import { ModerationDashboardRouter } from "./routes/ModerationDashboardRouter";
@@ -510,6 +511,9 @@ injectWebSocket(honoServer);
 // Warm the ownership-based cosmetic rarity cache once at boot (then on-demand per request).
 warmCosmeticStats();
 
+// Warm the region-scoped rating percentile-tier cache once at boot (then daily via cron below).
+warmRatingTiers();
+
 // run clean up scripts every midnight
 new Cron("0 0 * * *", async () => {
     try {
@@ -539,6 +543,13 @@ new Cron("0 0 * * *", async () => {
         server.logger.info("Recomputed cosmetic ownership stats");
     } catch (err) {
         server.logger.error("Failed to recompute cosmetic stats", err);
+    }
+
+    // Recompute primary regions + region-scoped rating percentile tiers for the new day.
+    try {
+        await computeRatingTiers();
+    } catch (err) {
+        server.logger.error("Failed to recompute rating tiers", err);
     }
 });
 
