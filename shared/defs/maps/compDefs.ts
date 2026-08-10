@@ -253,7 +253,7 @@ export const Comp: MapDef = {
             { name: "556mm", count: 90, weight: 3 },
             { name: "12gauge", count: 20, weight: 3 },
             { name: "50AE", count: 21, weight: 2 },
-            { name: "flare", count: 1, weight: 1.5 },
+            { name: "flare", count: 1, weight: 1 },
             { name: "45acp", count: 60, weight: 4.5 },
         ],
         tier_vending_soda: [

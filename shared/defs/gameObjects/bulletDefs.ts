@@ -623,7 +623,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_mkg45: {
         type: "bullet",
-        damage: 25, 
+        damage: 23.5, 
         obstacleDamage: 1,
         falloff: 0.8,
         distance: 245, 
@@ -664,7 +664,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         type: "bullet",
         damage: 40,
         obstacleDamage: 5,
-        falloff: 2.35,
+        falloff: 2.2,
         falloffUpperMax: 100,
         distance: 90,
         speed: 400,
