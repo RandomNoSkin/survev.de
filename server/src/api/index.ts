@@ -35,6 +35,7 @@ import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
+import { grantCreatorItems } from "./db/creatorGrants";
 import { cleanupExpiredOAuthArtifacts } from "./db/oauth";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
@@ -485,6 +486,19 @@ try {
     await backfillPassItemGrants();
 } catch (err) {
     server.logger.error("Failed to backfill pass item grants", err);
+}
+
+// Grant creator-credit cosmetics (defs with a `creatorDiscordId`) to their creators.
+// Idempotent - see grantCreatorItems for how repeat runs avoid re-granting.
+try {
+    const { granted, pending } = await grantCreatorItems();
+    if (granted > 0 || pending > 0) {
+        server.logger.info(
+            `Creator item grants: ${granted} granted, ${pending} pending (creator not signed in yet)`,
+        );
+    }
+} catch (err) {
+    server.logger.error("Failed to grant creator items", err);
 }
 
 const honoServer = serve({

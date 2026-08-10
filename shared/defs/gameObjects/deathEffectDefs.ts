@@ -16,7 +16,8 @@ export interface DeathEffectDef {
     // For particle effects with custom min/max particle counts
     minParticles?: number;
     maxParticles?: number;
-    creatorDiscordId?: number;
+    // Discord snowflake as a string - a JS number would lose precision.
+    creatorDiscordId?: string;
 }
 
 export const DeathEffectDefs: Record<string, DeathEffectDef> = {

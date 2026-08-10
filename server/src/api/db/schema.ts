@@ -135,6 +135,23 @@ export const passItemGrantsTable = pgTable(
     }),
 );
 
+// Idempotent record of "creator credit" cosmetic grants (game object defs with a
+// `creatorDiscordId`). One row per item type - a cosmetic has exactly one creator -
+// so a server restart re-scanning every def never grants the same item twice, and a
+// creator later selling/trading the item away doesn't cause it to be re-granted.
+export const creatorItemGrantsTable = pgTable("creator_item_grants", {
+    itemType: text("item_type").notNull().primaryKey(),
+    userId: text("user_id")
+        .notNull()
+        .references(() => usersTable.id, {
+            onDelete: "cascade",
+            onUpdate: "cascade",
+        }),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type CreatorItemGrantsTableSelect = typeof creatorItemGrantsTable.$inferSelect;
+
 // One row per purchased daily shop offer, to prevent buying the same slot twice a day.
 export const shopPurchasesTable = pgTable(
     "shop_purchases",

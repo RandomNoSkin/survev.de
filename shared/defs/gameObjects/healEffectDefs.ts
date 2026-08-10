@@ -8,7 +8,8 @@ export interface HealEffectDef {
     shop?: boolean;
     texture: string;
     emitter: string;
-    creatorDiscordId?: number;
+    // Discord snowflake as a string - a JS number would lose precision.
+    creatorDiscordId?: string;
 }
 
 export const HealEffectDefs: Record<string, HealEffectDef> = {
