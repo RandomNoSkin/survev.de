@@ -541,15 +541,6 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "emote_logotwins",
             "death_none",
             "death_basic",
-            "death_touhou",
-            "death_bubble",
-            "death_pixel_explosion",
-            "death_xp_orb",
-            "death_drop_cellphone",
-            "death_smoke",
-            "death_alphabet_soup",
-            "death_pulse",
-            "death_shattered_glass",
             /* use this to unlock everything :)
             ...new Set([
                 ...allowedOutfits,
