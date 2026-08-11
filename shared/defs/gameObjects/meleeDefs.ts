@@ -1580,6 +1580,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     wakizashi_woodland: defineMeleeSkin("wakizashi", {
         name: "Wakizashi Woodland",
+        creatorDiscordId: "710474700056428625",
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1591,6 +1592,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     wakizashi_burnished: defineMeleeSkin("wakizashi", {
         name: "Wakizashi Burnished",
+        creatorDiscordId: "710474700056428625",        
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1602,6 +1604,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     wakizashi_nightbloom: defineMeleeSkin("wakizashi", {
         name: "Wakizashi Nightbloom",
+        creatorDiscordId: "710474700056428625",
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
@@ -1613,6 +1616,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     }),
     wakizashi_blackwater: defineMeleeSkin("wakizashi", {
         name: "Wakizashi Blackwater",
+        creatorDiscordId: "710474700056428625",
         rarity: Rarity.Epic,
         noPotatoSwap: false,
         lootImg: {
