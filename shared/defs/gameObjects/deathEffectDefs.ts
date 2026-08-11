@@ -193,7 +193,8 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     },
     death_smoke: {
         type: "death_effect",
-        name: "Smoke",
+        name: "Smoke Death",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         texture: "loot-smoke-death.img",
         particle: "smokeDeath",
