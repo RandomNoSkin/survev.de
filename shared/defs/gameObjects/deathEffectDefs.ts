@@ -169,7 +169,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
             "pixel-explosion-10.img",
         ],
         animationSpeed: 0.15,
-        animationScale: 0.6,
+        animationScale: 0.65,
     },
     death_pulse: {
         type: "death_effect",
@@ -189,7 +189,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
             "pulse-death-08.img",
         ],
         animationSpeed: 0.20,
-        animationScale: 2,
+        animationScale: 2.2,
     },
     death_smoke: {
         type: "death_effect",
@@ -213,7 +213,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
             "smoke-death-11.img",
         ],
         animationSpeed: 0.35,
-        animationScale: 0.6,
+        animationScale: 0.65,
     
     },
     death_magic_spark: {
