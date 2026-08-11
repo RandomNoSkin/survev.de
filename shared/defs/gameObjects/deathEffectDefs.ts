@@ -149,9 +149,10 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         animationSpeed: 0.15,
         animationScale: 1.2,
     },
-    death_pixel_explosion: {
+    death_pixel_explosion: { // above death effects
         type: "death_effect",
         name: "Pixel Explosion",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         texture: "loot-pixel-explosion.img",
         particle: "pixelExplosionDeath",
@@ -171,9 +172,10 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         animationSpeed: 0.15,
         animationScale: 0.65,
     },
-    death_pulse: {
+    death_pulse: { // above death effects
         type: "death_effect",
         name: "Pulse Death",
+        creatorDiscordId: 1468016902650462313,
         rarity: Rarity.Epic,
         texture: "loot-pulse-death.img",
         particle: "pulseDeath",
@@ -191,7 +193,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         animationSpeed: 0.20,
         animationScale: 2.2,
     },
-    death_smoke: {
+    death_smoke: { // above death effects
         type: "death_effect",
         name: "Smoke Death",
         creatorDiscordId: 1468016902650462313,
@@ -226,7 +228,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         minParticles: 30,
         maxParticles: 35,
     },
-    death_touhou: {
+    death_touhou: { // above death effects
         type: "death_effect",
         name: "Touhou Death",
         creatorDiscordId: 1468016902650462313,
@@ -237,7 +239,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         minParticles: 25,
         maxParticles: 30,
     },
-    death_bubble: {
+    death_bubble: { // above death effects
         type: "death_effect",
         name: "Bubble Death",
         creatorDiscordId: 1468016902650462313,
@@ -248,7 +250,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         minParticles: 25,
         maxParticles: 30,
     },
-    death_shattered_glass: {
+    death_shattered_glass: { // above death effects
         type: "death_effect",
         name: "Shattered Glass",
         creatorDiscordId: 1468016902650462313,
@@ -259,7 +261,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         minParticles: 20,
         maxParticles: 25,
     },
-    death_xp_orb: {
+    death_xp_orb: { // above death effects
         type: "death_effect",
         name: "XP Orb",
         creatorDiscordId: 1468016902650462313,
@@ -270,7 +272,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         minParticles: 10,
         maxParticles: 30,
     },
-    death_alphabet_soup: {
+    death_alphabet_soup: { // above death effects
         type: "death_effect",
         name: "Alphabet Soup",
         creatorDiscordId: 1468016902650462313,
@@ -281,7 +283,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
         minParticles: 30,
         maxParticles: 40,
     },
-    death_drop_cellphone: {
+    death_drop_cellphone: { // above death effects
         type: "death_effect",
         name: "Drop Cellphone",
         creatorDiscordId: 1468016902650462313,
