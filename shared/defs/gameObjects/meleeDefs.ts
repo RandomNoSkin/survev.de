@@ -1578,6 +1578,50 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-wakizashi-ninja.img",
         },
     }),
+    wakizashi_woodland: defineMeleeSkin("wakizashi", {
+        name: "Wakizashi Woodland",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-wakizashi-woodland.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi-woodland.img",
+        },
+    }),
+    wakizashi_burnished: defineMeleeSkin("wakizashi", {
+        name: "Wakizashi Burnished",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-wakizashi-burnished.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi-burnished.img",
+        },
+    }),
+    wakizashi_nightbloom: defineMeleeSkin("wakizashi", {
+        name: "Wakizashi Nightbloom",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-wakizashi-nightbloom.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi-nightbloom.img",
+        },
+    }),
+    wakizashi_blackwater: defineMeleeSkin("wakizashi", {
+        name: "Wakizashi Blackwater",
+        rarity: Rarity.Epic,
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-wakizashi-blackwater.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-wakizashi-blackwater.img",
+        },
+    }),
     bayonet_glow: defineMeleeSkin("bayonet", {
         name: "Bayonet Glow",
         rarity: Rarity.Epic,
