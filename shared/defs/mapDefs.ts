@@ -310,6 +310,11 @@ export interface MapDef {
                     outerRad: number;
                     centerObj?: string;
                     riverMaskRad?: number;
+                    riverConnection?: boolean;
+                    riverConnectionWidth?: number;
+                    lakeRiverbankColor?: number;
+                    lakeWaterColor?: number;
+                    lakeWaterRippleColor?: number;
                     spawnBound: {
                         pos: Vec2;
                         rad: number;

@@ -11,14 +11,39 @@ function serializeMapRiver(s: BitStream, data: MapRiverData) {
     s.writeArray(data.points, 8, (pos) => {
         s.writeMapPos(pos);
     });
+
+    s.writeBoolean(data.lakeRiverbankColor !== undefined);
+    if (data.lakeRiverbankColor !== undefined) {
+        s.writeUint32(data.lakeRiverbankColor);
+    }
+    s.writeBoolean(data.lakeWaterColor !== undefined);
+    if (data.lakeWaterColor !== undefined) {
+        s.writeUint32(data.lakeWaterColor);
+    }
+    s.writeBoolean(data.lakeWaterRippleColor !== undefined);
+    if (data.lakeWaterRippleColor !== undefined) {
+        s.writeUint32(data.lakeWaterRippleColor);
+    }
 }
 
 function deserializeMapRiver(s: BitStream): MapRiverData {
-    return {
+    const river: MapRiverData = {
         width: s.readUint8(),
         looped: !!s.readUint8(),
         points: s.readArray(8, () => s.readMapPos()),
     };
+
+    if (s.readBoolean()) {
+        river.lakeRiverbankColor = s.readUint32();
+    }
+    if (s.readBoolean()) {
+        river.lakeWaterColor = s.readUint32();
+    }
+    if (s.readBoolean()) {
+        river.lakeWaterRippleColor = s.readUint32();
+    }
+
+    return river;
 }
 
 type Place = MapDef["mapGen"]["places"][number];

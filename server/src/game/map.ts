@@ -696,7 +696,45 @@ export class GameMap {
                     }
                 }
 
-                this.riverDescs.push(lake);
+                this.riverDescs.push({
+                    width: lake.width,
+                    looped: lake.looped,
+                    points: lake.points,
+                    aabb: lake.aabb,
+                    lakeRiverbankColor: lakeDef.lakeRiverbankColor,
+                    lakeWaterColor: lakeDef.lakeWaterColor,
+                    lakeWaterRippleColor: lakeDef.lakeWaterRippleColor,
+                });
+
+                if (lakeDef.riverConnection) {
+                    const connectionPoints = riverCreator.createLakeConnection(
+                        lake,
+                        lakeDef,
+                    );
+                    if (connectionPoints.length < 12) {
+                        this.riverDescs.pop();
+                        return false;
+                    }
+                    this.riverDescs.push({
+                        width: lakeDef.riverConnectionWidth ?? Math.max(
+                            4,
+                            Math.min(
+                                16,
+                                Math.round((lakeDef.outerRad - lakeDef.innerRad) / 2),
+                            ),
+                        ),
+                        points: connectionPoints,
+                        looped: false,
+                    });
+                }
+
+                if (lakeDef.riverMaskRad && lakeDef.riverMaskRad > 0) {
+                    this.riverMasks.push({
+                        pos: lake.center,
+                        rad: lakeDef.riverMaskRad,
+                    });
+                }
+
                 this.lakeObjs.push(lakeDef.centerObj ?? "");
                 return true;
             });

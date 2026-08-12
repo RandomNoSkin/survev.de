@@ -408,7 +408,11 @@ export class Map {
                 groundGfx.beginFill(mapColors.riverbank);
                 tracePath(groundGfx, terrain.rivers[i].shorePoly);
             } else {
-                groundGfx.beginFill(mapColors.lakeRiverbank ?? mapColors.riverbank);
+                groundGfx.beginFill(
+                    terrain.rivers[i].lakeRiverbankColor ??
+                    mapColors.lakeRiverbank ??
+                    mapColors.riverbank,
+                );
                 tracePath(groundGfx, terrain.rivers[i].shorePoly);
             }
         }
@@ -698,12 +702,12 @@ export class Map {
                 data.waterColor = data.waterColor !== undefined
                     ? data.waterColor
                     : isLake
-                    ? (mapColors.lakeWater ?? mapColors.water)
+                    ? (data.river?.lakeWaterColor ?? mapColors.lakeWater ?? mapColors.water)
                     : mapColors.water;
                 data.rippleColor = data.rippleColor !== undefined
                     ? data.rippleColor
                     : isLake
-                    ? (mapColors.lakeWaterRipple ?? mapColors.waterRipple)
+                    ? (data.river?.lakeWaterRippleColor ?? mapColors.lakeWaterRipple ?? mapColors.waterRipple)
                     : mapColors.waterRipple;
             }
             return {

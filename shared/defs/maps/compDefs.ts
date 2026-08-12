@@ -175,10 +175,10 @@ export const Comp: MapDef = {
             { name: "chest02", count: 1, weight: 0.15 },
             { name: "helmet02", count: 1, weight: 0.15 },
             { name: "tier_medical", count: 1, weight: 0.2 },
-            { name: "spas12", count: 1, weight: 0.07 },
-            { name: "m870", count: 1, weight: 0.07},
+            { name: "spas12", count: 1, weight: 0.08 },
+            { name: "m870", count: 1, weight: 0.08},
             { name: "mp220", count: 1, weight: 0.08 },
-            { name: "origin", count: 1, weight: 0.08 },
+            { name: "origin", count: 1, weight: 0.06 },
             //{ name: "tier_outfits", count: 1, weight: 0.025 }, // !
         ],
         tier_toilet_gold: [
@@ -222,7 +222,7 @@ export const Comp: MapDef = {
             { name: "soda", count: 1, weight: 1},
         ],
         tier_adren: [
-            { name: "soda", count: 2, weight: 1},
+            { name: "tier_soda", count: 1, weight: 1},
             { name: "painkiller", count: 1, weight: 1},
         ],
         tier_throwables: [
@@ -253,7 +253,7 @@ export const Comp: MapDef = {
             { name: "556mm", count: 90, weight: 3 },
             { name: "12gauge", count: 20, weight: 3 },
             { name: "50AE", count: 21, weight: 2 },
-            { name: "flare", count: 1, weight: 1.5 },
+            { name: "flare", count: 1, weight: 1 },
             { name: "45acp", count: 60, weight: 4.5 },
         ],
         tier_vending_soda: [
@@ -325,14 +325,17 @@ export const Comp: MapDef = {
         tier_eye_02: [{ name: "stonehammer", count: 1, weight: 1 }],
         tier_eye_block: [
             { name: "supply_flare_gun", count: 1, weight: 0.08 }, 
-            { name: "scorpion", count: 1, weight: 0.14 }, 
+            { name: "scorpion", count: 1, weight: 0.13 }, 
             { name: "an94", count: 1, weight: 0.12 }, 
-            { name: "tier_hawk", count: 1, weight: 0.16 }, 
+            { name: "tier_hawk", count: 1, weight: 0.14 }, 
             { name: "sv98", count: 1, weight: 0.1 }, 
             { name: "usas", count: 1, weight: 0.08 }, 
-            { name: "pkp", count: 1, weight: 0.11 }, 
+            { name: "pkp", count: 1, weight: 0.08 }, 
             { name: "awc", count: 1, weight: 0.15 }, 
-            { name: "pkm", count: 1, weight: 0.06 }, 
+            { name: "pkm", count: 1, weight: 0.06 },
+            { name: "ash12", count: 1, weight: 0.02 },
+            { name: "sw500", count: 1, weight: 0.02 },
+            { name: "barrett", count: 1, weight: 0.02 }, 
         ],
         tier_eye_stone: [
             { name: "vector45", count: 1, weight: 1 },
@@ -482,22 +485,22 @@ export const Comp: MapDef = {
         tier_ak_military_crate: [
             { name: "groza", count: 1, weight: 0.1 }, 
             { name: "spas12", count: 1, weight: 0.1 },
-            { name: "m870", count: 1, weight: 0.07 },
+            { name: "m870", count: 1, weight: 0.08 },
             { name: "mp220", count: 1, weight: 0.07 },
             { name: "imbel", count: 1, weight: 0.07 },
-            { name: "origin", count: 1, weight: 0.1 },
+            { name: "origin", count: 1, weight: 0.07 },
             { name: "ots38", count: 1, weight: 0.2 },
-            { name: "saiga", count: 1, weight: 0.07 },
+            { name: "saiga", count: 1, weight: 0.08 },
             { name: "tier_hawk", count: 1, weight: 0.03 },
-            { name: "ak74", count: 1, weight: 0.12 }, 
+            { name: "ak74", count: 1, weight: 0.13 }, 
             { name: "l86", count: 1, weight: 0.07 },
         ],
         tier_bank_vault_basic: [
             { name: "famas", count: 1, weight: 0.13 }, 
             { name: "qbb97", count: 1, weight: 0.03 },
             { name: "dp28", count: 1, weight: 0.1 },
-            { name: "m870", count: 1, weight: 0.11 },
-            { name: "origin", count: 1, weight: 0.03 },
+            { name: "m870", count: 1, weight: 0.12 },
+            { name: "origin", count: 1, weight: 0.02 },
             { name: "hk416", count: 1, weight: 0.13 }, 
             { name: "ak47", count: 1, weight: 0.1 },
             { name: "m93r_dual", count: 1, weight: 0.09 },
@@ -514,7 +517,7 @@ export const Comp: MapDef = {
             { name: "qbb97", count: 1, weight: 0.13 },
             { name: "dp28", count: 1, weight: 0.06 },
             { name: "m870", count: 1, weight: 0.1 },
-            { name: "origin", count: 1, weight: 0.06 },
+            { name: "origin", count: 1, weight: 0.05 },
             { name: "hk416", count: 1, weight: 0.05 },
             { name: "mkg45", count: 1, weight: 0.13 },
             { name: "m39", count: 1, weight: 0.08 }, 
@@ -523,7 +526,7 @@ export const Comp: MapDef = {
             { name: "m4a1", count: 1, weight: 0.1 }, 
             { name: "scar", count: 1, weight: 0.03 },
             { name: "p90", count: 1, weight: 0.07 },
-            { name: "saiga", count: 1, weight: 0.05 },
+            { name: "saiga", count: 1, weight: 0.06 },
             { name: "l86", count: 1, weight: 0.01 },
             { name: "svd", count: 1, weight: 0.01 },
         ],
@@ -597,7 +600,7 @@ export const Comp: MapDef = {
         ],
         tier_noir_outfit: [{ name: "outfitNoir", count: 1, weight: 1 }],
         tier_khaki_outfit: [{ name: "outfitKhaki", count: 1, weight: 1 }],
-        tier_pirate_melee: [{ name: "hook", count: 1, weight: 1 }],
+        tier_pirate_melee: [{ name: ""/*""*/, count: 1, weight: 1 }],
         tier_hatchet: [
             { name: "vector", count: 1, weight: 0.7 },
             { name: "mosin", count: 1, weight: 0.03 },
@@ -978,6 +981,9 @@ export const Comp: MapDef = {
             { name: "flare_gun", count: 1, weight: 1 },
             { name: "supply_flare_gun", count: 1, weight: 1 },
             { name: "ak74", count: 1, weight: 1 },
+            { name: "ash12", count: 1, weight: 1 },
+            { name: "sw500", count: 1, weight: 1 },
+            { name: "barrett", count: 1, weight: 1 },
         ],
         tier_xp_uncommon: [
             { name: "xp_book_tallow", count: 1, weight: 1 },
@@ -1098,7 +1104,34 @@ export const Comp: MapDef = {
             shoreInset: 48,
             grassInset: 18,
             rivers: {
-                lakes: [],
+                lakes: [
+                    {
+                        odds: 0.2,
+                        innerRad: 22,
+                        outerRad: 36,
+                        centerObj: "teapavilion_01comp",
+                        riverConnection: true,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 200,
+                        },
+                    },
+                    {
+                        odds: 0.2,
+                        innerRad: 10,
+                        outerRad: 20,
+                        centerObj: "oasis_01comp",
+                        riverConnection: false,
+                        riverMaskRad: 48,
+                        lakeRiverbankColor: 0xcdb35b,
+                        lakeWaterColor: 0x2f93b7,
+                        lakeWaterRippleColor: 0xb3f0ff,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 300,
+                        },
+                    },
+                ],
                 weights: [
                     { weight: 0.1, widths: [4] },
                     { weight: 0.15, widths: [8] },
@@ -1220,6 +1253,7 @@ export const Comp: MapDef = {
                 hut_01: 3, // huts
                 hut_02: 2, // spas hut
                 hut_03: 1, // scout hut
+                hut_04: { odds: 0.2 },
                 shack_03a: 3, // small river / sea cabins
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
@@ -1232,7 +1266,7 @@ export const Comp: MapDef = {
                 bunker_structure_03: 1, // storm bunker
                 bunker_structure_04: 1, // sea bunker
                 bunker_structure_05: 1, // river bunker
-                warehouse_complex_01: 2, // docks
+                warehouse_complex_01: 1, // docks
                 chest_01: 1,
                 chest_03: { odds: 0.35 }, // river chest
                 mil_crate_02: { odds: 0.2 }, // ot chest
@@ -1250,14 +1284,15 @@ export const Comp: MapDef = {
         ],
         spawnReplacements: [
             {
+                // Odds not actually realistic due to it rerolling after every spawn attempt and reserve having a harder time spawning in
                 club_complex_01: [
-                    { type: "club_complex_01", weight: 0.4 },
-                    { type: "reserve_complex_01", weight: 0.6 },
+                    { type: "club_complex_01", weight: 0.1 },
+                    { type: "reserve_complex_01", weight: 0.9 },
                 ],
             },
         ],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
-        spawnOnRiver: ["club_complex_01", "reserve_complex_01", "warehouse_complex_01"],
+        spawnOnRiver: ["club_complex_01"/*, "reserve_complex_01"*/, "warehouse_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };
