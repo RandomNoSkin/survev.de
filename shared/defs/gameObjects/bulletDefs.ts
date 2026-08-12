@@ -459,7 +459,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         onHit: "explosion_usas",
         noDistAdj: true,
         projType: "mirv_mini_usas",
-        projCount: 3,
+        projCount: 2,
         projSpread: 0.8,
     },
     bullet_slug: {
@@ -675,7 +675,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerWidth: 0.225,
         tracerLength: 1,
         piercing: true,
-        pierceDamageMult: 1.0,
+        pierceDamageMult: 0.5,
         pierceDistanceMult: 1.0,
         maxPierce: 1,
     },
@@ -920,7 +920,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_bar_modified: {
         type: "bullet",
-        damage: 26,
+        damage: 27,
         obstacleDamage: 1,
         falloff: 0.9,
         distance: 275,
@@ -933,7 +933,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_bar_extra_modified: {
         type: "bullet",
-        damage: 26,
+        damage: 27,
         obstacleDamage: 2.5,
         falloff: 0.9,
         distance: 275,

@@ -35,9 +35,11 @@ import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
+import { grantCreatorItems } from "./db/creatorGrants";
 import { cleanupExpiredOAuthArtifacts } from "./db/oauth";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
+import { computeRatingTiers, warmRatingTiers } from "./db/ratingTiers";
 import type { OAuthGrantSelect, SessionTableSelect, UsersTableSelect } from "./db/schema";
 import { verifyReplayToken } from "./replayToken";
 import { ModerationDashboardRouter } from "./routes/ModerationDashboardRouter";
@@ -487,6 +489,19 @@ try {
     server.logger.error("Failed to backfill pass item grants", err);
 }
 
+// Grant creator-credit cosmetics (defs with a `creatorDiscordId`) to their creators.
+// Idempotent - see grantCreatorItems for how repeat runs avoid re-granting.
+try {
+    const { granted, pending } = await grantCreatorItems();
+    if (granted > 0 || pending > 0) {
+        server.logger.info(
+            `Creator item grants: ${granted} granted, ${pending} pending (creator not signed in yet)`,
+        );
+    }
+} catch (err) {
+    server.logger.error("Failed to grant creator items", err);
+}
+
 const honoServer = serve({
     fetch: app.fetch,
     port: Config.apiServer.port,
@@ -495,6 +510,9 @@ injectWebSocket(honoServer);
 
 // Warm the ownership-based cosmetic rarity cache once at boot (then on-demand per request).
 warmCosmeticStats();
+
+// Warm the region-scoped rating percentile-tier cache once at boot (then daily via cron below).
+warmRatingTiers();
 
 // run clean up scripts every midnight
 new Cron("0 0 * * *", async () => {
@@ -525,6 +543,13 @@ new Cron("0 0 * * *", async () => {
         server.logger.info("Recomputed cosmetic ownership stats");
     } catch (err) {
         server.logger.error("Failed to recompute cosmetic stats", err);
+    }
+
+    // Recompute primary regions + region-scoped rating percentile tiers for the new day.
+    try {
+        await computeRatingTiers();
+    } catch (err) {
+        server.logger.error("Failed to recompute rating tiers", err);
     }
 });
 

@@ -188,6 +188,9 @@ export class Player implements AbstractObject {
     frontSprite = createSprite();
     deathEffectSprite = new PIXI.AnimatedSprite([PIXI.Texture.EMPTY]);
     deathEffectContainer = new PIXI.Container();
+    // world-space position captured at time of death; re-projected to screen
+    // space every frame in render() so the effect stays put as the camera pans
+    deathEffectWorldPos = v2.create(0, 0);
     chestSprite = createSprite();
     flakSprite = createSprite();
     steelskinSprite = createSprite();
@@ -1407,6 +1410,12 @@ export class Player implements AbstractObject {
         this.container.visible = !this.m_netData.m_dead;
         this.auraContainer.position.set(screenPos.x, screenPos.y);
         this.auraContainer.scale.set(screenScale, screenScale);
+
+        if (this.deathEffectSprite.visible) {
+            const deathScreenPos = camera.m_pointToScreen(this.deathEffectWorldPos);
+            this.deathEffectContainer.position.set(deathScreenPos.x, deathScreenPos.y);
+            this.deathEffectContainer.scale.set(screenScale, screenScale);
+        }
 
         if (IS_DEV && debug.players) {
             debugLines.addCircle(this.m_pos, this.m_rad, 0xff0000, 0);
@@ -3235,9 +3244,17 @@ export class PlayerBarn {
                 sprite.position.set(0, 0);
                 sprite.visible = true;
 
+                // remember the world position so render() can keep re-projecting
+                // it to screen space every frame instead of leaving it pinned to
+                // a single stale screen position as the camera moves
+                target.deathEffectWorldPos = v2.copy(target.m_pos);
                 target.deathEffectContainer.position.set(
                     target.container.position.x,
                     target.container.position.y,
+                );
+                target.deathEffectContainer.scale.set(
+                    target.container.scale.x,
+                    target.container.scale.y,
                 );
                 target.deathEffectContainer.addChild(sprite);
                 renderer.addPIXIObj(

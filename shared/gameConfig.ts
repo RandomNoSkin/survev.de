@@ -355,6 +355,12 @@ export const GameConfig = {
                     end: "2026-07-26T23:59:59",
                     boost: 3,
                 },
+                "Fiance said it's double time": {
+                    maps: ["local", "comp"],
+                    start: "2026-08-08T23:30:00",
+                    end: "2026-08-09T23:59:59",
+                    boost: 2,
+                },
             },
         } as Record<
             string,
@@ -410,12 +416,15 @@ export const GameConfig = {
         minSpawnRad: 400, // spawn radius away from alive players
         minPosSpawnRad: 100, // spawn radius from other spawn locations
 
-        //boost decay settings to disable boostDecayAmount -> 0
-        camperPunishmentDistance: 15, // distance player has to move to not decay boost
-        camperDecayTime: 6, // time in *seconds* until boost decays
-        boostDecayAmount: 1.5, // amount of boost to decay per boostDecayDistance
-        camperPunishment: false, // if true, player will have enhanced decay for boostDecayTime after not moving for boostDecayTime
-        camperPunishmentTime: 3, // time in *seconds* after boost decay to punish player for not moving
+        // anti-camp: staying in one spot under cover triggers, in order,
+        // (1) faster boost decay, then (2) a periodic map ping revealing the
+        // camper's position instead of a live tracker
+        camperPunishmentDistance: 15, // distance player has to move to reset the camping timer
+        camperDecayTime: 5, // time in *seconds* stationary under cover before boost decays faster
+        camperBoostDecayMult: 3.5, // boost decay rate multiplier while camping
+        camperPunishment: false, // if true, enables the anti-camp boost decay + map ping reveal
+        camperRevealDelay: 10, // extra time in *seconds* after boost starts decaying faster before being revealed via a ping
+        camperPingInterval: 5, // how often (in *seconds*) the reveal ping refreshes while the player keeps camping
         camperGracePeriod: 40, // time in *seconds* after spawn before camping checks start
 
         /* STRIP_FROM_PROD_CLIENT:START */

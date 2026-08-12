@@ -5,13 +5,15 @@ import {
     type UserStatsResponse,
 } from "../../../../shared/types/stats.ts";
 import { db } from "./index.ts";
-import { matchDataTable, usersTable } from "./schema.ts";
+import { getRatingTier } from "./ratingTiers.ts";
+import { matchDataTable, regionGroupsTable, usersTable } from "./schema.ts";
 
 /** Minimum data required for the UI to show the user doesn't exist. */
 export const emptyUserStats = {
     slug: "",
     username: "",
     assists: 0,
+    primaryRegion: null,
     modes: [],
 };
 
@@ -56,11 +58,18 @@ export async function userStatsSqlQuery(
                 avg_time_alive: sql`ROUND(AVG(${matchDataTable.timeAlive}))`.as(
                     "avg_time_alive",
                 ),
-                // AVG() ignores NULL rows on its own, so matches without an impact
-                // score (solo, or maps that don't opt in) don't skew this.
-                rating: sql`ROUND(AVG(${matchDataTable.impactScore}))`.as("rating"),
+                // AVG() ignores NULL rows on its own, so matches without an impact score
+                // (solo, or maps that don't opt in) don't skew this. FILTER further scopes
+                // it to matches in the account's primary region group, so Rating only
+                // compares against a same-cohort pool (see ratingTiers.ts) — every other
+                // aggregate here stays all-region.
+                rating: sql`ROUND(AVG(${matchDataTable.impactScore})
+                    FILTER (WHERE ${regionGroupsTable.groupName} = ${usersTable.primaryRegion}))`
+                    .as("rating"),
             })
             .from(matchDataTable)
+            .innerJoin(usersTable, eq(matchDataTable.userId, usersTable.id))
+            .leftJoin(regionGroupsTable, eq(matchDataTable.region, regionGroupsTable.region))
             .where(
                 and(
                     eq(matchDataTable.userId, userId),
@@ -79,6 +88,7 @@ export async function userStatsSqlQuery(
             slug: usersTable.slug,
             username: usersTable.username,
             banned: usersTable.banned,
+            primaryRegion: sql`NULLIF(${usersTable.primaryRegion}, '')`,
             player_icon: sql`JSON_EXTRACT_PATH(ANY_VALUE(${usersTable.loadout}), 'player_icon')`,
             games: sql`COALESCE(SUM("mode_stats".games), 0)`,
             wins: sql`COALESCE(SUM("mode_stats".wins), 0)`,
@@ -108,7 +118,7 @@ export async function userStatsSqlQuery(
         .from(usersTable)
         .leftJoin(withSelect, eq(sql`1`, 1))
         .where(eq(usersTable.id, userId))
-        .groupBy(usersTable.slug, usersTable.username, usersTable.banned)
+        .groupBy(usersTable.slug, usersTable.username, usersTable.banned, usersTable.primaryRegion)
         .limit(1);
 
     const userStats = res[0] as UserStatsResponse;
@@ -119,7 +129,10 @@ export async function userStatsSqlQuery(
     const formatedData: UserStatsResponse = {
         ...userStats,
         // sql fuckery, it returns [null] where no result
-        modes: modes[0] === null ? [] : modes,
+        modes: (modes[0] === null ? [] : modes).map((mode) => ({
+            ...mode,
+            tier: getRatingTier(mode.teamMode, userStats.primaryRegion ?? "", mode.rating),
+        })),
     };
     return formatedData;
 }

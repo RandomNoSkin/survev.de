@@ -23,7 +23,8 @@ export interface EmoteDef {
     teamOnly?: boolean;
     category: number;
     noCustom?: boolean;
-    creatorDiscordId?: number;
+    // Discord snowflake as a string - a JS number would lose precision.
+    creatorDiscordId?: string;
 }
 
 export const EmotesDefs: Record<string, EmoteDef> = {
