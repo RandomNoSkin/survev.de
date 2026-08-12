@@ -359,6 +359,8 @@ export interface MapDef {
         randomSpawns: Array<{
             spawns: string[];
             choose: number;
+            // survev.de addition, have a chance to spawn any number of the random spawns between the amount defined by choose and choose + chooseMore 
+            chooseMore?: number; // defaults to 0 if not defined
         }>;
         spawnReplacements: [Record<string, string | Array<{ type: string; weight: number }>>];
         importantSpawns: string[];

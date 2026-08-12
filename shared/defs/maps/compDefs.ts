@@ -815,28 +815,19 @@ export const Comp: MapDef = {
             { name: "backpack03", count: 1, weight: 1 },
         ],
         tier_pirate: [
-            { name: "tier_ammo", count: 1, weight: 0.1 },
-            { name: "tier_scopes", count: 1, weight: 0.1 },
-            { name: "tier_armor", count: 1, weight: 0.05 },
-            { name: "tier_medical", count: 1, weight: 0.25 },
+            { name: "tier_scrap", count: 1, weight: 0.2 },
+            { name: "tier_medical", count: 1, weight: 0.30 },
+            { name: "tier_adren", count: 1, weight: 0.35 },
             { name: "tier_throwables", count: 1, weight: 0.15 },
-            { name: "tier_packs", count: 1, weight: 0.05 },
         ],
         tier_pirate_rare: [
-            { name: "m9", count: 1, weight: 0.5 },
-            { name: "m4a1", count: 1, weight: 1 },
-            { name: "scorpion", count: 1, weight: 1 },
-            { name: "scar", count: 1, weight: 1 },
-            { name: "flare", count: 1, weight: 1 },
-            { name: "garand", count: 1, weight: 0.75 },
+            { name: "tier_flare", count: 1, weight: 1 },
+            /*{ name: "garand", count: 1, weight: 0.75 },
             { name: "mosin", count: 1, weight: 0.5 },
-            { name: "deagle", count: 1, weight: 1 },
-            { name: "saiga", count: 1, weight: 1 },
             { name: "p30l_dual", count: 1, weight: 0.5 },
             { name: "deagle_dual", count: 1, weight: 0.5 },
             { name: "sv98", count: 1, weight: 0.3 },
-            { name: "awc", count: 1, weight: 0.3 },
-            { name: "m249", count: 1, weight: 0.25 },
+            { name: "awc", count: 1, weight: 0.3 },*/
         ],
         tier_airdrop_uncommon: [
             { name: "l86", count: 1, weight: 2.5 },
@@ -1279,7 +1270,8 @@ export const Comp: MapDef = {
         randomSpawns: [
             /*{
                 spawns: ["mansion_structure_01", "police_01", "bank_01"],
-                choose: 3,
+                choose: 2,
+                chooseMore: 1,
             },*/
         ],
         spawnReplacements: [

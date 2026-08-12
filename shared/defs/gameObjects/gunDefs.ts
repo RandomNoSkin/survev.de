@@ -104,6 +104,7 @@ export interface GunDef {
     // Granaten-Modus: verschießt die aktuell gewählte Wurfwaffe aus dem Inventar
     // statt eines festen projType/Geschosses (siehe modified_hk416_grenade)
     launchThrowable?: boolean;
+    ammoPreserve?: number;
     ignoreDetune?: boolean;
     aimDelay?: boolean;
     isBullpup?: boolean;
@@ -3619,7 +3620,7 @@ export const BaseDefs: Record<string, GunDef> = {
         barrelLength: 2.7,
         barrelOffset: 0,
         recoilTime: 1e10,
-        moveSpread: 4.5,
+        moveSpread: 3,
         shotSpread: 1,
         bulletCount: 3,
         bulletTypeMix: [
@@ -4333,10 +4334,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "SPAS-12 [+]",
         maxClip: 4,
         maxReload: 2,
-        bulletCount: 7,
+        bulletCount: 3,
+        ammoPreserve: 2,
+        shotSpread: 3,
+        moveSpread: 2,
         reloadTime: 0.65,
-        burstCount: 2,
-        burstDelay: 0.06,
+        burstCount: 4,
+        burstDelay: 0.02,
         fireMode: "burst",
         upgraded: undefined,
         modifiedSound: "spas12_01",

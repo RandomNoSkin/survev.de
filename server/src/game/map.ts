@@ -897,7 +897,9 @@ export class GameMap {
 
         for (const randomSpawns of mapGen.randomSpawns) {
             const spawns = [...randomSpawns.spawns];
-            for (let i = 0; i < randomSpawns.choose; i++) {
+            let spawnAmount = randomSpawns.choose;
+            spawnAmount +=  util.randomInt(0, randomSpawns.chooseMore ?? 0);
+            for (let i = 0; i < spawnAmount; i++) {
                 const idx = util.randomInt(0, spawns.length - 1);
                 const type = spawns.splice(idx, 1)[0];
 

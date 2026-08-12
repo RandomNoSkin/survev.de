@@ -4219,7 +4219,7 @@ export class Player extends BaseGameObject {
                     }
 
                     // rare gun
-                    if (Math.random() < 0.12) {
+                    if (Math.random() < 0.50) {
                         const item = this.game.lootBarn.getLootTable("tier_pirate_rare");
                         if (item) {
                             this.game.lootBarn.addLoot(
