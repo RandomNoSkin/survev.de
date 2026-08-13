@@ -45,7 +45,7 @@ export default defineConfig(({ mode }) => {
         port: Config.vite.port,
         host: Config.vite.host,
         allowedHosts: [
-            "like-chronicles-spas-diff.trycloudflare.com",
+            "http://wills-sonic.tun.ply.gg",
         ],
         proxy: {
             // this redirects /stats to /stats/
