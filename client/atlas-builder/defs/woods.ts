@@ -5,6 +5,7 @@ export const WoodsAtlas: AtlasDef = {
     compress: true,
     images: [
         ...BuildingSprites.pavilion,
+        ...BuildingSprites.buckhouse,
         ...BuildingSprites.bunker_eye,
         ...BuildingSprites.bunker_hatchet,
         ...BuildingSprites.workshop,
@@ -16,6 +17,7 @@ export const WoodsAtlas: AtlasDef = {
         "map/map-campfire-01.svg",
 
         "map/map-chest-03x.svg",
+        "map/map-chest-buck.svg",
 
         "map/map-crate-01x.svg",
         "map/map-crate-02x.svg",
@@ -47,6 +49,7 @@ export const WoodsAtlas: AtlasDef = {
         "map/map-woodpile-03.svg",
         "map/map-woodpile-res-02.svg",
         "map/map-woodpile-res-03.svg",
+        "map/map-woodpile-h015.svg",
 
         "map/map-snow-01.svg",
         "map/map-snow-03.svg",

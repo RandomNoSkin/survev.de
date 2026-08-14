@@ -752,6 +752,19 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             path: "audio/guns/scout_pull_01.mp3",
             volume: 1.2,
         },
+        henry_01: {
+            path: "audio/guns/henry_01.mp3",
+            volume: 2.5,
+            maxInstances: 5,
+        },
+        henry_reload_01: {
+            path: "audio/guns/henry_reload_01.mp3",
+            volume: 2,
+        },
+        henry_switch_01: {
+            path: "audio/guns/henry_switch_01.mp3",
+            volume: 2,
+        },        
         model94_01: {
             path: "audio/guns/model94_01.mp3",
             volume: 1,

@@ -29,6 +29,7 @@ export interface MeleeDef {
     anim: {
         idlePose: string;
         attackAnims: string[];
+        attackSequence?: string[];
     };
     sound: Record<string, string>;
     //  {
@@ -48,6 +49,7 @@ export interface MeleeDef {
         borderTint?: number;
         rot?: number;
         mirror?: boolean;
+        innerScale?: number;
     };
     baseType?: string;
     rarity?: number;
@@ -77,7 +79,11 @@ export interface Img {
     scale: Vec2;
     tint: number;
     leftHandOntop?: boolean;
+    leftHandUnder?: boolean;
+    handUnder?: boolean;
     renderOnHand?: boolean;
+    leftSprite?: string;
+    rightSprite?: string;
 }
 
 function defineMeleeSkin(baseType: string, params: DeepPartial<MeleeDef>): MeleeDef {
@@ -173,6 +179,62 @@ const BaseDefs: Record<string, MeleeDef> = {
             scale: {
                 x: 0.2,
                 y: 0.2,
+            },
+            tint: 0xffffff,
+        },
+    },
+    antlers: {
+        name: "Buck Antler",
+        type: "melee",
+        quality: 1,
+        armorPiercing: true,
+        cleave: true,
+        autoAttack: false,
+        switchDelay: 0.25,
+        damage: 45,
+        obstacleDamage: 2,
+        noPotatoSwap: true,
+        attack: {
+            offset: {
+                x: 1.5,
+                y: 0,
+            },
+            rad: 1,
+            damageTimes: [0.3],
+            cooldownTime: 0.6,
+        },
+        speed: {
+            equip: 1,
+        },
+        anim: {
+            idlePose: "cutlass",
+            attackAnims: ["cutReverseSlow", "fistsSlow"],
+        },
+        sound: {
+            pickup: "heavy_pickup_01",
+            swing: "heavy_swing_01",
+            deploy: "stow_weapon_01",
+            playerHit: "axe_hit_01",
+        },
+        lootImg: {
+            sprite: "loot-melee-buck-antler-02.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-02.img",
+            borderTint: 0xffffff,
+            scale: 0.3,
+            innerScale: 1.5,
+            rot: 0,
+        },
+        worldImg: {
+            sprite: "loot-melee-buck-antler.img",
+            pos: {
+                x: -2.5,
+                y: -32,
+            },
+            rot: 1.885,
+            scale: {
+                x: 0.6,
+                y: 0.6,
             },
             tint: 0xffffff,
         },
