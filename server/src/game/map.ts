@@ -1042,6 +1042,7 @@ export class GameMap {
                 for (let i = 0; i < cabinsToSpawn; i++) {
                     this.genRiverCabin();
                 }
+                this.genRiverCabin("buckhouse_01");
                 this.timerEnd("Generating river cabins");
             }
 
@@ -2044,10 +2045,8 @@ export class GameMap {
         });
     }
 
-    genRiverCabin() {
+    genRiverCabin(type = "cabin_01") {
         if (!this.normalRivers.length) return;
-
-        const type = "cabin_01";
 
         const inset = this.grassInset + this.shoreInset;
         const mapBound = collider.createAabb(

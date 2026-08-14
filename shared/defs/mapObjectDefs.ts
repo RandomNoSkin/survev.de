@@ -1047,7 +1047,7 @@ function createGunMount<T extends ObstacleDef>(e: Partial<T>): T {
     const t = {
         type: "obstacle",
         obstacleType: "furniture",
-        scale: { createMin: 1, createMax: 1, destroy: 0.9 },
+        scale: { createMin: 1, createMax: 1, destroy: 0.95 },
         collision: collider.createAabbExtents(v2.create(0, 0.2), v2.create(2.25, 0.7)),
         height: 0.5,
         collidable: true,
@@ -2012,6 +2012,39 @@ function createWoodPile<T extends ObstacleDef>(e: Partial<T>): T {
         terrain: {},
         img: {
             sprite: "map-woodpile-01.img",
+            residue: "map-woodpile-res-01.img",
+            scale: 0.5,
+            alpha: 1,
+            tint: 0xffffff,
+            zIdx: 10,
+        },
+        sound: {
+            bullet: "tree_bullet",
+            punch: "tree_bullet",
+            explode: "tree_break_01",
+            enter: "none",
+        },
+    };
+    return util.mergeDeep(t, e || {});
+}
+function createFence<T extends ObstacleDef>(e: Partial<T>): T {
+    const t = {
+        type: "obstacle",
+        scale: { createMin: 1, createMax: 1, destroy: 0.9 },
+        collision: collider.createAabbExtents(v2.create(0, 0), v2.create(0.5, 2.3)),
+        height: 0.5,
+        collidable: true,
+        destructible: true,
+        isWindow: true,
+        health: 150,
+        hitParticle: "woodChip",
+        explodeParticle: "woodLog",
+        reflectBullets: false,
+        loot: [],
+        map: { display: false, color: 0x904800, scale: 0.875 },
+        terrain: {},
+        img: {
+            sprite: "map-fence-01.img",
             residue: "map-woodpile-res-01.img",
             scale: 0.5,
             alpha: 1,
@@ -11674,7 +11707,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             imgs: [
                 {
                     sprite: "map-building-buckhouse-floor.img",
-                    pos: v2.create(0, -1),
+                    pos: v2.create(-0.75, -1),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -11685,22 +11718,42 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             zoomRegions: [
                 {
                     zoomIn: collider.createAabbExtents(
-                        v2.create(0, 14),
-                        v2.create(24, 10),
+                        v2.create(0, 14.5),
+                        v2.create(26, 8),
                     ),
                     zoomOut: collider.createAabbExtents(
-                        v2.create(0, 14),
-                        v2.create(26, 12),
+                        v2.create(1, 14.5),
+                        v2.create(27, 10),
                     ),
                 },
                 {
                     zoomIn: collider.createAabbExtents(
                         v2.create(-7, -1),
-                        v2.create(17, 25),
+                        v2.create(19, 23.5),
                     ),
                     zoomOut: collider.createAabbExtents(
                         v2.create(-7, -1),
-                        v2.create(19, 27),
+                        v2.create(19, 25.5),
+                    ),
+                },
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(-11, 23.5),
+                        v2.create(2.5, 1.5),
+                    ),
+                    zoomOut: collider.createAabbExtents(
+                        v2.create(-11, 24),
+                        v2.create(3, 2),
+                    ),
+                },
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(-3, -25),
+                        v2.create(2.5, 1.5),
+                    ),
+                    zoomOut: collider.createAabbExtents(
+                        v2.create(-3, -25.5),
+                        v2.create(3, 2),
                     ),
                 },
             ],
@@ -11708,7 +11761,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             imgs: [
                 {
                     sprite: "map-building-buckhouse-ceiling.img",
-                    pos: v2.create(0.5, -1),
+                    pos: v2.create(-0.25, -1),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -11731,6 +11784,45 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 layer: 0,
                 parentToCeiling: true,
+            },
+            /*{
+                type: "lodge_smoke",
+                pos: v2.create(16.5, 14.5),
+                dir: v2.create(-0.3, 0),
+                rot: 0,
+                scale: 0.35,
+                layer: 0,
+                parentToCeiling: false,
+            },*/
+            {
+                type: "lodge_fire",
+                pos: v2.create(16.5, 14.5),
+                dir: v2.create(0.1, 0),
+                rot: 0,
+                spriteRot: (rot: number) => rot + (Math.abs(Math.sin(rot)) > 0.5 ? 0 : Math.PI),
+                scale: 0.6,
+                layer: 0,
+                parentToCeiling: false,
+            },
+            {
+                type: "lodge_fire",
+                pos: v2.create(16.5, 15.5),
+                dir: v2.create(0.1, 0),
+                rot: 0,
+                spriteRot: (rot: number) => rot + (Math.abs(Math.sin(rot)) > 0.5 ? 0 : Math.PI),
+                scale: 0.6,
+                layer: 0,
+                parentToCeiling: false,
+            },
+            {
+                type: "lodge_fire",
+                pos: v2.create(16.5, 13.5),
+                dir: v2.create(0.1, 0),
+                rot: 0,
+                spriteRot: (rot: number) => rot + (Math.abs(Math.sin(rot)) > 0.5 ? 0 : Math.PI),
+                scale: 0.6,
+                layer: 0,
+                parentToCeiling: false,
             },
         ],
         mapObjects: [
@@ -11783,9 +11875,9 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "fence_wall",
+                type: "fence_01",
                 pos: v2.create(25.5, 14.5),
-                scale: 1,
+                scale: 1.1,
                 ori: 0,
             },
             {
@@ -12000,8 +12092,8 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             },
             {
                 type: "gun_mount_buck",
-                pos: v2.create(20.5, 14.5),
-                scale: 1,
+                pos: v2.create(20.58, 14.5),
+                scale: 1.15,
                 ori: -1,
             },
             {
@@ -12047,40 +12139,40 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: -1,
             },
             {
-                type: randomObstacleType({ toilet_01: 3, toilet_02: 1 }),
-                pos: v2.create(-23, -11),
+                type: "bush_01",
+                pos: v2.create(-23, -11.5),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: "stand_01",
-                pos: v2.create(-23.5, -14),
-                scale: 1,
-                ori: 1,
-            },
-            {
-                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
-                pos: v2.create(-23.5, -21),
-                scale: 1,
-                ori: 1,
-            },
-            {
-                type: ("stand_01"),
-                pos: v2.create(-14.5, -22),
+                type: randomObstacleType({ bookshelf_01: 2, bookshelf_02: 1 }),
+                pos: v2.create(-17, -10.6),
                 scale: 1,
                 ori: 2,
             },
             {
-                type: "bush_01",
-                pos: v2.create(-11, -21.5),
+                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                pos: v2.create(-23.5, -20.9),
                 scale: 1,
-                ori: 0,
+                ori: 1,
+            },
+            {//xy
+                type: "refrigerator_01",
+                pos: v2.create(-14.8, -21.9),
+                scale: 1,
+                ori: 2,
             },
             {
-                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
-                pos: v2.create(-10.5, -16.5),
+                type: "",
+                pos: v2.create(-10.5, -17),
                 scale: 1,
                 ori: -1,
+            },
+            {
+                type: "sink_01",
+                pos: v2.create(-11, -21.9),
+                scale: 0.95,
+                ori: 2,
             },
             {
                 type: "table_02x",
@@ -12107,74 +12199,158 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "chest_buck",
-                pos: v2.create(8.5, 4.5),
+                type: "drawers_01",
+                pos: v2.create(9.5, 3.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "tree_02",
+                pos: v2.create(-19.5, 6),
+                inheritOri: false,
                 scale: 1,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ woodpile_h015: 1, tree_02: 2 }),
-                pos: v2.create(-22, 8),
+                type: "tree_09",
+                pos: v2.create(-22.5, 11.5),
+                inheritOri: false,
                 scale: 1,
-                ori: 1,
+                ori: 0,
             },
             {
                 type: "woodpile_03",
-                pos: v2.create(-21, 0),
+                pos: v2.create(-21, -0.5),
+                scale: 0.95,
+                ori: 0,
+            },
+            {
+                type: "crate_06",
+                pos: v2.create(-23.5, 4.5),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: randomObstacleType({ drawers_01: 1, drawers_02: 2 }),
+                pos: v2.create(-18.5, 18.5),
+                scale: 1,
+                ori: 3,
+            },
+            {
+                type: "chest_02",
+                pos: v2.create(-22.5, 19.5),
                 scale: 1,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
-                pos: v2.create(-18.5, 7),
+                type: "crate_06",
+                pos: v2.create(-18.5, 13),
+                scale: 1,
+                ori: -1,
+            },
+            {
+                type: randomObstacleType({ bookshelf_01: 2, bookshelf_02: 1 }),
+                pos: v2.create(9.85, -8.5),
                 scale: 1,
                 ori: -1,
             },
             {
                 type: "woodpile_03",
-                pos: v2.create(-19, 16),
-                scale: 1,
-                ori: 1,
-            },
-            {
-                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
-                pos: v2.create(-23.5, 19),
-                scale: 1,
-                ori: 1,
-            },
-            {
-                type: "woodpile_03",
                 pos: v2.create(7, -2),
-                scale: 1,
+                scale: 0.95,
                 ori: 0,
             },
             {
-                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
+                type: "crate_06",
                 pos: v2.create(4.5, -9),
                 scale: 1,
                 ori: 1,
             },
             {
                 type: "woodpile_03",
-                pos: v2.create(5, -18),
+                pos: v2.create(5, -16),
                 scale: 1,
                 ori: 1,
             },
             {
-                type: randomObstacleType({ drawers_01: 3, drawers_02: 1 }),
-                pos: v2.create(9.5, -21),
+                type: randomObstacleType({ drawers_01: 1, drawers_02: 2 }),
+                pos: v2.create(9.5, -20.9),
                 scale: 1,
                 ori: -1,
             },
             {
-                type: randomObstacleType({ gun_mount_05: 2, gun_mount_02: 1 }),
+                type: randomObstacleType({
+                        gun_mount_01: 50,
+                        gun_mount_08: 50,
+                        gun_mount_04: 1,
+                        gun_mount_02: 10,
+                        gun_mount_03: 10,
+                    }),
                 pos: v2.create(5.5, -22.6),
                 scale: 1,
                 ori: 2,
             },
-            {
+            /*{
                 type: "hat_mount_buck",
                 pos: v2.create(10, -9),
+                scale: 1,
+                ori: 1,
+            },*/
+            // Outside stuff
+            {
+                type: "tree_02",
+                pos: v2.create(25.5, -5.5),
+                inheritOri: false,
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "woodpile_03",
+                pos: v2.create(14, -7),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "barrel_01",
+                pos: v2.create(14, -13),
+                inheritOri: false,
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "woodpile_02",
+                pos: v2.create(23.5, -14),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "crate_06",
+                pos: v2.create(-28, -11.5),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: randomObstacleType({ crate_01: 2, crate_02: 1 }),
+                pos: v2.create(-28.5, -6.5),
+                inheritOri: false,
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "woodpile_03",
+                pos: v2.create(-28, 7),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "tree_01",
+                pos: v2.create(21, -23),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "tree_01",
+                pos: v2.create(18, -0.5),
                 scale: 1,
                 ori: 1,
             },
@@ -16078,13 +16254,13 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     gun_mount_buck: createGunMount({
         loot: [
             autoLoot("henry", 1),
-            autoLoot("antlers", 1),
+            //autoLoot("antlers", 1),
         ],
         img: { sprite: "map-gun-mount-buck.img" },
     }),
     hat_mount_buck: createGunMount({
         loot: [
-            autoLoot("antlers", 1),
+            //autoLoot("antlers", 1),
             autoLoot("helmet03_hat", 1),
         ],
         img: { sprite: "map-hat-mount-buck.img" },
@@ -16417,6 +16593,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: { sprite: "map-sandbags-02.img" },
     }),
     sink_01: createSink({}),
+    fence_01: createFence({}),
     silo_01: createSilo({}),
     silo_01po: createSilo({
         scale: { createMin: 1, createMax: 1, destroy: 0.9 },
@@ -16892,7 +17069,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     })({}),
     toilet_01: createToilet({
         img: { sprite: "map-toilet-01.img" },
-        loot: [tierLoot("tier_toilet", 0, 2), tierLoot("tier_adren", 1, 1), tierLoot("tier_health", 1, 1), tierLoot("tier_outfits", 0, 1), tierLoot("tier_playtest", 0, 0)], // checkpoint testing
+        loot: [tierLoot("tier_toilet", 0, 2), tierLoot("tier_adren", 1, 1), tierLoot("tier_health", 1, 1), tierLoot("tier_outfits", 0, 1)],
     }),
     toilet_02: createToilet({
         img: { sprite: "map-toilet-02.img" }, 
@@ -25669,7 +25846,18 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         plant_pos: v2.create(4, 8.5),
         plant_loot: randomObstacleType({ loot_tier_surviv: 1 }),
     } as unknown as Partial<ExtendedBuildingDef>),
-    buckhouse_01: createBuckhouse({}),
+    buckhouse_01: createBuckhouse({
+        terrain: {
+            grass: true,
+            beach: false,
+            riverShore: true,
+            nearbyRiver: {
+                radMin: 0.75,
+                radMax: 1.5,
+                facingOri: 2,
+            },
+        },
+    } as unknown as Partial<ExtendedBuildingDef>),
     cabin_wall_int_5: createWall({
         material: "wood",
         extents: v2.create(0.5, 2.5),
@@ -25695,10 +25883,12 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: wallImg("map-wall-12-rounded.img", 0x412817),
     }),
     buckhouse_wall_int_5: createWall({
-        material: "wood",
+        material: "brick",
         extents: v2.create(0.5, 2.5),
-        hitParticle: "tanChip",
-        img: wallImg("map-wall-05-rounded.img", 0x412817),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
     }),
     buckhouse_wall_int_15: createWall({
         material: "wood",
@@ -25707,10 +25897,12 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         img: wallImg("map-wall-15-rounded.img", 0x412817),
     }),
     buckhouse_wall_int_26: createWall({
-        material: "wood",
+        material: "brick",
         extents: v2.create(0.5, 13),
-        hitParticle: "tanChip",
-        img: wallImg("map-wall-26-rounded.img", 0x412817),
+        sound: {
+            bullet: "wall_wood_bullet",
+            punch: "wall_wood_bullet",
+        },
     }),
     cabin_01: createCabin({}),
     cabin_01x: createCabin({
