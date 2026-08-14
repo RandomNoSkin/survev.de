@@ -2775,12 +2775,12 @@ const ParticleDefs: Record<string, ParticleDef> = {
             lerp: new Range(0.9, 1),
         },
         alphaIn: {
-            start: 0,
-            end: 1,
+            start: 0.7,
+            end: 0.5,
             lerp: new Range(0, 0.1),
         },
         color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.69, 0.695)));
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.94, 0.99)));
         },
     },
     bathhouseSteam: {

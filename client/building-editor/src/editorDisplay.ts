@@ -212,6 +212,7 @@ export class EditorDisplay {
             actionItem: "",
             wearingPan: false,
             healEffect: false,
+            healRegionEffect: false,
             lastStandEffect: false,
             frozen: false,
             frozenOri: 0,
@@ -443,9 +444,18 @@ export class EditorDisplay {
         let def = MapObjectDefs.typeToDef(type);
 
         const spawnReplacements = this.map.getMapDef().mapGen.spawnReplacements[0];
-        if (spawnReplacements[type] && !ignoreMapSpawnReplacement) {
-            type = spawnReplacements[type];
-            def = MapObjectDefs.typeToDef(type);
+        if (!ignoreMapSpawnReplacement) {
+            const replacement = spawnReplacements[type];
+            if (typeof replacement === "string") {
+                type = replacement;
+                def = MapObjectDefs.typeToDef(type);
+            } else if (Array.isArray(replacement) && replacement.length > 0) {
+                const weightedOptions = replacement.filter((option) => option.weight > 0);
+                if (weightedOptions.length > 0) {
+                    type = util.weightedRandom(weightedOptions).type;
+                    def = MapObjectDefs.typeToDef(type);
+                }
+            }
         }
 
         switch (def.type) {

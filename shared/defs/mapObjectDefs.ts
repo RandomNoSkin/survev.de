@@ -11714,6 +11714,15 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 },
             ],
         },
+        healRegions: [
+            {
+                    collision: collider.createAabbExtents(
+                        v2.create(18.5, 14.5),
+                        v2.create(7, 7),
+                    ),
+                    healRate: 2,
+            },
+        ],
         ceiling: {
             zoomRegions: [
                 {
@@ -11876,7 +11885,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             },
             {
                 type: "fence_01",
-                pos: v2.create(25.5, 14.5),
+                pos: v2.create(25.5, 14.4),
                 scale: 1.1,
                 ori: 0,
             },
@@ -17820,7 +17829,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
             hitParticle: "tanChip",
             explodeParticle: "potBreak",
             reflectBullets: false,
-            loot: [tierLoot("tier_vending_soda", 1, 3), autoLoot("soda", 1)],
+            loot: [tierLoot("tier_soda", 1, 3),],
             map: {
                 display: false,
                 color: 0x2aad,

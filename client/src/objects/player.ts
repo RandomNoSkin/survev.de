@@ -345,6 +345,7 @@ export class Player implements AbstractObject {
         m_actionSeq: number;
         m_wearingPan: boolean;
         m_healEffect: boolean;
+        m_healRegionEffect: boolean;
         m_adrenalineEffect: boolean;
         m_frozen: boolean;
         m_frozenOri: number;
@@ -509,6 +510,7 @@ export class Player implements AbstractObject {
             m_actionSeq: 0,
             m_wearingPan: false,
             m_healEffect: false,
+            m_healRegionEffect: false,
             m_adrenalineEffect: false,
             m_frozen: false,
             m_frozenOri: 0,
@@ -589,6 +591,7 @@ export class Player implements AbstractObject {
             this.m_netData.m_actionSeq = data.actionSeq;
             this.m_netData.m_wearingPan = data.wearingPan;
             this.m_netData.m_healEffect = data.healEffect;
+            this.m_netData.m_healRegionEffect = data.healRegionEffect;
             this.m_netData.m_adrenalineEffect = data.lastStandEffect;
             this.m_netData.m_frozen = data.frozen;
             this.m_netData.m_frozenOri = data.frozenOri;
@@ -1242,17 +1245,23 @@ export class Player implements AbstractObject {
             this.hasteEmitter.zOrd = this.renderZOrd + 1;
         }
 
+        const passiveHealRateMult = util.getPassiveHealParticleRateMult(
+            !!this.m_netData.m_healRegionEffect,
+        );
+
         // Passive heal effect
         if (this.m_netData.m_healEffect && !this.passiveHealEmitter) {
             this.passiveHealEmitter = particleBarn.addEmitter("heal_basic", {
                 pos: this.m_pos,
                 layer: this.layer,
+                rateMult: passiveHealRateMult,
             });
         } else if (!this.m_netData.m_healEffect && this.passiveHealEmitter) {
             this.passiveHealEmitter.stop();
             this.passiveHealEmitter = null;
         }
         if (this.passiveHealEmitter) {
+            this.passiveHealEmitter.rateMult = passiveHealRateMult;
             this.passiveHealEmitter.pos = v2.add(this.m_pos, v2.create(0, 0.1));
             this.passiveHealEmitter.layer = this.renderLayer;
             this.passiveHealEmitter.zOrd = this.renderZOrd + 1;
