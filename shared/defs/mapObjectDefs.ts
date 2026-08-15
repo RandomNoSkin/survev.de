@@ -11770,7 +11770,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             imgs: [
                 {
                     sprite: "map-building-buckhouse-ceiling.img",
-                    pos: v2.create(-0.25, -1),
+                    pos: v2.create(0.45, -1),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -11842,6 +11842,17 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 range: { min: 6, max: 10 },
                 falloff: 0.7,
                 volume: 0.5,
+            },
+        ],
+        mapGroundPatches: [
+            {
+                bound: collider.createAabbExtents(
+                    v2.create(19, -10),
+                    v2.create(10, 18),
+                ),
+                color: 0x734c18,
+                roughness: 0.15,
+                offsetDist: 0.5,
             },
         ],
         mapObjects: [
@@ -12175,7 +12186,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 scale: 1,
                 ori: 1,
             },
-            {//xy
+            {
                 type: "refrigerator_01",
                 pos: v2.create(-14.8, -21.9),
                 scale: 1,
