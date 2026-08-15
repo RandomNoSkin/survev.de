@@ -6843,7 +6843,7 @@ function createLargeHut<T extends BuildingDef>(e: Partial<T>): T {
             },
             {
                 type: randomObstacleType({ gun_mount_10: 3, gun_mount_11 : 1 }),
-                pos: v2.create(-6.1, 3),
+                pos: v2.create(-5.95, 3),
                 scale: 1,
                 ori: -1,
             },
@@ -12331,7 +12331,7 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
             },
             {
                 type: "barrel_01",
-                pos: v2.create(14, -13),
+                pos: v2.create(14, -12.5),
                 inheritOri: false,
                 scale: 1,
                 ori: 0,
