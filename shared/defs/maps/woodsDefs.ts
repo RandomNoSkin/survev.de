@@ -13,10 +13,12 @@ const mapDef: PartialMapDef = {
     },
     assets: {
         audio: [
+            { name: "lodge_music_01", channel: "gameMusic" },
             { name: "vault_change_02", channel: "sfx" },
             { name: "footstep_08", channel: "sfx" },
             { name: "footstep_09", channel: "sfx" },
             { name: "helmet03_forest_pickup_01", channel: "ui" },
+            { name: "ambient_fireplace_01", channel: "ambient" },
         ],
         atlases: ["gradient", "loadout", "shared", "woods"],
     },

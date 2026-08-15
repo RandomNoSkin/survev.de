@@ -6842,7 +6842,7 @@ function createLargeHut<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 1,
             },
             {
-                type: "gun_mount_10",
+                type: randomObstacleType({ gun_mount_10: 3, gun_mount_11 : 1 }),
                 pos: v2.create(-6.1, 3),
                 scale: 1,
                 ori: -1,
@@ -9828,7 +9828,7 @@ function createTeaPavilion<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
             {
-                type: "gun_mount_09",
+                type: randomObstacleType({ gun_mount_09: 3, gun_mount_11 : 1 }),
                 pos: v2.create(0, 5.4),
                 scale: 1,
                 ori: 0,
@@ -11832,6 +11832,16 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 scale: 0.6,
                 layer: 0,
                 parentToCeiling: false,
+            },
+        ],
+        soundEmitters: [
+            {
+                sound: "ambient_fireplace_01",
+                channel: "ambient",
+                pos: v2.create(17.5, 14.5),
+                range: { min: 6, max: 10 },
+                falloff: 0.7,
+                volume: 0.5,
             },
         ],
         mapObjects: [
@@ -16260,6 +16270,10 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         loot: [autoLoot("cutlass", 1)],
         img: { sprite: "map-gun-mount-10.img" },
     }),
+    gun_mount_11: createGunMount({
+        loot: [autoLoot("henry", 1)],
+        img: { sprite: "map-gun-mount-11.img" },
+    }),
     gun_mount_buck: createGunMount({
         loot: [
             autoLoot("henry", 1),
@@ -16382,7 +16396,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     pot_04: createBottle({ img: { sprite: "map-pot-04.img" } }),
     pot_05: createBottle({
         img: { sprite: "map-pot-05.img" },
-        loot: [autoLoot("scout_elite", 1), tierLoot("tier_islander_outfit", 1, 1)],
+        loot: [tierLoot("tier_scout_hut", 1, 1), tierLoot("tier_islander_outfit", 1, 1)],
     }),
     potato_01: createPotato({}),
     potato_01f: createPotato({
@@ -17829,7 +17843,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
             hitParticle: "tanChip",
             explodeParticle: "potBreak",
             reflectBullets: false,
-            loot: [tierLoot("tier_soda", 1, 3),],
+            loot: [tierLoot("tier_soda", 3, 3),],
             map: {
                 display: false,
                 color: 0x2aad,
@@ -17871,7 +17885,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     woodpile_01: createWoodPile({}),
     woodpile_02: createWoodPile({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(6, 3)),
-        health: 400,
+        health: 800,
         destructible: true,
         map: { display: true, color: 0x663300, scale: 0.8 },
         img: {
@@ -25867,6 +25881,36 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
             },
         },
     } as unknown as Partial<ExtendedBuildingDef>),
+    buckhouse_structure_01: {
+        type: "structure",
+        terrain: {
+            grass: true,
+            beach: false,
+            riverShore: true,
+            nearbyRiver: {
+                radMin: 0.75,
+                radMax: 1.5,
+                facingOri: 2,
+            },
+        },
+        layers: [
+            {
+                type: "buckhouse_01",
+                pos: v2.create(0, 0),
+                ori: 0,
+            },
+        ],
+        stairs: [],
+        mask: [],
+        /*interiorSound: {
+            sound: "lodge_music_01",
+            soundAlt: "",
+            transitionTime: 5,
+            outsideMaxDist: 10,
+            outsideVolume: 0.25,
+            puzzle: "",
+        },*/
+    },
     cabin_wall_int_5: createWall({
         material: "wood",
         extents: v2.create(0.5, 2.5),

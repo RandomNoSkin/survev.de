@@ -1042,7 +1042,7 @@ export class GameMap {
                 for (let i = 0; i < cabinsToSpawn; i++) {
                     this.genRiverCabin();
                 }
-                this.genRiverCabin("buckhouse_01");
+                this.genRiverCabin("buckhouse_structure_01");
                 this.timerEnd("Generating river cabins");
             }
 

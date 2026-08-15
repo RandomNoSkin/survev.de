@@ -687,6 +687,7 @@ export const LoadoutAtlas: AtlasDef = {
         "map/map-gun-mount-08.svg",
         "map/map-gun-mount-09.svg",
         "map/map-gun-mount-10.svg",
+        "map/map-gun-mount-11.svg",
         "map/map-switch-01o.svg",
         "map/map-switch-01p.svg",
         "map/map-switch-01y.svg",

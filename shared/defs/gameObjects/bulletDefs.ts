@@ -1218,15 +1218,15 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_henry: {
         type: "bullet",
-        damage: 76,
+        damage: 62,
         obstacleDamage: 1.75,
         falloff: 0.95,
         distance: 500,
-        speed: 200,
+        speed: 192,
         variance: 0,
         shrapnel: false,
         tracerColor: "556mm",
-        tracerWidth: 0.16,
+        tracerWidth: 0.18,
         tracerLength: 1.15,
     },
     bullet_flare: {

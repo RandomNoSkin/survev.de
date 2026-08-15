@@ -22,7 +22,9 @@ export const Main: MapDef = {
         audio: [
             { name: "club_music_01", channel: "gameMusic" },
             { name: "club_music_02", channel: "gameMusic" },
+            { name: "lodge_music_01", channel: "gameMusic" },
             { name: "ambient_steam_01", channel: "ambient" },
+            { name: "ambient_fireplace_01", channel: "ambient" },
             { name: "log_05", channel: "sfx" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
