@@ -17916,7 +17916,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     woodpile_01: createWoodPile({}),
     woodpile_02: createWoodPile({
         collision: collider.createAabbExtents(v2.create(0, 0), v2.create(6, 3)),
-        health: 800,
+        health: 1000,
         destructible: true,
         map: { display: true, color: 0x663300, scale: 0.8 },
         img: {
