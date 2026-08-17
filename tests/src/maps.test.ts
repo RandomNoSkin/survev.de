@@ -5,9 +5,29 @@ import { type MapDef, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.
 import { GameMap } from "../../server/src/game/map.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
 import { Constants } from "../../shared/net/net.ts";
+import { generateJaggedAabbPoints } from "../../shared/utils/terrainGen.ts";
 import { getAllAtlasSprites, getAllMapSprites } from "./spriteHelpers.ts";
 
 const maps = Object.keys(MapDefs);
+
+describe("Ground patch generation", () => {
+    test("keeps AABB edges jagged instead of collapsing to a flat side", () => {
+        const points = generateJaggedAabbPoints(
+            {
+                min: { x: 0, y: 0 },
+                max: { x: 10, y: 18 },
+            },
+            0,
+            0,
+            0.7,
+            () => 0.5,
+        );
+
+        expect(points.length).toBeGreaterThan(4);
+        expect(points[1].x).not.toBe(points[0].x);
+        expect(points[1].y).not.toBe(points[0].y);
+    });
+});
 
 describe.for(maps)("Map %s", (map) => {
     const mapDef: MapDef = MapDefs[map as MapDefKey];

@@ -11871,8 +11871,8 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                     v2.create(10, 18),
                 ),
                 color: 0x734c18,
-                roughness: 0.15,
-                offsetDist: 0.5,
+                roughness: 0.25,
+                offsetDist: 1.1,
             },
         ],
         mapObjects: [

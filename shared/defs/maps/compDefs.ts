@@ -1104,7 +1104,7 @@ export const Comp: MapDef = {
             rivers: {
                 lakes: [
                     {
-                        odds: 0.2,
+                        odds: 0.25,
                         innerRad: 22,
                         outerRad: 36,
                         centerObj: "teapavilion_01comp",
@@ -1115,7 +1115,7 @@ export const Comp: MapDef = {
                         },
                     },
                     {
-                        odds: 0.2,
+                        odds: 0.25,
                         innerRad: 10,
                         outerRad: 20,
                         centerObj: "oasis_01comp",
@@ -1251,7 +1251,7 @@ export const Comp: MapDef = {
                 hut_01: 3, // huts
                 hut_02: 2, // spas hut
                 hut_03: 1, // scout hut
-                hut_04: { odds: 0.2 },
+                hut_04: { odds: 0.25 },
                 shack_03a: 3, // small river / sea cabins
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
@@ -1269,17 +1269,17 @@ export const Comp: MapDef = {
                 chest_03: { odds: 0.35 }, // river chest
                 mil_crate_02: { odds: 0.2 }, // ot chest
                 tree_02: 10, // axe logs
-                mansion_structure_01: { small: 0, large: 1,},
-                police_01: { small: 0, large: 1,},
-                bank_01: { small: 0, large: 1,},
+                //mansion_structure_01: { small: 0, large: 1,},
+                //police_01: { small: 0, large: 1,},
+                //bank_01: { small: 0, large: 1,},
             },
         ],
         randomSpawns: [
-            /*{
+            {
                 spawns: ["mansion_structure_01", "police_01", "bank_01"],
                 choose: 2,
-                chooseMore: 1,
-            },*/
+                chooseMore: 0,
+            },
         ],
         spawnReplacements: [
             {

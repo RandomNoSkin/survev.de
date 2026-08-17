@@ -22,6 +22,9 @@ export function generateJaggedAabbPoints(
     variation: number,
     rand: (typeof util)["random"],
 ) {
+    const safeDivisionsX = Math.max(2, Math.ceil(divisionsX));
+    const safeDivisionsY = Math.max(2, Math.ceil(divisionsY));
+
     const ll = v2.create(aabb.min.x, aabb.min.y);
     const lr = v2.create(aabb.max.x, aabb.min.y);
     const ul = v2.create(aabb.min.x, aabb.max.y);
@@ -29,29 +32,29 @@ export function generateJaggedAabbPoints(
 
     const distanceX = lr.x - ll.x;
     const distanceY = ul.y - ll.y;
-    const spanX = distanceX / (divisionsX + 1);
-    const spanY = distanceY / (divisionsY + 1);
+    const spanX = distanceX / (safeDivisionsX + 1);
+    const spanY = distanceY / (safeDivisionsY + 1);
 
     // Generate points in a counter-clockwise direction starting from the
     // lower left.
     const points: Vec2[] = [];
     points.push(v2.copy(ll));
-    for (let i = 1; i <= divisionsX; ++i) {
+    for (let i = 1; i <= safeDivisionsX; ++i) {
         points.push(v2.create(ll.x + spanX * i, ll.y + rand(-variation, variation)));
     }
 
     points.push(v2.copy(lr));
-    for (let i = 1; i <= divisionsY; ++i) {
+    for (let i = 1; i <= safeDivisionsY; ++i) {
         points.push(v2.create(lr.x + rand(-variation, variation), lr.y + spanY * i));
     }
 
     points.push(v2.copy(ur));
-    for (let i = 1; i <= divisionsX; ++i) {
+    for (let i = 1; i <= safeDivisionsX; ++i) {
         points.push(v2.create(ur.x - spanX * i, ur.y + rand(-variation, variation)));
     }
 
     points.push(v2.copy(ul));
-    for (let i = 1; i <= divisionsY; ++i) {
+    for (let i = 1; i <= safeDivisionsY; ++i) {
         points.push(v2.create(ul.x + rand(-variation, variation), ul.y - spanY * i));
     }
 
