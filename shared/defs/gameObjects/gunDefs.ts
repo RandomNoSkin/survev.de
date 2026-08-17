@@ -1866,7 +1866,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 1,
         bulletType: "bullet_henry",
         headshotMult: 1,
-        speed: { equip: 0, attack: 2.5 },
+        speed: { equip: 0, attack: 1.5 },
         lootImg: {
             sprite: "loot-weapon-henry.img",
             tint: 0xff00,

@@ -3893,6 +3893,15 @@ const EmitterDefs: Record<string, EmitterDef> = {
         maxCount: Number.MAX_VALUE,
         rot: Math.PI,
     },
+    lodge_fire_slow: {
+        particle: "lodgeFire",
+        rate: new Range(2, 3),
+        radius: 0.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        maxCount: Number.MAX_VALUE,
+        rot: Math.PI,
+    },
     bunker_bubbles_01: {
         particle: "bunkerBubbles",
         rate: new Range(0.3, 0.325),

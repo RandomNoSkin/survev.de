@@ -11833,6 +11833,26 @@ function createBuckhouse<T extends ExtendedBuildingDef>(e: Partial<T>): T {
                 layer: 0,
                 parentToCeiling: false,
             },
+            /*{
+                type: "lodge_fire_slow",
+                pos: v2.create(16.5, 15),
+                dir: v2.create(0.1, 0),
+                rot: 0,
+                spriteRot: (rot: number) => rot + (Math.abs(Math.sin(rot)) > 0.5 ? 0 : Math.PI),
+                scale: 0.6,
+                layer: 0,
+                parentToCeiling: false,
+            },
+            {
+                type: "lodge_fire_slow",
+                pos: v2.create(16.5, 14),
+                dir: v2.create(0.1, 0),
+                rot: 0,
+                spriteRot: (rot: number) => rot + (Math.abs(Math.sin(rot)) > 0.5 ? 0 : Math.PI),
+                scale: 0.6,
+                layer: 0,
+                parentToCeiling: false,
+            },*/
         ],
         soundEmitters: [
             {
