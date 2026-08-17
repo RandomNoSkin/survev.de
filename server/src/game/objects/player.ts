@@ -1130,6 +1130,7 @@ export class Player extends BaseGameObject {
 
     wearingPan = false;
     healEffect = false;
+    healRegionEffect = false;
     healEffectTicker = 0;
     // if hit by snowball, potato, or coconut: slowed down for "x" seconds
     frozenTicker = 0;
@@ -2948,7 +2949,9 @@ export class Player extends BaseGameObject {
          * so we just set healEffect to false by default and set it to true when theyre inside a heal region
          */
         const oldHealEffect = this.healEffect;
+        const oldHealRegionEffect = this.healRegionEffect;
         this.healEffect = false;
+        this.healRegionEffect = false;
 
         // Special handling for short ticker for throwable healing
         this.healEffectTicker -= dt;
@@ -2984,6 +2987,7 @@ export class Player extends BaseGameObject {
                     if (totalHeal) {
                         this.health += totalHeal * dt;
                         this.healEffect = true;
+                        this.healRegionEffect = true;
                     }
                 }
 
@@ -3058,8 +3062,11 @@ export class Player extends BaseGameObject {
             }
         }
 
-        // only dirty if healEffect changed from last tick to current tick (leaving or entering a heal region)
-        if (oldHealEffect != this.healEffect) {
+        // only dirty if heal effect state changed from last tick to current tick
+        if (
+            oldHealEffect != this.healEffect
+            || oldHealRegionEffect != this.healRegionEffect
+        ) {
             this.setDirty();
         }
 
