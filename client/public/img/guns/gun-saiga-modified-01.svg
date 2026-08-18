@@ -1,0 +1,33 @@
+<svg width="48" height="196" viewBox="0 0 48 196" fill="none" xmlns="http://www.w3.org/2000/svg">
+<mask id="mask0_222_614" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="12" y="34" width="24" height="146">
+<path d="M34 38.5254V76.5254L36 80.5254V162.525L34 164.001V180.001H14V164.001L12 162.525V80.5254L14 76.5254V38.5254L18 34.5254H30L34 38.5254Z" fill="white"/>
+</mask>
+<g mask="url(#mask0_222_614)">
+<path d="M34 38.5254V76.5254L36 80.5254V162.525L34 164.001V180.001H14V164.001L12 162.525V80.5254L14 76.5254V38.5254L18 34.5254H30L34 38.5254Z" fill="#0F0F0F" stroke="black" stroke-width="16" stroke-miterlimit="10"/>
+</g>
+<mask id="mask1_222_614" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="10" y="92" width="28" height="60">
+<path d="M35.4706 92.5254L37.7648 97.1136V146.525L30.8824 151.114H17.1177L10.2354 146.525V97.1136L12.5295 92.5254H35.4706Z" fill="white"/>
+</mask>
+<g mask="url(#mask1_222_614)">
+<path d="M35.4706 92.5254L37.7648 97.1136V146.525L30.8824 151.114H17.1177L10.2354 146.525V97.1136L12.5295 92.5254H35.4706Z" fill="#2F2B2B" stroke="black" stroke-width="16" stroke-miterlimit="10"/>
+</g>
+<path d="M16.5 0H19H29H31.5V9L29 13V22V39H19V13L16.5 9V0Z" fill="black"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M29 39V22H38V47H29V39Z" fill="black"/>
+<path d="M16 109.35H32" stroke="black" stroke-width="3"/>
+<path d="M16 115.35H32" stroke="black" stroke-width="3"/>
+<path d="M16 121.35H32" stroke="black" stroke-width="3"/>
+<path d="M16 127.35H32" stroke="black" stroke-width="3"/>
+<path d="M16 133.35H32" stroke="black" stroke-width="3"/>
+<path d="M16 139.35H32" stroke="black" stroke-width="3"/>
+<path d="M22 48.5254H26V42.5254H22V48.5254Z" fill="#614242"/>
+<path d="M22 78.5254H26V72.5254H22V78.5254Z" fill="#614242"/>
+<path d="M8 104.525H0V114.001H8V104.525Z" fill="black"/>
+<path d="M5 130.525H15V136.525H5V130.525Z" fill="black"/>
+<path d="M6 118H2C0.89543 118 0 118.895 0 120V142.525C0 143.629 0.89543 144.525 2 144.525H6C7.10457 144.525 8 143.629 8 142.525V120C8 118.895 7.10457 118 6 118Z" fill="black"/>
+<path d="M16 103.639H32" stroke="black" stroke-width="3"/>
+<path d="M22 72.5254H26V48.5254H22V72.5254Z" fill="#1B1B1B"/>
+<path d="M5 122.525H15V128.525H5V122.525Z" fill="black"/>
+<path d="M32 126.525H16V112.525H32V126.525Z" fill="#2F2B2B" stroke="black" stroke-width="4"/>
+<path d="M33.4919 113.788H14.5081L12 104.525H36L33.4919 113.788Z" fill="#D2CECE" stroke="black" stroke-width="5.31282"/>
+<path d="M5 105.525H15V111.525H5V105.525Z" fill="black"/>
+</svg>

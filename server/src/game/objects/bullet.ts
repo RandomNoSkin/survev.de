@@ -729,6 +729,7 @@ export class Bullet {
             }
 
         }
+        const bulletDef = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
 
         for (let i = 0; i < collisions.length; i++) {
             const col = collisions[i];
@@ -798,7 +799,7 @@ export class Bullet {
                             distance: remainingDistance * pierceDistanceMult,
                         });
                     }
-                } else if (mapDef.reflectBullets) {
+                } else if (mapDef.reflectBullets || bulletDef.alwaysReflect) {
                     this.reflect(col.point, col.normal, col.obj!.__id);
                 }
 
@@ -882,7 +883,7 @@ export class Bullet {
                 math.max(1, this.distance - this.distanceTraveled) /
                 Math.pow(GameConfig.bullet.reflectDistDecay, this.reflectCount);
         }
-
+        
         this.bulletManager.fireBullet({
             bulletType: this.bulletType,
             gameSourceType: this.shotSourceType,

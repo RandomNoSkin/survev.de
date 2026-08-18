@@ -37,6 +37,7 @@ export interface BulletDef {
     spawnBulletCount?: number;
     spawnBulletSpeed?: number;
     spawnBulletSpread?: number;
+    alwaysReflect?: boolean;
 }
 
 export const BaseDefs: Record<string, BulletDef> = {
@@ -72,7 +73,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         obstacleDamage: 1,
         falloff: 0.89,
         distance: 175,
-        speed: 135,
+        speed: 130,
         variance: 0,
         shrapnel: false,
         tracerColor: "762mm",
@@ -215,7 +216,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_awc_modded: {
         type: "bullet",
         damage: 150,
-        obstacleDamage: 10,
+        obstacleDamage: 0.1,
         falloff: 0.94,
         distance: 100,
         speed: 200,
@@ -224,6 +225,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerColor: "308sub",
         tracerWidth: 0.3,
         tracerLength: 1.5,
+        alwaysReflect: true,
     },
     bullet_scarssr: {
         type: "bullet",
@@ -597,9 +599,9 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_m1911: {
         type: "bullet",
-        damage: 13.5,
+        damage: 14,
         obstacleDamage: 1,
-        falloff: 0.7,
+        falloff: 0.8,
         speed: 120,
         distance: 88,
         variance: 0,
@@ -748,14 +750,14 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_mac10_modified: {
         type: "bullet",
         damage: 10.5,
-        obstacleDamage: 2,
+        obstacleDamage: 2.5,
         falloff: 0.75,
         distance: 40,
         speed: 50,
         variance: 0,
         shrapnel: false,
-        freezeAmount: 2,
-        freezeDuration: 0.5,
+        freezeAmount: 2.5,
+        freezeDuration: 0.4,
         accelerating: 0.05,
         tracerColor: "9mm",
         tracerWidth: 0.1,
@@ -879,7 +881,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_vss_modified_3: {
         type: "bullet",
-        damage: 13,
+        damage: 14.5,
         obstacleDamage: 0.3,
         falloff: 0.8,
         distance: 25,
@@ -1051,7 +1053,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     },
     bullet_hk416_modified: {
         type: "bullet",
-        damage: 17,
+        damage: 16.5,
         obstacleDamage: 1,
         falloff: 0.85,
         distance: 175,
@@ -1061,6 +1063,22 @@ export const BaseDefs: Record<string, BulletDef> = {
         tracerColor: "556mm",
         tracerWidth: 0.1,
         tracerLength: 0.9,
+    },
+    bullet_hk416_modified_double: {
+        type: "bullet",
+        damage: 0,
+        obstacleDamage: 1,
+        falloff: 0.85,
+        distance: 0,
+        speed: 120,
+        variance: 0,
+        shrapnel: false,
+        tracerColor: "556mm",
+        tracerWidth: 0.1,
+        tracerLength: 0.9,
+        spawnBulletType: "bullet_hk416_modified",
+        spawnBulletCount: 2,
+        spawnBulletSpread: 0.04,
     },
     bullet_m4a1: {
         type: "bullet",
@@ -1417,7 +1435,7 @@ export const BaseDefs: Record<string, BulletDef> = {
         obstacleDamage: 1,
         falloff: 0.9,
         distance: 200,
-        speed: 120,
+        speed: 135,
         variance: 0,
         shrapnel: false,
         tracerColor: "762mm",

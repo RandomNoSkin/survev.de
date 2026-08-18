@@ -1947,7 +1947,7 @@ const SkinDefs: Record<string, MeleeDef> = {
         name: "Gold Cutlass",
         noPotatoSwap: true,
         damage: 35,
-        perk: "pirate",
+        // perk: "pirate",
         lootImg: { sprite: "loot-melee-cutlass-gold.img" },
         worldImg: { sprite: "loot-melee-cutlass-gold.img" },
     }),

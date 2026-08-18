@@ -31732,7 +31732,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 3,
             },
             {
-                type: randomObstacleType({ crate_07: 5, crate_17: 1 }),
+                type: randomObstacleType({ crate_07: 7, crate_17: 1 }),
                 pos: v2.create(0, -4.5),
                 scale: 1,
                 ori: 0,

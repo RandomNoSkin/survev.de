@@ -781,7 +781,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_m249",
-        upgraded: { gun: "modified_m249", cost: 5 },
+        upgraded: { gun: "modified_m249", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: -2 },
         lootImg: {
@@ -991,7 +991,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_scar",
-        upgraded: { gun: "modified_scar", cost: 3 },
+        upgraded: { gun: "modified_scar", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 3.5 },
         lootImg: {
@@ -2061,7 +2061,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot",
-        upgraded: { gun: "modified_m870", cost: 2 },
+        upgraded: { gun: "modified_m870", cost: 3 },
         headshotMult: 1,
         lootImg: {
             sprite: "loot-weapon-m870.img",
@@ -2973,7 +2973,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_p30l",
         upgraded: { gun: "modified_p30l", cost: 2 },
         headshotMult: 1,
-        speed: { equip: 2.5, attack: 2 },
+        speed: { equip: 2.5, attack: 3 },
         lootImg: {
             sprite: "loot-weapon-p30l.img",
             tint: 65280,
@@ -3024,7 +3024,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_p30l",
         upgraded: { gun: "modified_p30l_dual", cost: 4 },
         headshotMult: 1,
-        speed: { equip: 1.5, attack: 2 },
+        speed: { equip: 1.5, attack: 3 },
         lootImg: {
             sprite: "loot-weapon-p30l-dual.img",
             tint: 65280,
@@ -3657,7 +3657,7 @@ export const BaseDefs: Record<string, GunDef> = {
         fireMode: "single",
         caseTiming: "reload",
         ammo: "50AE",
-        ammoSpawnCount: 45,
+        ammoSpawnCount: 55,
         pistol: true,
         maxClip: 5,
         maxReload: 5,
@@ -4271,7 +4271,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         isDual: false,
         fireMode: "auto",
         dualWieldType: "modified_p30l_dual",
-        speed: { equip: 2.5, attack: 3.5 },
+        speed: { equip: 2.5, attack: 4.5 },
         upgraded: undefined,
         modifiedSound: "p30l_01",
         lootImg: {
@@ -4310,7 +4310,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_m870: defineGunSkin("m870", {
         name: "M870 [+]",
         bulletCount: 16,
-        moveSpread: 9.5,
+        moveSpread: 8,
         shotSpread: 12,
         bulletType: "bullet_buckshot_modified",
         bulletTypeMix: [
@@ -4566,6 +4566,8 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         name: "Origin-12 [+]",
         maxClip: 8,
         maxReload: 8,
+        bulletCount: 12,
+        moveSpread: 2,
         bulletType: "bullet_modified_origin",
         upgraded: undefined,
         modifiedSound: "origin12_01",
@@ -4666,7 +4668,9 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         secondAmmoLabel: "Auto",
         moveSpread: 5,
         shotSpread: 2,
-        fireDelay: 0.082,
+        fireDelay: 0.088,
+        bulletTypeExtra: "bullet_hk416_modified_double",
+        extraBulletTrigger: 4,
         bulletType: "bullet_hk416_modified",
         upgraded: undefined,
         modifiedSound: "hk416_01",
@@ -4733,9 +4737,9 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     }),
     modified_scorpion: defineGunSkin("scorpion", {
         name: "CZ-3A1 [+]",
-        reloadTime: 0.17,
+        reloadTime: 0.2,
         maxReload: 2,
-        maxClip: 12,
+        maxClip: 10,
         upgraded: undefined,
         modifiedSound: "scorpion_01",
         lootImg: {
@@ -4745,8 +4749,9 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_scar: defineGunSkin("scar", {
         name: "SCAR-H [+]",
         fireDelay: 0.045,
-        maxClip: 36,
-        maxReload: 36,
+        maxClip: 20,
+        maxReload: 20,
+        ammoPreserve: 2,
         bulletTypeExtra: "bullet_scar",
         extraBulletTrigger: 2,
         bulletType: "bullet_scar_modified",
