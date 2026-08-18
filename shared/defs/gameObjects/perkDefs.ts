@@ -635,6 +635,18 @@ export const PerkDefs: Record<string, PerkDef> = {
         type: "perk",
         lootImg: {
             sprite: "loot-perk-arena.img",
+                        tint: 0xffffff,
+            border: "loot-circle-outer-03.img",
+            borderTint: 0xffffff,
+            scale: 0.275,
+        },
+        sound: { pickup: "perk_pickup_01" },
+    },
+    buck_stalker: {
+        name: "Buck Stalker",
+        type: "perk",
+        lootImg: {
+            sprite: "loot-perk-buck-stalker.img",
             tint: 0xffffff,
             border: "loot-circle-outer-03.img",
             borderTint: 0xffffff,
@@ -642,7 +654,6 @@ export const PerkDefs: Record<string, PerkDef> = {
         },
         sound: { pickup: "perk_pickup_01" },
     },
-
     // Halloween Perks
     halloween_mystery: {
         name: "Trick or Treat?",

@@ -345,6 +345,7 @@ export class Player implements AbstractObject {
         m_actionSeq: number;
         m_wearingPan: boolean;
         m_healEffect: boolean;
+        m_healRegionEffect: boolean;
         m_adrenalineEffect: boolean;
         m_frozen: boolean;
         m_frozenOri: number;
@@ -509,6 +510,7 @@ export class Player implements AbstractObject {
             m_actionSeq: 0,
             m_wearingPan: false,
             m_healEffect: false,
+            m_healRegionEffect: false,
             m_adrenalineEffect: false,
             m_frozen: false,
             m_frozenOri: 0,
@@ -589,6 +591,7 @@ export class Player implements AbstractObject {
             this.m_netData.m_actionSeq = data.actionSeq;
             this.m_netData.m_wearingPan = data.wearingPan;
             this.m_netData.m_healEffect = data.healEffect;
+            this.m_netData.m_healRegionEffect = data.healRegionEffect;
             this.m_netData.m_adrenalineEffect = data.lastStandEffect;
             this.m_netData.m_frozen = data.frozen;
             this.m_netData.m_frozenOri = data.frozenOri;
@@ -1242,17 +1245,23 @@ export class Player implements AbstractObject {
             this.hasteEmitter.zOrd = this.renderZOrd + 1;
         }
 
+        const passiveHealRateMult = util.getPassiveHealParticleRateMult(
+            !!this.m_netData.m_healRegionEffect,
+        );
+
         // Passive heal effect
         if (this.m_netData.m_healEffect && !this.passiveHealEmitter) {
             this.passiveHealEmitter = particleBarn.addEmitter("heal_basic", {
                 pos: this.m_pos,
                 layer: this.layer,
+                rateMult: passiveHealRateMult,
             });
         } else if (!this.m_netData.m_healEffect && this.passiveHealEmitter) {
             this.passiveHealEmitter.stop();
             this.passiveHealEmitter = null;
         }
         if (this.passiveHealEmitter) {
+            this.passiveHealEmitter.rateMult = passiveHealRateMult;
             this.passiveHealEmitter.pos = v2.add(this.m_pos, v2.create(0, 0.1));
             this.passiveHealEmitter.layer = this.renderLayer;
             this.passiveHealEmitter.zOrd = this.renderZOrd + 1;
@@ -1830,17 +1839,42 @@ export class Player implements AbstractObject {
         }
         if (R.type == "melee" && this.m_netData.m_activeWeapon != "fists") {
             const V = R.worldImg!;
-            this.meleeSprite.texture = PIXI.Texture.from(V.sprite);
+            // Default melee sprite on the right hand.
+            this.meleeSprite.texture = PIXI.Texture.from(V.rightSprite || V.sprite);
             this.meleeSprite.pivot.set(-V.pos.x, -V.pos.y);
             this.meleeSprite.scale.set(V.scale.x / bodyScale, V.scale.y / bodyScale);
             this.meleeSprite.rotation = V.rot;
             this.meleeSprite.tint = V.tint;
             this.meleeSprite.visible = true;
             const U = this.handRContainer.getChildIndex(this.handRSprite);
-            const W = math.max(V.renderOnHand ? U + 1 : U - 1, 0);
+            const W = math.max(V.handUnder ? U - 1 : V.renderOnHand ? U + 1 : U - 1, 0);
             if (this.handRContainer.getChildIndex(this.meleeSprite) != W) {
                 this.handRContainer.addChildAt(this.meleeSprite, W);
             }
+
+            // Optional second sprite for the left hand.
+            if (V.leftSprite) {
+                this.objectLSprite.texture = PIXI.Texture.from(V.leftSprite);
+                this.objectLSprite.pivot.set(-V.pos.x, -V.pos.y);
+                this.objectLSprite.scale.set(V.scale.x / bodyScale, V.scale.y / bodyScale);
+                this.objectLSprite.rotation = V.rot;
+                this.objectLSprite.tint = V.tint;
+                this.objectLSprite.visible = true;
+
+                const handIndex = this.handLContainer.getChildIndex(this.handLSprite);
+                const objectIndex = this.handLContainer.getChildIndex(this.objectLSprite);
+                const targetIndex = V.leftHandUnder || V.handUnder
+                    ? handIndex - (objectIndex >= 0 && objectIndex < handIndex ? 1 : 0)
+                    : handIndex + (objectIndex >= 0 && objectIndex < handIndex ? 0 : 1);
+                const desiredIndex = math.clamp(targetIndex, 0, this.handLContainer.children.length - 1);
+                if (this.handLContainer.getChildIndex(this.objectLSprite) != desiredIndex) {
+                    this.handLContainer.addChildAt(this.objectLSprite, desiredIndex);
+                }
+            } else {
+                this.objectLSprite.visible = false;
+            }
+            this.objectRSprite.visible = false;
+
             const G = this.bodyContainer.getChildIndex(this.handRContainer);
             const X = math.max(V.leftHandOntop ? G + 1 : G - 1, 0);
             if (this.bodyContainer.getChildIndex(this.handLContainer) != X) {
@@ -1848,6 +1882,8 @@ export class Player implements AbstractObject {
             }
         } else {
             this.meleeSprite.visible = false;
+            this.objectLSprite.visible = false;
+            this.objectRSprite.visible = false;
         }
         if (R.type == "throwable") {
             const K = function(
@@ -1877,7 +1913,7 @@ export class Player implements AbstractObject {
             const Z = R.handImg?.[this.throwableState];
             K(this.objectLSprite, Z!.left);
             K(this.objectRSprite, Z!.right);
-        } else {
+        } else if (R.type !== "melee") {
             this.objectLSprite.visible = false;
             this.objectRSprite.visible = false;
         }
@@ -2325,6 +2361,22 @@ export class Player implements AbstractObject {
                 return anim("crawl_backward", true);
             case Anim.Melee: {
                 const def = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as MeleeDef;
+                const buildChain = (
+                    types: string[],
+                    startMirror = false,
+                ): { type: string; mirror: boolean; nextAnim?: unknown } => {
+                    const node: any = {
+                        type: types[0],
+                        mirror: startMirror,
+                    };
+                    if (types.length > 1) {
+                        node.nextAnim = buildChain(types.slice(1), !startMirror);
+                    }
+                    return node;
+                };
+                if (def.anim?.attackSequence && def.anim.attackSequence.length > 0) {
+                    return buildChain(def.anim.attackSequence, false) as any;
+                }
                 if (!def.anim?.attackAnims) {
                     return anim("fists", true);
                 }
@@ -2414,6 +2466,12 @@ export class Player implements AbstractObject {
                 }
             }
             if (w) {
+                const nextAnim = (this.anim.data as any).nextAnim;
+                if (nextAnim) {
+                    this.anim.data = nextAnim;
+                    this.anim.ticker = 0;
+                    return;
+                }
                 this.playAnim(Anim.None, this.anim.seq);
             }
         }

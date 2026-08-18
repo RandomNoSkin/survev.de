@@ -146,6 +146,7 @@ export class Particle {
 interface EmitterOptions {
     pos?: Vec2;
     dir?: Vec2;
+    spriteRot?: number;
     scale?: number;
     layer?: number;
     duration?: number;
@@ -161,6 +162,7 @@ export class Emitter {
     type!: string;
     pos!: Vec2;
     dir!: Vec2;
+    spriteRot?: number;
     scale!: number;
     layer!: number;
     duration!: number;
@@ -181,6 +183,7 @@ export class Emitter {
         this.type = type;
         this.pos = options.pos ? v2.copy(options.pos) : v2.create(0, 0);
         this.dir = options.dir ? v2.copy(options.dir) : v2.create(0, 1);
+        this.spriteRot = options.spriteRot;
         this.scale = options.scale !== undefined ? options.scale : 1;
         this.layer = options.layer || 0;
         this.duration = options.duration !== undefined ? options.duration : Number.MAX_VALUE;
@@ -322,7 +325,7 @@ export class ParticleBarn {
                     const pos = v2.add(e.pos, util.randomPointInCircle(rad));
                     const dir = v2.rotate(e.dir, (Math.random() - 0.5) * def.angle);
                     const vel = v2.mul(dir, getRangeValue(def.speed));
-                    const rot = getRangeValue(def.rot!);
+                    const rot = e.spriteRot !== undefined ? e.spriteRot : getRangeValue(def.rot!);
                     const particle = this.addParticle(
                         def.particle,
                         e.layer,
@@ -2756,6 +2759,30 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.69, 0.695)));
         },
     },
+    lodgeFire: {
+        image: ["part-fire-01.img"],
+        life: new Range(3, 3.25),
+        drag: new Range(0.2, 0.22),
+        rotVel: new Range(0, 0),
+        scale: {
+            start: new Range(0.2, 0.25),
+            end: new Range(0.6, 0.65),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        alphaIn: {
+            start: 0.7,
+            end: 0.5,
+            lerp: new Range(0, 0.1),
+        },
+        color: function() {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.94, 0.99)));
+        },
+    },
     bathhouseSteam: {
         image: ["part-smoke-02.img", "part-smoke-03.img"],
         life: new Range(10, 12),
@@ -3848,6 +3875,32 @@ const EmitterDefs: Record<string, EmitterDef> = {
         speed: new Range(1.5, 2),
         angle: Math.PI * 0.1,
         maxCount: Number.MAX_VALUE,
+    },
+    lodge_smoke: {
+        particle: "cabinSmoke",
+        rate: new Range(1.5, 2),
+        radius: 1,
+        speed: new Range(1, 1.5),
+        angle: Math.PI * 0.1,
+        maxCount: Number.MAX_VALUE,
+    },
+    lodge_fire: {
+        particle: "lodgeFire",
+        rate: new Range(1.2, 1.5),
+        radius: 0.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        maxCount: Number.MAX_VALUE,
+        rot: Math.PI,
+    },
+    lodge_fire_slow: {
+        particle: "lodgeFire",
+        rate: new Range(2, 3),
+        radius: 0.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        maxCount: Number.MAX_VALUE,
+        rot: Math.PI,
     },
     bunker_bubbles_01: {
         particle: "bunkerBubbles",

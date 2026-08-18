@@ -24,7 +24,9 @@ export const Comp: MapDef = {
         audio: [
             { name: "club_music_01", channel: "gameMusic" },
             { name: "daniel_club_music_01", channel: "gameMusic" },
+            { name: "lodge_music_01", channel: "gameMusic" },
             { name: "ambient_steam_01", channel: "ambient" },
+            { name: "ambient_fireplace_01", channel: "ambient" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
             { name: "reserve_music_01", channel: "gameMusic" },
@@ -64,7 +66,7 @@ export const Comp: MapDef = {
     gameMode: {
         maxPlayers: 8,
         killLeaderEnabled: true,
-        freezeTime: 10,
+        freezeTime: 0,
         joinTime: 10, // time until players can move after game start
         airdropMinDistance: 0.72, // minimum distance between airdrops as multiplier of gas radius (has to be between 0 and 1)
         betterSpawn: true,
@@ -312,6 +314,10 @@ export const Comp: MapDef = {
             { name: "spas12", count: 1, weight: 0.66 },
             { name: "spas16", count: 1, weight: 0.33 },
         ],
+        tier_scout_hut: [
+            { name: "scout_elite", count: 1, weight: 0.75 },
+            { name: "henry", count: 1, weight: 0.25 },
+        ],
         tier_chrys_case: [
             { name: "", count: 1, weight: 5 }, // ?
             { name: "tier_katanas", count: 1, weight: 3 }, // ?
@@ -539,11 +545,11 @@ export const Comp: MapDef = {
             { name: "ak47", count: 1, weight: 0.4 }, 
         ],
         tier_chest_sniper_tea: [
-            { name: "mosin", count: 1, weight: 0.16 },  // 8%
+            { name: "mosin", count: 1, weight: 0.13 },  // 8%
             //{ name: "sv98", count: 1, weight: 0.0662 },   // 1.75%
-            { name: "scout_elite", count: 1, weight: 0.3 },
+            { name: "scout_elite", count: 1, weight: 0.25 },
             { name: "saiga", count: 1, weight: 0.35 },
-            { name: "blr", count: 1, weight: 0.35 },
+            { name: "blr", count: 1, weight: 0.3 },
             { name: "spas12", count: 1, weight: 0.7 },
             { name: "deagle", count: 1, weight: 0.25 },
             { name: "vector", count: 1, weight: 0.15 },
@@ -553,9 +559,9 @@ export const Comp: MapDef = {
         tier_chest_sniper: [
             { name: "garand", count: 1, weight: 0.25 },  // 8%
             //{ name: "sv98", count: 1, weight: 0.0662 },   // 1.75%
-            { name: "scout_elite", count: 1, weight: 0.5 },
+            { name: "scout_elite", count: 1, weight: 0.45 },
             { name: "saiga", count: 1, weight: 0.3 },
-            { name: "blr", count: 1, weight: 0.35 },
+            { name: "blr", count: 1, weight: 0.3 },
             { name: "spas12", count: 1, weight: 1 },
             { name: "deagle", count: 1, weight: 0.15 },
             { name: "vector", count: 1, weight: 0.1 },
@@ -565,9 +571,9 @@ export const Comp: MapDef = {
         tier_chest_sniper_spec: [
             { name: "garand", count: 1, weight: 0.3 },  // 8%
             //{ name: "sv98", count: 1, weight: 0.0662 },   // 1.75%
-            { name: "scout_elite", count: 1, weight: 0.5 },
+            { name: "scout_elite", count: 1, weight: 0.45 },
             { name: "saiga", count: 1, weight: 0.3 },
-            { name: "blr", count: 1, weight: 0.35 },
+            { name: "blr", count: 1, weight: 0.3 },
             { name: "spas12", count: 1, weight: 1 },
             { name: "deagle", count: 1, weight: 0.15 },
             { name: "vector", count: 1, weight: 0.1 },
@@ -832,14 +838,15 @@ export const Comp: MapDef = {
         tier_airdrop_uncommon: [
             { name: "l86", count: 1, weight: 2.5 },
             { name: "imbel", count: 1, weight: 1.5 },
-            { name: "mosin", count: 1, weight: 1 },
+            { name: "mosin", count: 1, weight: 0.5 },
             { name: "svd", count: 1, weight: 2.5 },
             { name: "m1014", count: 1, weight: 2 },
             { name: "spas16", count: 1, weight: 1.5 },
+            { name: "henry", count: 1, weight: 1 },
             { name: "scorpion", count: 1, weight: 1 },
             //{ name: "m9", count: 1, weight: 0.01 },
             { name: "tier_flare", count: 1, weight: 0.5 },
-            { name: "blr", count: 1, weight: 1.5 },
+            { name: "blr", count: 1, weight: 1 },
             { name: "an94", count: 1, weight: 2 }, // !
         ],
         tier_airdrop_rare: [
@@ -1097,7 +1104,7 @@ export const Comp: MapDef = {
             rivers: {
                 lakes: [
                     {
-                        odds: 0.2,
+                        odds: 0.25,
                         innerRad: 22,
                         outerRad: 36,
                         centerObj: "teapavilion_01comp",
@@ -1108,7 +1115,7 @@ export const Comp: MapDef = {
                         },
                     },
                     {
-                        odds: 0.2,
+                        odds: 0.25,
                         innerRad: 10,
                         outerRad: 20,
                         centerObj: "oasis_01comp",
@@ -1244,7 +1251,7 @@ export const Comp: MapDef = {
                 hut_01: 3, // huts
                 hut_02: 2, // spas hut
                 hut_03: 1, // scout hut
-                hut_04: { odds: 0.2 },
+                hut_04: { odds: 0.25 },
                 shack_03a: 3, // small river / sea cabins
                 shack_03b: { small: 2, large: 3,}, // small river / sea cabins
                 greenhouse_01: { small: 1, large: 1,}, // greenhouses
@@ -1262,17 +1269,17 @@ export const Comp: MapDef = {
                 chest_03: { odds: 0.35 }, // river chest
                 mil_crate_02: { odds: 0.2 }, // ot chest
                 tree_02: 10, // axe logs
-                mansion_structure_01: { small: 0, large: 1,},
-                police_01: { small: 0, large: 1,},
-                bank_01: { small: 0, large: 1,},
+                //mansion_structure_01: { small: 0, large: 1,},
+                //police_01: { small: 0, large: 1,},
+                //bank_01: { small: 0, large: 1,},
             },
         ],
         randomSpawns: [
-            /*{
+            {
                 spawns: ["mansion_structure_01", "police_01", "bank_01"],
                 choose: 2,
-                chooseMore: 1,
-            },*/
+                chooseMore: 0,
+            },
         ],
         spawnReplacements: [
             {

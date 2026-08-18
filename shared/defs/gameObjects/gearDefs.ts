@@ -943,6 +943,22 @@ const SkinDefs = {
             rot: 0.5 * Math.PI,
         },
     }),
+        helmet03_hat: defineSkin("helmet03", {
+        name: "Cowboy Hat",
+        perk: "buck_stalker",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseTintRed: 0xffffff,
+            baseTintBlue: 0xffffff,
+            baseSprite: "player-helmet-hat.img",
+            spriteScale: 0.3,
+        },
+        lootImg: {
+            sprite: "player-helmet-hat.img",
+            scale: 0.3,
+            rot: 0.5 * Math.PI,
+        },
+    }),
 };
 
 // Shared with the client; move them somewhere

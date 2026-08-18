@@ -70,6 +70,12 @@ export const util = {
         return Math.floor(rand() * (max - min + 1)) + min;
     },
 
+    getPassiveHealParticleRateMult(insideHealRegion: boolean) {
+        // `Emitter.rateMult` scales the spawn interval, not the per-frame count.
+        // To reduce particle rate by 50%, the interval must be doubled.
+        return insideHealRegion ? 2 : 1;
+    },
+
     // Uniformly distributed random point within circle
     // Taken from https://stackoverflow.com/questions/5837572/generate-a-random-point-within-a-circle-uniformly
     randomPointInCircle(rad: number, rand = Math.random) {

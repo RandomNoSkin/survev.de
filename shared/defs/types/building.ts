@@ -82,6 +82,7 @@ export interface BuildingDef {
         layer: number;
         parentToCeiling?: boolean;
         dir?: Vec2;
+        spriteRot?: number | ((rot: number) => number);
     }>;
     puzzle?: {
         name: string;

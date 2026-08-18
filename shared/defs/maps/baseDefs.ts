@@ -22,7 +22,9 @@ export const Main: MapDef = {
         audio: [
             { name: "club_music_01", channel: "gameMusic" },
             { name: "club_music_02", channel: "gameMusic" },
+            { name: "lodge_music_01", channel: "gameMusic" },
             { name: "ambient_steam_01", channel: "ambient" },
+            { name: "ambient_fireplace_01", channel: "ambient" },
             { name: "log_05", channel: "sfx" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
@@ -587,7 +589,7 @@ export const Main: MapDef = {
             { name: "m4a1", count: 1, weight: 1 },
             { name: "scorpion", count: 1, weight: 1 },
             { name: "scar", count: 1, weight: 1 },
-            { name: "flare", count: 1, weight: 1 },
+            { name: "flare_gun", count: 1, weight: 1 },
             { name: "garand", count: 1, weight: 0.75 },
             { name: "mosin", count: 1, weight: 0.5 },
             { name: "deagle", count: 1, weight: 1 },
