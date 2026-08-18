@@ -844,7 +844,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_vss_modified_1: {
         type: "bullet",
         damage: 2,
-        obstacleDamage: 1,
+        obstacleDamage: 30,
         falloff: 0.8,
         distance: 18,
         speed: 80,
@@ -862,7 +862,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_vss_modified_2: {
         type: "bullet",
         damage: 2,
-        obstacleDamage: 1,
+        obstacleDamage: 15,
         falloff: 0.8,
         distance: 18,
         speed: 80,
@@ -880,7 +880,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_vss_modified_3: {
         type: "bullet",
         damage: 13,
-        obstacleDamage: 1,
+        obstacleDamage: 0.3,
         falloff: 0.8,
         distance: 25,
         speed: 80,
@@ -1079,7 +1079,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_m4a1_modified: {
         type: "bullet",
         damage: 2,
-        obstacleDamage: 1,
+        obstacleDamage: 15,
         falloff: 0.9,
         distance: 20,
         speed: 85,
@@ -1096,7 +1096,7 @@ export const BaseDefs: Record<string, BulletDef> = {
     bullet_m4a1_mini: {
         type: "bullet",
         damage: 11,
-        obstacleDamage: 1,
+        obstacleDamage: 0.5,
         falloff: 0.9,
         distance: 30,
         speed: 200,

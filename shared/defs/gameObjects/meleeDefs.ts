@@ -1257,7 +1257,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         cleave: true,
         autoAttack: false,
         switchDelay: 0.25,
-        damage: 30,
+        damage: 35,
         obstacleDamage: 1,
         attack: {
             offset: {

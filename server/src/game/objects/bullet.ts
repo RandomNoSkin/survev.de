@@ -67,6 +67,10 @@ export interface BulletParams {
     hasModifier?: boolean;
     speedMult?: number;
     distanceMult?: number;
+    // Optional: preserve an initial speed and traveled distance when spawning
+    // (used for reflections to continue acceleration state)
+    initialSpeed?: number;
+    initialDistanceTraveled?: number;
 }
 
 export class BulletBarn {
@@ -198,7 +202,7 @@ export class Bullet {
         this.alive = true;
         this.active = true;
         this.collided = false;
-        this.distanceTraveled = 0;
+        this.distanceTraveled = params.initialDistanceTraveled ?? 0;
         this.sentToClient = false;
         // this.serialized = false; // TODO: cache bullet serialization?
 
@@ -221,7 +225,7 @@ export class Bullet {
         this.baseSpeed = bulletDef.speed;
         this.accelerating = bulletDef.accelerating ?? 0;
         this.speedVariance = variance;
-        this.speed = this.baseSpeed * this.speedMult * this.speedVariance;
+        this.speed = params.initialSpeed ?? (this.baseSpeed * this.speedMult * this.speedVariance);
         this.hasModifier =
             this.speedMult !== 1 || this.distanceMult !== 1 || this.accelerating !== 0;
         this.onHitFx = bulletDef.onHit ?? params.onHitFx;
@@ -907,6 +911,9 @@ export class Bullet {
             varianceT: this.varianceT,
             clipDistance: this.clipDistance,
             distance: distance,
+            // preserve current velocity/acceleration state on reflection
+            initialSpeed: this.speed,
+            initialDistanceTraveled: this.distanceTraveled,
         });
     }
 }
