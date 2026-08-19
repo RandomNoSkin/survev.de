@@ -4282,7 +4282,7 @@ export const BaseDefs: Record<string, GunDef> = {
         worldImg: {
             sprite: "gun-long-ak74.img",
             scale: { x: 0.55, y: 0.5655 },
-            tint: 0xffffff, // not tint at all
+            tint: 0xffffff,
             leftHandOffset: { x: 2.8, y: 0 },
             recoil: 1.33,
         },
@@ -4324,6 +4324,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         speed: { equip: 2.5, attack: 4.5 },
         upgraded: undefined,
         modifiedSound: "p30l_01",
+        worldImg: {
+            sprite: "gun-p30l-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4338,6 +4345,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "p30l_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-p30l-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_awc: defineGunSkin("awc", {
@@ -4372,6 +4386,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-m870-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_model94: defineGunSkin("model94", {
         name: "Model 94 [+]",
@@ -4401,6 +4422,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-usas-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_mk12: defineGunSkin("mk12", {
         name: "Mk12 SPR [+]",
@@ -4412,6 +4440,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "mk12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-mk12-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_m39: defineGunSkin("m39", {
@@ -4426,6 +4461,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "m39_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m39-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_an94: defineGunSkin("an94", {
@@ -4455,7 +4497,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         shotSpread: 3,
         moveSpread: 2,
         reloadTime: 0.65,
-        burstCount: 4,
+        burstCount: 3,
         burstDelay: 0.025,
         fireMode: "burst",
         upgraded: undefined,
@@ -4480,6 +4522,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "mac10_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-mac10-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_bar: defineGunSkin("bar", {
@@ -4513,6 +4562,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-grozas-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_deagle: defineGunSkin("deagle", {
         name: "DEagle 50 [+]",
@@ -4528,6 +4584,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_deagle_45acp: defineGunSkin("deagle", {
@@ -4546,6 +4609,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_deagle_dual: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 50 [+]",
@@ -4559,6 +4629,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
@@ -4576,6 +4653,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_vss: defineGunSkin("vss", {
         name: "VSS [+]",
@@ -4590,6 +4674,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "vss_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-vss-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_m1014: defineGunSkin("m1014", {
@@ -4624,6 +4715,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-origin-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_saiga: defineGunSkin("saiga", {
         name: "Saiga-12 [+]",
@@ -4635,6 +4733,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "saiga_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-saiga-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_saiga_grenade: defineGunSkin("saiga", {
@@ -4650,6 +4755,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         speed: { equip: 0, attack: -2 },
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-saiga-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_qbb97: defineGunSkin("qbb97", {
@@ -4683,6 +4795,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-famas-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_l86: defineGunSkin("l86", {
         name: "L86A2 [+]",
@@ -4701,13 +4820,20 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
     }),
     modified_m4a1: defineGunSkin("m4a1", {
-        name: "M4A1 [+]",
+        name: "M4A1-S [+]",
         bulletType: "bullet_m4a1_modified",
         toMouseHit: true,
         upgraded: undefined,
         modifiedSound: "m4a1_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m4a1-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     // M416 [+]: Kugel-Modus, per SwitchAmmo (B) in den Granaten-Modus umschaltbar
@@ -4727,6 +4853,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m416-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     // M416 [+]: Granaten-Modus – verschießt die aktuell gewählte Wurfwaffe aus dem
@@ -4749,6 +4882,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m416-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_scout_elite: defineGunSkin("scout_elite",{
@@ -4784,6 +4924,17 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-m249-top-modified-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 13.2, y: 0 },
+            recoil: 1.33,
+            magImg: {
+                sprite: "gun-m249-bot-modified-01.img",
+                pos: { x: 0, y: -20.5 },
+            },
+        },
     }),
     modified_scorpion: defineGunSkin("scorpion", {
         name: "CZ-3A1 [+]",
@@ -4794,6 +4945,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "scorpion_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-scorpion-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_scar: defineGunSkin("scar", {
