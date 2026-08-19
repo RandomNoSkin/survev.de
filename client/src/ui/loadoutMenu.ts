@@ -400,6 +400,7 @@ export class LoadoutMenu {
             $("#modal-customize-header .modal-customize-cat").last().before(settingsTab);
             settingsTab.on("mouseup", () => this.openSettingsTab());
             this.itemSort = $("#modal-customize-sort");
+            this.itemSort.val("alpha");
             this.itemSort.on("change", (e) => {
                 this.sortItems(e.target.value);
             });
