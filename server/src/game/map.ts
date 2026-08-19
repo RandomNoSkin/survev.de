@@ -936,7 +936,14 @@ export class GameMap {
         // SpawnReduction system that allows for more building variety via rare spawns replacing common spawns instead of spawning as additional buildings
         // Apply spawn reductions based on which buildings are spawning
         if (mapGen.spawnReductions) {
-            const allSpawns = [...objsToSpawn.stage1, ...objsToSpawn.stage2];
+            const lakeSpawns = this.lakeObjs
+                .filter((type) => type)
+                .map((type) => ({ type, count: 1 }));
+            const allSpawns = [
+                ...lakeSpawns,
+                ...objsToSpawn.stage1,
+                ...objsToSpawn.stage2,
+            ];
             const reductionMap: Record<string, number> = {};
 
             // Calculate total reductions needed for each target

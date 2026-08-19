@@ -4310,6 +4310,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-mp220-modified-01.img",
+            scale: { x: 0.45, y: 0.45 },
         },
         sound: {
             reload: "mp220_modified_reload_01",
@@ -4368,7 +4369,11 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
             border: "loot-circle-outer-modified-01.img",
         },
         worldImg: {
-            sprite: "gun-awc-02.img",
+            sprite: "gun-awc-modified-01.img",
+            //scale: { x: 0.6, y: 0.435 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_m870: defineGunSkin("m870", {
@@ -4388,7 +4393,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-m870-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.6, y: 0.435 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4443,7 +4448,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-mk12-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.6, y: 0.485 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4464,7 +4469,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-m39-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.7, y: 0.4925 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4525,7 +4530,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-mac10-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.55, y: 0.48 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4709,6 +4714,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         maxReload: 8,
         bulletCount: 12,
         moveSpread: 2,
+        barrelLength: 4,
         bulletType: "bullet_modified_origin",
         upgraded: undefined,
         modifiedSound: "origin12_01",
@@ -4717,7 +4723,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-origin-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.65, y: 0.55 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4856,7 +4862,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-m416-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.65, y: 0.5 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4885,7 +4891,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-m416-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.65, y: 0.5 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
