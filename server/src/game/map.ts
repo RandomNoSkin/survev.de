@@ -933,6 +933,28 @@ export class GameMap {
                 });
             }
         }
+        // SpawnReduction system that allows for more building variety via rare spawns replacing common spawns instead of spawning as additional buildings
+        // Apply spawn reductions based on which buildings are spawning
+        if (mapGen.spawnReductions) {
+            const allSpawns = [...objsToSpawn.stage1, ...objsToSpawn.stage2];
+            const reductionMap: Record<string, number> = {};
+
+            // Calculate total reductions needed for each target
+            for (const spawn of allSpawns) {
+                if (spawn.count > 0 && mapGen.spawnReductions[spawn.type]) {
+                    for (const reduction of mapGen.spawnReductions[spawn.type]) {
+                        reductionMap[reduction.target] = (reductionMap[reduction.target] ?? 0) + (reduction.amount * spawn.count);
+                    }
+                }
+            }
+
+            // Apply reductions to the spawn counts
+            for (const spawn of allSpawns) {
+                if (reductionMap[spawn.type]) {
+                    spawn.count = Math.max(0, spawn.count - reductionMap[spawn.type]);
+                }
+            }
+        }
 
         const sortFn = (a: MapSpawn, b: MapSpawn) => {
             const priorityA = mapGen.importantSpawns.indexOf(a.type) + 1;

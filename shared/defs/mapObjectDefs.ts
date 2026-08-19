@@ -6848,6 +6848,7 @@ function createLargeHut<T extends BuildingDef>(e: Partial<T>): T {
                 ori: -1,
             },
         ],
+        group: { id: BuildingGroups.SniperSpawns, minDistance: MinDistance.SniperSpawns, noSpawnRadius: NoSpawnRadius.SniperSpawns },
     };
     return util.mergeDeep(t, e || {});
 }
@@ -9318,6 +9319,7 @@ function createOasis<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
         ],
+        group: { id: BuildingGroups.SniperSpawns, minDistance: MinDistance.SniperSpawns, noSpawnRadius: NoSpawnRadius.SniperSpawns },
     };
     return util.mergeDeep(t, e || {});
 }
@@ -9870,6 +9872,7 @@ function createTeaPavilion<T extends BuildingDef>(e: Partial<T>): T {
                 ori: 0,
             },
         ],
+        group: { id: BuildingGroups.SniperSpawns, minDistance: MinDistance.SniperSpawns, noSpawnRadius: NoSpawnRadius.SniperSpawns },
     };
     return util.mergeDeep(t, e || {});
 }

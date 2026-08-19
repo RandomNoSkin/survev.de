@@ -365,6 +365,11 @@ export interface MapDef {
         spawnReplacements: [Record<string, string | Array<{ type: string; weight: number }>>];
         importantSpawns: string[];
         spawnOnRiver?: string[];
+        /**
+         * Defines spawn count reductions for buildings.
+         * Used for rare structures not making extremely dense maps on occasion but instead making another building not spawn when they do spawn in
+         */
+        spawnReductions?: Record<string, Array<{ target: string; amount: number }>>;
     };
 }
 

@@ -670,7 +670,7 @@ export class EmoteBarn {
                         ? pingData.tint!
                         : indicator.indSpriteOuter.baseTint;
                     indicator.fadeIn = this.pingFadeIn;
-                    indicator.life = this.pingLife;
+                    indicator.life = pingData.pingLife ?? this.pingLife;
                     indicator.fadeOut = this.pingFadeOut;
                     indicator.mapEvent = pingData.mapEvent;
                     indicator.worldDisplay = pingData.worldDisplay;

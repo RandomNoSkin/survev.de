@@ -255,7 +255,7 @@ export const Comp: MapDef = {
             { name: "556mm", count: 90, weight: 3 },
             { name: "12gauge", count: 20, weight: 3 },
             { name: "50AE", count: 21, weight: 2 },
-            { name: "flare", count: 1, weight: 1 },
+            { name: "flare", count: 1, weight: 1.5 },
             { name: "45acp", count: 60, weight: 4.5 },
         ],
         tier_vending_soda: [
@@ -1240,10 +1240,7 @@ export const Comp: MapDef = {
                 warehouse_03sv: 1,
                 house_red_01: { small: 3, large: 7,}, 
                 house_red_02: { small: 3, large: 7,},
-                teahouse_complex_01su: {
-                    small: 1,
-                    large: 3,
-                },
+                teahouse_complex_01su: 3, // tea house
                 barn_01: { small: 1, large: 4,}, //green houses
                 barn_02: { small: 1, large: 1,},
                 hut_01: 3, // huts
@@ -1290,6 +1287,11 @@ export const Comp: MapDef = {
         ],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
         spawnOnRiver: ["club_complex_01"/*, "reserve_complex_01"*/, "warehouse_complex_01"],
+        spawnReductions: {
+            hut_04: [{ target: "teahouse_complex_01su", amount: 1 }],
+            teapavilion_01comp: [{ target: "teahouse_complex_01su", amount: 1 }],
+            oasis_01comp: [{ target: "teahouse_complex_01su", amount: 1 }],
+        },
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };
