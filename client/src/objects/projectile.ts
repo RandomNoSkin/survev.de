@@ -126,7 +126,9 @@ class Projectile implements AbstractObject {
             const itemDef = GameObjectDefs.typeToDef(data.type, "throwable");
             const imgDef = itemDef.worldImg;
             this.imgScale = imgDef.scale;
-            this.rot = 0;
+            this.rot = itemDef.throwPhysics.rotateToDirection
+                ? Math.atan2(this.dir.x, this.dir.y)
+                : 0;
             this.rotVel = itemDef.throwPhysics.spinVel;
             if (itemDef.throwPhysics.randomizeSpinDir && Math.random() < 0.5) {
                 this.rotVel *= -1;
@@ -211,8 +213,10 @@ export class ProjectileBarn {
                 if (p.inWater) {
                     rotDrag *= 3;
                 }
-                p.rotVel *= 1 / (1 + dt * rotDrag);
-                p.rot += p.rotVel * dt;
+                if (!itemDef.throwPhysics.rotateToDirection) {
+                    p.rotVel *= 1 / (1 + dt * rotDrag);
+                    p.rot += p.rotVel * dt;
+                }
 
                 // Detect overlapping obstacles for sound effects
                 const wallCol: {
