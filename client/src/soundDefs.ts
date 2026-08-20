@@ -29,6 +29,10 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
             volume: 1,
             maxInstances: 5,
         },
+        explosion_04_gun: {
+            path: "audio/sfx/explosion_04.mp3",
+            volume: 0.7,
+        },
         m9_reload_01: {
             path: "audio/guns/m9_reload_01.mp3",
             volume: 1,

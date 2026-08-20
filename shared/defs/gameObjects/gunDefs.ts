@@ -4937,6 +4937,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         preserveSecondAmmo: true,
         secondAmmoLabel: "Grenade",
         launchThrowable: true,
+        projectileMaxAimDistance: 45,
         fireMode: "single",
         maxClip: 1,
         maxReload: 1,
@@ -4945,7 +4946,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         reloadTime: 1.0,
         fireDelay: 0.5,
         upgraded: undefined,
-        modifiedSound: "hk416_01",
+        modifiedSound: "explosion_04_gun",
         lootImg: {
             sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
@@ -4956,6 +4957,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
+        },
+        sound: {
+            shoot: "explosion_04_gun",
+            reload: "hk416_reload_01",
+            pickup: "gun_pickup_01",
+            empty: "empty_fire_01",
+            deploy: "hk416_switch_01",
         },
     }),
     modified_scout_elite: defineGunSkin("scout_elite",{

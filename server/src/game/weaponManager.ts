@@ -1416,13 +1416,22 @@ export class WeaponManager {
      * Flugbahn-Simulation wird die (immer schnelle) Geschwindigkeit gewählt, mit
      * der die Granate genau am Crosshair des Spielers detoniert.
      */
-    computeLauncherVel(throwableDef: ThrowableDef, spawnPos: Vec2, dir: Vec2): Vec2 {
+    computeLauncherVel(
+        throwableDef: ThrowableDef,
+        spawnPos: Vec2,
+        dir: Vec2,
+        maxAimDistance?: number,
+    ): Vec2 {
         // Zielpunkt = Mausposition des Spielers
-        const target = v2.add(this.player.pos, v2.mul(dir, this.player.toMouseLen));
+        const targetDistance = math.min(
+            this.player.toMouseLen,
+            maxAimDistance ?? Infinity,
+        );
+        const target = v2.add(this.player.pos, v2.mul(dir, targetDistance));
         const targetDist = v2.length(v2.sub(target, spawnPos));
 
-        // immer "ziemlich schnell" -> hoher Geschwindigkeitsbereich
-        const minSpeed = 30;
+        // Allow close cursor targets to produce genuinely short throws.
+        const minSpeed = 0;
         const maxSpeed = 130;
         let lo = minSpeed;
         let hi = maxSpeed;
@@ -1538,7 +1547,12 @@ export class WeaponManager {
             }
         }
 
-        const vel = this.computeLauncherVel(throwableDef, spawnPos, direction);
+        const vel = this.computeLauncherVel(
+            throwableDef,
+            spawnPos,
+            direction,
+            itemDef.projectileMaxAimDistance,
+        );
 
         let fuseTime = 1;
         let multiplier = 1;
