@@ -43,6 +43,7 @@ export class ProjectileBarn {
         throwDir?: Vec2,
         weaponSourceType?: string,
         damageMultiplier?: number,
+        initialVelZ?: number,
     ): Projectile {
         const proj = new Projectile(
             this.game,
@@ -57,6 +58,7 @@ export class ProjectileBarn {
             throwDir,
             weaponSourceType,
             damageMultiplier,
+            initialVelZ,
         );
 
         this.projectiles.push(proj);
@@ -125,6 +127,7 @@ export class Projectile extends BaseGameObject {
         throwDir?: Vec2,
         weaponSourceType?: string,
         damageMultiplier?: number,
+        initialVelZ?: number,
     ) {
         super(game, pos);
         this.layer = layer;
@@ -139,7 +142,7 @@ export class Projectile extends BaseGameObject {
         this.weaponSourceType = weaponSourceType || this.type;
         this.damageMultiplier = damageMultiplier || 1;
         const def = GameObjectDefs.typeToDefSafe(type) as ThrowableDef;
-        this.velZ = def.throwPhysics.velZ;
+        this.velZ = initialVelZ ?? def.throwPhysics.velZ;
         this.rad = def.rad * 0.5;
         this.bounds = collider.createAabbExtents(
             v2.create(0, 0),

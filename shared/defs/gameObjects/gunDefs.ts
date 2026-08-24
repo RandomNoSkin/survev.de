@@ -101,9 +101,12 @@ export interface GunDef {
     isLauncher?: boolean;
     deployGroup?: number;
     projType?: string;
+    projectileUsesAimDistance?: boolean;
+    projectileMaxAimDistance?: number;
     // Granaten-Modus: verschießt die aktuell gewählte Wurfwaffe aus dem Inventar
     // statt eines festen projType/Geschosses (siehe modified_hk416_grenade)
     launchThrowable?: boolean;
+    ammoPreserve?: number;
     ignoreDetune?: boolean;
     aimDelay?: boolean;
     isBullpup?: boolean;
@@ -285,8 +288,8 @@ export const BaseDefs: Record<string, GunDef> = {
         maxReload: 33,
         extendedClip: 40,
         extendedReload: 40,
-        reloadTime: 1.6,
-        fireDelay: 0.03,
+        reloadTime: 3,
+        fireDelay: 0.035,
         switchDelay: 0.75,
         barrelLength: 2.5,
         barrelOffset: 0,
@@ -353,7 +356,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-p90-01.img",
-            scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.54, y: 0.52 },
             tint: 0xffffff,
             leftHandOffset: { x: 7, y: 0 },
             recoil: 0.89,
@@ -379,7 +382,7 @@ export const BaseDefs: Record<string, GunDef> = {
         maxReload: 32,
         extendedClip: 48,
         extendedReload: 48,
-        reloadTime: 1.6,
+        reloadTime: 2.4,
         fireDelay: 0.17,
         burstDelay: 0.016,
         switchDelay: 0.75,
@@ -411,7 +414,7 @@ export const BaseDefs: Record<string, GunDef> = {
         particle: { shellScale: 1.2, shellOffset: 0.4 },
         sound: {
             shoot: "vector_02",
-            reload: "vector_reload_01",
+            reload: "vector_reload_02",
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "vector_switch_01",
@@ -780,7 +783,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_m249",
-        upgraded: { gun: "modified_m249", cost: 5 },
+        upgraded: { gun: "modified_m249", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: -2 },
         lootImg: {
@@ -826,7 +829,7 @@ export const BaseDefs: Record<string, GunDef> = {
         extendedReloadAlt: 95,
         reloadTime: 0.95,
         reloadTimeAlt: 3.9,
-        fireDelay: 0.088,
+        fireDelay: 0.091,
         switchDelay: 0.75,
         barrelLength: 3.1,
         barrelOffset: 0,
@@ -990,7 +993,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1.5,
         bulletCount: 1,
         bulletType: "bullet_scar",
-        upgraded: { gun: "modified_scar", cost: 3 },
+        upgraded: { gun: "modified_scar", cost: 4 },
         headshotMult: 1,
         speed: { equip: 0, attack: 3.5 },
         lootImg: {
@@ -1841,6 +1844,104 @@ export const BaseDefs: Record<string, GunDef> = {
             fallOff: 3,
         },
     },
+    henry: {
+        name: "Henry H015",
+        type: "gun",
+        quality: 0,
+        fireMode: "single",
+        caseTiming: "shoot",
+        ammo: "556mm",
+        aimDelay: true,
+        ammoSpawnCount: 16,
+        maxClip: 3,
+        maxReload: 1,
+        extendedClip: 1,
+        extendedReload: 1,
+        reloadTime: 1.4,
+        fireDelay: 0.35,
+        switchDelay: 0.35,
+        pullDelay: 1,
+        barrelLength: 3.85,
+        barrelOffset: 0,
+        recoilTime: 0.6,
+        moveSpread: 2.5,
+        shotSpread: 1,
+        bulletCount: 1,
+        bulletType: "bullet_henry",
+        headshotMult: 1,
+        speed: { equip: 0, attack: 1.5 },
+        lootImg: {
+            sprite: "loot-weapon-henry.img",
+            tint: 0xff00,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.3,
+        },
+        worldImg: {
+            sprite: "gun-henry-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 11, y: 0 },
+            recoil: 2.33,
+        },
+        particle: { shellScale: 1.6, shellOffset: 0.6 },
+        sound: {
+            shoot: "henry_01",
+            reload: "henry_reload_01",
+            pickup: "gun_pickup_01",
+            empty: "empty_fire_02",
+            deploy: "henry_switch_01",
+        },
+    },
+        cz600: {
+        name: "CZ 600 Lux",
+        type: "gun",
+        quality: 0,
+        fireMode: "single",
+        caseTiming: "shoot",
+        ammo: "556mm",
+        aimDelay: true,
+        ammoSpawnCount: 16,
+        maxClip: 3,
+        maxReload: 1,
+        extendedClip: 1,
+        extendedReload: 1,
+        reloadTime: 1.4,
+        fireDelay: 0.35,
+        switchDelay: 0.35,
+        pullDelay: 1,
+        barrelLength: 3.85,
+        barrelOffset: 0,
+        recoilTime: 0.6,
+        moveSpread: 2.5,
+        shotSpread: 1,
+        bulletCount: 1,
+        bulletType: "bullet_henry",
+        headshotMult: 1,
+        speed: { equip: 0, attack: 1.5 },
+        lootImg: {
+            sprite: "loot-weapon-cz600.img",
+            tint: 0xff00,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.3,
+        },
+        worldImg: {
+            sprite: "gun-cz600-01.img",
+            scale: { x: 0.6, y: 0.6 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 11, y: 0 },
+            recoil: 2.33,
+        },
+        particle: { shellScale: 1.6, shellOffset: 0.6 },
+        sound: {
+            shoot: "henry_01",
+            reload: "henry_reload_01",
+            pickup: "gun_pickup_01",
+            empty: "empty_fire_02",
+            deploy: "henry_switch_01",
+        },
+    },
     m39: {
         name: "M39 EMR",
         type: "gun",
@@ -2011,7 +2112,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletCount: 9,
         jitter: 1,
         bulletType: "bullet_buckshot",
-        upgraded: { gun: "modified_m870", cost: 2 },
+        upgraded: { gun: "modified_m870", cost: 3 },
         headshotMult: 1,
         lootImg: {
             sprite: "loot-weapon-m870.img",
@@ -2923,7 +3024,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_p30l",
         upgraded: { gun: "modified_p30l", cost: 2 },
         headshotMult: 1,
-        speed: { equip: 2.5, attack: 2 },
+        speed: { equip: 2.5, attack: 3 },
         lootImg: {
             sprite: "loot-weapon-p30l.img",
             tint: 65280,
@@ -2974,7 +3075,7 @@ export const BaseDefs: Record<string, GunDef> = {
         bulletType: "bullet_p30l",
         upgraded: { gun: "modified_p30l_dual", cost: 4 },
         headshotMult: 1,
-        speed: { equip: 1.5, attack: 2 },
+        speed: { equip: 1.5, attack: 3 },
         lootImg: {
             sprite: "loot-weapon-p30l-dual.img",
             tint: 65280,
@@ -3266,7 +3367,7 @@ export const BaseDefs: Record<string, GunDef> = {
         barrelOffset: 0,
         dualOffset: 0.6,
         recoilTime: 0.35,
-        moveSpread: 6,
+        moveSpread: 8,
         shotSpread: 2,
         bulletCount: 1,
         bulletType: "bullet_colt45",
@@ -3607,7 +3708,7 @@ export const BaseDefs: Record<string, GunDef> = {
         fireMode: "single",
         caseTiming: "reload",
         ammo: "50AE",
-        ammoSpawnCount: 45,
+        ammoSpawnCount: 55,
         pistol: true,
         maxClip: 5,
         maxReload: 5,
@@ -3720,7 +3821,7 @@ export const BaseDefs: Record<string, GunDef> = {
         maxReload: 1,
         extendedClip: 1,
         extendedReload: 1,
-        reloadTime: 2,
+        reloadTime: 6,
         fireDelay: 0.4,
         switchDelay: 0.3,
         barrelLength: 2,
@@ -3912,6 +4013,62 @@ export const BaseDefs: Record<string, GunDef> = {
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "gun_switch_01",
+        },
+    },
+    qlu11: {
+        name: "QLU-11",
+        type: "gun",
+        quality: 0,
+        fireMode: "single",
+        caseTiming: "shoot",
+        ammo: "12gauge",
+        ammoSpawnCount: 12,
+        maxClip: 4,
+        maxReload: 4,
+        extendedClip: 4,
+        extendedReload: 1,
+        reloadTime: 1,
+        fireDelay: 3.4,
+        switchDelay: 1,
+        barrelLength: 3,
+        barrelOffset: 0,
+        recoilTime: 1e10,
+        moveSpread: 2,
+        shotSpread: 1,
+        bulletCount: 1,
+        bulletType: "bullet_potato",
+        //projType: "hv_grenade",
+        projectileUsesAimDistance: true,
+        noSplinter: true,
+        headshotMult: 1,
+        speed: { equip: -0.5, attack: 0 },
+        lootImg: {
+            sprite: "loot-weapon-qlu11.img",
+            tint: 65280,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.3,
+        },
+        worldImg: {
+            sprite: "gun-qlu11-01.img",
+            scale: { x: 0.6, y: 0.6 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 7, y: 0 },
+            gunOffset: { x: 0, y: 0 },
+            recoil: 6,
+            handsBelow: false,
+        },
+        particle: {
+            shellScale: 1,
+            shellOffset: -1,
+            shellOffsetY: 1,
+        },
+        sound: {
+            shoot: "potato_cannon_01",
+            reload: "potato_cannon_reload_01",
+            pickup: "gun_pickup_01",
+            empty: "empty_fire_01",
+            deploy: "potato_cannon_switch_01",
         },
     },
     potato_cannon: {
@@ -4180,10 +4337,10 @@ export const BaseDefs: Record<string, GunDef> = {
             scale: 0.3,
         },
         worldImg: {
-            sprite: "gun-long-ak74.img",
-            scale: { x: 0.55, y: 0.5655 },
-            tint: 0xffffff, // not tint at all
-            leftHandOffset: { x: 2.8, y: 0 },
+            sprite: "gun-ak74-01.img",
+            scale: { x: 0.55, y: 0.55 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 4.8, y: 0 },
             recoil: 1.33,
         },
         particle: { shellScale: 1, shellOffset: 0.45 },
@@ -4210,6 +4367,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-mp220-modified-01.img",
+            scale: { x: 0.45, y: 0.45 },
         },
         sound: {
             reload: "mp220_modified_reload_01",
@@ -4221,9 +4379,16 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         isDual: false,
         fireMode: "auto",
         dualWieldType: "modified_p30l_dual",
-        speed: { equip: 2.5, attack: 3.5 },
+        speed: { equip: 2.5, attack: 4.5 },
         upgraded: undefined,
         modifiedSound: "p30l_01",
+        worldImg: {
+            sprite: "gun-p30l-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
@@ -4239,6 +4404,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-p30l-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_awc: defineGunSkin("awc", {
         name: "AWM-S [+]",
@@ -4253,11 +4425,18 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-awc-modified-01.img",
+            //scale: { x: 0.6, y: 0.435 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_m870: defineGunSkin("m870", {
         name: "M870 [+]",
         bulletCount: 16,
-        moveSpread: 9.5,
+        moveSpread: 8,
         shotSpread: 12,
         bulletType: "bullet_buckshot_modified",
         bulletTypeMix: [
@@ -4268,6 +4447,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "m870_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m870-modified-01.img",
+            scale: { x: 0.6, y: 0.435 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_model94: defineGunSkin("model94", {
@@ -4282,6 +4468,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-model94-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 3.2, y: 0 },
+            recoil: 2.33,
+        },
     }),
     modified_usas: defineGunSkin("usas", {
         name: "USAS-12 [+]",
@@ -4290,6 +4483,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "usas_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-usas-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_mk12: defineGunSkin("mk12", {
@@ -4302,6 +4502,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "mk12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-mk12-modified-01.img",
+            scale: { x: 0.6, y: 0.485 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_m39: defineGunSkin("m39", {
@@ -4317,6 +4524,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-m39-modified-01.img",
+            scale: { x: 0.7, y: 0.4925 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_an94: defineGunSkin("an94", {
         name: "AN-94 [+]",
@@ -4328,20 +4542,37 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-an94-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 9, y: 0 },
+            recoil: 1.33,
+        },
     }),
     modified_spas12: defineGunSkin("spas12", {
         name: "SPAS-12 [+]",
-        maxClip: 4,
+        maxClip: 6,
         maxReload: 2,
-        bulletCount: 7,
+        bulletCount: 3,
+        ammoPreserve: 2,
+        shotSpread: 3,
+        moveSpread: 2,
         reloadTime: 0.65,
-        burstCount: 2,
-        burstDelay: 0.06,
+        burstCount: 4,
+        burstDelay: 0.025,
         fireMode: "burst",
         upgraded: undefined,
         modifiedSound: "spas12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-spas12-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 4.9, y: 0 },
+            recoil: 1.33,
         },
     }),
     modified_mac10: defineGunSkin("mac10", {
@@ -4353,6 +4584,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "mac10_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-mac10-modified-01.img",
+            scale: { x: 0.55, y: 0.48 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_bar: defineGunSkin("bar", {
@@ -4368,6 +4606,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-bar-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 6.8, y: 0 },
+            recoil: 1.4,
+        },
     }),
     modified_grozas: defineGunSkin("grozas", {
         name: "Groza-S [+]",
@@ -4378,6 +4623,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         bulletType: "bullet_grozas_modified",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-grozas-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_deagle: defineGunSkin("deagle", {
@@ -4394,6 +4646,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_deagle_45acp: defineGunSkin("deagle", {
@@ -4412,6 +4671,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_deagle_dual: defineGunSkin("deagle_dual", {
         name: "Dual DEagle 50 [+]",
@@ -4425,6 +4691,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "deagle_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_deagle_dual_45acp: defineGunSkin("deagle_dual", {
@@ -4442,6 +4715,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-deagle-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_vss: defineGunSkin("vss", {
         name: "VSS [+]",
@@ -4457,6 +4737,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-vss-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_m1014: defineGunSkin("m1014", {
         name: "Super90 [+]",
@@ -4470,16 +4757,33 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-m1014-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 7.8, y: 0 },
+            recoil: 1.33,
+        },
     }),
     modified_origin: defineGunSkin("origin", {
         name: "Origin-12 [+]",
         maxClip: 8,
         maxReload: 8,
+        bulletCount: 11,
+        moveSpread: 2,
+        barrelLength: 4,
         bulletType: "bullet_modified_origin",
         upgraded: undefined,
         modifiedSound: "origin12_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-origin-modified-01.img",
+            scale: { x: 0.65, y: 0.55 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_saiga: defineGunSkin("saiga", {
@@ -4493,20 +4797,38 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-saiga-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_saiga_grenade: defineGunSkin("saiga", {
         name: "Saiga-12 [+]",
         secondAmmo: "modified_saiga",
         preserveSecondAmmo: true,
         secondAmmoLabel: "Grenade",
-        moveSpread: 2,
+        shotSpread: 20,
+        moveSpread: 10,
         bulletCount: 2,
-        bulletType: "bullet_saiga_modified",
+        projType: "mirv_mini_saiga",
+        projectileUsesAimDistance: true,
+        projectileMaxAimDistance: 18,
+        bulletType: "bullet_potato",
         upgraded: undefined,
         modifiedSound: "saiga_01",
         speed: { equip: 0, attack: -2 },
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-saiga-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     modified_qbb97: defineGunSkin("qbb97", {
@@ -4518,6 +4840,18 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-qbb97-top-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 12, y: 0 },
+            gunOffset: { x: 2, y: 0 },
+            recoil: 1.33,
+            magImg: {
+                sprite: "gun-qbb97-bot-01.img",
+                pos: { x: -1.5, y: -7.5 },
+            },
+        },
     }),
     modified_famas: defineGunSkin("famas", {
         name: "FAMAS [+]",
@@ -4528,6 +4862,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-famas-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_l86: defineGunSkin("l86", {
         name: "L86A2 [+]",
@@ -4537,15 +4878,29 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-l86-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 2, y: 0 },
+            recoil: 1.66,
+        },
     }),
     modified_m4a1: defineGunSkin("m4a1", {
-        name: "M4A1 [+]",
+        name: "M4A1-S [+]",
         bulletType: "bullet_m4a1_modified",
         toMouseHit: true,
         upgraded: undefined,
         modifiedSound: "m4a1_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m4a1-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     // M416 [+]: Kugel-Modus, per SwitchAmmo (B) in den Granaten-Modus umschaltbar
@@ -4556,13 +4911,22 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         secondAmmoLabel: "Auto",
         moveSpread: 5,
         shotSpread: 2,
-        fireDelay: 0.082,
+        fireDelay: 0.088,
+        bulletTypeExtra: "bullet_hk416_modified_double",
+        extraBulletTrigger: 4,
         bulletType: "bullet_hk416_modified",
         upgraded: undefined,
         modifiedSound: "hk416_01",
         lootImg: {
             sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m416-modified-01.img",
+            scale: { x: 0.65, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
         },
     }),
     // M416 [+]: Granaten-Modus – verschießt die aktuell gewählte Wurfwaffe aus dem
@@ -4573,6 +4937,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         preserveSecondAmmo: true,
         secondAmmoLabel: "Grenade",
         launchThrowable: true,
+        projectileMaxAimDistance: 45,
         fireMode: "single",
         maxClip: 1,
         maxReload: 1,
@@ -4581,10 +4946,24 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         reloadTime: 1.0,
         fireDelay: 0.5,
         upgraded: undefined,
-        modifiedSound: "hk416_01",
+        modifiedSound: "explosion_04_gun",
         lootImg: {
             sprite: "loot-weapon-hk416-modified.img",
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-m416-modified-01.img",
+            scale: { x: 0.65, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
+        sound: {
+            shoot: "explosion_04_gun",
+            reload: "hk416_reload_01",
+            pickup: "gun_pickup_01",
+            empty: "empty_fire_01",
+            deploy: "hk416_switch_01",
         },
     }),
     modified_scout_elite: defineGunSkin("scout_elite",{
@@ -4603,7 +4982,10 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-scout_elite-01.img",
+            scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
+            leftHandOffset: { x: 6, y: 0 },
+            recoil: 2.33,
         },
         sound: {
             reloadAlt: "scout_reload_01",
@@ -4617,23 +4999,42 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-m249-top-modified-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 13.2, y: 0 },
+            recoil: 1.33,
+            magImg: {
+                sprite: "gun-m249-bot-modified-01.img",
+                pos: { x: 0, y: -20.5 },
+            },
+        },
     }),
     modified_scorpion: defineGunSkin("scorpion", {
         name: "CZ-3A1 [+]",
-        reloadTime: 0.17,
+        reloadTime: 0.2,
         maxReload: 2,
-        maxClip: 12,
+        maxClip: 10,
         upgraded: undefined,
         modifiedSound: "scorpion_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
         },
+        worldImg: {
+            sprite: "gun-scorpion-modified-01.img",
+            //scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            //leftHandOffset: { x: 9, y: 0 },
+            //recoil: 1.33,
+        },
     }),
     modified_scar: defineGunSkin("scar", {
         name: "SCAR-H [+]",
         fireDelay: 0.045,
-        maxClip: 36,
-        maxReload: 36,
+        maxClip: 20,
+        maxReload: 20,
+        ammoPreserve: 2,
         bulletTypeExtra: "bullet_scar",
         extraBulletTrigger: 2,
         bulletType: "bullet_scar_modified",
@@ -4641,6 +5042,13 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         modifiedSound: "scar_01",
         lootImg: {
             border: "loot-circle-outer-modified-01.img",
+        },
+        worldImg: {
+            sprite: "gun-scar-01.img",
+            scale: { x: 0.5, y: 0.5 },
+            tint: 0xffffff,
+            leftHandOffset: { x: 2.8, y: 0 },
+            recoil: 1.33,
         },
     }),
 }

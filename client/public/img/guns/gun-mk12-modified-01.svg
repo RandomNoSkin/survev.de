@@ -1,0 +1,26 @@
+<svg width="83" height="226" viewBox="0 0 83 226" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="36" y="134" width="12" height="28" fill="#322B20" stroke="black" stroke-width="8"/>
+<path d="M52 129H32V64H52V129Z" fill="#726248" stroke="black" stroke-width="8"/>
+<path d="M69 75H65.5L63 74.25H57L55 75H52V70H55L57 70.75H63L65.5 70H69V75Z" fill="black"/>
+<path d="M33 75H29.5L27 74.25H21L19 75H16V70H19L21 70.75H27L29.5 70H33V75Z" fill="black"/>
+<path opacity="0.4" d="M42 135V65" stroke="black" stroke-width="7"/>
+<path opacity="0.4" d="M42 67L42 72" stroke="black" stroke-width="7"/>
+<path opacity="0.4" d="M42 79L42 83" stroke="black" stroke-width="7"/>
+<path opacity="0.4" d="M42 90L42 94" stroke="black" stroke-width="7"/>
+<path opacity="0.4" d="M42 100L42 104" stroke="black" stroke-width="7"/>
+<path opacity="0.4" d="M42 110L42 114" stroke="black" stroke-width="7"/>
+<rect x="37" y="120" width="10" height="17" fill="black"/>
+<circle cx="42" cy="147" r="4" fill="black"/>
+<rect x="39" y="48" width="6" height="15" fill="white" stroke="black" stroke-width="8"/>
+<path d="M33 222H51V222C51 224.209 49.2091 226 47 226H37C34.7909 226 33 224.209 33 222V222Z" fill="black"/>
+<path d="M34 158H50V178.5V219H34V178.5V158Z" fill="#726248"/>
+<path d="M34 178.5V219H50V178.5M34 178.5V158H50V178.5M34 178.5H50" stroke="black" stroke-width="8"/>
+<path d="M40 176L40 162" stroke="black" stroke-width="3"/>
+<path d="M44 176L44 162" stroke="black" stroke-width="3"/>
+<path d="M51 158V158C55.4183 158 59 161.582 59 166V168C59 172.418 55.4183 176 51 176V176V158Z" fill="black"/>
+<path d="M33 209L28.5 209C27.6716 209 27 208.328 27 207.5V207.5C27 206.672 27.6716 206 28.5 206L33 206L33 209Z" fill="black"/>
+<path d="M51 209L55.5 209C56.3284 209 57 208.328 57 207.5V207.5C57 206.672 56.3284 206 55.5 206L51 206L51 209Z" fill="black"/>
+<rect x="37" y="10" width="10" height="54" fill="black"/>
+<path d="M35 9H49V24.5844L46.8462 29H37.1538L35 24.5844V9Z" fill="black"/>
+<rect x="35" y="32" width="14" height="4" fill="black"/>
+</svg>

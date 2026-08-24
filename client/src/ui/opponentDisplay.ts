@@ -346,6 +346,7 @@ export class LoadoutDisplay {
             actionItem: options.actionItem || "",
             wearingPan: false,
             healEffect: false,
+            healRegionEffect: false,
             lastStandEffect: false,
             frozen: false,
             frozenOri: 0,

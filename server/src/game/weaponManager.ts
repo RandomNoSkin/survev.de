@@ -53,6 +53,7 @@ export class WeaponManager {
         cooldown: number;
         recoilTime: number;
         shotCount: number;
+        ammoPreserveCounter?: number;
         backpackFed?: boolean;
         // Granaten-Launcher (modified_hk416_grenade): in der Kammer geladener
         // Wurfwaffen-Typ und das gestashte Magazin des inaktiven Modus.
@@ -84,6 +85,7 @@ export class WeaponManager {
                 cooldown: 0,
                 recoilTime: Infinity,
                 shotCount: 0,
+                ammoPreserveCounter: 0,
                 backpackFed: false,
                 loadedThrowable: undefined,
                 secondaryClip: undefined,
@@ -195,6 +197,8 @@ export class WeaponManager {
 
         this.lastWeaponIdx = this._curWeapIdx;
         this._curWeapIdx = idx;
+        // Reset preserve counter on weapon switch so the preserve pattern restarts
+        if (this.weapons[idx]) this.weapons[idx].ammoPreserveCounter = 0;
         if (cancelAction) {
             this.player.cancelAction();
         }
@@ -289,6 +293,7 @@ export class WeaponManager {
         this.weapons[idx].type = type;
         this.weapons[idx].cooldown = 0;
         this.weapons[idx].ammo = ammo;
+        this.weapons[idx].ammoPreserveCounter = 0;
         if (weaponDef?.type === "gun") {
             this.weapons[idx].recoilTime = weaponDef.recoilTime;
             this.weapons[idx].backpackFed = !!weaponDef.backpackFed;
@@ -698,6 +703,7 @@ export class WeaponManager {
             );
             if (taken <= 0) return;
             weapon.ammo += taken;
+            weapon.ammoPreserveCounter = 0;
             weapon.loadedThrowable = throwableType;
             this.player.weapsDirty = true;
             this.bursts.length = 0;
@@ -736,6 +742,7 @@ export class WeaponManager {
         }
 
         weapon.ammo += amountToReload;
+        weapon.ammoPreserveCounter = 0;
 
         // reload again if we still have ammo in the inventory but didnt fill the weapon
         // for single reload shotguns
@@ -779,6 +786,7 @@ export class WeaponManager {
                 );
                 if (taken <= 0) continue;
                 weapon.ammo = math.min(maxClip, curAmmo + taken);
+                weapon.ammoPreserveCounter = 0;
                 weapon.loadedThrowable = throwableType;
                 continue;
             }
@@ -795,6 +803,7 @@ export class WeaponManager {
 
             weapon.ammo = curAmmo + add;
             if (weapon.ammo > maxClip) weapon.ammo = maxClip;
+            weapon.ammoPreserveCounter = 0;
         }
 
         this.player.reloadAgain = false;
@@ -956,8 +965,6 @@ export class WeaponManager {
     fireWeapon(offHand: boolean, forceFire?: boolean) {
         const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
 
-        // Granaten-Launcher (modified_hk416_grenade): verschießt die geladene
-        // Wurfwaffe cursor-gezielt statt normaler Kugeln.
         if (itemDef.launchThrowable) {
             this.fireThrowableLauncher(offHand);
             return;
@@ -1009,6 +1016,13 @@ export class WeaponManager {
                 this.player.invManager.has(itemDef.ammo as InventoryItem)
             ) {
                 this.player.invManager.take(itemDef.ammo, 1);
+            }
+        } else if (itemDef.ammoPreserve) {
+            // Count shots per-weapon and consume ammo only on the configured
+            // shot number (e.g. ammoPreserve=2 => consume every 2nd shot).
+            weapon.ammoPreserveCounter = (weapon.ammoPreserveCounter ?? 0) + 1;
+            if (weapon.ammoPreserveCounter % itemDef.ammoPreserve === 0) {
+                weapon.ammo--;
             }
         } else {
             weapon.ammo--;
@@ -1239,7 +1253,60 @@ export class WeaponManager {
                     `Invalid projectile type: ${itemDef.projType}`,
                 );
 
-                const vel = v2.mul(shotDir, projDef.throwPhysics.speed);
+                let projectileSpeed = projDef.throwPhysics.speed;
+                let projectileDirection = shotDir;
+                let projectileVelocityZ: number | undefined;
+                if (projDef.exactAimDistance) {
+                    const gravity = 10.5;
+                    const launchHeight = 0.5;
+                    const launchVelocityZ = projDef.throwPhysics.velZ;
+                    const computedFlightTime =
+                        (launchVelocityZ
+                            + Math.sqrt(
+                                launchVelocityZ * launchVelocityZ
+                                    + 2 * gravity * launchHeight,
+                            )) / gravity;
+                    const baseFlightTime =
+                        projDef.exactAimFlightTime ?? computedFlightTime;
+                    const targetPos = v2.add(
+                        this.player.pos,
+                        v2.mul(direction, this.player.toMouseLen),
+                    );
+                    const targetDistance = math.max(
+                        v2.dot(v2.sub(targetPos, shotPos), direction),
+                        0,
+                    );
+                    const distanceRatio = math.clamp(
+                        targetDistance
+                            / (GameConfig.player.throwableMaxMouseDist * 1.8),
+                        0,
+                        1,
+                    );
+                    const flightTime =
+                        baseFlightTime
+                        * (1
+                            - (projDef.exactAimFlightTimeVariation ?? 0)
+                                * (1 - distanceRatio));
+                    projectileSpeed = targetDistance / flightTime;
+                    projectileVelocityZ =
+                        (0.5 * gravity * flightTime * flightTime - launchHeight)
+                        / flightTime;
+                } else if (itemDef.projectileUsesAimDistance) {
+                    const maxAimDistance =
+                        itemDef.projectileMaxAimDistance
+                        ?? GameConfig.player.throwableMaxMouseDist * 1.8;
+                    const aimDistanceMultiplier =
+                        math.clamp(
+                            this.player.toMouseLen,
+                            0,
+                            maxAimDistance,
+                        ) / 15;
+                    projectileSpeed *= aimDistanceMultiplier;
+                }
+                const vel = v2.mul(
+                    projectileDirection,
+                    projectileSpeed,
+                );
                 projectile = this.player.game.projectileBarn.addProjectile(
                     this.player.__id,
                     itemDef.projType,
@@ -1249,7 +1316,10 @@ export class WeaponManager {
                     vel,
                     projDef.fuseTime,
                     GameConfig.DamageType.Player,
-                    shotDir,
+                    projectileDirection,
+                    undefined,
+                    undefined,
+                    projectileVelocityZ,
                 );
             }
 
@@ -1346,13 +1416,22 @@ export class WeaponManager {
      * Flugbahn-Simulation wird die (immer schnelle) Geschwindigkeit gewählt, mit
      * der die Granate genau am Crosshair des Spielers detoniert.
      */
-    computeLauncherVel(throwableDef: ThrowableDef, spawnPos: Vec2, dir: Vec2): Vec2 {
+    computeLauncherVel(
+        throwableDef: ThrowableDef,
+        spawnPos: Vec2,
+        dir: Vec2,
+        maxAimDistance?: number,
+    ): Vec2 {
         // Zielpunkt = Mausposition des Spielers
-        const target = v2.add(this.player.pos, v2.mul(dir, this.player.toMouseLen));
+        const targetDistance = math.min(
+            this.player.toMouseLen,
+            maxAimDistance ?? Infinity,
+        );
+        const target = v2.add(this.player.pos, v2.mul(dir, targetDistance));
         const targetDist = v2.length(v2.sub(target, spawnPos));
 
-        // immer "ziemlich schnell" -> hoher Geschwindigkeitsbereich
-        const minSpeed = 30;
+        // Allow close cursor targets to produce genuinely short throws.
+        const minSpeed = 0;
         const maxSpeed = 130;
         let lo = minSpeed;
         let hi = maxSpeed;
@@ -1468,7 +1547,12 @@ export class WeaponManager {
             }
         }
 
-        const vel = this.computeLauncherVel(throwableDef, spawnPos, direction);
+        const vel = this.computeLauncherVel(
+            throwableDef,
+            spawnPos,
+            direction,
+            itemDef.projectileMaxAimDistance,
+        );
 
         let fuseTime = 1;
         let multiplier = 1;

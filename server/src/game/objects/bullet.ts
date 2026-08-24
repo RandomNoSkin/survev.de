@@ -67,6 +67,10 @@ export interface BulletParams {
     hasModifier?: boolean;
     speedMult?: number;
     distanceMult?: number;
+    // Optional: preserve an initial speed and traveled distance when spawning
+    // (used for reflections to continue acceleration state)
+    initialSpeed?: number;
+    initialDistanceTraveled?: number;
 }
 
 export class BulletBarn {
@@ -198,7 +202,7 @@ export class Bullet {
         this.alive = true;
         this.active = true;
         this.collided = false;
-        this.distanceTraveled = 0;
+        this.distanceTraveled = params.initialDistanceTraveled ?? 0;
         this.sentToClient = false;
         // this.serialized = false; // TODO: cache bullet serialization?
 
@@ -221,7 +225,7 @@ export class Bullet {
         this.baseSpeed = bulletDef.speed;
         this.accelerating = bulletDef.accelerating ?? 0;
         this.speedVariance = variance;
-        this.speed = this.baseSpeed * this.speedMult * this.speedVariance;
+        this.speed = params.initialSpeed ?? (this.baseSpeed * this.speedMult * this.speedVariance);
         this.hasModifier =
             this.speedMult !== 1 || this.distanceMult !== 1 || this.accelerating !== 0;
         this.onHitFx = bulletDef.onHit ?? params.onHitFx;
@@ -706,13 +710,12 @@ export class Bullet {
             const distT = math.clamp(this.distanceTraveled / this.distance, 0, 1);
             const falloff = math.remap(distT, 0, 1, 1, def.falloff);
             finalDamage *= falloff;
-            finalDamage *= falloff; // Apply falloff twice for exponential damage dropoff to stop excessive damage from short range guns lie vector
+            finalDamage *= falloff; // Apply falloff twice for exponential damage dropoff to stop excessive damage from short range guns like vector
 
             if (def.falloffUpperMax !== undefined && finalDamage > def.falloffUpperMax) {
                 finalDamage = def.falloffUpperMax;
             }
 
-            // 2. New rule: Stacking -10% every 5 units after 55
             const falloffStartDist = 55;    // Start penalty after 55 units
             const falloffIncrement = 1;     // Penalty every 1 units beyond
             const falloffRate = 0.065;        // -6.5% per increment
@@ -722,10 +725,11 @@ export class Bullet {
                     (this.distanceTraveled - falloffStartDist) / falloffIncrement
                 );
                 // Apply penalty multiplicatively (e.g., 0.9 for 60 units, 0.8 for 65 units...)
-                finalDamage *= Math.max(1 - (incrementsPastThreshold * falloffRate), 0.2); // Math.max makes sure to prevent bullets from doing 0 damage (0.1 equals min damage of 10%)
+                finalDamage *= Math.max(1 - (incrementsPastThreshold * falloffRate), 0.2); // Math.max makes sure to prevent bullets from doing 0 damage (0.2 is 20% min dmg)
             }
 
         }
+        const bulletDef = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
 
         for (let i = 0; i < collisions.length; i++) {
             const col = collisions[i];
@@ -795,7 +799,7 @@ export class Bullet {
                             distance: remainingDistance * pierceDistanceMult,
                         });
                     }
-                } else if (mapDef.reflectBullets) {
+                } else if (mapDef.reflectBullets || bulletDef.alwaysReflect) {
                     this.reflect(col.point, col.normal, col.obj!.__id);
                 }
 
@@ -879,7 +883,7 @@ export class Bullet {
                 math.max(1, this.distance - this.distanceTraveled) /
                 Math.pow(GameConfig.bullet.reflectDistDecay, this.reflectCount);
         }
-
+        
         this.bulletManager.fireBullet({
             bulletType: this.bulletType,
             gameSourceType: this.shotSourceType,
@@ -907,6 +911,9 @@ export class Bullet {
             varianceT: this.varianceT,
             clipDistance: this.clipDistance,
             distance: distance,
+            // preserve current velocity/acceleration state on reflection
+            initialSpeed: this.speed,
+            initialDistanceTraveled: this.distanceTraveled,
         });
     }
 }

@@ -31,7 +31,7 @@ function serializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
         for (const key of Object.keys(GameConfig.bagSizes)) {
             const hasItem = data.inventory[key] > 0;
             s.writeBoolean(hasItem);
-            if (hasItem) s.writeBits(data.inventory[key], 9);
+            if (hasItem) s.writeBits(data.inventory[key], 10);
         }
     }
 
@@ -83,7 +83,7 @@ function deserializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
             const item = inventoryKeys[i];
             let count = 0;
             if (s.readBoolean()) {
-                count = s.readBits(9);
+                count = s.readBits(10);
             }
             data.inventory[item] = count;
         }

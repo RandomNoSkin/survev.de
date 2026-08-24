@@ -13,10 +13,12 @@ const mapDef: PartialMapDef = {
     },
     assets: {
         audio: [
+            { name: "lodge_music_01", channel: "gameMusic" },
             { name: "vault_change_02", channel: "sfx" },
             { name: "footstep_08", channel: "sfx" },
             { name: "footstep_09", channel: "sfx" },
             { name: "helmet03_forest_pickup_01", channel: "ui" },
+            { name: "ambient_fireplace_01", channel: "ambient" },
         ],
         atlases: ["gradient", "loadout", "shared", "woods"],
     },
@@ -136,6 +138,7 @@ const mapDef: PartialMapDef = {
             { name: "saiga", count: 1, weight: 1 },
             { name: "spas16", count: 1, weight: 1 },
             { name: "qbb97", count: 1, weight: 1 },
+            { name: "henry", count: 1, weight: 1 },
         ],
         tier_airdrop_rare: [
             { name: "usas", count: 1, weight: 1.5 },
@@ -148,6 +151,12 @@ const mapDef: PartialMapDef = {
             { name: "556mm", count: 30, weight: 3 },
             { name: "12gauge", count: 5, weight: 3 },
         ],
+        tier_airdrop_armor: [
+            { name: "helmet03", count: 1, weight: 1 },
+            { name: "helmet03_hat", count: 1, weight: 1 },
+            { name: "chest03", count: 1, weight: 1 },
+            { name: "backpack03", count: 1, weight: 1 },
+        ],
         tier_hatchet: [
             { name: "usas", count: 1, weight: 2 },
             { name: "pkp", count: 1, weight: 0.25 },
@@ -156,7 +165,8 @@ const mapDef: PartialMapDef = {
         tier_airdrop_melee: [
             { name: "", count: 1, weight: 13 },
             { name: "stonehammer", count: 1, weight: 3 },
-            { name: "pan", count: 1, weight: 1 },
+            { name: "pan", count: 1, weight: 3 },
+            { name: "antlers", count: 1, weight: 3 },
         ],
     },
     mapGen: {

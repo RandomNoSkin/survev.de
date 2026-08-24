@@ -172,8 +172,8 @@ a:active {
   background-image: url(/img/survev-de_logo_full.png);
   background-repeat: no-repeat;
   /* In case of logo change, update this value to width divided by 2 ceiled  */
-  background-size: 500px;
-  background-position: center;
+  background-size: 600px;
+  background-position: center -20px;
   height: 300px;
   margin: auto;
   margin-top: 20px;
@@ -181,7 +181,7 @@ a:active {
   margin-bottom: 24px;
   position: relative;
   /* In case of logo change, update this value to width divided by 2 ceiled  */
-  width: 500px;
+  width: 600px;
 }
 
 /* Russian locale logo */

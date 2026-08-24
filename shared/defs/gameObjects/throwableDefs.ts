@@ -20,6 +20,7 @@ export interface ThrowableDef {
         spinDrag: number;
         fixedCollisionHeight?: number;
         randomizeSpinDir?: boolean;
+        rotateToDirection?: boolean;
     };
     speed: {
         equip: number;
@@ -52,6 +53,9 @@ export interface ThrowableDef {
     heavyType?: string;
     changeTime?: number; // after changeTime has elapsed, throwable is changed to its "heavyType" variant
     forceMaxThrowDistance?: boolean;
+    exactAimDistance?: boolean;
+    exactAimFlightTime?: number;
+    exactAimFlightTimeVariation?: number;
     emoteId?: number;
     noPotatoSwap?: boolean;
     destroyNonCollidables?: boolean;
@@ -224,6 +228,7 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
         cookable: false,
         explodeOnImpact: false,
         playerCollision: false,
+        destroyNonCollidables: false,
         proximityMine: { armTime: 3, triggerRad: 6, triggerDelay: 0.7 },
         fuseTime: 420, 
         aimDistance: 0,
@@ -399,7 +404,7 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
         noPotatoSwap: true,
         explodeOnImpact: false,
         playerCollision: false,
-        fuseTime: 1,
+        fuseTime: 1.2,
         fuseVariance: 0.3,
         aimDistance: 0,
         rad: 1,
@@ -419,7 +424,7 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
             scale: 0.2,
         },
         worldImg: {
-            sprite: "proj-mirv-mini-01.img",
+            sprite: "proj-mirv-mini-saiga-01.img",
             scale: 0.12,
             tint: 0xffffff,
         },
@@ -461,7 +466,7 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
             scale: 0.2,
         },
         worldImg: {
-            sprite: "proj-mirv-mini-01.img",
+            sprite: "proj-mirv-mini-usas-01.img",
             scale: 0.12,
             tint: 0xffffff,
         },
@@ -646,6 +651,61 @@ export const ThrowableDefs: Record<string, ThrowableDef> = {
             throwing: "frag_throw_01",
             pickup: "frag_pickup_01",
             deploy: "frag_deploy_01",
+        },
+    },
+    hv_grenade: {
+        name: "HV-Grenade",
+        type: "throwable",
+        quality: 0,
+        explosionType: "explosion_dynamite",
+        inventoryOrder: 0,
+        noPotatoSwap: true,
+        cookable: true,
+        forceMaxThrowDistance: true,
+        exactAimDistance: true,
+        exactAimFlightTime: 0.4,
+        exactAimFlightTimeVariation: 0.6,
+        explodeOnImpact: true,
+        destroyNonCollidables: true,
+        playerCollision: true,
+        fuseTime: 999,
+        aimDistance: 32,
+        rad: 1,
+        throwPhysics: {
+            playerVelMult: 0,
+            velZ: 2,
+            speed: 120,
+            spinVel: 0,
+            spinDrag: 0,
+            fixedCollisionHeight: 0.25,
+            rotateToDirection: true,
+        },
+        speed: { equip: 0, attack: 0 },
+        lootImg: {
+            sprite: "loot-throwable-potato.img",
+            tint: 0xff00,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.2,
+        },
+        worldImg: {
+            sprite: "proj-qlu11-01.img",
+            scale: 0.2,
+            tint: 0xffffff,
+        },
+        handImg: {},
+        useThrowParticles: false,
+        sound: {
+            pullPin: "",
+            throwing: "frag_throw_01",
+            pickup: "frag_pickup_01",
+            deploy: "frag_deploy_01",
+        },
+        trail: {
+            maxLength: 30,
+            width: 1.5,
+            alpha: 0.7,
+            tint: 0xcb0000,
         },
     },
     snowball: {

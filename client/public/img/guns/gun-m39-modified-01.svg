@@ -1,0 +1,19 @@
+<svg width="88" height="226" viewBox="0 0 88 226" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M32 160V159H37V160H32Z" fill="#686060" stroke="black" stroke-width="8"/>
+<path d="M35 210V151H51V210H35Z" fill="#19233B" stroke="black" stroke-width="8"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M36.4194 219H31V216H55V219H49.5806H36.4194Z" fill="black"/>
+<path d="M40 219V192H46V219H40Z" fill="black"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M36.4194 219H31L36.4194 226H49.5806L55 219H49.5806H36.4194Z" fill="black"/>
+<path d="M44 183V164" stroke="black" stroke-opacity="0.5" stroke-width="16"/>
+<circle cx="2" cy="2" r="2" transform="matrix(-1 0 0 1 45 208)" fill="#74777D"/>
+<path d="M51 218.5V208" stroke="black" stroke-width="4"/>
+<path d="M35 218.5V208" stroke="black" stroke-width="4"/>
+<path d="M37 151V118H49V151H37Z" fill="#19233B" stroke="black" stroke-width="8"/>
+<path d="M35 113V104.523V82H51V104.523V113L47.8889 120H37.6667L35 113Z" fill="#74777D" stroke="black" stroke-width="8"/>
+<path d="M36.6 62.4915V81H49.4V62.4915L55 58.5424V53H31V58.5424L36.6 62.4915Z" fill="#19233B" stroke="black" stroke-width="8"/>
+<rect x="38" y="25" width="10" height="44" fill="#74777D" stroke="black" stroke-width="8"/>
+<path d="M43 110V91" stroke="black" stroke-opacity="0.5" stroke-width="8"/>
+<path d="M43 101V97" stroke="black" stroke-opacity="0.5" stroke-width="8"/>
+<path d="M45 68H41" stroke="black" stroke-width="8"/>
+<path d="M43 24V5" stroke="black" stroke-width="8"/>
+</svg>

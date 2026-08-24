@@ -359,10 +359,17 @@ export interface MapDef {
         randomSpawns: Array<{
             spawns: string[];
             choose: number;
+            // survev.de addition, have a chance to spawn any number of the random spawns between the amount defined by choose and choose + chooseMore 
+            chooseMore?: number; // defaults to 0 if not defined
         }>;
         spawnReplacements: [Record<string, string | Array<{ type: string; weight: number }>>];
         importantSpawns: string[];
         spawnOnRiver?: string[];
+        /**
+         * Defines spawn count reductions for buildings.
+         * Used for rare structures not making extremely dense maps on occasion but instead making another building not spawn when they do spawn in
+         */
+        spawnReductions?: Record<string, Array<{ target: string; amount: number }>>;
     };
 }
 

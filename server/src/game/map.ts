@@ -897,7 +897,9 @@ export class GameMap {
 
         for (const randomSpawns of mapGen.randomSpawns) {
             const spawns = [...randomSpawns.spawns];
-            for (let i = 0; i < randomSpawns.choose; i++) {
+            let spawnAmount = randomSpawns.choose;
+            spawnAmount +=  util.randomInt(0, randomSpawns.chooseMore ?? 0);
+            for (let i = 0; i < spawnAmount; i++) {
                 const idx = util.randomInt(0, spawns.length - 1);
                 const type = spawns.splice(idx, 1)[0];
 
@@ -929,6 +931,35 @@ export class GameMap {
                     type,
                     count,
                 });
+            }
+        }
+        // SpawnReduction system that allows for more building variety via rare spawns replacing common spawns instead of spawning as additional buildings
+        // Apply spawn reductions based on which buildings are spawning
+        if (mapGen.spawnReductions) {
+            const lakeSpawns = this.lakeObjs
+                .filter((type) => type)
+                .map((type) => ({ type, count: 1 }));
+            const allSpawns = [
+                ...lakeSpawns,
+                ...objsToSpawn.stage1,
+                ...objsToSpawn.stage2,
+            ];
+            const reductionMap: Record<string, number> = {};
+
+            // Calculate total reductions needed for each target
+            for (const spawn of allSpawns) {
+                if (spawn.count > 0 && mapGen.spawnReductions[spawn.type]) {
+                    for (const reduction of mapGen.spawnReductions[spawn.type]) {
+                        reductionMap[reduction.target] = (reductionMap[reduction.target] ?? 0) + (reduction.amount * spawn.count);
+                    }
+                }
+            }
+
+            // Apply reductions to the spawn counts
+            for (const spawn of allSpawns) {
+                if (reductionMap[spawn.type]) {
+                    spawn.count = Math.max(0, spawn.count - reductionMap[spawn.type]);
+                }
             }
         }
 
@@ -1042,6 +1073,7 @@ export class GameMap {
                 for (let i = 0; i < cabinsToSpawn; i++) {
                     this.genRiverCabin();
                 }
+                this.genRiverCabin("buckhouse_structure_01");
                 this.timerEnd("Generating river cabins");
             }
 
@@ -2044,10 +2076,8 @@ export class GameMap {
         });
     }
 
-    genRiverCabin() {
+    genRiverCabin(type = "cabin_01") {
         if (!this.normalRivers.length) return;
-
-        const type = "cabin_01";
 
         const inset = this.grassInset + this.shoreInset;
         const mapBound = collider.createAabb(

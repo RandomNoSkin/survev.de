@@ -484,7 +484,7 @@ export const GameConfig = {
     ],
     airdrop: {
         actionOffset: 0,
-        fallTime: 8,
+        fallTime: 15,
         crushDamage: 100,
         planeVel: 48,
         planeRad: 150,
@@ -508,7 +508,7 @@ export const GameConfig = {
     },
     supplydrop: {
         actionOffset: 0,
-        fallTime: 8,
+        fallTime: 15,
         crushDamage: 100,
         planeDelay: 40,
         planeVel: 200,
