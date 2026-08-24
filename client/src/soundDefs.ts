@@ -222,7 +222,7 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         },
         flare_gun_reload_01: {
             path: "audio/guns/flare_gun_reload_01.mp3",
-            volume: 1.5,
+            volume: 1.25,
         },
         flare_gun_reload_02: {
             path: "audio/guns/flare_gun_reload_02.mp3",

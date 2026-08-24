@@ -430,8 +430,8 @@ export const GameConfig = {
         /* STRIP_FROM_PROD_CLIENT:START */
         defaultItems: {
             weapons: [
-                { type: "henry", ammo: 0 },
-                { type: "henry", ammo: 0 },
+                { type: "", ammo: 0 },
+                { type: "", ammo: 0 },
                 { type: "fists", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
@@ -444,7 +444,7 @@ export const GameConfig = {
             inventory: {
                 "9mm": 0,
                 "762mm": 0,
-                "556mm": 999,
+                "556mm": 0,
                 "12gauge": 0,
                 "50AE": 0,
                 "308sub": 0,
@@ -467,7 +467,7 @@ export const GameConfig = {
                 painkiller: 0,
                 "1xscope": 1,
                 "2xscope": 0,
-                "4xscope": 1,
+                "4xscope": 0,
                 "8xscope": 0,
                 "15xscope": 0,
             },
