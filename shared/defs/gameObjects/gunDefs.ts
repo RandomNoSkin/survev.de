@@ -414,7 +414,7 @@ export const BaseDefs: Record<string, GunDef> = {
         particle: { shellScale: 1.2, shellOffset: 0.4 },
         sound: {
             shoot: "vector_02",
-            reload: "vector_reload_01",
+            reload: "vector_reload_02",
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "vector_switch_01",
@@ -3821,7 +3821,7 @@ export const BaseDefs: Record<string, GunDef> = {
         maxReload: 1,
         extendedClip: 1,
         extendedReload: 1,
-        reloadTime: 2,
+        reloadTime: 6,
         fireDelay: 0.4,
         switchDelay: 0.3,
         barrelLength: 2,

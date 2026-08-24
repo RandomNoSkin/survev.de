@@ -222,7 +222,7 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         },
         flare_gun_reload_01: {
             path: "audio/guns/flare_gun_reload_01.mp3",
-            volume: 1,
+            volume: 1.5,
         },
         flare_gun_reload_02: {
             path: "audio/guns/flare_gun_reload_02.mp3",
@@ -603,6 +603,10 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         },
         vector_reload_01: {
             path: "audio/guns/vector_reload_01.mp3",
+            volume: 1,
+        },
+        vector_reload_02: {
+            path: "audio/guns/vector_reload_02.mp3",
             volume: 1,
         },
         vector_switch_01: {
@@ -1556,7 +1560,7 @@ const Sounds: Record<string, Record<string, SoundDef>> = {
         },
         airdrop_fall_01: {
             path: "audio/sfx/airdrop_fall_01.mp3",
-            volume: 1,
+            volume: 1.5,
         },
         airdrop_crash_01: {
             path: "audio/sfx/airdrop_crash_01.mp3",
