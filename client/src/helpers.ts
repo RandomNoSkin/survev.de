@@ -199,15 +199,6 @@ export const helpers = {
                 const outfitDef = def as OutfitDef;
                 const lootImg = outfitDef.lootImg;
 
-                // Skins with their own dedicated loadout art (resurviv skins +
-                // classic surviv shirts) already look right — use it directly.
-                const usesGenericShirt =
-                    lootImg.sprite === "loot-shirt-01.img" ||
-                    lootImg.sprite === "loot-shirt-outfitBase.img";
-                if (!usesGenericShirt) {
-                    return `img/loot/${lootImg.sprite.slice(0, -4)}.svg`;
-                }
-
                 // Otherwise render a full in-game character preview (body + backpack +
                 // fists + accessory) so the skin looks like it does in game, the same
                 // way the hand-drawn resurviv icons do.

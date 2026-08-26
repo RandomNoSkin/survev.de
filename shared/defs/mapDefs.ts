@@ -351,6 +351,11 @@ export interface MapDef {
                 retryOnFailure: boolean;
             }>;
             placeSpawns: string[];
+            /** Spawns `type` on the map edge opposite of wherever `opposite` ended up */
+            oppositeEdgeSpawns?: Array<{
+                type: string;
+                opposite: string;
+            }>;
         };
         densitySpawns: [Record<string, number>];
         fixedSpawns: [

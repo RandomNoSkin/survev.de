@@ -1210,6 +1210,9 @@ export const Comp: MapDef = {
                 },
             ],
             placeSpawns: ["club_complex_01", "warehouse_complex_01"/*"warehouse_01", "house_red_01", "house_red_02", "barn_01"*/],
+            oppositeEdgeSpawns: [
+                { type: "logging_complex_01comp", opposite: "warehouse_complex_01" },
+            ],
         },
         densitySpawns: [
             {

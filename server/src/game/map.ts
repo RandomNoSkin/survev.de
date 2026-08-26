@@ -857,12 +857,17 @@ export class GameMap {
         type MapSpawn = {
             type: string;
             count: number;
-            customRule?: {
-                type: "location";
-                pos: Vec2;
-                rad: number;
-                retryOnFailure: boolean;
-            };
+            customRule?:
+                | {
+                      type: "location";
+                      pos: Vec2;
+                      rad: number;
+                      retryOnFailure: boolean;
+                  }
+                | {
+                      type: "oppositeEdge";
+                      opposite: string;
+                  };
         };
 
         /**
@@ -891,6 +896,19 @@ export class GameMap {
                     pos: customSpawnRule.pos,
                     rad: customSpawnRule.rad,
                     retryOnFailure: customSpawnRule.retryOnFailure,
+                },
+            });
+        }
+
+        for (const oppositeEdgeSpawn of mapGen.customSpawnRules.oppositeEdgeSpawns ?? []) {
+            // pushed to stage2 so the reference object (e.g. warehouse_complex_01)
+            // has already been generated in stage1 by the time this runs
+            objsToSpawn.stage2.push({
+                type: oppositeEdgeSpawn.type,
+                count: 1,
+                customRule: {
+                    type: "oppositeEdge",
+                    opposite: oppositeEdgeSpawn.opposite,
                 },
             });
         }
@@ -980,6 +998,8 @@ export class GameMap {
                         });
                     }
                 }
+            } else if (spawnData.type === "oppositeEdge") {
+                this.genOnWaterEdgeOpposite(spawn.type, spawnData.opposite);
             }
         };
 
@@ -1636,7 +1656,7 @@ export class GameMap {
         return resolvedType;
     }
 
-    genOnWaterEdge(type: string): void {
+    genOnWaterEdge(type: string, forcedSide?: number): void {
         this.trySpawn(type, () => {
             const resolvedType = this.resolveSpawnType(type);
             const def = MapObjectDefs.typeToDef(resolvedType) as BuildingDef | StructureDef;
@@ -1651,7 +1671,9 @@ export class GameMap {
             const edgeRot = Math.atan2(waterEdge.dir.y, waterEdge.dir.x);
 
             let side: number;
-            if (this.factionMode && "teamId" in def && def.teamId) {
+            if (forcedSide !== undefined) {
+                side = forcedSide;
+            } else if (this.factionMode && "teamId" in def && def.teamId) {
                 // this formula does the same thing but isn't readable: ((this.factionModeSplitOri ^ 1) + 2) - ((def.teamId - 1) * 2);
                 switch (this.factionModeSplitOri) {
                     case 0:
@@ -1697,6 +1719,36 @@ export class GameMap {
             this.genResolved(resolvedType, pos, 0, ori!, 1);
             return true;
         });
+    }
+
+    /**
+     * Same as genOnWaterEdge, but forces the object onto the map edge opposite of
+     * wherever the already-spawned `oppositeOfType` object ended up (e.g. keep the
+     * logging complex on the far side of the map from the docks).
+     * Falls back to a normal random-side spawn if the reference object isn't found.
+     */
+    genOnWaterEdgeOpposite(type: string, oppositeOfType: string): void {
+        const reference =
+            this.buildings.find((b) => b.type === oppositeOfType) ??
+            this.structures.find((s) => s.type === oppositeOfType);
+
+        if (!reference) {
+            this.genOnWaterEdge(type);
+            return;
+        }
+
+        const distRight = this.width - reference.pos.x;
+        const distLeft = reference.pos.x;
+        const distTop = this.height - reference.pos.y;
+        const distBottom = reference.pos.y;
+
+        const distsBySide = [distRight, distTop, distLeft, distBottom];
+        let referenceSide = 0;
+        for (let i = 1; i < distsBySide.length; i++) {
+            if (distsBySide[i] < distsBySide[referenceSide]) referenceSide = i;
+        }
+
+        this.genOnWaterEdge(type, (referenceSide + 2) % 4);
     }
 
     genLocationSpawn(type: string, pos: Vec2, rad: number) {

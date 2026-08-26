@@ -20763,6 +20763,9 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
         groundTintLt: 0x77ad32,
         groundTintDk: 0x4e7d13,
     }),
+    logging_complex_01comp: createLoggingComplex({
+        terrain: { waterEdge: { dir: v2.create(-1, 0), distMin: 55, distMax: 70 } },
+    }),
     logging_complex_02: createLoggingComplex2({}),
     logging_complex_02sp: createLoggingComplex2({
         groundTintDk: 0x253210,
@@ -23895,6 +23898,14 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
     metal_wall_ext_thicker_49: createWall({
         material: "metal",
         extents: v2.create(2.5, 7),
+    }),
+    metal_wall_ext_thicker_50: createWall({
+        material: "metal",
+        extents: v2.create(1.5, 7),
+    }),
+    metal_wall_ext_thicker_51: createWall({
+        material: "metal",
+        extents: v2.create(1.5, 15.5),
     }),
     glass_wall_9: createWall({
         material: "glass",
@@ -34280,11 +34291,27 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                         ),
                     ],
                 },
+                {
+                    type: "container",
+                    collision: [
+                        collider.createAabbExtents(
+                            v2.create(-71, 32.9),
+                            v2.create(2, 3),
+                        ),
+                    ],
+                },
             ],
             imgs: [
                 {
                     sprite: "map-bunker-storm-floor-02.img",
                     pos: v2.create(1.25, 10),
+                    scale: 0.5,
+                    alpha: 1,
+                    tint: 0xffffff,
+                },
+                {
+                    sprite: "map-bunker-generic-floor-01.img",
+                    pos: v2.create(-71, 31.9),
                     scale: 0.5,
                     alpha: 1,
                     tint: 0xffffff,
@@ -34398,6 +34425,24 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
             {
                 type: "tree_07",
                 pos: v2.create(6.75, -4.5),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "metal_wall_ext_short_6",
+                pos: v2.create(-71, 29.7),
+                scale: 1,
+                ori: 1,
+            },
+            {
+                type: "metal_wall_ext_short_7",
+                pos: v2.create(-73.5, 32.9),
+                scale: 1,
+                ori: 0,
+            },
+            {
+                type: "metal_wall_ext_short_7",
+                pos: v2.create(-68.5, 32.9),
                 scale: 1,
                 ori: 0,
             },
@@ -34739,6 +34784,7 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     type: "tile",
                     collision: [
                         collider.createAabbExtents(v2.create(0, 0), v2.create(16, 15)),
+                        collider.createAabbExtents(v2.create(-7.5, 24), v2.create(4, 9)),
                     ],
                 },
             ],
@@ -34779,6 +34825,12 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                     zoomIn: collider.createAabbExtents(
                         v2.create(-0.5, 0),
                         v2.create(16, 15),
+                    ),
+                },
+                {
+                    zoomIn: collider.createAabbExtents(
+                        v2.create(-7.5, 24),
+                        v2.create(4, 9),
                     ),
                 },
             ],
@@ -34848,8 +34900,8 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 1,
             },
             {
-                type: "metal_wall_ext_thicker_25",
-                pos: v2.create(-11, 20.5),
+                type: "metal_wall_ext_thicker_51",
+                pos: v2.create(-11, 23.5),
                 scale: 1,
                 ori: 0,
             },
@@ -35044,10 +35096,16 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 ori: 0,
             },
             {
-                type: "metal_wall_ext_thicker_21",
-                pos: v2.create(-10.5, 10),
+                type: "metal_wall_ext_thicker_50",
+                pos: v2.create(-7, 10),
                 scale: 1,
                 ori: 1,
+            },
+            {
+                type: "metal_wall_ext_thicker_8",
+                pos: v2.create(-12.5, 12.5),
+                scale: 1,
+                ori: 0,
             },
             {
                 type: "crate_01",
@@ -35121,10 +35179,17 @@ export const RawMapObjectDefs: Record<string, MapObjectDef> = {
                 ),
                 downDir: v2.create(0, -1),
             },
+            {
+                collision: collider.createAabbExtents(
+                    v2.create(-71, 32.9),
+                    v2.create(2, 2.6),
+                ),
+                downDir: v2.create(0, -1),
+            },
         ],
         mask: [
             collider.createAabbExtents(v2.create(-3, -3.7), v2.create(13, 9.5)),
-            collider.createAabbExtents(v2.create(-48.025, 6), v2.create(32, 24.95)),
+            collider.createAabbExtents(v2.create(-48.025, 8.5), v2.create(32, 27.5)),
         ],
     },
     bunker_eye_01: {

@@ -123,9 +123,7 @@ export class Loot implements AbstractObject {
             // loadout menu) instead of a plain shirt, for skins without their own
             // dedicated loot art.
             const usesGenericShirt =
-                itemDef.type === "outfit" &&
-                (itemDef.lootImg.sprite === "loot-shirt-01.img" ||
-                    itemDef.lootImg.sprite === "loot-shirt-outfitBase.img");
+                itemDef.type === "outfit";
             const outfitTex = usesGenericShirt
                 ? getOutfitLootTexture(this.type, ctx.renderer.game.m_pixi.renderer)
                 : null;
