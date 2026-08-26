@@ -77,6 +77,7 @@ export interface PrivateLobbyMenuPlayer {
     spectator: boolean;
     /** Index into the lobby's loadout list (0 = `customLoadout`, 1+ = `extraCustomLoadouts[index - 1]`) this player spawns with when `customLoadoutEnabled` is true. Default 0. */
     loadoutIndex: number;
+    premium: boolean;
 }
 
 /**

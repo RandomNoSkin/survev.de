@@ -1816,9 +1816,9 @@ export class UiManager2 {
         return `${killerTxt} knocked ${youTxt} out`;
     }
 
-    getJoinedText(name: string){
+    getJoinedText(name: string, premium = false){
         const joinTxt = this.localization.translate("game-joined");
-        return `${name} ${joinTxt}`;
+        return `${helpers.formatUsername(name, premium)} ${joinTxt}`;
     }
 
     getEnemieText(group1: string[]){

@@ -21,6 +21,13 @@ import { CreateJS } from "../lib/createJS";
 
 /** Candidate containers/codecs for a recording with an audio track, best first. */
 const MIME_CANDIDATES_AV: Array<{ mime: string; ext: string }> = [
+    // Deliberately unqualified (no explicit H.264 profile/level): MediaRecorder's
+    // encoder doesn't reliably conform its actual output to a profile/level pinned in
+    // the codecs string - it can accept the string (isTypeSupported passes) while the
+    // real encoded bitstream doesn't match, and the declared SPS/level then disagrees
+    // with the real content. That mismatch is what corrupts playback (macroblock/
+    // stride misinterpretation -> smeared vertical banding), not a bitrate issue. Let
+    // the browser fully own the encoder configuration instead.
     { mime: 'video/mp4;codecs="avc1,mp4a.40.2"', ext: "mp4" },
     { mime: 'video/mp4;codecs="avc1,opus"', ext: "mp4" },
     { mime: 'video/webm;codecs="vp9,opus"', ext: "webm" },
@@ -44,6 +51,8 @@ export class ReplayRecorder {
     private chunks: Blob[] = [];
     private mime = "";
     private ext = "webm";
+    /** Which capture path is active - "tab" also captures DOM overlays (killfeed/HUD/replay bar), "canvas" never does. */
+    mode: "tab" | "canvas" = "canvas";
     /** True while the game-audio output capture is tapped (canvas mode only). */
     private capturingGameAudio = false;
     /** Invoked whenever the recording ends — stop(), an error, or the browser's own "Stop sharing" UI. */
@@ -129,12 +138,27 @@ export class ReplayRecorder {
             if (typeof navigator.mediaDevices?.getDisplayMedia === "function") {
                 try {
                     this.stream = await this.captureTab();
+                    this.mode = "tab";
+                    // The browser's native "Stop sharing" infobar appears right after
+                    // this resolves and shrinks the page's viewport, which triggers our
+                    // own resize handler mid-transition - starting MediaRecorder before
+                    // that settles can capture a torn/glitched frame. Give it a moment.
+                    await new Promise((r) => setTimeout(r, 400));
                 } catch (err) {
-                    console.info("Tab capture cancelled/unavailable:", err);
-                    return "cancelled"; // picker dismissed — don't record anything
+                    // Only a genuine user cancel/deny should be silent - anything else
+                    // (permission-policy block, NotReadableError, etc.) is a real
+                    // failure and must surface to the caller's alert(...) path.
+                    const name = err instanceof DOMException ? err.name : undefined;
+                    if (name === "NotAllowedError" || name === "AbortError") {
+                        console.info("Tab capture cancelled:", err);
+                        return "cancelled";
+                    }
+                    console.error("Tab capture failed:", err);
+                    return "error";
                 }
             } else if (ReplayRecorder.isSupported()) {
                 this.stream = this.captureCanvas();
+                this.mode = "canvas";
             } else {
                 console.error("Replay recording is not supported in this browser.");
                 return "unsupported";

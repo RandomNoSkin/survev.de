@@ -104,6 +104,9 @@
                 <!-- Game view + Expand/Unexpand icon -->
                 <div class='offset-0 col-1 pl-0 pr-0 match-link-actions'>
                     <a class='gv-match-btn' href='/stats/?game=<%= env.games[i].summary.guid %>&region=<%= env.games[i].summary.region %>&player=<%= env.slugify(env.games[i].summary.username) %>' onclick='event.stopPropagation()' title='Detailed game view (movement + damage)'>Game View</a>
+                    <% if (env.isOwnProfile) { %>
+                      <a class='gv-match-btn gv-replay-btn' onclick='event.stopPropagation()' title='Watch the full replay (Premium)'>Watch Replay</a>
+                    <% } %>
                     <div class='match-link-expand <%= env.games[i].expanded ? 'match-link-expand-up' : 'match-link-expand-down' %>'>
                     </div>
                 </div>

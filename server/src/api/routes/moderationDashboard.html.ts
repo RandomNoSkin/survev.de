@@ -123,6 +123,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     @keyframes flashrow { from { background: var(--blue-dim); } to { background: transparent; } }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; letter-spacing: .3px; }
     .badge-admin  { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
+    .badge-premium { background: rgba(242, 214, 59, 0.15); color: #f2d63b; border: 1px solid #f2d63b; }
     .badge-mod    { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .badge-self   { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
     .badge-alive  { background: var(--green-dim);  color: var(--green-t);  }
@@ -144,6 +145,8 @@ export const dashboardHtml = `<!DOCTYPE html>
     /* ── Buttons ── */
     .btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 11px; font-family: inherit; font-weight: 600; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
+    .btn:disabled { cursor: not-allowed; opacity: .5; }
+    .btn:disabled:hover { opacity: .5; }
     .btn-red    { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
     .btn-blue   { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .btn-green  { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
@@ -1197,7 +1200,9 @@ function renderReplays() {
         <td><span class="rep-modcell" data-key="\${esc(rec.gameId + '|' + (p.modKey || ''))}">\${modBadge(p.modStatus)}</span></td>
         <td style="white-space:nowrap">
           <span style="display:inline-flex;gap:5px;align-items:center;">
-            <button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>
+            \${rec.archived === false
+              ? \`<button class="btn btn-gray btn-sm" disabled title="No archived client build exists for protocol \${rec.protocolVersion} — this replay can no longer be played back">Not Watchable</button>\`
+              : \`<button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>\`}
             \${p.modKey
               ? \`<button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" data-repname="\${esc(p.playerName)}" title="Flag this \${p.guest ? 'guest' : 'player'} in this game as suspicious">⚑ sus</button>\`
               : ''}
@@ -1218,7 +1223,9 @@ function renderReplays() {
           <span>\${esc(rec.mapName)} · \${mode}</span>
           <span>\${durStr}</span>
           \${rec.protocolVersion && rec.protocolVersion !== PROTOCOL_VERSION
-            ? \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version; 404 means it was never archived">proto \${rec.protocolVersion}</span>\`
+            ? rec.archived === false
+              ? \`<span class="badge badge-perm" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — no archived client build exists for this version, so it can no longer be played back">not watchable</span>\`
+              : \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version">proto \${rec.protocolVersion}</span>\`
             : ''}
           <span class="rep-modcell" data-key="\${esc(rec.gameId + '|')}">\${modBadge(rec.gameStatus)}</span>
           <button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" title="Flag this whole game as suspicious">⚑ sus game</button>
@@ -3854,10 +3861,12 @@ function buildCosmeticOptions() {
 function renderAccountDetail(data) {
   const u = data.user;
   const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
+  const premiumActive = u.premiumUntil && new Date(u.premiumUntil).getTime() > Date.now();
   const flags = [
     u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
     u.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : '',
     u.banned ? '<span class="badge badge-perm">BANNED</span>'  : '',
+    premiumActive ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '',
   ].join(' ');
 
   const identity = \`
@@ -3877,6 +3886,11 @@ function renderAccountDetail(data) {
               ? '<button class="btn btn-gray btn-sm" onclick="accSetModerator(false)">Remove moderator</button>'
               : '<button class="btn btn-blue btn-sm" onclick="accSetModerator(true)" title="Grant replays-only dashboard access">🛡 Make moderator</button>') +
             '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-dim);">⭐ Premium: \${premiumActive ? ('active until ' + fmtDate(u.premiumUntil)) : 'not active'}</span>
+        <button class="btn btn-blue btn-sm" onclick="accGrantPremium()">+2 months</button>
+        \${premiumActive ? '<button class="btn btn-gray btn-sm" onclick="accRemovePremium()">Remove premium</button>' : ''}
       </div>
     </div>\`;
 
@@ -4208,6 +4222,22 @@ async function accSetModerator(makeMod) {
   try {
     await post('/api/account/moderator', { slug: currentAccountSlug, moderator: makeMod });
     toast(makeMod ? 'Moderator added — replays-only access' : 'Moderator role removed');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
+async function accGrantPremium() {
+  try {
+    await post('/api/account/premium/grant', { slug: currentAccountSlug, months: 2 });
+    toast('⭐ Premium extended by 2 months');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
+async function accRemovePremium() {
+  try {
+    await post('/api/account/premium/remove', { slug: currentAccountSlug });
+    toast('Premium removed');
     openAccountDetail(currentAccountSlug);
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }

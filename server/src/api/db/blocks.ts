@@ -1,6 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import type { BlockedUser, FriendActionResponse } from "../../../../shared/types/user";
 import { db } from "./index";
+import { isPremiumActive } from "./premium";
 import { blocksTable, friendsTable, usersTable } from "./schema";
 
 /** Resolves a slug to a user id (null if no such user). */
@@ -81,9 +82,17 @@ export async function unblockUser(
 /** The accounts `userId` has blocked (for the Social panel's Blocked list). */
 export async function getBlocked(userId: string): Promise<BlockedUser[]> {
     const rows = await db
-        .select({ slug: usersTable.slug, username: usersTable.username })
+        .select({
+            slug: usersTable.slug,
+            username: usersTable.username,
+            premiumUntil: usersTable.premiumUntil,
+        })
         .from(blocksTable)
         .innerJoin(usersTable, eq(usersTable.id, blocksTable.blockedId))
         .where(eq(blocksTable.userId, userId));
-    return rows.map((r) => ({ slug: r.slug, username: r.username || r.slug }));
+    return rows.map((r) => ({
+        slug: r.slug,
+        username: r.username || r.slug,
+        premium: isPremiumActive(r.premiumUntil),
+    }));
 }

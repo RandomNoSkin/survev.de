@@ -51,6 +51,7 @@ export interface JoinTokenData {
     /** Per-player resolved Custom Loadout (see `Room.getPlayerCustomLoadout`); overrides `Game.customLoadout` for this player when `Game.customLoadoutEnabled` is true. */
     customLoadout?: CustomLoadoutConfig;
     admin: boolean;
+    premium: boolean;
     groupData: {
         autoFill: boolean;
         playerCount: number;
@@ -889,6 +890,7 @@ export class Game {
                 loadout: token.loadout,
                 customLoadout: token.customLoadout,
                 admin: token.admin,
+                premium: token.premium,
             });
         }
     }
@@ -912,6 +914,7 @@ export class Game {
                 loadout: token.loadout,
                 customLoadout: token.customLoadout,
                 admin: token.admin,
+                premium: token.premium,
             });
         }
     }
@@ -941,6 +944,7 @@ export class Game {
                     loadout: token.loadout,
                     customLoadout: token.customLoadout,
                     admin: token.admin,
+                    premium: token.premium,
                 });
             }
         }

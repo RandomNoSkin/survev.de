@@ -25,6 +25,7 @@ import { assert, util } from "../../shared/utils/util";
 import type { ApiServer } from "./api/apiServer";
 import { validateSessionToken } from "./api/auth";
 import { getOwnedLoadouts } from "./api/db/loadouts";
+import { isPremiumActive } from "./api/db/premium";
 import { hashIp, isBanned } from "./api/routes/private/ModerationRouter";
 import { Config } from "./config";
 import { ServerLogger } from "./utils/logger";
@@ -87,6 +88,7 @@ class Player {
             afk: this.afk,
             spectator: this.spectator,
             loadoutIndex: this.loadoutIndex,
+            premium: this.premium,
         };
     }
 
@@ -96,6 +98,7 @@ class Player {
 
     encodedIp: string;
     admin: boolean;
+    premium: boolean;
 
     constructor(
         public socket: WSContext<SocketData>,
@@ -103,8 +106,10 @@ class Player {
         public userId: string | null,
         public ip: string,
         admin = false,
+        premium = false,
     ) {
         this.admin = admin;
+        this.premium = premium;
         this.encodedIp = hashIp(ip);
         // disconnect if didn't join a room in 5 seconds
         this.disconnectTimeout = setTimeout(() => {
@@ -724,6 +729,7 @@ class Room {
                     userId: p.userId,
                     ip: p.ip,
                     admin: p.admin,
+                    premium: p.premium,
                     loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
                     customLoadout: this.getPlayerCustomLoadout(p),
                 } satisfies FindGamePrivateBody["playerData"][0];
@@ -740,6 +746,7 @@ class Room {
                 userId: p.userId,
                 ip: p.ip,
                 admin: p.admin,
+                premium: p.premium,
             } satisfies FindGamePrivateBody["playerData"][0];
         });
 
@@ -912,6 +919,7 @@ export class PrivateLobbyMenu {
 
                 let userId: string | null = null;
                 let admin = false;
+                let premium = false;
                 const sessionId = getCookie(c, "session") ?? null;
 
                 if (sessionId) {
@@ -919,10 +927,12 @@ export class PrivateLobbyMenu {
                         const account = await validateSessionToken(sessionId);
                         userId = account.user?.id || null;
                         admin = account.user?.admin ?? false;
+                        premium = isPremiumActive(account.user?.premiumUntil ?? null);
 
                         if (account.user?.banned) {
                             userId = null;
                             admin = false;
+                            premium = false;
                         }
                     } catch (err) {
                         this.logger.error(`Failed to validate session:`, err);
@@ -964,6 +974,7 @@ export class PrivateLobbyMenu {
                             userId,
                             ip!,
                             admin,
+                            premium,
                         );
                     },
 
@@ -1001,8 +1012,14 @@ export class PrivateLobbyMenu {
         );
     }
 
-    onOpen(ws: WSContext<SocketData>, userId: string | null, ip: string, admin: boolean) {
-        const player = new Player(ws, this, userId, ip, admin);
+    onOpen(
+        ws: WSContext<SocketData>,
+        userId: string | null,
+        ip: string,
+        admin: boolean,
+        premium: boolean,
+    ) {
+        const player = new Player(ws, this, userId, ip, admin, premium);
         ws.raw!.player = player;
 
         let players = this.playersByIp.get(player.encodedIp);

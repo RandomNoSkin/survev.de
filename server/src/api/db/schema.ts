@@ -50,6 +50,11 @@ export const usersTable = pgTable("users", {
     // When the account ban auto-expires. null = permanent (or no ban). Temporary
     // account bans are lifted by the ban-expiry sweep (see db/banExpiry.ts).
     banExpiresAt: timestamp("ban_expires_at", { withTimezone: true }),
+    // Premium account subscription (bought with golden fries, or admin-granted). null =
+    // never purchased/not active. A lazy `premiumUntil.getTime() > Date.now()` check
+    // (same idea as banActive above) determines whether it's currently active - a
+    // lapsed subscription just leaves this in the past rather than being cleared.
+    premiumUntil: timestamp("premium_until", { withTimezone: true }),
     username: text("username").notNull().default(""),
     usernameSet: boolean("username_set").notNull().default(false),
     userCreated: timestamp("user_created", { withTimezone: true }).notNull().defaultNow(),

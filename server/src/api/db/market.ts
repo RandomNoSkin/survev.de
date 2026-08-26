@@ -33,6 +33,7 @@ import type {
 } from "../../../../shared/types/user";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
+import { isPremiumActive } from "./premium";
 import {
     auctionsTable,
     goldenFriesLedgerTable,
@@ -381,6 +382,7 @@ async function queryListings(conds: SQL[], page: number): Promise<MarketListResp
             sellerSlug: marketListingsTable.sellerSlug,
             createdAt: marketListingsTable.createdAt,
             sellerUsername: usersTable.username,
+            sellerPremiumUntil: usersTable.premiumUntil,
             source: itemsTable.source,
             previousOwners: itemsTable.previousOwners,
             games: itemsTable.games,
@@ -406,6 +408,7 @@ async function queryListings(conds: SQL[], page: number): Promise<MarketListResp
         total: getMarketTotal(r.price),
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
+        sellerPremium: isPremiumActive(r.sellerPremiumUntil),
         createdAt: r.createdAt.getTime(),
         source: r.source ?? "",
         previousOwners: r.previousOwners ?? [],
@@ -495,6 +498,7 @@ export async function getUnackedSales(userId: string): Promise<SaleNotification[
             price: marketListingsTable.price,
             buyerUsername: usersTable.username,
             buyerSlug: usersTable.slug,
+            buyerPremiumUntil: usersTable.premiumUntil,
         })
         .from(marketListingsTable)
         .leftJoin(usersTable, eq(usersTable.id, marketListingsTable.buyerId))
@@ -512,6 +516,7 @@ export async function getUnackedSales(userId: string): Promise<SaleNotification[
         type: r.type,
         price: r.price,
         buyerName: r.buyerUsername || r.buyerSlug || "someone",
+        buyerPremium: isPremiumActive(r.buyerPremiumUntil),
     }));
 }
 

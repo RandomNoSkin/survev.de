@@ -10,6 +10,7 @@ import type { Localization } from "./localization";
 import type { MarketUi } from "./marketUi";
 import { MenuModal } from "./menuModal";
 import type { OwnersUi } from "./ownersUi";
+import type { PremiumUi } from "./premiumUi";
 
 /** Rarity index → colour (matches the loadout menu palette). */
 const RARITY_COLORS = ["#c5c5c5", "#c5c5c5", "#12ff00", "#00deff", "#f600ff", "#d96100"];
@@ -21,11 +22,20 @@ const SLOT_TITLES: Record<number, string> = {
     1: "Bundle",
     2: "Item",
     3: "Bundle",
+    4: "Item",
+    5: "Item",
 };
 
 /** Slots 2 and 3 are the weekly rotation — mirrors `isWeeklySlot` on the server. */
 function isWeeklySlot(slot: number): boolean {
     return slot === 2 || slot === 3;
+}
+
+/** Slots 4 and 5 are the two separate Premium Daily offers — mirrors `isPremiumSlot`
+ *  on the server. */
+const PREMIUM_SLOTS = [4, 5];
+function isPremiumDailySlot(slot: number): boolean {
+    return PREMIUM_SLOTS.includes(slot);
 }
 
 /** "3d 04:11:22" / "04:11:22" — the weekly countdown spans days, unlike the daily one. */
@@ -50,7 +60,9 @@ export class ShopUi {
     ownersUi: OwnersUi | null = null;
     /** The "Auction" tab; set by main.ts. */
     auctionUi: AuctionUi | null = null;
-    tab: "daily" | "market" | "auction" | "owners" = "daily";
+    /** The "Premium" tab; set by main.ts. */
+    premiumUi: PremiumUi | null = null;
+    tab: "daily" | "market" | "auction" | "owners" | "premium" = "daily";
     private resetInterval: ReturnType<typeof setInterval> | null = null;
     /** Epoch ms of the next daily shop reset, as reported by the API server. */
     private resetTime = 0;
@@ -83,6 +95,7 @@ export class ShopUi {
             this.marketUi?.deactivate();
             this.auctionUi?.deactivate();
             this.ownersUi?.deactivate();
+            this.premiumUi?.deactivate();
             // A purchase/claim while open may have changed what's waiting — recheck badges.
             this.refreshShopBadges();
         });
@@ -93,7 +106,8 @@ export class ShopUi {
                     | "daily"
                     | "market"
                     | "auction"
-                    | "owners",
+                    | "owners"
+                    | "premium",
             );
         });
 
@@ -112,8 +126,8 @@ export class ShopUi {
         this.account.addEventListener("auctions", refreshTradeBadges);
     }
 
-    /** Switch between the Daily shop, the player Market, the Auction house, and Owners. */
-    selectTab(tab: "daily" | "market" | "auction" | "owners") {
+    /** Switch between the Daily shop, the player Market, the Auction house, Owners, and Premium. */
+    selectTab(tab: "daily" | "market" | "auction" | "owners" | "premium") {
         this.tab = tab;
         $("#modal-shop [data-shop-tab]").removeClass("shop-tab-active");
         $(`#modal-shop [data-shop-tab='${tab}']`).addClass("shop-tab-active");
@@ -121,10 +135,12 @@ export class ShopUi {
         $("#shop-market").css("display", tab === "market" ? "block" : "none");
         $("#shop-auction").css("display", tab === "auction" ? "block" : "none");
         $("#shop-owners").css("display", tab === "owners" ? "block" : "none");
+        $("#shop-premium").css("display", tab === "premium" ? "block" : "none");
 
         if (tab !== "market") this.marketUi?.deactivate();
         if (tab !== "auction") this.auctionUi?.deactivate();
         if (tab !== "owners") this.ownersUi?.deactivate();
+        if (tab !== "premium") this.premiumUi?.deactivate();
 
         if (tab === "daily") {
             this.refresh();
@@ -136,8 +152,10 @@ export class ShopUi {
             this.auctionUi?.activate();
             // Viewing the auctions clears the "new bid" badge.
             this.markAuctionSeen();
-        } else {
+        } else if (tab === "owners") {
             this.ownersUi?.activate();
+        } else {
+            this.premiumUi?.activate();
         }
     }
 
@@ -373,15 +391,34 @@ export class ShopUi {
             this.body.html('<div class="shop-status">No offers today</div>');
             return;
         }
-        // One row per rotation, daily above weekly, each heading carrying its countdown.
+        // One row per rotation: Premium Daily first (it's the highlight), then daily,
+        // then weekly — each heading carrying its countdown.
         for (const section of [
-            { label: "Daily", weekly: false },
-            { label: "Weekly", weekly: true },
+            {
+                label: "⭐ Premium Daily",
+                weekly: false,
+                filter: (slot: number) => isPremiumDailySlot(slot),
+                premium: true,
+            },
+            {
+                label: "Daily",
+                weekly: false,
+                filter: (slot: number) => !isWeeklySlot(slot) && !isPremiumDailySlot(slot),
+                premium: false,
+            },
+            {
+                label: "Weekly",
+                weekly: true,
+                filter: (slot: number) => isWeeklySlot(slot),
+                premium: false,
+            },
         ]) {
-            const group = offers.filter((o) => isWeeklySlot(o.slot) === section.weekly);
+            const group = offers.filter((o) => section.filter(o.slot));
             if (group.length === 0) continue;
             const timerClass = section.weekly ? "shop-weekly-timer" : "shop-daily-timer";
-            const el = $('<div class="shop-section"></div>');
+            const el = $(
+                `<div class="shop-section${section.premium ? " shop-section-premium" : ""}"></div>`,
+            );
             el.append(
                 `<div class="shop-section-head">` +
                     `<span class="shop-section-label">${section.label}</span>` +
@@ -395,8 +432,16 @@ export class ShopUi {
         }
     }
 
+    /** Mirrors the server's `isPremiumActive()` check (see premiumUi.ts). */
+    private isAccountPremium(): boolean {
+        const until = this.account.profile.premiumUntil;
+        return until != null && until > Date.now();
+    }
+
     private renderOffer(balance: number, offer: ShopOffer): JQuery<HTMLElement> {
-        const card = $('<div class="shop-offer"></div>');
+        const card = $(
+            `<div class="shop-offer${isPremiumDailySlot(offer.slot) ? " shop-offer-premium" : ""}"></div>`,
+        );
         card.append(`<div class="shop-offer-title">${SLOT_TITLES[offer.slot]}</div>`);
 
         const itemsWrap = $('<div class="shop-offer-items"></div>');
@@ -410,9 +455,17 @@ export class ShopUi {
             `<div class="shop-offer-price"><div class="shop-fries-icon"></div><span>${offer.price}</span></div>`,
         );*/
 
+        const locked = isPremiumDailySlot(offer.slot) && !this.isAccountPremium();
         const btn = $('<div class="shop-buy-btn menu-option btn-darken"></div>');
         if (offer.purchased) {
             btn.addClass("shop-buy-disabled").text("Owned");
+        } else if (locked) {
+            // Deliberately NOT .shop-buy-disabled (that sets pointer-events:none) —
+            // this button stays clickable, it just links to the Premium tab instead
+            // of buying.
+            btn.addClass("shop-buy-locked")
+                .text("⭐ Premium only")
+                .on("click", () => this.openPremiumUpsell());
         } else if (balance < offer.price) {
             btn.addClass("shop-buy-disabled").html(
                 `<div class="shop-fries-icon"></div><div class="shop-offer-price">${offer.price}</div>`,
@@ -425,6 +478,12 @@ export class ShopUi {
         footer.append(btn);
         card.append(footer);
         return card;
+    }
+
+    /** The locked "⭐ Premium only" button on the Premium Daily offer links straight
+     *  to the Premium tab so a non-Premium viewer can act on it immediately. */
+    private openPremiumUpsell() {
+        this.selectTab("premium");
     }
 
     private renderItem(type: string): JQuery<HTMLElement> {
@@ -462,7 +521,13 @@ export class ShopUi {
         this.account.buyShopOffer(slot, (err, res) => {
             this.buying = false;
             if (err || !res || !res.success) {
-                btn.text(res?.error === "insufficient_funds" ? "Too poor" : "Error");
+                btn.text(
+                    res?.error === "insufficient_funds"
+                        ? "Too poor"
+                        : res?.error === "premium_required"
+                          ? "⭐ Premium only"
+                          : "Error",
+                );
                 setTimeout(() => this.refresh(), 900);
                 return;
             }

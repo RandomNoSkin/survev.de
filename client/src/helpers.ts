@@ -85,6 +85,18 @@ export const helpers = {
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
     },
+    /**
+     * Escapes a display name and, for Premium accounts, prepends a golden "[PREM]"
+     * tag. The single choke point for rendering a username anywhere in the client -
+     * use this instead of `htmlEscape(name)` wherever the caller also knows whether
+     * the account is Premium.
+     */
+    formatUsername: function(name = "", premium = false) {
+        const escaped = helpers.htmlEscape(name);
+        return premium
+            ? `<span class="username-premium-tag">[PREM]</span> ${escaped}`
+            : escaped;
+    },
     truncateString: function(str: string, font: string, maxWidthPixels: number) {
         const context = truncateCanvas.getContext("2d")!;
         context.font = font;

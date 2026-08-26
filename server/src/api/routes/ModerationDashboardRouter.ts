@@ -45,6 +45,7 @@ import {
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
+import { Config } from "../../config";
 import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
 import { OAUTH_APP_STATUSES, type OAuthAppStatus, zAppReviewRequest } from "../../../../shared/types/oauth.ts";
 import { util } from "../../../../shared/utils/util";
@@ -64,6 +65,7 @@ import {
 } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
 import { listApps, reviewApp } from "../db/oauth";
+import { grantPremiumMonths, removePremium } from "../db/premium";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
@@ -108,6 +110,33 @@ const SOLVED_SUS_LIMIT = 10;
 
 /** Recordings per region the Replays tab loads when it doesn't ask for a specific count. */
 const REPLAY_LIST_DEFAULT_LIMIT = 200;
+
+/**
+ * Whether an archived client build exists for a given protocol version, so an
+ * old-protocol replay can actually be watched (see `client/scripts/archiveBuild.mjs`,
+ * published under `CLIENT_URL/archive/<version>/`). Checked over HTTP rather than the
+ * filesystem because this API process and the nginx-served client dist aren't
+ * necessarily the same machine/process. Cached in-memory - the archive only changes on
+ * deploy, and the set of distinct protocol versions seen at any time is tiny.
+ */
+const archivedBuildExistsCache = new Map<number, boolean>();
+async function archivedBuildExists(protocolVersion: number): Promise<boolean> {
+    if (protocolVersion === GameConfig.protocolVersion) return true;
+    const cached = archivedBuildExistsCache.get(protocolVersion);
+    if (cached !== undefined) return cached;
+    let exists = false;
+    try {
+        const res = await fetch(
+            `${Config.oauthRedirectURI}/archive/${protocolVersion}/index.html`,
+            { method: "HEAD" },
+        );
+        exists = res.ok;
+    } catch {
+        exists = false;
+    }
+    archivedBuildExistsCache.set(protocolVersion, exists);
+    return exists;
+}
 
 /**
  * Length of a moderation time window, parsed from `<n>h` / `<n>d`.
@@ -1457,6 +1486,25 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ),
         ];
 
+        // Resolve "is this replay's protocol version actually archived?" once per
+        // distinct version (usually 1-2), not once per replay row.
+        const protocolVersions = [
+            ...new Set(
+                regions.flatMap((r) =>
+                    (r.recordings as any[]).map((rec) => rec.protocolVersion).filter(
+                        (v) => typeof v === "number",
+                    )
+                ),
+            ),
+        ];
+        const archivedByVersion = new Map(
+            await Promise.all(
+                protocolVersions.map(
+                    async (v) => [v, await archivedBuildExists(v)] as const,
+                ),
+            ),
+        );
+
         const [rows, mods] = await Promise.all([
             gameIds.length
                 ? db
@@ -1509,6 +1557,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 regionId: r.regionId,
                 recordings: (r.recordings as any[]).map((rec) => ({
                     ...rec,
+                    // Whether an archived client build exists for this replay's
+                    // protocol version (always true for the current version).
+                    archived: typeof rec.protocolVersion === "number"
+                        ? (archivedByVersion.get(rec.protocolVersion) ?? false)
+                        : true,
                     // A flag on the game as a whole (mod key "").
                     gameStatus: modByKey.get(`${rec.gameId}|`) ?? null,
                     players: (rec.players ?? []).map((p: any) => {
@@ -3137,6 +3190,62 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, moderator });
         },
     )
+    /** Grants (extends) Premium on an account for free - admin action, no Golden Fries involved. */
+    .post(
+        "/api/account/premium/grant",
+        validateParams(z.object({ slug: z.string().min(1), months: z.number().int().min(1).max(24) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, months } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+
+            const premiumUntil = await grantPremiumMonths(target.id, months);
+
+            void logModerationAction(
+                "⭐ Premium granted",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Months", value: String(months) },
+                    { name: "Now until", value: premiumUntil.toISOString() },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xf2d63b,
+            );
+            return c.json({ ok: true, premiumUntil: premiumUntil.getTime() });
+        },
+    )
+    /** Immediately clears Premium on an account - admin action. */
+    .post(
+        "/api/account/premium/remove",
+        validateParams(z.object({ slug: z.string().min(1) })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+
+            await removePremium(target.id);
+
+            void logModerationAction(
+                "⭐ Premium removed",
+                [
+                    { name: "Account", value: slug },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xf2d63b,
+            );
+            return c.json({ ok: true });
+        },
+    )
     /** Full account detail: identity (incl. discord id), per-pass XP, owned items grouped by source, recent matches. */
     .get("/api/account/:slug", async (c) => {
         const slug = c.req.param("slug");
@@ -3156,6 +3265,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 admin: true,
                 moderator: true,
                 goldenFries: true,
+                premiumUntil: true,
                 userCreated: true,
             },
         });

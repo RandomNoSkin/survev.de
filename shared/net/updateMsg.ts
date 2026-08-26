@@ -201,6 +201,8 @@ export interface PlayerInfo {
     teamId: number;
     groupId: number;
     name: string;
+    /** Active Premium subscription - the client shows a "[PREM]" tag before the name. */
+    premium: boolean;
 
     loadout: {
         heal: string;
@@ -214,6 +216,7 @@ function serializePlayerInfo(s: BitStream, data: PlayerInfo) {
     s.writeUint8(data.teamId);
     s.writeUint8(data.groupId);
     s.writeString(data.name);
+    s.writeBoolean(data.premium);
 
     s.writeGameType(data.loadout.heal);
     s.writeGameType(data.loadout.boost);
@@ -227,6 +230,7 @@ function deserializePlayerInfo(s: BitStream, data: PlayerInfo) {
     data.teamId = s.readUint8();
     data.groupId = s.readUint8();
     data.name = s.readString();
+    data.premium = s.readBoolean();
     data.loadout = {} as PlayerInfo["loadout"];
     data.loadout.heal = s.readGameType();
     data.loadout.boost = s.readGameType();

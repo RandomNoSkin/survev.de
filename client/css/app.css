@@ -5984,6 +5984,192 @@ a:active {
   pointer-events: none;
 }
 
+/* ---- Premium Daily offer (shop slot 4, "Deals" tab) ---- */
+.shop-section-premium .shop-section-label {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(242, 214, 59, 0.8);
+}
+.shop-offer-premium {
+  border-color: #f2d63b;
+  box-shadow: 0 0 12px rgba(242, 214, 59, 0.25);
+}
+.shop-buy-locked {
+  background: rgba(242, 214, 59, 0.15);
+  color: #f2d63b;
+  border: 1px solid #f2d63b;
+}
+.shop-buy-locked:hover {
+  background: rgba(242, 214, 59, 0.3);
+}
+
+/* ---- Premium tab (rendered inside the shop modal's Premium tab) ---- */
+/* shopUi.ts toggles this tab's visibility with an inline `display: block`, which beats
+ * a `display: flex` rule here by specificity — so centering is done on the card itself
+ * (fixed width + auto margins) rather than via a flex container on the parent. */
+#shop-premium {
+  padding: 36px 24px;
+  text-align: center;
+}
+.premium-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 420px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 28px 32px 24px;
+  background: radial-gradient(
+      ellipse at top,
+      rgba(242, 214, 59, 0.12),
+      rgba(0, 0, 0, 0) 70%
+    ),
+    rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(242, 214, 59, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 0 24px rgba(242, 214, 59, 0.15);
+  text-align: center;
+}
+.premium-crown {
+  width: 46px;
+  height: 46px;
+  background: url(/img/gui/crown.svg) center/contain no-repeat;
+  filter: drop-shadow(0 0 8px rgba(242, 214, 59, 0.6));
+}
+.premium-badge {
+  color: #f2d63b;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(242, 214, 59, 0.5);
+}
+.premium-status {
+  font-size: 14px;
+  font-weight: 700;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.premium-status-active {
+  color: #f2d63b;
+}
+.premium-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin: 4px 0 10px;
+  padding: 16px 18px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+.premium-benefit {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  color: #ddd;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.premium-benefit-icon {
+  flex-shrink: 0;
+  width: 20px;
+  color: #f2d63b;
+  font-size: 14px;
+  text-align: center;
+}
+.premium-buy-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 22px;
+  background: #83af50;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.premium-buy-btn:hover {
+  background: #93c65b;
+}
+.premium-buy-btn.shop-buy-disabled {
+  background: #555;
+  color: #aaa;
+  cursor: default;
+  pointer-events: none;
+}
+.premium-buy-price {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+}
+.premium-buy-price .shop-fries-icon {
+  width: 22px;
+  height: 22px;
+}
+.premium-note {
+  color: #888;
+  font-size: 11px;
+  max-width: 340px;
+}
+.premium-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: #666;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+.premium-divider::before,
+.premium-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.premium-kofi-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 22px;
+  background: #ff6433;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.premium-kofi-btn:hover {
+  background: #ff7a4f;
+}
+.premium-kofi-icon {
+  width: 20px;
+  height: 20px;
+  background: url(/img/icon_kofi.png) center/contain no-repeat;
+}
+/* The [PREM] tag prepended by helpers.formatUsername() wherever a Premium
+ * account's name is rendered (chat, market, social, team menu, dashboard, ...). */
+.username-premium-tag {
+  color: #f2d63b;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(242, 214, 59, 0.55);
+}
+
 /* ---- Player marketplace (rendered inside the shop modal's Market tab) ---- */
 /* The sell dialog floats above everything (loadout modal is z-index 4). */
 #modal-market-sell,

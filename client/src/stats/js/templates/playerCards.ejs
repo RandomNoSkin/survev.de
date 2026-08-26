@@ -20,9 +20,9 @@
               <div class='card-player-name-row <%= env.profile.banned ? "" : "mt-3"%>'>
                 <% if (env.profile.region) { %>
                   <div class='card-player-region-badge ml-md-5 ml-sm-1 ml-xs-1'><%= env.profile.region.toUpperCase() %></div>
-                  <div class='card-player-name ml-2'><%= env.profile.username %></div>
+                  <div class='card-player-name ml-2'><%- env.profile.usernameHtml %></div>
                 <% } else { %>
-                  <div class='card-player-name ml-md-5 ml-sm-1 ml-xs-1'><%= env.profile.username %></div>
+                  <div class='card-player-name ml-md-5 ml-sm-1 ml-xs-1'><%- env.profile.usernameHtml %></div>
                 <% } %>
                 <div class='view-loadout-btn ml-2' title='View Loadout'></div>
               </div>

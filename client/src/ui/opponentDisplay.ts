@@ -367,6 +367,7 @@ export class LoadoutDisplay {
             teamId: 0,
             groupId: 0,
             name: "",
+            premium: false,
             loadout: {
                 heal: this.loadout.heal,
                 boost: this.loadout.boost,

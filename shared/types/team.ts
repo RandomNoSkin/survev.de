@@ -48,6 +48,7 @@ export interface TeamMenuPlayer {
     playerId: number;
     isLeader: boolean;
     inGame: boolean;
+    premium: boolean;
 }
 
 /**
