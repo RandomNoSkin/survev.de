@@ -342,7 +342,18 @@ export const matchDataTable = pgTable(
         gameId: uuid("game_id").notNull(),
         mapSeed: bigint("map_seed", { mode: "number" }).notNull(),
         username: text("username").notNull(),
+        // Stable per-match id used for kill/assist credit (killerId/killedIds/assistedIds
+        // all reference THIS, never the recording id below) - `Player.matchDataId`, a
+        // monotonic per-game counter that's never reused, unlike the network `__id`.
         playerId: integer("player_id").notNull(),
+        // The recording system's player id (`Player.__id`) at save time - DIFFERENT from
+        // `playerId` above and NOT safe to use for kill credit (it's a network slot id
+        // that can be recycled mid-match). This is what `players[].playerId` in a game's
+        // meta.json / the per-player `.svrep.gz` filename actually key off, so it's what
+        // the Premium self-service replay lookup (getReplayMeta/listReplays match) must
+        // use to find THIS player's own POV recording. Null for matches saved before this
+        // column existed - those can't be resolved to a POV file anymore.
+        recordingPlayerId: integer("recording_player_id"),
         // Non-default cosmetic types this player had equipped for the match (snapshot),
         // shown on the advanced game stats page (with total worth). Hidden there when the
         // owning account has loadout_private set.

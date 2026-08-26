@@ -470,6 +470,16 @@ UserRouter.post(
             return c.json<PremiumReplayTokenResponse>({ success: false, error: "error" }, 200);
         }
 
+        // Games saved before recordingPlayerId existed can't be resolved to a POV file
+        // anymore - row.playerId (matchDataId) is a different id space than the
+        // recording system's __id and was never usable for this lookup.
+        if (row.recordingPlayerId == null) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "expired" },
+                200,
+            );
+        }
+
         // Confirm the recording (and this player's POV file specifically) hasn't
         // already been pruned by retention, instead of minting a token that would
         // just 404 when the client tries to fetch it. Same bounded listReplays() the
@@ -478,7 +488,9 @@ UserRouter.post(
         // getting misread as "expired" for perfectly fresh games.
         const recordings = await server.listReplays(row.region, REPLAY_LIST_DEFAULT_LIMIT);
         const rec = recordings.find((r: any) => r.gameId === gameId);
-        const povExists = rec?.players?.some((p: any) => p.playerId === row.playerId);
+        const povExists = rec?.players?.some(
+            (p: any) => p.playerId === row.recordingPlayerId,
+        );
         if (!rec || !povExists) {
             return c.json<PremiumReplayTokenResponse>(
                 { success: false, error: "expired" },
@@ -489,10 +501,10 @@ UserRouter.post(
         const token = signReplayToken({
             region: row.region,
             gameId,
-            playerId: row.playerId,
+            playerId: row.recordingPlayerId,
         });
         return c.json<PremiumReplayTokenResponse>(
-            { success: true, token, playerId: row.playerId },
+            { success: true, token, playerId: row.recordingPlayerId },
             200,
         );
     },

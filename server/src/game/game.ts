@@ -1082,6 +1082,10 @@ export class Game {
                 region: Config.gameServer.thisRegion,
                 username: player.name,
                 playerId: player.matchDataId,
+                // The recording system keys players by __id (see GameRecorder), not
+                // matchDataId - store it too so the Premium self-service replay lookup
+                // can find the right POV file (see recordingPlayerId's schema comment).
+                recordingPlayerId: player.__id,
                 // Snapshot the player's non-default equipped cosmetics for the match, so the
                 // advanced game stats page can show each loadout + its worth.
                 equippedCosmetics: player.equippedCosmetics,
