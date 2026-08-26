@@ -51,7 +51,7 @@ import { OAUTH_APP_STATUSES, type OAuthAppStatus, zAppReviewRequest } from "../.
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
-import { server } from "../apiServer";
+import { REPLAY_LIST_DEFAULT_LIMIT, server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
@@ -108,9 +108,6 @@ const MAX_WINDOW_MS = 3650 * 24 * 60 * 60 * 1000;
 
 /** How many already-resolved sus reports the Sus tab keeps around, newest first. */
 const SOLVED_SUS_LIMIT = 10;
-
-/** Recordings per region the Replays tab loads when it doesn't ask for a specific count. */
-const REPLAY_LIST_DEFAULT_LIMIT = 200;
 
 /**
  * Whether an archived client build exists for a given protocol version, so an
