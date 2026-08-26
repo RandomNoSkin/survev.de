@@ -82,6 +82,7 @@ import {
     marketListingsTable,
     matchDataTable,
     offersTable,
+    premiumXpGrantsTable,
     usersTable,
     userXpTable,
 } from "../db/schema";
@@ -3273,7 +3274,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         const passTypes = Object.keys((GameConfig.serverSettings as any).passes ?? {});
 
-        const [xpRows, items, matches] = await Promise.all([
+        const [xpRows, items, matches, premiumXpRows] = await Promise.all([
             db.select().from(userXpTable).where(eq(userXpTable.userId, user.id)),
             db
                 .select({
@@ -3300,12 +3301,26 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .where(eq(matchDataTable.userId, user.id))
                 .orderBy(desc(matchDataTable.createdAt))
                 .limit(25),
+            // Per-pass total XP granted via Premium purchases - shown next to the pass's
+            // total XP so a jump doesn't get mistaken for account boosting.
+            db
+                .select({
+                    passType: premiumXpGrantsTable.passType,
+                    total: sql<string>`sum(${premiumXpGrantsTable.xpGranted})`,
+                })
+                .from(premiumXpGrantsTable)
+                .where(eq(premiumXpGrantsTable.userId, user.id))
+                .groupBy(premiumXpGrantsTable.passType),
         ]);
+
+        const premiumXpByPass: Record<string, number> = {};
+        for (const r of premiumXpRows) premiumXpByPass[r.passType] = Number(r.total);
 
         const xp = xpRows.map((r) => ({
             passType: r.passType,
             level: r.level,
             xp: Number(r.xp),
+            premiumXp: premiumXpByPass[r.passType] ?? 0,
         }));
 
         // Owned items grouped by source so a whole source group (e.g. an S2 pass)

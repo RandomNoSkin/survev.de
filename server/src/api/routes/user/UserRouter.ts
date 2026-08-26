@@ -472,9 +472,16 @@ UserRouter.post(
 
         // Confirm the recording (and this player's POV file specifically) hasn't
         // already been pruned by retention, instead of minting a token that would
-        // just 404 when the client tries to fetch it.
-        const recordings = await server.listReplays(row.region);
-        const rec = recordings.find((r: any) => r.gameId === gameId);
+        // just 404 when the client tries to fetch it. Uses a single-game lookup
+        // (not listReplays) - scanning the whole archive here is what made this
+        // check time out and get misread as "expired" for perfectly fresh games.
+        const rec = await server.getReplayMeta(row.region, gameId);
+        if (rec === undefined) {
+            server.logger.warn(
+                `/premium/replay_token: replay meta lookup failed for game ${gameId} (region ${row.region})`,
+            );
+            return c.json<PremiumReplayTokenResponse>({ success: false, error: "error" }, 200);
+        }
         const povExists = rec?.players?.some((p: any) => p.playerId === row.playerId);
         if (!rec || !povExists) {
             return c.json<PremiumReplayTokenResponse>(

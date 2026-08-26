@@ -126,8 +126,14 @@ app.get("/api/replay/povs", async (c) => {
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
     }
-    const recordings = await server.listReplays(data.region);
-    const rec = recordings.find((r: any) => r.gameId === data.gameId);
+    // A single-game lookup (not listReplays) - scanning the whole archive for one
+    // known gameId is unnecessary and, on a busy host, slow enough to time out.
+    const rec = await server.getReplayMeta(data.region, data.gameId);
+    if (rec === undefined) {
+        server.logger.warn(
+            `/api/replay/povs: replay meta lookup failed for game ${data.gameId} (region ${data.region})`,
+        );
+    }
     if (!rec) {
         return c.json({ error: "not_found" }, 404);
     }

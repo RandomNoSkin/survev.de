@@ -4,7 +4,12 @@ import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { getPassLevelXp } from "./passReconcile";
 import { setPassXp } from "./passXp";
-import { goldenFriesLedgerTable, userXpTable, usersTable } from "./schema";
+import {
+    goldenFriesLedgerTable,
+    premiumXpGrantsTable,
+    userXpTable,
+    usersTable,
+} from "./schema";
 
 /** Golden Fries cost of one Premium purchase (grants/extends by PREMIUM_DURATION). */
 export const PREMIUM_COST_FRIES = 3000;
@@ -26,6 +31,11 @@ function xpForLevels(passType: string, levels: number): number {
  * first. Reuses `setPassXp`'s absolute-set cascade (derives the new level, grants
  * any pass cosmetics/Golden Fries owed for levels just crossed) so this can't
  * leave cosmetics/fries out of sync with the new XP total.
+ *
+ * `setPassXp` also anchors `reconcileBaseXp`/`reconcileFrom` to this new total, so
+ * `reconcileAllPasses` treats it as the floor going forward (old matches aren't
+ * re-counted under it) and — being ratchet-up-only anyway — can never lower it back
+ * out. The `premium_xp_grants` row is purely an audit trail for the dashboard.
  */
 export async function grantPremiumPassXp(userId: string): Promise<void> {
     const passType = GameConfig.serverSettings.currentPass;
@@ -38,6 +48,11 @@ export async function grantPremiumPassXp(userId: string): Promise<void> {
     const currentXp = existing ? Number(existing.xp) : 0;
 
     await setPassXp(userId, passType, currentXp + xpToAdd);
+    await db.insert(premiumXpGrantsTable).values({
+        userId,
+        passType,
+        xpGranted: String(xpToAdd),
+    });
 }
 
 /** Whether a `premiumUntil` timestamp currently grants Premium (null = never bought). */

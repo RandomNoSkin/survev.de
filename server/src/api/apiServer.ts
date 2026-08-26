@@ -130,6 +130,21 @@ class Region {
         return data?.recordings ?? [];
     }
 
+    /**
+     * Looks up ONE game's replay meta.json directly, without scanning the whole
+     * archive like `listReplays()` - use this for a single known `gameId`.
+     * Returns `undefined` if the region fetch itself failed/timed out (unknown -
+     * NOT proof the recording is gone), `null` if the fetch succeeded and the
+     * recording genuinely isn't there, or the meta if it is.
+     */
+    async getReplayMeta(gameId: string): Promise<any | null | undefined> {
+        const data = await this.fetch<{ recording: any | null }>(
+            "api/dashboard/replay_meta",
+            { gameId },
+        );
+        return data ? data.recording : undefined;
+    }
+
     /** Fetches one per-player replay file (raw gzip bytes) from this region's game server. */
     async streamReplayFile(
         gameId: string,
@@ -407,6 +422,12 @@ export class ApiServer {
     /** Lists replay recordings stored on a region's game server. */
     async listReplays(region: string, limit?: number): Promise<any[]> {
         return (await this.regions[region]?.listReplays(limit)) ?? [];
+    }
+
+    /** Looks up ONE game's replay meta on a region's game server (see Region.getReplayMeta).
+     *  `undefined` = the region is unknown or the fetch failed (unresolved, not "gone"). */
+    async getReplayMeta(region: string, gameId: string): Promise<any | null | undefined> {
+        return this.regions[region]?.getReplayMeta(gameId);
     }
 
     /** Fetches a per-player replay file (raw gzip bytes) from a region's game server. */
