@@ -15,7 +15,6 @@ import {
     listRecordings,
     readDamageFile,
     readMapFile,
-    readMeta,
     readRecordingFile,
     readTracksFile,
 } from "./game/recording/gameRecorder";
@@ -867,33 +866,6 @@ app.post("/api/dashboard/replays", (res, req) => {
             const recordings = await listRecordings(limit);
             if (res.aborted) return;
             returnJson(res, { recordings });
-        },
-        () => {
-            if (!res.aborted) returnJson(res, { error: "body error" });
-        },
-    );
-});
-
-/** Looks up ONE game's replay meta.json directly (no archive scan) - used for
- *  request-scoped "does this recording still exist?" checks instead of the
- *  paginated /api/dashboard/replays listing. */
-app.post("/api/dashboard/replay_meta", (res, req) => {
-    res.onAborted(() => {
-        res.aborted = true;
-    });
-
-    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
-        forbidden(res);
-        return;
-    }
-
-    readPostedJSON<{ gameId?: string }>(
-        res,
-        async (body) => {
-            if (res.aborted) return;
-            const recording = body?.gameId ? await readMeta(body.gameId) : null;
-            if (res.aborted) return;
-            returnJson(res, { recording });
         },
         () => {
             if (!res.aborted) returnJson(res, { error: "body error" });

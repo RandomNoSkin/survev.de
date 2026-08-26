@@ -22,7 +22,7 @@ import {
     logErrorToWebhook,
     verifyTurnsStile,
 } from "../utils/serverHelpers";
-import { server } from "./apiServer";
+import { REPLAY_LIST_DEFAULT_LIMIT, server } from "./apiServer";
 import { deleteExpiredSessions, validateSessionToken } from "./auth";
 import { rateLimitMiddleware, validateParams } from "./auth/middleware";
 import {
@@ -126,14 +126,10 @@ app.get("/api/replay/povs", async (c) => {
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
     }
-    // A single-game lookup (not listReplays) - scanning the whole archive for one
-    // known gameId is unnecessary and, on a busy host, slow enough to time out.
-    const rec = await server.getReplayMeta(data.region, data.gameId);
-    if (rec === undefined) {
-        server.logger.warn(
-            `/api/replay/povs: replay meta lookup failed for game ${data.gameId} (region ${data.region})`,
-        );
-    }
+    // Same bounded listReplays() the moderation dashboard's Replays tab already uses
+    // in production, rather than scanning the whole archive for one known gameId.
+    const recordings = await server.listReplays(data.region, REPLAY_LIST_DEFAULT_LIMIT);
+    const rec = recordings.find((r: any) => r.gameId === data.gameId);
     if (!rec) {
         return c.json({ error: "not_found" }, 404);
     }
