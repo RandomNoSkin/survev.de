@@ -15,6 +15,7 @@ import { isBlockedBetween } from "./blocks";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { getOwnedLoadouts } from "./loadouts";
+import { isPremiumActive } from "./premium";
 import {
     auctionsTable,
     giftNotificationsTable,
@@ -235,7 +236,11 @@ export async function searchUsers(
 ): Promise<UserSearchResult[]> {
     const q = `%${escapeLike(query.trim())}%`;
     const rows = await db
-        .select({ slug: usersTable.slug, username: usersTable.username })
+        .select({
+            slug: usersTable.slug,
+            username: usersTable.username,
+            premiumUntil: usersTable.premiumUntil,
+        })
         .from(usersTable)
         .where(
             and(
@@ -246,7 +251,11 @@ export async function searchUsers(
         )
         .orderBy(usersTable.username)
         .limit(Math.min(Math.max(limit, 1), 25));
-    return rows.map((r) => ({ slug: r.slug, username: r.username }));
+    return rows.map((r) => ({
+        slug: r.slug,
+        username: r.username,
+        premium: isPremiumActive(r.premiumUntil),
+    }));
 }
 
 /**
@@ -268,12 +277,13 @@ export async function getItemOwners(
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            premiumUntil: usersTable.premiumUntil,
             copies: sql<number>`count(*)::int`,
         })
         .from(itemsTable)
         .innerJoin(usersTable, eq(usersTable.id, itemsTable.userId))
         .where(and(...conds))
-        .groupBy(usersTable.id, usersTable.slug, usersTable.username)
+        .groupBy(usersTable.id, usersTable.slug, usersTable.username, usersTable.premiumUntil)
         .orderBy(desc(sql`count(*)`), usersTable.username)
         .limit(OWNERS_PAGE_SIZE + 1)
         .offset(p * OWNERS_PAGE_SIZE);
@@ -282,6 +292,7 @@ export async function getItemOwners(
     const owners: ItemOwner[] = rows.slice(0, OWNERS_PAGE_SIZE).map((r) => ({
         slug: r.slug,
         username: r.username,
+        premium: isPremiumActive(r.premiumUntil),
         copies: r.copies,
     }));
 
@@ -304,8 +315,12 @@ export async function getGiftNotifications(userId: string): Promise<GiftNotifica
             kind: giftNotificationsTable.kind,
             amount: giftNotificationsTable.amount,
             itemType: giftNotificationsTable.itemType,
+            // The sender's CURRENT premium status (fromName/fromSlug are a snapshot
+            // taken at gift-send time, but there's no reason to freeze premium too).
+            fromPremiumUntil: usersTable.premiumUntil,
         })
         .from(giftNotificationsTable)
+        .leftJoin(usersTable, eq(usersTable.slug, giftNotificationsTable.fromSlug))
         .where(
             and(
                 eq(giftNotificationsTable.recipientId, userId),
@@ -317,6 +332,7 @@ export async function getGiftNotifications(userId: string): Promise<GiftNotifica
     return rows.map((r) => ({
         id: r.id,
         fromName: r.fromName || r.fromSlug,
+        fromPremium: isPremiumActive(r.fromPremiumUntil),
         kind: r.kind === "item" ? "item" : "fries",
         amount: r.amount,
         itemType: r.itemType,

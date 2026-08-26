@@ -118,6 +118,7 @@ export const Comp: MapDef = {
         bagSizes: {},
         bleedDamage: 2,
         bleedDamageMult: 1,
+        damageMult: 0.9,
     },
     // NOTE: this loot table is not the original one so its not accurate
     // ? are guesses based on statistics
@@ -1209,7 +1210,7 @@ export const Comp: MapDef = {
         },
         densitySpawns: [
             {
-                stone_01: 370,
+                stone_01: 428,
                 barrel_01: 66,
                 silo_01: 8,
                 crate_01: 50,
@@ -1217,10 +1218,10 @@ export const Comp: MapDef = {
                 crate_03: 12, //grenade crates
                 bush_01: 78,
                 cache_06: 12,
-                tree_01: 430,
-                tree_13: 36,
-                sandbags_01: 11,
-                sandbags_02: 11,
+                tree_01: 323,
+                tree_13: 27,
+                sandbags_01: 40,
+                sandbags_02: 40,
                 hedgehog_01: 24,
                 container_01: 5,
                 container_02: 5,

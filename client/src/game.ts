@@ -130,6 +130,17 @@ export class Game {
 
     /** True when this Game is playing back a recorded replay (no socket, no input sent). */
     m_replayMode = false;
+    /** Current match's gameId - set by main.ts at join/spectate time, or by ReplayPlayer when loading a recording. Shown in the game-over header. */
+    m_gameId = "";
+    /** Bridge to the replay bar's visibility, set by ReplayPlayer while active (Game has no direct reference to it). */
+    m_onToggleSpectateUiHidden?: (hidden: boolean) => void;
+    /** Bridge to the replay-control keybinds (play/pause, speed, skip, frame step), set by ReplayPlayer while active. */
+    m_replayControls?: {
+        togglePause(): void;
+        adjustSpeed(dir: 1 | -1): void;
+        skip(deltaMs: number): void;
+        stepFrame(dir: 1 | -1): void;
+    };
     /**
      * God-view player snapshot during replay (all players' pos/health, regardless of
      * POV culling). Fed by the replay player; consumed by the advanced spectator +
@@ -1016,6 +1027,78 @@ export class Game {
             this.m_uiManager.toggleAdvancedSpectator();
         }
 
+        // Keybind to hide/show spectate buttons + the replay bar. Works whenever
+        // spectating (live or replay); not gated by advanced spectator being enabled.
+        if (this.m_inputBinds.isBindPressed(Input.ToggleSpectateUi) && this.m_spectating) {
+            this.m_uiManager.setSpectateUiHidden(!this.m_uiManager.spectateUiHidden);
+        }
+
+        // Keybinds for the advanced spectator sub-toggles - same guard as the master
+        // toggle, plus advanced spectator must actually be enabled.
+        if (this.m_spectating && this.m_advancedSpectatorAllowed && this.m_advSpec.enabled) {
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecCollapse)) {
+                this.m_uiManager.toggleCollapse();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecFreecam)) {
+                this.m_uiManager.toggleFreecam();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecZoomToggle)) {
+                this.m_uiManager.toggleZoomMode();
+            }
+            if (this.m_advSpec.zoom && this.m_inputBinds.isBindPressed(Input.AdvSpecZoomIn)) {
+                this.m_uiManager.adjustZoom(-6);
+            }
+            if (this.m_advSpec.zoom && this.m_inputBinds.isBindPressed(Input.AdvSpecZoomOut)) {
+                this.m_uiManager.adjustZoom(6);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecLayer)) {
+                this.m_uiManager.toggleLayer();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecTransparent)) {
+                this.m_uiManager.toggleTransparent();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecEnemiesOnMap)) {
+                this.m_uiManager.toggleEnemiesOnMap();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecEsp)) {
+                this.m_uiManager.toggleEsp();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecLabels)) {
+                this.m_uiManager.toggleLabels();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecNades)) {
+                this.m_uiManager.toggleNadeEsp();
+            }
+        }
+
+        // Keybinds for the replay-bar controls (play/pause, skip, speed, frame step).
+        // Only meaningful in replay mode - m_replayControls is only set while a
+        // ReplayPlayer is active.
+        if (this.m_replayMode && this.m_replayControls) {
+            const rc = this.m_replayControls;
+            if (this.m_inputBinds.isBindPressed(Input.ReplayTogglePause)) {
+                rc.togglePause();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySkipBack)) {
+                rc.skip(-5000);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySkipForward)) {
+                rc.skip(5000);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySpeedUp)) {
+                rc.adjustSpeed(1);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySpeedDown)) {
+                rc.adjustSpeed(-1);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplayFrameBack)) {
+                rc.stepFrame(-1);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplayFrameForward)) {
+                rc.stepFrame(1);
+            }
+        }
+
         this.m_uiManager.reloadTouched = false;
         this.m_uiManager.interactionTouched = false;
         this.m_uiManager.swapWeapSlots = false;
@@ -1665,9 +1748,12 @@ export class Game {
                     this.m_activeId,
                     true,
                 );
-                targetName = helpers.htmlEscape(targetName);
-                killerName = helpers.htmlEscape(killerName);
-                killfeedKillerName = helpers.htmlEscape(killfeedKillerName);
+                targetName = helpers.formatUsername(targetName, targetInfo.premium);
+                killerName = helpers.formatUsername(killerName, killerInfo.premium);
+                killfeedKillerName = helpers.formatUsername(
+                    killfeedKillerName,
+                    killfeedKillerInfo.premium,
+                );
                 // Display the kill / downed notification for the active player
                 if (msg.killCreditId == this.m_activeId) {
                     const completeKill = msg.killerId == this.m_activeId;
@@ -1749,7 +1835,7 @@ export class Game {
                 const group1 = msg.group1;
                 const group2 = msg.group2;
                 if (group1.length <= 0) {
-                    const text = this.m_ui2Manager.getJoinedText(playerName);
+                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.premium);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 } else {
                     const group1Text = this.m_ui2Manager.getEnemieText(group1);
@@ -2010,9 +2096,13 @@ export class Game {
                 msg.deserialize(stream);
                 if (msg.assisterId == this.m_activeId) {
                     const targetInfo = this.m_playerBarn.getPlayerInfo(msg.targetId);
+                    const targetNameHtml = helpers.formatUsername(
+                        targetInfo.name,
+                        targetInfo.premium,
+                    );
                     // Add to killfeed
                     this.m_ui2Manager.addKillFeedMessage(
-                        `Assist on ${targetInfo.name} (${msg.damageAmount} dmg)`,
+                        `Assist on ${targetNameHtml} (${msg.damageAmount} dmg)`,
                         "#00bfff",
                     );
                     // Show assist notification box at bottom
@@ -2022,7 +2112,7 @@ export class Game {
                     let assistCountText =
                         assistCount === 1 ? "1 Assist" : `${assistCount} Assists`;
                     this.m_ui2Manager.displayAssistMessage(
-                        `Assist on ${targetInfo.name} (${msg.damageAmount} dmg)`,
+                        `Assist on ${targetNameHtml} (${msg.damageAmount} dmg)`,
                         assistCountText,
                     );
                 }

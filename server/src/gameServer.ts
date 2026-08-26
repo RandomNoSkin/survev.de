@@ -514,6 +514,11 @@ app.post("/api/find_game_by_id", async (res, req) => {
                         token,
                         ip,
                         admin,
+                        // No account identity flows through this legacy "watch by
+                        // gameId" spectate path (no userId either), so Premium status
+                        // can't be resolved here - spectators joining this way just
+                        // won't show the [PREM] tag.
+                        premium: false,
                     },
                 ];
 

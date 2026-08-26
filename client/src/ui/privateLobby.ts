@@ -695,7 +695,7 @@ export class PrivateLobbyMenu {
             }
             const nameDiv = $("<div/>", {
                 class: `name menu-option ${nameClass}`,
-                html: helpers.htmlEscape(player.name),
+                html: helpers.formatUsername(player.name, player.premium),
             });
             if (self) {
                 nameDiv.on("click", (e) => {

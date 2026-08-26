@@ -275,6 +275,7 @@ export class PlayerBarn {
             joinData.findGameIp,
             joinData.userId,
             joinData.admin,
+            joinData.premium,
             joinData.loadout,
             joinData.customLoadout,
         );
@@ -360,6 +361,7 @@ export class PlayerBarn {
             joinData.findGameIp,
             joinData.userId,
             joinData.admin,
+            joinData.premium,
             joinData.loadout,
             joinData.customLoadout,
         );
@@ -416,6 +418,7 @@ export class PlayerBarn {
 
             let joinFeedMsg = new net.JoinFeedMsg();
             joinFeedMsg.name = player.name;
+            joinFeedMsg.premium = player.premium;
             this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
         this.game.pluginManager.emit("playerJoin", player);
@@ -475,6 +478,7 @@ export class PlayerBarn {
             "",
             "",
             null,
+            false,
             false,
         );
 
@@ -2011,6 +2015,8 @@ export class Player extends BaseGameObject {
     userId: string | null = null;
     ip: string;
     isAdmin: boolean;
+    /** Active Premium subscription - drives the client-side "[PREM]" name tag (see PlayerInfo/JoinFeedMsg). */
+    premium: boolean;
     // see comment on server/src/api/schema.ts
     // about logging find_game IP's
     findGameIp: string;
@@ -2026,6 +2032,7 @@ export class Player extends BaseGameObject {
         findGameIp: string,
         userId: string | null,
         admin: boolean,
+        premium: boolean,
         loadout?: Loadout,
         customLoadout?: CustomLoadoutConfig,
     ) {
@@ -2045,6 +2052,7 @@ export class Player extends BaseGameObject {
         this.findGameIp = findGameIp;
         this.userId = userId;
         this.isAdmin = admin;
+        this.premium = premium;
 
         this.isMobile = joinMsg.isMobile;
         this.onlyGhilliePickup = joinMsg.onlyGhilliePickup;
@@ -3742,6 +3750,8 @@ export class Player extends BaseGameObject {
             params.damageType !== GameConfig.DamageType.Bleeding &&
             params.damageType !== GameConfig.DamageType.Airdrop
         ) {
+            finalDamage *= this.game.map.mapDef.gameConfig.damageMult ?? 1;
+
             const gameSourceDef = GameObjectDefs.typeToDefSafe(params.gameSourceType ?? "");
             /*
             let isHeadShot = false;

@@ -39,6 +39,7 @@ import { MenuModal } from "./ui/menuModal";
 import { LoadoutDisplay } from "./ui/opponentDisplay";
 import { OwnersUi } from "./ui/ownersUi";
 import { Pass } from "./ui/pass";
+import { PremiumUi } from "./ui/premiumUi";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
 import { ShopUi } from "./ui/shopUi";
@@ -95,6 +96,7 @@ export class Application {
     marketUi!: MarketUi;
     ownersUi!: OwnersUi;
     auctionUi!: AuctionUi;
+    premiumUi!: PremiumUi;
     socialUi!: SocialUi;
 
     pingTest = new PingTest();
@@ -166,6 +168,9 @@ export class Application {
         // The Auction house tab (bid on / put up items).
         this.auctionUi = new AuctionUi(this.account, this.localization);
         this.shopUi.auctionUi = this.auctionUi;
+        // The Premium tab (buy/extend account Premium with Golden Fries).
+        this.premiumUi = new PremiumUi(this.account, this.localization);
+        this.shopUi.premiumUi = this.premiumUi;
         // The Social panel (gift skins / Golden Fries), opened from the top-right button.
         this.socialUi = new SocialUi(this.account, this.localization);
         this.profileUi.socialUi = this.socialUi;
@@ -1191,6 +1196,7 @@ export class Application {
             }, 250);
             return;
         }
+        this.game.m_gameId = matchData.gameId;
         // Snapshot the equipped instance ids so this game's cosmetic stats land on the
         // exact owned copies the player selected (start-of-game snapshot).
         this.account.reportEquippedInstances();
@@ -1281,6 +1287,7 @@ export class Application {
             }, 250);
             return;
         }
+        this.game.m_gameId = matchData.gameId;
         const hosts = matchData.hosts || [];
         const urls: string[] = [];
         const appsid = localStorage.getItem("appsid"); // Retrieve the appsid from local storage

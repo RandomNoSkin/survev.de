@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { type MatchDataResponse, zMatchDataRequest } from "../../../../../shared/types/stats.ts";
 import { databaseEnabledMiddleware, rateLimitMiddleware, validateParams } from "../../auth/middleware.ts";
 import { db } from "../../db/index.ts";
+import { isPremiumActive } from "../../db/premium.ts";
 import { matchDataTable, usersTable } from "../../db/schema.ts";
 import type { Context } from "../../index.ts";
 
@@ -32,6 +33,7 @@ matchDataRouter.post(
                 killed_ids: matchDataTable.killedIds,
                 equipped_cosmetics: matchDataTable.equippedCosmetics,
                 loadout_private: usersTable.loadoutPrivate,
+                premiumUntil: usersTable.premiumUntil,
                 role: matchDataTable.role,
                 revives: matchDataTable.revives,
                 teammate_saves: matchDataTable.teammateSaves,
@@ -44,9 +46,10 @@ matchDataRouter.post(
             .where(eq(matchDataTable.gameId, gameId));
 
         // Hide the loadout for accounts that marked it private.
-        const result: MatchDataResponse = rows.map(({ loadout_private, ...r }) => ({
+        const result: MatchDataResponse = rows.map(({ loadout_private, premiumUntil, ...r }) => ({
             ...r,
             equipped_cosmetics: loadout_private ? [] : (r.equipped_cosmetics ?? []),
+            premium: isPremiumActive(premiumUntil),
         }));
 
         return c.json<MatchDataResponse>(result);

@@ -173,9 +173,29 @@ export const RARITY_SHOP_WEIGHT: Record<number, number> = {
     [Rarity.Mythic]: 5,
 };
 
-/** Shop random-pick weight for `type`: higher = more likely (rarer items are lower). */
-export function getShopWeight(type: string): number {
-    return RARITY_SHOP_WEIGHT[getItemRarity(type)] ?? RARITY_SHOP_WEIGHT[Rarity.Common];
+/**
+ * Rarity weights for the two Premium Daily offers (shop slots 4/5): Stock and Common
+ * are excluded entirely (weight 0, never drawn), and the remaining mass shifts toward
+ * Rare+ compared to `RARITY_SHOP_WEIGHT` (Rare ~2.4x, Epic ~3x, Mythic ~3.7x more
+ * likely proportionally) - a real, noticeable "higher chance of rare cosmetics" rather
+ * than just adding a couple of guaranteed-rare slots.
+ */
+export const RARITY_SHOP_WEIGHT_PREMIUM: Record<number, number> = {
+    [Rarity.Stock]: 0,
+    [Rarity.Common]: 0,
+    [Rarity.Uncommon]: 60,
+    [Rarity.Rare]: 50,
+    [Rarity.Epic]: 30,
+    [Rarity.Mythic]: 15,
+};
+
+/** Shop random-pick weight for `type`: higher = more likely (rarer items are lower).
+ *  Pass `weights` to use a different rarity curve (e.g. `RARITY_SHOP_WEIGHT_PREMIUM`). */
+export function getShopWeight(
+    type: string,
+    weights: Record<number, number> = RARITY_SHOP_WEIGHT,
+): number {
+    return weights[getItemRarity(type)] ?? weights[Rarity.Common];
 }
 
 /**

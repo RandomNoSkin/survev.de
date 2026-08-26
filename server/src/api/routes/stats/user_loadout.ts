@@ -8,6 +8,7 @@ import {
     validateParams,
 } from "../../auth/middleware";
 import { db } from "../../db";
+import { isPremiumActive } from "../../db/premium";
 import { itemsTable, marketListingsTable, usersTable } from "../../db/schema";
 
 export const UserLoadoutRouter = new Hono<Context>();
@@ -35,13 +36,18 @@ UserLoadoutRouter.post(
                 loadout: true,
                 username: true,
                 loadoutPrivate: true,
+                premiumUntil: true,
             },
         });
         if (!user) return c.json({ found: false }, 200);
+        const premium = isPremiumActive(user.premiumUntil);
 
         // The owner chose to hide their loadout from public view.
         if (user.loadoutPrivate) {
-            return c.json({ found: true, private: true, username: user.username }, 200);
+            return c.json(
+                { found: true, private: true, username: user.username, premium },
+                200,
+            );
         }
 
         const owned = await db
@@ -94,6 +100,7 @@ UserLoadoutRouter.post(
             {
                 found: true,
                 username: user.username,
+                premium,
                 slug: user.slug,
                 loadout: user.loadout,
                 items,

@@ -13,6 +13,7 @@ import type {
 } from "../../../../shared/types/user";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
+import { isPremiumActive } from "./premium";
 import {
     auctionsTable,
     blocksTable,
@@ -394,8 +395,10 @@ function mapOffer(r: {
     status: string;
     fromSlug: string;
     fromUsername: string | null;
+    fromPremiumUntil?: Date | null;
     toSlug: string;
     toUsername: string | null;
+    toPremiumUntil?: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }): Offer {
@@ -408,8 +411,10 @@ function mapOffer(r: {
         status: r.status,
         fromSlug: r.fromSlug,
         fromUsername: r.fromUsername ?? "",
+        fromPremium: isPremiumActive(r.fromPremiumUntil ?? null),
         toSlug: r.toSlug,
         toUsername: r.toUsername ?? "",
+        toPremium: isPremiumActive(r.toPremiumUntil ?? null),
         createdAt: r.createdAt.getTime(),
         updatedAt: r.updatedAt.getTime(),
     };
@@ -431,7 +436,11 @@ export async function getOffersForUser(userId: string): Promise<OfferListRespons
     };
 
     const incomingRows = await db
-        .select({ ...base, fromUsername: usersTable.username })
+        .select({
+            ...base,
+            fromUsername: usersTable.username,
+            fromPremiumUntil: usersTable.premiumUntil,
+        })
         .from(offersTable)
         .leftJoin(usersTable, eq(usersTable.id, offersTable.fromUserId))
         .where(
@@ -443,7 +452,11 @@ export async function getOffersForUser(userId: string): Promise<OfferListRespons
         .orderBy(desc(offersTable.createdAt));
 
     const outgoingRows = await db
-        .select({ ...base, toUsername: usersTable.username })
+        .select({
+            ...base,
+            toUsername: usersTable.username,
+            toPremiumUntil: usersTable.premiumUntil,
+        })
         .from(offersTable)
         .leftJoin(usersTable, eq(usersTable.id, offersTable.toUserId))
         .where(

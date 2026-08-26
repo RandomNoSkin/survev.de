@@ -5,6 +5,7 @@ import {
     type UserStatsResponse,
 } from "../../../../shared/types/stats.ts";
 import { db } from "./index.ts";
+import { isPremiumActive } from "./premium.ts";
 import { getRatingTier } from "./ratingTiers.ts";
 import { matchDataTable, regionGroupsTable, usersTable } from "./schema.ts";
 
@@ -12,6 +13,7 @@ import { matchDataTable, regionGroupsTable, usersTable } from "./schema.ts";
 export const emptyUserStats = {
     slug: "",
     username: "",
+    premium: false,
     assists: 0,
     primaryRegion: null,
     modes: [],
@@ -88,6 +90,7 @@ export async function userStatsSqlQuery(
             slug: usersTable.slug,
             username: usersTable.username,
             banned: usersTable.banned,
+            premiumUntil: usersTable.premiumUntil,
             primaryRegion: sql`NULLIF(${usersTable.primaryRegion}, '')`,
             player_icon: sql`JSON_EXTRACT_PATH(ANY_VALUE(${usersTable.loadout}), 'player_icon')`,
             games: sql`COALESCE(SUM("mode_stats".games), 0)`,
@@ -118,16 +121,23 @@ export async function userStatsSqlQuery(
         .from(usersTable)
         .leftJoin(withSelect, eq(sql`1`, 1))
         .where(eq(usersTable.id, userId))
-        .groupBy(usersTable.slug, usersTable.username, usersTable.banned, usersTable.primaryRegion)
+        .groupBy(
+            usersTable.slug,
+            usersTable.username,
+            usersTable.banned,
+            usersTable.premiumUntil,
+            usersTable.primaryRegion,
+        )
         .limit(1);
 
-    const userStats = res[0] as UserStatsResponse;
+    const userStats = res[0] as UserStatsResponse & { premiumUntil: Date | null };
 
     if (!userStats || !userStats.slug) return emptyUserStats as unknown as UserStatsResponse;
 
     const modes = userStats?.modes;
     const formatedData: UserStatsResponse = {
         ...userStats,
+        premium: isPremiumActive(userStats.premiumUntil),
         // sql fuckery, it returns [null] where no result
         modes: (modes[0] === null ? [] : modes).map((mode) => ({
             ...mode,

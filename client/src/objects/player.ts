@@ -3000,6 +3000,7 @@ export class PlayerBarn {
             teamId: info.teamId,
             groupId: info.groupId,
             name: info.name,
+            premium: info.premium,
             nameTruncated: helpers.truncateString(
                 info.name || "",
                 "bold 16px arial",

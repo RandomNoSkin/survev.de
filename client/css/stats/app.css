@@ -395,6 +395,9 @@ a.nav-link-bright:hover {
   background-color: #80af49;
   border: none;
   color: white;
+  /* Overrides the Bootstrap .col-lg-8 grid max-width (66.6667%) - the [PREM] tag
+   * needs the extra room next to the name so it doesn't get clipped. */
+  max-width: none;
 }
 @media (max-width: 768px) {
   .card-player {
@@ -1729,6 +1732,18 @@ td.data-player-status {
 .gv-match-btn:hover {
   background: #438a00;
 }
+.gv-replay-btn {
+  color: #1e1e1e !important;
+  background: #f2d63b;
+  cursor: pointer;
+}
+.gv-replay-btn:hover {
+  background: #d9bd2f;
+}
+.gv-replay-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
 .gv-you {
   color: #2c3e50;
   background: #d7e8b5;
@@ -1826,4 +1841,12 @@ td.data-player-status {
 .gv-impact-detail-total {
   font-size: 13px;
   color: #1e1e1e;
+}
+
+/* The [PREM] tag prepended by helpers.formatUsername() (see client/css/app.css for
+ * the in-game copy of this class - the stats mini-app has its own CSS bundle). */
+.username-premium-tag {
+  color: #f2d63b;
+  font-weight: 700;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
 }

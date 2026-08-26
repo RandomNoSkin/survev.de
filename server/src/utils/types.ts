@@ -103,6 +103,7 @@ export const zFindGamePrivateBody = z.object({
             userId: z.string().nullable(),
             ip: z.string(),
             admin: z.boolean(),
+            premium: z.boolean(),
             loadout: loadoutSchema.optional(),
             customLoadout: zCustomLoadoutConfig.optional(),
         }),
@@ -116,6 +117,7 @@ const zPrivateLobbyPlayerData = z.object({
     userId: z.string().nullable(),
     ip: z.string(),
     admin: z.boolean(),
+    premium: z.boolean(),
     loadout: loadoutSchema.optional(),
     customLoadout: zCustomLoadoutConfig.optional(),
 });

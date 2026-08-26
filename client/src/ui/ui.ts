@@ -192,6 +192,8 @@ export class UiManager {
     advCollapseButton = $("#btn-adv-collapse");
     // Start collapsed: the option list is hidden until the spectator expands it.
     advCollapsed = true;
+    /** True while the manual "Hide Spectate UI" toggle (or an active recording) is forcing the spectate HUD hidden. */
+    spectateUiHidden = false;
     advFreecamButton = $("#btn-adv-freecam");
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");
@@ -447,52 +449,38 @@ export class UiManager {
 
         // Advanced spectator toggles. Namespaced + off() first because the buttons
         // live in static HTML but UiManager is recreated each game, so a plain
-        // .on() would stack handlers (and double-toggle the booleans).
+        // .on() would stack handlers (and double-toggle the booleans). Each button
+        // calls the same named method a keybind can also call (see game.ts).
         this.specAdvancedButton.off("click.advspec").on("click.advspec", () => {
             this.toggleAdvancedSpectator();
         });
-        const advToggle = (btn: JQuery, flip: () => void) => {
-            btn.off("click.advspec").on("click.advspec", () => {
-                flip();
-                this.saveAdvSpec();
-                this.updateAdvancedSpectatorUi();
-            });
-        };
-        advToggle(this.advFreecamButton, () => {
-            const adv = this.game.m_advSpec;
-            adv.freecam = !adv.freecam;
-            // ESP lines run from the screen center, which has no player in freecam,
-            // so turn them off when entering freecam.
-            if (adv.freecam) adv.espLines = false;
-            this.updateSpectateText();
+        this.advFreecamButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleFreecam();
         });
-        advToggle(this.advZoomButton, () => {
-            this.game.m_advSpec.zoom = !this.game.m_advSpec.zoom;
+        this.advZoomButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleZoomMode();
         });
-        advToggle(this.advLayerButton, () => {
-            // Toggle the viewed render layer (0 = surface, 1 = underground).
-            this.game.m_advSpec.layer = this.game.m_advSpec.layer === 1 ? 0 : 1;
+        this.advLayerButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleLayer();
         });
-        advToggle(this.advTransparentButton, () => {
-            this.game.m_advSpec.transparentSurfaces =
-                !this.game.m_advSpec.transparentSurfaces;
+        this.advTransparentButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleTransparent();
         });
-        advToggle(this.advEnemiesMapButton, () => {
-            this.game.m_advSpec.enemiesOnMap = !this.game.m_advSpec.enemiesOnMap;
+        this.advEnemiesMapButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleEnemiesOnMap();
         });
-        advToggle(this.advEspButton, () => {
-            this.game.m_advSpec.espLines = !this.game.m_advSpec.espLines;
+        this.advEspButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleEsp();
         });
-        advToggle(this.advLabelsButton, () => {
-            this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
+        this.advLabelsButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleLabels();
         });
-        advToggle(this.advNadesButton, () => {
-            this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        this.advNadesButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleNadeEsp();
         });
         // Collapse only hides the option list; the enabled features keep running.
         this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
-            this.advCollapsed = !this.advCollapsed;
-            this.updateAdvancedSpectatorUi();
+            this.toggleCollapse();
         });
 
         // Touch specific buttons
@@ -919,7 +907,7 @@ export class UiManager {
                 // Team UI
                 this.updateTeam(
                     i,
-                    helpers.htmlEscape(playerInfo.name),
+                    helpers.formatUsername(playerInfo.name, playerInfo.premium),
                     playerStatus.health!,
                     {
                         disconnected: playerStatus.disconnected,
@@ -1665,6 +1653,12 @@ export class UiManager {
                             class: "ui-stats-header-overview",
                             html: z,
                         }),
+                    )
+                    .append(
+                        $("<div/>", {
+                            class: "ui-stats-header-gameid",
+                            text: this.game.m_gameId ? `Game ID: ${this.game.m_gameId}` : "",
+                        }),
                     );
                 this.statsHeader.html(I as unknown as HTMLElement);
                 const T = (e: string, t: string | number) =>
@@ -1700,7 +1694,7 @@ export class UiManager {
                     B.append(
                         $("<div/>", {
                             class: "ui-stats-info-player-name",
-                            html: helpers.htmlEscape(playerInfo.name),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.premium),
                         }),
                     );
                     B.append(
@@ -1885,6 +1879,14 @@ export class UiManager {
                     class: "ui-stats-title",
                     text: "Battle Result",
                 });
+                if (this.game.m_gameId) {
+                    title.append(
+                        $("<div/>", {
+                            class: "ui-stats-header-gameid",
+                            text: `Game ID: ${this.game.m_gameId}`,
+                        }),
+                    );
+                }
 
                 const tableContainer = $("<div/>", {
                     class: "ui-stats-table-container",
@@ -1932,7 +1934,7 @@ export class UiManager {
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            text: helpers.htmlEscape(playerInfo.name),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.premium),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -2225,7 +2227,10 @@ export class UiManager {
             this.setSpectating(true, teamMode);
             const name = playerBarn.getPlayerName(targetId, localId, false);
             this.spectatedPlayerId = targetId;
-            this.spectatedPlayerName = helpers.htmlEscape(name);
+            this.spectatedPlayerName = helpers.formatUsername(
+                name,
+                playerBarn.getPlayerInfo(targetId).premium,
+            );
             this.updateSpectateText();
             this.actionSeq = -1;
             this.m_pieTimer.stop();
@@ -2292,6 +2297,89 @@ export class UiManager {
         }
         this.updateAdvancedSpectatorUi();
         this.updateSpectateText();
+    }
+
+    // Advanced spectator sub-toggles. Each is shared by its on-screen button and the
+    // matching keybind (see game.ts) - both call these, never duplicate the logic.
+    toggleFreecam() {
+        const adv = this.game.m_advSpec;
+        adv.freecam = !adv.freecam;
+        // ESP lines run from the screen center, which has no player in freecam, so
+        // turn them off when entering freecam.
+        if (adv.freecam) adv.espLines = false;
+        this.updateSpectateText();
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleZoomMode() {
+        this.game.m_advSpec.zoom = !this.game.m_advSpec.zoom;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    /** Adjusts the custom zoom level directly (keybind path); mirrors the mouse-wheel path in game.ts. */
+    adjustZoom(delta: number) {
+        this.game.m_advSpec.adjustZoom(delta);
+        this.saveAdvSpec();
+    }
+
+    toggleLayer() {
+        // Toggle the viewed render layer (0 = surface, 1 = underground).
+        this.game.m_advSpec.layer = this.game.m_advSpec.layer === 1 ? 0 : 1;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleTransparent() {
+        this.game.m_advSpec.transparentSurfaces = !this.game.m_advSpec.transparentSurfaces;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleEnemiesOnMap() {
+        this.game.m_advSpec.enemiesOnMap = !this.game.m_advSpec.enemiesOnMap;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleEsp() {
+        this.game.m_advSpec.espLines = !this.game.m_advSpec.espLines;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleLabels() {
+        this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleNadeEsp() {
+        this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    // Collapse only hides the option list; the enabled features keep running. Not
+    // persisted, purely a UI convenience (matches the previous inline behavior).
+    toggleCollapse() {
+        this.advCollapsed = !this.advCollapsed;
+        this.updateAdvancedSpectatorUi();
+    }
+
+    /**
+     * Forces spectate buttons (HUD + advanced-spectator panel) hidden or shown -
+     * driven by the manual ToggleSpectateUi keybind and by an active tab-capture
+     * video recording (see ReplayPlayer.toggleRecord). Layered on top of the normal
+     * display:block/none logic via a !important CSS class so it can't fight
+     * setSpectating()/updateAdvancedSpectatorUi().
+     */
+    setSpectateUiHidden(hidden: boolean) {
+        this.spectateUiHidden = hidden;
+        this.spectateMode.toggleClass("js-force-hide-spectate-ui", hidden);
+        this.spectateOptionsWrapper.toggleClass("js-force-hide-spectate-ui", hidden);
+        this.game.m_onToggleSpectateUiHidden?.(hidden);
     }
 
     // Reflects the advanced spectator state onto the buttons. The master button is

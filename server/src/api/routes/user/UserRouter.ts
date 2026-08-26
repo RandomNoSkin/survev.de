@@ -21,6 +21,7 @@ import {
     type AckSalesResponse,
     type AuctionListResponse,
     type BuyListingResponse,
+    type BuyPremiumResponse,
     type BuyShopResponse,
     type CancelListingResponse,
     type CreateAuctionResponse,
@@ -40,6 +41,7 @@ import {
     type OfferActionResponse,
     type OfferListResponse,
     type PlaceBidResponse,
+    type PremiumReplayTokenResponse,
     type ProfileResponse,
     type RefreshQuestResponse,
     type SetPassUnlockResponse,
@@ -68,6 +70,7 @@ import {
     zMarketBrowseRequest,
     zOfferIdRequest,
     zPlaceBidRequest,
+    zPremiumReplayTokenRequest,
     zRefreshQuestRequest,
     zSetItemStatusRequest,
     zSetPassUnlockRequest,
@@ -135,8 +138,11 @@ import {
     withdrawOffer,
 } from "../../db/offers";
 import { grantPassItems } from "../../db/passGrants";
+import { buyPremium, grantPremiumPassXp, isPremiumActive } from "../../db/premium";
+import { grantPremiumUnlocks } from "../../db/premiumUnlocks";
 import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
 import { buyShopOffer, getShopForUser } from "../../db/shop";
+import { signReplayToken } from "../../replayToken";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
@@ -165,6 +171,7 @@ UserRouter.post("/profile", async (c) => {
         banReason,
         banExpiresAt,
         goldenFries,
+        premiumUntil,
     } = user;
 
     // A time-limited account ban whose duration has run out is treated as lifted
@@ -220,6 +227,7 @@ UserRouter.post("/profile", async (c) => {
                 usernameSet,
                 usernameChangeTime: timeUntilNextChange,
                 goldenFries,
+                premiumUntil: premiumUntil ? premiumUntil.getTime() : null,
             },
             loadout,
             items: items,
@@ -394,9 +402,98 @@ UserRouter.post("/shop", async (c) => {
 UserRouter.post("/shop/buy", validateParams(zBuyShopRequest), async (c) => {
     const user = c.get("user")!;
     const { slot } = c.req.valid("json");
-    const result = await buyShopOffer(user.id, slot);
+    const result = await buyShopOffer(user.id, slot, isPremiumActive(user.premiumUntil));
     return c.json<BuyShopResponse>(result, 200);
 });
+
+UserRouter.post("/premium/buy", async (c) => {
+    const user = c.get("user")!;
+    const result = await buyPremium(user.id);
+    if (result.success) {
+        // Every successful purchase/renewal also gifts pass XP + any premium-exclusive
+        // cosmetic unlocks. Awaited (not fire-and-forget) so the client's post-purchase
+        // profile refresh already reflects the new level/cosmetics/fries. A failure
+        // here must not undo or mask the Premium purchase itself (fries are already
+        // spent) - just log it.
+        try {
+            await grantPremiumPassXp(user.id);
+            await grantPremiumUnlocks(user.id);
+        } catch (err) {
+            server.logger.error("premium/buy: failed to grant bonus pass XP/unlocks", err);
+        }
+    }
+    return c.json<BuyPremiumResponse>(
+        {
+            success: result.success,
+            error: result.error,
+            balance: result.balance,
+            premiumUntil: result.premiumUntil?.getTime(),
+        },
+        200,
+    );
+});
+
+// Mints a token so a Premium account can watch the full replay of a game THEY played
+// in - scoped to their own POV only (see verifyReplayToken/ReplayTokenData.playerId
+// and the playerId-aware checks in the /api/replay* routes).
+UserRouter.post(
+    "/premium/replay_token",
+    validateParams(zPremiumReplayTokenRequest),
+    async (c) => {
+        const user = c.get("user")!;
+        if (!isPremiumActive(user.premiumUntil)) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "premium_required" },
+                200,
+            );
+        }
+
+        const { gameId } = c.req.valid("json");
+
+        const row = await db.query.matchDataTable.findFirst({
+            where: and(eq(matchDataTable.gameId, gameId), eq(matchDataTable.userId, user.id)),
+        });
+        if (!row) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "not_your_game" },
+                200,
+            );
+        }
+
+        // A region this API server has no route for is a config/availability problem,
+        // not "this replay is old" - don't conflate the two or a legitimate outage
+        // would falsely tell the player their replay is gone forever.
+        if (!server.regions[row.region]) {
+            server.logger.warn(
+                `/premium/replay_token: no region route for "${row.region}" (game ${gameId})`,
+            );
+            return c.json<PremiumReplayTokenResponse>({ success: false, error: "error" }, 200);
+        }
+
+        // Confirm the recording (and this player's POV file specifically) hasn't
+        // already been pruned by retention, instead of minting a token that would
+        // just 404 when the client tries to fetch it.
+        const recordings = await server.listReplays(row.region);
+        const rec = recordings.find((r: any) => r.gameId === gameId);
+        const povExists = rec?.players?.some((p: any) => p.playerId === row.playerId);
+        if (!rec || !povExists) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "expired" },
+                200,
+            );
+        }
+
+        const token = signReplayToken({
+            region: row.region,
+            gameId,
+            playerId: row.playerId,
+        });
+        return c.json<PremiumReplayTokenResponse>(
+            { success: true, token, playerId: row.playerId },
+            200,
+        );
+    },
+);
 
 //
 // MARKET (player-to-player marketplace)
@@ -617,6 +714,7 @@ UserRouter.post("/friends/list", async (c) => {
     const friends: FriendEntry[] = detailed.map((f) => ({
         slug: f.slug,
         username: f.username,
+        premium: f.premium,
         lastGame: f.lastGame,
         live: liveMap.get(f.userId) ?? null,
     }));

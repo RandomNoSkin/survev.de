@@ -358,9 +358,13 @@ export interface UnlockDef {
     name: string;
     unlocks: string[];
     free?: boolean;
+    /** Only granted to accounts with an active Premium subscription (see
+     *  `server/src/api/db/premiumUnlocks.ts`) - never handed out by account
+     *  creation or any other unlock path. */
+    premiumOnly?: boolean;
 }
 
-type UnlockDefKey = "unlock_default" | "unlock_new_account";
+type UnlockDefKey = "unlock_default" | "unlock_new_account" | "unlock_premium";
 export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
     unlock_default: {
         type: "unlock",
@@ -571,5 +575,17 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
         name: "new-account",
         free: true,
         unlocks: ["outfitDarkShirt"],
+    },
+    // Cosmetics ONLY obtainable by having an active Premium subscription - never
+    // shoppable, never a pass reward. Empty for now (no premium-exclusive cosmetics
+    // have been designed/added yet); granting is already wired up end-to-end (see
+    // `grantPremiumUnlocks` in `server/src/api/db/premiumUnlocks.ts`, called from the
+    // `/premium/buy` route) so adding a type here is the only step needed later - it
+    // starts granting automatically, no further code changes required.
+    unlock_premium: {
+        type: "unlock",
+        name: "premium",
+        premiumOnly: true,
+        unlocks: [],
     },
 };

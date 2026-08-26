@@ -71,6 +71,10 @@ export class ReplayPlayer {
     private ui: ReplayUI;
     private keyHandler: (e: KeyboardEvent) => void;
     private recorder?: ReplayRecorder;
+    /** Guards against a second getDisplayMedia() call while the permission prompt is still open. */
+    private isStartingRecording = false;
+    /** Spectate-UI hidden state to restore once a tab-capture recording ends. */
+    private preRecordSpectateUiHidden = false;
     /** God-view tracks (all players' pos/health); undefined for older recordings. */
     private godView?: ReplayGodView;
 
@@ -90,6 +94,19 @@ export class ReplayPlayer {
             },
             SPEEDS,
         );
+
+        // Bridge for the manual "Hide Spectate UI" keybind (game.ts) - Game has no
+        // direct reference to the replay bar, so it calls this hook instead.
+        this.game.m_onToggleSpectateUiHidden = (hidden) => this.ui.setVisible(!hidden);
+
+        // Bridge for the Spectator-tab replay-control keybinds (game.ts) - same
+        // reasoning, Game has no direct reference to the ReplayPlayer instance.
+        this.game.m_replayControls = {
+            togglePause: () => this.togglePause(),
+            adjustSpeed: (dir) => this.adjustSpeed(dir),
+            skip: (deltaMs) => this.skip(deltaMs),
+            stepFrame: (dir) => this.stepFrame(dir),
+        };
 
         this.keyHandler = (e: KeyboardEvent) => {
             // Don't hijack keys while typing in a form control (e.g. the speed dropdown).
@@ -120,6 +137,9 @@ export class ReplayPlayer {
         if (!this.povs.length) {
             throw new Error("This recording has no player POVs.");
         }
+        // A player-scoped (Premium self-service) token only ever lists one POV -
+        // switching is meaningless then, so don't show dead buttons for it.
+        this.ui.setPovButtonsVisible(this.povs.length > 1);
         const startIdx = this.povs.findIndex((p) => p.playerId === this.initialPov);
         this.povIndex = startIdx >= 0 ? startIdx : 0;
 
@@ -171,6 +191,7 @@ export class ReplayPlayer {
 
         this.frames = parsed.frames;
         this.meta = parsed.meta;
+        this.game.m_gameId = this.meta.gameId;
         if (this.meta.protocolVersion !== GameConfig.protocolVersion) {
             console.warn(
                 `Replay protocol ${this.meta.protocolVersion} differs from client ${GameConfig.protocolVersion} — playback may be inaccurate.`,
@@ -248,6 +269,37 @@ export class ReplayPlayer {
 
     private setSpeed(speed: number): void {
         if (SPEEDS.includes(speed)) this.speed = speed;
+    }
+
+    /** Steps to the next/previous entry in the SPEEDS list (keybind path). */
+    private adjustSpeed(dir: 1 | -1): void {
+        const i = SPEEDS.indexOf(this.speed);
+        this.setSpeed(SPEEDS[clamp(i + dir, 0, SPEEDS.length - 1)]);
+    }
+
+    /** Skips the current POV forward/backward by a fixed step (keybind path). */
+    private skip(deltaMs: number): void {
+        this.seekTo(this.elapsed + deltaMs);
+    }
+
+    /**
+     * Steps exactly one recorded frame forward/backward, pausing first if needed.
+     * Forward just feeds the next frame; backward rebuilds to the previous frame's
+     * timestamp (delta-compressed stream, no random access - see rebuildTo).
+     */
+    private stepFrame(dir: 1 | -1): void {
+        if (!this.frames.length || this.switching) return;
+        this.paused = true;
+        if (dir > 0) {
+            if (this.idx >= this.frames.length) return;
+            const target = this.cumTimes[this.idx] - this.offset;
+            this.feedUpTo(target);
+            this.elapsed = target;
+        } else {
+            const prevIdx = Math.max(0, this.idx - 2);
+            const target = prevIdx > 0 ? this.cumTimes[prevIdx] - this.offset : 0;
+            this.rebuildTo(target);
+        }
     }
 
     /**
@@ -341,11 +393,11 @@ export class ReplayPlayer {
      * capture with the game audio muxed in where `getDisplayMedia` is unavailable.
      */
     private async toggleRecord(): Promise<void> {
+        if (this.isStartingRecording) return; // permission prompt already pending
         try {
             if (this.recorder?.isRecording) {
                 this.recorder.stop();
-                this.ui.setRecording(false);
-                return;
+                return; // UI is restored by the recorder's onStop below
             }
             const canvas = document.querySelector<HTMLCanvasElement>("#cvs");
             if (!canvas) {
@@ -354,12 +406,27 @@ export class ReplayPlayer {
             }
             const recorder = new ReplayRecorder(canvas, this.recordFileName());
             // The browser's own "Stop sharing" bar can end a tab capture without the
-            // ⏺ button — keep the control-bar state in sync either way.
-            recorder.onStop = () => this.ui.setRecording(false);
+            // ⏺ button — keep the control-bar state in sync either way, and always
+            // restore whatever the spectate-UI visibility was before recording
+            // started (tab-capture recordings force it hidden so the video is clean).
+            recorder.onStop = () => {
+                this.ui.setRecording(false);
+                if (recorder.mode === "tab") {
+                    this.ui.setVisible(true);
+                    this.game.m_uiManager.setSpectateUiHidden(this.preRecordSpectateUiHidden);
+                }
+            };
             this.recorder = recorder;
+            this.isStartingRecording = true;
             const result = await recorder.start();
+            this.isStartingRecording = false;
             if (result === "ok") {
                 this.ui.setRecording(true);
+                if (recorder.mode === "tab") {
+                    this.preRecordSpectateUiHidden = this.game.m_uiManager.spectateUiHidden;
+                    this.ui.setVisible(false);
+                    this.game.m_uiManager.setSpectateUiHidden(true);
+                }
             } else {
                 this.recorder = undefined;
                 this.ui.setRecording(false);
@@ -368,6 +435,7 @@ export class ReplayPlayer {
                 }
             }
         } catch (err) {
+            this.isStartingRecording = false;
             console.error("Replay recording toggle failed:", err);
             this.ui.setRecording(false);
         }
@@ -397,6 +465,8 @@ export class ReplayPlayer {
         window.removeEventListener("keydown", this.keyHandler);
         this.game.m_replayGodView = null;
         this.game.m_replayPaused = false;
+        this.game.m_onToggleSpectateUiHidden = undefined;
+        this.game.m_replayControls = undefined;
         // Finalize any in-progress recording so the file is still saved.
         this.recorder?.stop();
         this.ui.destroy();

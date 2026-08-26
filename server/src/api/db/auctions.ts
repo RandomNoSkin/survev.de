@@ -10,6 +10,7 @@ import {
     type SQL,
     sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
     AUCTION_DURATION_MS,
     AUCTION_MIN_INCREMENT,
@@ -29,6 +30,7 @@ import type {
 } from "../../../../shared/types/user";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
+import { isPremiumActive } from "./premium";
 import {
     auctionsTable,
     goldenFriesLedgerTable,
@@ -39,6 +41,8 @@ import {
 } from "./schema";
 
 const PAGE_SIZE = 30;
+/** Second reference to `users`, joined on the current bidder (the seller already uses the base `usersTable`). */
+const bidderUsersTable = alias(usersTable, "bidder_users");
 
 class AuctionError extends Error {
     constructor(public code: string) {
@@ -432,9 +436,11 @@ function mapAuction(
         currentBid: number | null;
         currentBidderId: string | null;
         currentBidderSlug: string | null;
+        currentBidderPremiumUntil?: Date | null;
         sellerId: string;
         sellerSlug: string;
         sellerUsername: string | null;
+        sellerPremiumUntil?: Date | null;
         endsAt: Date;
         createdAt: Date;
         source: string | null;
@@ -453,8 +459,10 @@ function mapAuction(
         minBid: r.minBid,
         currentBid: r.currentBid,
         currentBidderSlug: r.currentBidderSlug,
+        currentBidderPremium: isPremiumActive(r.currentBidderPremiumUntil ?? null),
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
+        sellerPremium: isPremiumActive(r.sellerPremiumUntil ?? null),
         endsAt: r.endsAt.getTime(),
         createdAt: r.createdAt.getTime(),
         source: r.source ?? "",
@@ -490,9 +498,11 @@ export async function getActiveAuctions(
             currentBid: auctionsTable.currentBid,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
             sellerId: auctionsTable.sellerId,
             sellerSlug: auctionsTable.sellerSlug,
             sellerUsername: usersTable.username,
+            sellerPremiumUntil: usersTable.premiumUntil,
             endsAt: auctionsTable.endsAt,
             createdAt: auctionsTable.createdAt,
             source: itemsTable.source,
@@ -505,6 +515,7 @@ export async function getActiveAuctions(
         .from(auctionsTable)
         .leftJoin(itemsTable, eq(itemsTable.id, auctionsTable.itemId))
         .leftJoin(usersTable, eq(usersTable.id, auctionsTable.sellerId))
+        .leftJoin(bidderUsersTable, eq(bidderUsersTable.id, auctionsTable.currentBidderId))
         .where(and(...conds))
         .orderBy(auctionsTable.endsAt)
         .limit(PAGE_SIZE + 1)
@@ -559,9 +570,13 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
             sellerSlug: auctionsTable.sellerSlug,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            sellerPremiumUntil: usersTable.premiumUntil,
+            currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
             status: auctionsTable.status,
         })
         .from(auctionsTable)
+        .leftJoin(usersTable, eq(usersTable.id, auctionsTable.sellerId))
+        .leftJoin(bidderUsersTable, eq(bidderUsersTable.id, auctionsTable.currentBidderId))
         .where(
             or(
                 and(
@@ -588,6 +603,7 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 amount: r.currentBid ?? 0,
                 kind: "won" as const,
                 otherName: r.sellerSlug,
+                otherPremium: isPremiumActive(r.sellerPremiumUntil),
             };
         }
         if (r.status === "settled") {
@@ -597,6 +613,7 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 amount: r.currentBid ?? 0,
                 kind: "sold" as const,
                 otherName: r.currentBidderSlug ?? "someone",
+                otherPremium: isPremiumActive(r.currentBidderPremiumUntil),
             };
         }
         return {
@@ -605,6 +622,7 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
             amount: 0,
             kind: "no_bids" as const,
             otherName: "",
+            otherPremium: false,
         };
     });
 }

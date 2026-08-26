@@ -18,6 +18,7 @@ import { assert, util } from "../../shared/utils/util";
 import type { ApiServer } from "./api/apiServer";
 import { validateSessionToken } from "./api/auth";
 import { getOwnedLoadouts } from "./api/db/loadouts";
+import { isPremiumActive } from "./api/db/premium";
 import { hashIp, isBanned } from "./api/routes/private/ModerationRouter";
 import { Config } from "./config";
 import { ServerLogger } from "./utils/logger";
@@ -59,6 +60,7 @@ class Player {
             inGame: this.inGame,
             isLeader: this.isLeader,
             playerId: this.playerId,
+            premium: this.premium,
         };
     }
 
@@ -68,6 +70,7 @@ class Player {
 
     encodedIp: string;
     admin: boolean;
+    premium: boolean;
 
     constructor(
         public socket: WSContext<SocketData>,
@@ -75,8 +78,10 @@ class Player {
         public userId: string | null,
         public ip: string,
         admin = false,
+        premium = false,
     ) {
         this.admin = admin;
+        this.premium = premium;
         this.encodedIp = hashIp(ip);
         // disconnect if didn't join a room in 5 seconds
         this.disconnectTimeout = setTimeout(() => {
@@ -292,6 +297,7 @@ class Room {
                 userId: p.userId,
                 ip: p.ip,
                 admin: p.admin,
+                premium: p.premium,
                 loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
             } satisfies FindGamePrivateBody["playerData"][0];
         });
@@ -467,6 +473,7 @@ export class TeamMenu {
 
                 let userId: string | null = null;
                 let admin = false;
+                let premium = false;
                 const sessionId = getCookie(c, "session") ?? null;
 
                 if (sessionId) {
@@ -474,10 +481,12 @@ export class TeamMenu {
                         const account = await validateSessionToken(sessionId);
                         userId = account.user?.id || null;
                         admin = account.user?.admin ?? false;
+                        premium = isPremiumActive(account.user?.premiumUntil ?? null);
 
                         if (account.user?.banned) {
                             userId = null;
                             admin = false;
+                            premium = false;
                         }
                     } catch (err) {
                         this.logger.error(`Failed to validate session:`, err);
@@ -512,7 +521,7 @@ export class TeamMenu {
                             ws.close();
                             return;
                         }
-                        teamMenu.onOpen(ws as WSContext<SocketData>, userId, ip!, admin);
+                        teamMenu.onOpen(ws as WSContext<SocketData>, userId, ip!, admin, premium);
                     },
 
                     onMessage(event, ws) {
@@ -546,8 +555,14 @@ export class TeamMenu {
         );
     }
 
-    onOpen(ws: WSContext<SocketData>, userId: string | null, ip: string, admin: boolean) {
-        const player = new Player(ws, this, userId, ip, admin);
+    onOpen(
+        ws: WSContext<SocketData>,
+        userId: string | null,
+        ip: string,
+        admin: boolean,
+        premium: boolean,
+    ) {
+        const player = new Player(ws, this, userId, ip, admin, premium);
         ws.raw!.player = player;
 
         let players = this.playersByIp.get(player.encodedIp);

@@ -569,9 +569,24 @@ img {
 }
 
 #ui-game-tab-keybinds > #ui-keybind-list {
-  height: 295px;
+  height: 270px;
   overflow-y: scroll;
   pointer-events: all;
+}
+
+.js-keybind-category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  pointer-events: all;
+}
+
+.js-keybind-category-tabs > .private-lobby-settings-tab {
+  flex: 1;
+}
+
+.js-force-hide-spectate-ui {
+  display: none !important;
 }
 
 #ui-map-container {
@@ -3246,6 +3261,14 @@ img {
   display: inline;
   padding-bottom: 12px;
   border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.ui-stats-header-gameid {
+  font-size: 11px;
+  font-weight: normal;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 4px;
+  user-select: text;
 }
 
 .ui-stats-header-overview div:not(:first-child) {

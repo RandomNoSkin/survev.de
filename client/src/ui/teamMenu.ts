@@ -73,6 +73,7 @@ export class TeamMenu {
         inGame: boolean;
         name: string;
         isLeader: boolean;
+        premium: boolean;
     }> = [];
 
     prevPlayerCount = 0;
@@ -619,6 +620,7 @@ export class TeamMenu {
                     playerId: 0,
                     isLeader: false,
                     inGame: false,
+                    premium: false,
                     self: false,
                 };
                 if (t < this.players.length) {
@@ -628,6 +630,7 @@ export class TeamMenu {
                         playerId: player.playerId,
                         isLeader: player.isLeader,
                         inGame: player.inGame,
+                        premium: player.premium,
                         self: player.playerId == this.localPlayerId,
                     };
                 }
@@ -702,7 +705,7 @@ export class TeamMenu {
                     }
                     const nameDiv = $("<div/>", {
                         class: `name menu-option ${nameClass}`,
-                        html: helpers.htmlEscape(playerStatus.name),
+                        html: helpers.formatUsername(playerStatus.name, playerStatus.premium),
                     });
                     if (playerStatus.self) {
                         nameDiv.on("click", () => {

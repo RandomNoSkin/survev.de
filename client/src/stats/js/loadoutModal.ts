@@ -109,7 +109,7 @@ export function nameFor(type: string): string {
  * Shows the cosmetics a player had equipped in a specific match, with their total worth.
  * Read-only: unlike the collection viewer these tiles carry no market/offer actions.
  */
-export function showMatchLoadout(username: string, cosmetics: string[]): void {
+export function showMatchLoadout(username: string, premium: boolean, cosmetics: string[]): void {
     $(".loadout-modal-overlay").remove();
 
     const shown = cosmetics.filter(
@@ -135,7 +135,7 @@ export function showMatchLoadout(username: string, cosmetics: string[]): void {
         `<div class="loadout-modal-overlay">` +
             `<style>${LOADOUT_MODAL_CSS}</style>` +
             `<div class="loadout-modal">` +
-            `<div class="ld-header"><span>Match loadout — ${helpers.htmlEscape(username)}</span><span class="ld-close">✕</span></div>` +
+            `<div class="ld-header"><span>Match loadout — ${helpers.formatUsername(username, premium)}</span><span class="ld-close">✕</span></div>` +
             (shown.length
                 ? `<div class="ld-valuebar">Loadout value <span class="ld-value-num">${total.toLocaleString("en-US")}</span><span class="ld-fries"></span></div>`
                 : "") +
