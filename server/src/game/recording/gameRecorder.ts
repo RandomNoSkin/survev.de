@@ -653,6 +653,34 @@ export async function listRecordings(limit = Infinity): Promise<GameRecordingInf
     return Number.isFinite(limit) ? out.slice(0, limit) : out;
 }
 
+/**
+ * Reads ONE game's `meta.json` directly, without scanning/parsing the rest of the
+ * archive - bounded by the number of day directories, not the number of recorded
+ * games. Use this (not `listRecordings`) for any request-scoped check that only cares
+ * about a single known `gameId` (e.g. "does this player's replay still exist?"),
+ * since `listRecordings()` reading the whole archive is what caused the API↔game-host
+ * fetch to time out and get misread as "replay expired" for perfectly fresh games.
+ */
+export async function readMeta(gameId: string): Promise<GameRecordingInfo | null> {
+    const root = recordingsRoot();
+    let days: string[];
+    try {
+        days = await fs.promises.readdir(root);
+    } catch {
+        return null;
+    }
+    for (const day of days) {
+        const file = path.join(root, day, gameId, "meta.json");
+        try {
+            const raw = await fs.promises.readFile(file, "utf8");
+            return JSON.parse(raw) as GameRecordingInfo;
+        } catch {
+            /* not in this day dir — keep looking */
+        }
+    }
+    return null;
+}
+
 /** Reads a single per-player `.svrep.gz` file. Returns the gzip bytes, or null if not found. */
 export async function readRecordingFile(
     gameId: string,

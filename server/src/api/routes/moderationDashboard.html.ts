@@ -3897,19 +3897,20 @@ function renderAccountDetail(data) {
   const xpByType = {};
   for (const x of (data.xp||[])) xpByType[x.passType] = x;
   const xpRows = (data.passTypes||[]).map(pt => {
-    const cur = xpByType[pt] || { level: 0, xp: 0 };
+    const cur = xpByType[pt] || { level: 0, xp: 0, premiumXp: 0 };
     return \`<tr>
       <td style="font-size:11px;">\${esc(pt)}</td>
       <td><input type="number" id="xp-lvl-\${esc(pt)}" value="\${cur.level}" readonly title="auto-derived from XP" style="width:70px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);padding:3px 6px;font-family:inherit;"></td>
       <td><input type="number" id="xp-xp-\${esc(pt)}" value="\${cur.xp}" min="0" oninput="updateLvlFromXp('\${esc(pt)}')" style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:inherit;"></td>
+      <td style="font-size:11px;color:#f2d63b;" title="XP granted by Premium purchases/renewals, already included in Total XP">\${cur.premiumXp ? ('⭐ ' + cur.premiumXp.toLocaleString()) : '–'}</td>
       <td><button class="btn btn-blue btn-sm" onclick="accSetXp('\${esc(pt)}')">Set</button></td>
     </tr>\`;
   }).join('');
   const xpCard = \`
     <div class="detail-card" style="margin-top:12px;" data-card="xp">
       <h3>XP / Pass Levels <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(level is derived from XP; setting it grants/revokes the matching unlocks)</span></h3>
-      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th></th></tr></thead>
-      <tbody>\${xpRows || '<tr><td colspan="4" class="empty">No passes.</td></tr>'}</tbody></table>
+      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th>from Premium</th><th></th></tr></thead>
+      <tbody>\${xpRows || '<tr><td colspan="5" class="empty">No passes.</td></tr>'}</tbody></table>
     </div>\`;
 
   const gpCard = \`

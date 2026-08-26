@@ -676,6 +676,34 @@ export const userXpTable = pgTable(
 );
 
 /**
+ * Append-only audit log of every XP grant from a Premium purchase/renewal (see
+ * grantPremiumPassXp) - lets the moderation dashboard show how much of an account's
+ * XP came from Premium separately from XP earned in matches, instead of a Premium
+ * XP jump getting mistaken for account boosting on the XP-gain leaderboard.
+ * Purely informational: it does NOT gate the reconcile job, which already can't
+ * revert this XP regardless (setPassXp anchors reconcileBaseXp/reconcileFrom to the
+ * post-grant total, and reconcileAllPasses only ever raises XP, never lowers it).
+ */
+export const premiumXpGrantsTable = pgTable(
+    "premium_xp_grants",
+    {
+        id: serial().primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        passType: text("pass_type").notNull(),
+        xpGranted: numeric("xp_granted").notNull(),
+        grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [index("premium_xp_grants_user_idx").on(table.userId, table.grantedAt)],
+);
+
+export type PremiumXpGrantsTable = typeof premiumXpGrantsTable.$inferSelect;
+
+/**
  * Per-user daily/rotating quests. Currently unused by gameplay code (the table exists
  * so the schema is complete and ready if the quest system is turned on later).
  */
