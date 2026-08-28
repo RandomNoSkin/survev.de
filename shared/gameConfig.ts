@@ -154,6 +154,14 @@ export enum Input {
     ReplaySpeedDown,
     ReplayFrameBack,
     ReplayFrameForward,
+    // Appended at the end (not inserted alphabetically among the other AdvSpec*
+    // entries above) so every existing member keeps its numeric value - this is a
+    // plain auto-incrementing enum, and its values get serialized (see
+    // inputBinds.ts's BitStream-based keybind code), so inserting in the middle would
+    // silently renumber everything after it.
+    AdvSpecZoneTransparent,
+    AdvSpecFoliageTransparent,
+    AdvSpecVisionRadius,
     Count,
 }
 
@@ -223,7 +231,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1025,
+    protocolVersion: 1026,
     Action,
     Anim,
     DamageType,
@@ -379,6 +387,12 @@ export const GameConfig = {
                     start: "2026-08-08T23:30:00",
                     end: "2026-08-09T23:59:59",
                     boost: 2,
+                },
+                "The Last Dance": {
+                    maps: ["local", "comp"],
+                    start: "2026-08-27T23:59:00",
+                    end: "2026-08-31T23:59:59",
+                    boost: 4,
                 },
             },
         } as Record<

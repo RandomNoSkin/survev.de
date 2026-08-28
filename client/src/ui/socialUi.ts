@@ -273,11 +273,15 @@ export class SocialUi {
     }
 
     /** A player name that links to their stats page on click. */
-    private nameLink(u: { slug: string; username: string; premium?: boolean }): JQuery<HTMLElement> {
+    private nameLink(u: {
+        slug: string;
+        username: string;
+        roleTag?: "admin" | "mod" | "premium" | null;
+    }): JQuery<HTMLElement> {
         const el = $(
             `<span class="social-player-name social-name-link">${helpers.formatUsername(
                 u.username || u.slug,
-                u.premium,
+                u.roleTag ?? null,
             )}</span>`,
         );
         el.on("click", () => this.openStats(u.slug));
@@ -692,7 +696,7 @@ export class SocialUi {
 
     private pushRecent(u: UserSearchResult) {
         const list = this.loadRecent().filter((r) => r.slug !== u.slug);
-        list.unshift({ slug: u.slug, username: u.username, premium: u.premium });
+        list.unshift({ slug: u.slug, username: u.username, roleTag: u.roleTag });
         try {
             localStorage.setItem(SocialUi.RECENT_KEY, JSON.stringify(list.slice(0, 8)));
         } catch {

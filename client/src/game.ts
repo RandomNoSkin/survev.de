@@ -48,6 +48,7 @@ import type { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { AdvancedSpectator } from "./ui/advancedSpectator";
 import { ChatUi } from "./ui/chat";
+import type { HudLayoutManager } from "./ui/hudLayoutManager";
 import type { Localization } from "./ui/localization";
 import { Touch } from "./ui/touch";
 import { UiManager } from "./ui/ui";
@@ -157,12 +158,23 @@ export class Game {
     debugPingTime!: number;
     lastUpdateTime!: number;
     updateIntervals!: number[];
+    /** Last value written to the opt-in FPS HUD counter - only touches the DOM when
+     *  the rounded value actually changes, so this doesn't add a per-frame DOM write
+     *  for players who don't even have the counter enabled... well, it still reads
+     *  the ticker every frame, but skips the write. */
+    m_lastFpsDisplayed = -1;
+    /** Timestamps of the last FPS/ping HUD counter DOM writes - both are throttled to
+     *  once/second (see `update`/`onMsg`), since the raw per-frame FPS and per-packet
+     *  ping values bounce around too fast to actually read otherwise. */
+    m_lastFpsCounterTime = 0;
+    m_lastPingCounterTime = 0;
 
     constructor(
         public m_pixi: PIXI.Application,
         public m_audioManager: AudioManager,
         public m_localization: Localization,
         public m_config: ConfigManager,
+        public m_hudLayoutManager: HudLayoutManager,
         public m_input: InputHandler,
         public m_inputBinds: InputBinds,
         public m_inputBindUi: InputBindUi,
@@ -224,6 +236,12 @@ export class Game {
                     joinMessage.bot = false;
                     joinMessage.onlyGhilliePickup =
                         this.m_config.get("onlyGhilliePickup") ?? true;
+                    // Sent once, never updated on resize - see JoinMsg's own doc
+                    // comment. window.innerWidth/Height rather than m_camera's, since
+                    // the camera isn't necessarily sized yet this early in the connect
+                    // flow (this fires right after the socket opens, before init()).
+                    joinMessage.screenWidth = window.innerWidth;
+                    joinMessage.screenHeight = window.innerHeight;
                     // Validate so a stale/incomplete stored loadout can never break the
                     // join by serializing an undefined game type.
                     joinMessage.loadout = loadoutHelper.validate(
@@ -379,7 +397,11 @@ export class Game {
             this.m_inputBinds,
             this.m_inputBindUi,
         );
-        this.m_ui2Manager = new UiManager2(this.m_localization, this.m_inputBinds);
+        this.m_ui2Manager = new UiManager2(
+            this.m_localization,
+            this.m_inputBinds,
+            this.m_hudLayoutManager,
+        );
         this.m_emoteBarn = new EmoteBarn(
             this.m_audioManager,
             this.m_uiManager,
@@ -530,6 +552,21 @@ export class Game {
     update(dt: number) {
         this.debugHUD.m_update(dt, this);
 
+        // Opt-in FPS counter (see hudLayoutManager.ts) - PIXI's ticker already tracks
+        // this internally (same source debugHUD's own FPS graph reads from), so this
+        // is just a cheap read + a DOM write, throttled to once/second (the raw
+        // per-frame value bounces around too fast to actually read otherwise).
+        const fpsCounterNow = performance.now();
+        if (fpsCounterNow - this.m_lastFpsCounterTime >= 1000) {
+            this.m_lastFpsCounterTime = fpsCounterNow;
+            const fps = Math.round(this.m_pixi.ticker.FPS);
+            if (fps !== this.m_lastFpsDisplayed) {
+                this.m_lastFpsDisplayed = fps;
+                const el = document.getElementById("ui-fps-counter");
+                if (el) el.textContent = String(fps);
+            }
+        }
+
         if (IS_DEV) {
             if (this.m_input.keyPressed(Key.F2)) {
                 this.editor.setEnabled(!this.editor.enabled);
@@ -577,6 +614,8 @@ export class Game {
         const advSpec = this.m_advSpec;
         const advActive = advSpec.enabled && this.m_spectating;
         this.m_camera.m_advSpecTransparent = advActive && advSpec.transparentSurfaces;
+        this.m_camera.m_advSpecZoneTransparent = advActive && advSpec.zoneTransparency;
+        this.m_camera.m_advSpecFoliageTransparent = advActive && advSpec.foliageTransparency;
         // Manual layer override so the spectator can look into bunkers / underground
         // even with no player down there. Runs before the renderer's m_update below.
         // In follow mode on the surface (layer 0) we leave the layer alone so it
@@ -1057,6 +1096,12 @@ export class Game {
             if (this.m_inputBinds.isBindPressed(Input.AdvSpecTransparent)) {
                 this.m_uiManager.toggleTransparent();
             }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecZoneTransparent)) {
+                this.m_uiManager.toggleZoneTransparent();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecFoliageTransparent)) {
+                this.m_uiManager.toggleFoliageTransparent();
+            }
             if (this.m_inputBinds.isBindPressed(Input.AdvSpecEnemiesOnMap)) {
                 this.m_uiManager.toggleEnemiesOnMap();
             }
@@ -1068,6 +1113,9 @@ export class Game {
             }
             if (this.m_inputBinds.isBindPressed(Input.AdvSpecNades)) {
                 this.m_uiManager.toggleNadeEsp();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecVisionRadius)) {
+                this.m_uiManager.toggleVisionRadius();
             }
         }
 
@@ -1611,6 +1659,15 @@ export class Game {
             const ping = now - this.seqSendTime;
             this.debugHUD.pingGraph.addEntry(ping);
             this.pings.push(ping);
+            // Opt-in ping counter (see hudLayoutManager.ts) - same measurement
+            // debugHUD's own ping graph already uses, just also written to the
+            // player-facing element, throttled to once/second (raw per-packet values
+            // bounce around too fast to actually read otherwise).
+            if (now - this.m_lastPingCounterTime >= 1000) {
+                this.m_lastPingCounterTime = now;
+                const pingEl = document.getElementById("ui-ping-counter");
+                if (pingEl) pingEl.textContent = String(ping);
+            }
         }
         if (this.lastUpdateTime > 0) {
             const interval = now - this.lastUpdateTime;
@@ -1748,11 +1805,11 @@ export class Game {
                     this.m_activeId,
                     true,
                 );
-                targetName = helpers.formatUsername(targetName, targetInfo.premium);
-                killerName = helpers.formatUsername(killerName, killerInfo.premium);
+                targetName = helpers.formatUsername(targetName, targetInfo.roleTag);
+                killerName = helpers.formatUsername(killerName, killerInfo.roleTag);
                 killfeedKillerName = helpers.formatUsername(
                     killfeedKillerName,
-                    killfeedKillerInfo.premium,
+                    killfeedKillerInfo.roleTag,
                 );
                 // Display the kill / downed notification for the active player
                 if (msg.killCreditId == this.m_activeId) {
@@ -1835,7 +1892,7 @@ export class Game {
                 const group1 = msg.group1;
                 const group2 = msg.group2;
                 if (group1.length <= 0) {
-                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.premium);
+                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.roleTag);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 } else {
                     const group1Text = this.m_ui2Manager.getEnemieText(group1);
@@ -2098,7 +2155,7 @@ export class Game {
                     const targetInfo = this.m_playerBarn.getPlayerInfo(msg.targetId);
                     const targetNameHtml = helpers.formatUsername(
                         targetInfo.name,
-                        targetInfo.premium,
+                        targetInfo.roleTag,
                     );
                     // Add to killfeed
                     this.m_ui2Manager.addKillFeedMessage(

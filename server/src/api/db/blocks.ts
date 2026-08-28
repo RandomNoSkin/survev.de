@@ -1,7 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import type { BlockedUser, FriendActionResponse } from "../../../../shared/types/user";
 import { db } from "./index";
-import { isPremiumActive } from "./premium";
+import { resolveRoleTag } from "./roleTag";
 import { blocksTable, friendsTable, usersTable } from "./schema";
 
 /** Resolves a slug to a user id (null if no such user). */
@@ -85,7 +85,12 @@ export async function getBlocked(userId: string): Promise<BlockedUser[]> {
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            admin: usersTable.admin,
+            moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showAdminPrefix: usersTable.showAdminPrefix,
+            showModPrefix: usersTable.showModPrefix,
+            showPremiumPrefix: usersTable.showPremiumPrefix,
         })
         .from(blocksTable)
         .innerJoin(usersTable, eq(usersTable.id, blocksTable.blockedId))
@@ -93,6 +98,6 @@ export async function getBlocked(userId: string): Promise<BlockedUser[]> {
     return rows.map((r) => ({
         slug: r.slug,
         username: r.username || r.slug,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
     }));
 }

@@ -86,16 +86,18 @@ export const helpers = {
             .replace(/>/g, "&gt;");
     },
     /**
-     * Escapes a display name and, for Premium accounts, prepends a golden "[PREM]"
-     * tag. The single choke point for rendering a username anywhere in the client -
-     * use this instead of `htmlEscape(name)` wherever the caller also knows whether
-     * the account is Premium.
+     * Escapes a display name and prepends the account's [ADMIN]/[MOD]/[PREM] tag, if
+     * any (server-resolved priority - see resolveRoleTag on the server, ADMIN > MOD >
+     * PREM, each independently toggleable so `roleTag` is already the one tag to
+     * show). The single choke point for rendering a username anywhere in the client -
+     * use this instead of `htmlEscape(name)` wherever the caller also knows the
+     * account's role tag.
      */
-    formatUsername: function(name = "", premium = false) {
+    formatUsername: function(name = "", roleTag: "admin" | "mod" | "premium" | null = null) {
         const escaped = helpers.htmlEscape(name);
-        return premium
-            ? `<span class="username-premium-tag">[PREM]</span> ${escaped}`
-            : escaped;
+        if (!roleTag) return escaped;
+        const label = roleTag === "admin" ? "ADMIN" : roleTag === "mod" ? "MOD" : "PREM";
+        return `<span class="username-${roleTag}-tag">[${label}]</span> ${escaped}`;
     },
     truncateString: function(str: string, font: string, maxWidthPixels: number) {
         const context = truncateCanvas.getContext("2d")!;

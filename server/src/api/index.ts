@@ -22,7 +22,7 @@ import {
     logErrorToWebhook,
     verifyTurnsStile,
 } from "../utils/serverHelpers";
-import { REPLAY_LIST_DEFAULT_LIMIT, server } from "./apiServer";
+import { server } from "./apiServer";
 import { deleteExpiredSessions, validateSessionToken } from "./auth";
 import { rateLimitMiddleware, validateParams } from "./auth/middleware";
 import {
@@ -33,7 +33,7 @@ import {
 import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
-import { isPremiumActive } from "./db/premium";
+import { resolveRoleTag } from "./db/roleTag";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
 import { grantCreatorItems } from "./db/creatorGrants";
@@ -126,10 +126,11 @@ app.get("/api/replay/povs", async (c) => {
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
     }
-    // Same bounded listReplays() the moderation dashboard's Replays tab already uses
-    // in production, rather than scanning the whole archive for one known gameId.
-    const recordings = await server.listReplays(data.region, REPLAY_LIST_DEFAULT_LIMIT);
-    const rec = recordings.find((r: any) => r.gameId === data.gameId);
+    // Targeted lookup for this one known gameId, not the moderation dashboard's
+    // recent-games-capped listReplays() - that cap could otherwise miss a
+    // legitimately-retained game on a busy region simply because it isn't among the
+    // most recent N, wrongly 404ing a token that was already verified as valid above.
+    const rec = await server.getReplayMeta(data.region, data.gameId);
     if (!rec) {
         return c.json({ error: "not_found" }, 404);
     }
@@ -309,7 +310,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 ip,
                 loadout: userLoadout,
                 admin: user?.admin ?? false,
-                premium: isPremiumActive(user?.premiumUntil ?? null),
+                roleTag: user ? resolveRoleTag(user) : null,
             },
         ],
     });

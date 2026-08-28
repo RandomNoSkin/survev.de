@@ -528,11 +528,17 @@ export class Obstacle implements AbstractObject {
         }
         this.sprite.rotation = -rot + this.imgRot;
 
-        // Advanced spectator "transparent surfaces": fade foliage (trees/bushes)
-        // so the spectator can see players hiding underneath, just like ceilings.
+        // Advanced spectator "transparent foliage": fade trees/bushes so the
+        // spectator can see players hiding underneath. "Transparent Foliage" is the
+        // sole authority here (not OR'd with the "Transparent Surfaces" master switch)
+        // - toggleTransparent() in ui.ts auto-enables it when the master switch turns
+        // on, so it still fades foliage by default, but the player can then flip
+        // Transparent Foliage back off on its own to keep ceilings transparent while
+        // foliage stays opaque, without that being immediately re-forced by the master
+        // switch still being on.
         if (this.isBush || this.isTree) {
             this.sprite.alpha =
-                camera.m_advSpecTransparent && !this.dead
+                camera.m_advSpecFoliageTransparent && !this.dead
                     ? this.sprite.imgAlpha * 0.5
                     : this.sprite.imgAlpha;
         }

@@ -17,6 +17,11 @@ export default class Camera {
 
     /** Advanced spectator: force building ceilings transparent when set. */
     m_advSpecTransparent = false;
+    /** Advanced spectator: fade the gas/zone overlay when set (see gas.ts#m_render). */
+    m_advSpecZoneTransparent = false;
+    /** Advanced spectator: fade bushes/trees when set, independently of
+     *  m_advSpecTransparent (see obstacle.ts's isBush/isTree alpha logic). */
+    m_advSpecFoliageTransparent = false;
 
     m_z() {
         return this.m_ppu * this.m_zoom;

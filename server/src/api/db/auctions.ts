@@ -30,7 +30,7 @@ import type {
 } from "../../../../shared/types/user";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
-import { isPremiumActive } from "./premium";
+import { resolveRoleTag } from "./roleTag";
 import {
     auctionsTable,
     goldenFriesLedgerTable,
@@ -436,11 +436,21 @@ function mapAuction(
         currentBid: number | null;
         currentBidderId: string | null;
         currentBidderSlug: string | null;
+        currentBidderAdmin?: boolean | null;
+        currentBidderModerator?: boolean | null;
         currentBidderPremiumUntil?: Date | null;
+        currentBidderShowAdminPrefix?: boolean | null;
+        currentBidderShowModPrefix?: boolean | null;
+        currentBidderShowPremiumPrefix?: boolean | null;
         sellerId: string;
         sellerSlug: string;
         sellerUsername: string | null;
+        sellerAdmin?: boolean | null;
+        sellerModerator?: boolean | null;
         sellerPremiumUntil?: Date | null;
+        sellerShowAdminPrefix?: boolean | null;
+        sellerShowModPrefix?: boolean | null;
+        sellerShowPremiumPrefix?: boolean | null;
         endsAt: Date;
         createdAt: Date;
         source: string | null;
@@ -459,10 +469,24 @@ function mapAuction(
         minBid: r.minBid,
         currentBid: r.currentBid,
         currentBidderSlug: r.currentBidderSlug,
-        currentBidderPremium: isPremiumActive(r.currentBidderPremiumUntil ?? null),
+        currentBidderRoleTag: resolveRoleTag({
+            admin: r.currentBidderAdmin,
+            moderator: r.currentBidderModerator,
+            premiumUntil: r.currentBidderPremiumUntil,
+            showAdminPrefix: r.currentBidderShowAdminPrefix,
+            showModPrefix: r.currentBidderShowModPrefix,
+            showPremiumPrefix: r.currentBidderShowPremiumPrefix,
+        }),
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
-        sellerPremium: isPremiumActive(r.sellerPremiumUntil ?? null),
+        sellerRoleTag: resolveRoleTag({
+            admin: r.sellerAdmin,
+            moderator: r.sellerModerator,
+            premiumUntil: r.sellerPremiumUntil,
+            showAdminPrefix: r.sellerShowAdminPrefix,
+            showModPrefix: r.sellerShowModPrefix,
+            showPremiumPrefix: r.sellerShowPremiumPrefix,
+        }),
         endsAt: r.endsAt.getTime(),
         createdAt: r.createdAt.getTime(),
         source: r.source ?? "",
@@ -498,11 +522,21 @@ export async function getActiveAuctions(
             currentBid: auctionsTable.currentBid,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            currentBidderAdmin: bidderUsersTable.admin,
+            currentBidderModerator: bidderUsersTable.moderator,
             currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
+            currentBidderShowAdminPrefix: bidderUsersTable.showAdminPrefix,
+            currentBidderShowModPrefix: bidderUsersTable.showModPrefix,
+            currentBidderShowPremiumPrefix: bidderUsersTable.showPremiumPrefix,
             sellerId: auctionsTable.sellerId,
             sellerSlug: auctionsTable.sellerSlug,
             sellerUsername: usersTable.username,
+            sellerAdmin: usersTable.admin,
+            sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowAdminPrefix: usersTable.showAdminPrefix,
+            sellerShowModPrefix: usersTable.showModPrefix,
+            sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
             endsAt: auctionsTable.endsAt,
             createdAt: auctionsTable.createdAt,
             source: itemsTable.source,
@@ -570,8 +604,18 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
             sellerSlug: auctionsTable.sellerSlug,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            sellerAdmin: usersTable.admin,
+            sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowAdminPrefix: usersTable.showAdminPrefix,
+            sellerShowModPrefix: usersTable.showModPrefix,
+            sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
+            currentBidderAdmin: bidderUsersTable.admin,
+            currentBidderModerator: bidderUsersTable.moderator,
             currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
+            currentBidderShowAdminPrefix: bidderUsersTable.showAdminPrefix,
+            currentBidderShowModPrefix: bidderUsersTable.showModPrefix,
+            currentBidderShowPremiumPrefix: bidderUsersTable.showPremiumPrefix,
             status: auctionsTable.status,
         })
         .from(auctionsTable)
@@ -603,7 +647,14 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 amount: r.currentBid ?? 0,
                 kind: "won" as const,
                 otherName: r.sellerSlug,
-                otherPremium: isPremiumActive(r.sellerPremiumUntil),
+                otherRoleTag: resolveRoleTag({
+                    admin: r.sellerAdmin,
+                    moderator: r.sellerModerator,
+                    premiumUntil: r.sellerPremiumUntil,
+                    showAdminPrefix: r.sellerShowAdminPrefix,
+                    showModPrefix: r.sellerShowModPrefix,
+                    showPremiumPrefix: r.sellerShowPremiumPrefix,
+                }),
             };
         }
         if (r.status === "settled") {
@@ -613,7 +664,14 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 amount: r.currentBid ?? 0,
                 kind: "sold" as const,
                 otherName: r.currentBidderSlug ?? "someone",
-                otherPremium: isPremiumActive(r.currentBidderPremiumUntil),
+                otherRoleTag: resolveRoleTag({
+                    admin: r.currentBidderAdmin,
+                    moderator: r.currentBidderModerator,
+                    premiumUntil: r.currentBidderPremiumUntil,
+                    showAdminPrefix: r.currentBidderShowAdminPrefix,
+                    showModPrefix: r.currentBidderShowModPrefix,
+                    showPremiumPrefix: r.currentBidderShowPremiumPrefix,
+                }),
             };
         }
         return {
@@ -622,7 +680,7 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
             amount: 0,
             kind: "no_bids" as const,
             otherName: "",
-            otherPremium: false,
+            otherRoleTag: null,
         };
     });
 }

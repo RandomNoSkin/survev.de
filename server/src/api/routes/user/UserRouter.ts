@@ -81,7 +81,7 @@ import {
 } from "../../../../../shared/types/user";
 import loadout from "../../../../../shared/utils/loadout";
 import { apiPrivateRouter, validateUserName } from "../../../utils/serverHelpers";
-import { REPLAY_LIST_DEFAULT_LIMIT, server } from "../../apiServer";
+import { server } from "../../apiServer";
 import {
     authMiddleware,
     databaseEnabledMiddleware,
@@ -240,6 +240,9 @@ UserRouter.post("/profile", async (c) => {
             settings: {
                 offersDisabled: user.offersDisabled,
                 loadoutPrivate: user.loadoutPrivate,
+                showAdminPrefix: user.showAdminPrefix,
+                showModPrefix: user.showModPrefix,
+                showPremiumPrefix: user.showPremiumPrefix,
             },
             ...(await (async () => {
                 const offers = await getOffersForUser(user.id);
@@ -307,10 +310,25 @@ UserRouter.post(
 
 UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const user = c.get("user")!;
-    const { offersDisabled, loadoutPrivate } = c.req.valid("json");
-    const patch: Partial<{ offersDisabled: boolean; loadoutPrivate: boolean }> = {};
+    const {
+        offersDisabled,
+        loadoutPrivate,
+        showAdminPrefix,
+        showModPrefix,
+        showPremiumPrefix,
+    } = c.req.valid("json");
+    const patch: Partial<{
+        offersDisabled: boolean;
+        loadoutPrivate: boolean;
+        showAdminPrefix: boolean;
+        showModPrefix: boolean;
+        showPremiumPrefix: boolean;
+    }> = {};
     if (offersDisabled !== undefined) patch.offersDisabled = offersDisabled;
     if (loadoutPrivate !== undefined) patch.loadoutPrivate = loadoutPrivate;
+    if (showAdminPrefix !== undefined) patch.showAdminPrefix = showAdminPrefix;
+    if (showModPrefix !== undefined) patch.showModPrefix = showModPrefix;
+    if (showPremiumPrefix !== undefined) patch.showPremiumPrefix = showPremiumPrefix;
     if (Object.keys(patch).length) {
         await db.update(usersTable).set(patch).where(eq(usersTable.id, user.id));
     }
@@ -319,6 +337,9 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
         settings: {
             offersDisabled: offersDisabled ?? user.offersDisabled,
             loadoutPrivate: loadoutPrivate ?? user.loadoutPrivate,
+            showAdminPrefix: showAdminPrefix ?? user.showAdminPrefix,
+            showModPrefix: showModPrefix ?? user.showModPrefix,
+            showPremiumPrefix: showPremiumPrefix ?? user.showPremiumPrefix,
         },
     });
 });
@@ -481,17 +502,20 @@ UserRouter.post(
         }
 
         // Confirm the recording (and this player's POV file specifically) hasn't
-        // already been pruned by retention, instead of minting a token that would
-        // just 404 when the client tries to fetch it. Same bounded listReplays() the
-        // moderation dashboard's Replays tab already uses in production - an earlier,
-        // unbounded listReplays() call here scanned the whole archive and timed out,
-        // getting misread as "expired" for perfectly fresh games.
-        const recordings = await server.listReplays(row.region, REPLAY_LIST_DEFAULT_LIMIT);
-        const rec = recordings.find((r: any) => r.gameId === gameId);
-        const povExists = rec?.players?.some(
-            (p: any) => p.playerId === row.recordingPlayerId,
-        );
-        if (!rec || !povExists) {
+        // already been pruned by retention, instead of minting a token that would just
+        // 404 when the client tries to fetch it. This used to go through the same
+        // bounded listReplays() the moderation dashboard's Replays tab uses - but that
+        // caps at the N most recent games across the WHOLE region for dashboard-listing
+        // performance, not a time window, so on a busy region it could miss a
+        // legitimately-retained game that's simply not among the most recent N (e.g.
+        // from earlier the same day, once that day alone had passed the cap) and wrongly
+        // report it "expired". replayExists() is a single targeted disk check for this
+        // exact (gameId, playerId) instead - cheap (a directory-listing attempt per
+        // retention day until it's found, not reading every game's meta.json like an
+        // unbounded listReplays() would), so it doesn't reintroduce the timeout that cap
+        // was originally added to fix either.
+        const exists = await server.replayExists(row.region, gameId, row.recordingPlayerId);
+        if (!exists) {
             return c.json<PremiumReplayTokenResponse>(
                 { success: false, error: "expired" },
                 200,
@@ -729,7 +753,7 @@ UserRouter.post("/friends/list", async (c) => {
     const friends: FriendEntry[] = detailed.map((f) => ({
         slug: f.slug,
         username: f.username,
-        premium: f.premium,
+        roleTag: f.roleTag,
         lastGame: f.lastGame,
         live: liveMap.get(f.userId) ?? null,
     }));

@@ -238,7 +238,7 @@ export class EditorDisplay {
             teamId: 1,
             groupId: 0,
             name: "",
-            premium: false,
+            roleTag: null,
             loadout: {
                 heal: "heal_basic",
                 boost: "boost_basic",

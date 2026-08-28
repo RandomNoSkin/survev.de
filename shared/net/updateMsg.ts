@@ -1,6 +1,8 @@
 import { GameConfig, type Plane as PlaneType } from "../gameConfig.ts";
+import type { RoleTag } from "../types/user.ts";
 import { v2, type Vec2 } from "./../utils/v2.ts";
 import { type AbstractMsg, BitSizes, type BitStream, Constants } from "./net.ts";
+import { decodeRoleTag, encodeRoleTag } from "./roleTagCodec.ts";
 import {
     ObjectSerializeFns,
     type ObjectsFullData,
@@ -136,6 +138,8 @@ function serializePlayerStatus(s: BitStream, players: PlayerStatus[], extended: 
             if (extended) {
                 s.writeFloat(info.health ?? 0, 0, 100, 8);
                 s.writeFloat(info.boost ?? 0, 0, 100, 8);
+                s.writeUint16(info.screenWidth ?? 0);
+                s.writeUint16(info.screenHeight ?? 0);
             }
         }
     });
@@ -170,6 +174,8 @@ function deserializePlayerStatus(s: BitStream): {
             if (extended) {
                 p.health = s.readFloat(0, 100, 8);
                 p.boost = s.readFloat(0, 100, 8);
+                p.screenWidth = s.readUint16();
+                p.screenHeight = s.readUint16();
             }
         }
         return p;
@@ -201,8 +207,9 @@ export interface PlayerInfo {
     teamId: number;
     groupId: number;
     name: string;
-    /** Active Premium subscription - the client shows a "[PREM]" tag before the name. */
-    premium: boolean;
+    /** The [ADMIN]/[MOD]/[PREM] tag the client shows before the name - server-resolved
+     *  priority (ADMIN > MOD > PREM), see resolveRoleTag on the server. */
+    roleTag: RoleTag;
 
     loadout: {
         heal: string;
@@ -216,7 +223,7 @@ function serializePlayerInfo(s: BitStream, data: PlayerInfo) {
     s.writeUint8(data.teamId);
     s.writeUint8(data.groupId);
     s.writeString(data.name);
-    s.writeBoolean(data.premium);
+    s.writeUint8(encodeRoleTag(data.roleTag));
 
     s.writeGameType(data.loadout.heal);
     s.writeGameType(data.loadout.boost);
@@ -230,7 +237,7 @@ function deserializePlayerInfo(s: BitStream, data: PlayerInfo) {
     data.teamId = s.readUint8();
     data.groupId = s.readUint8();
     data.name = s.readString();
-    data.premium = s.readBoolean();
+    data.roleTag = decodeRoleTag(s.readUint8());
     data.loadout = {} as PlayerInfo["loadout"];
     data.loadout.heal = s.readGameType();
     data.loadout.boost = s.readGameType();
@@ -903,6 +910,13 @@ export interface PlayerStatus {
     posDelta?: number;
     health?: number;
     boost?: number;
+    /** This player's own camera viewport (from JoinMsg, sent once at join, never
+     *  updated on resize) - extended-mode only, for advanced spectator's vision-radius
+     *  overlay to reproduce their actual view instead of approximating it with the
+     *  spectator's own aspect ratio. 0 for a player on an old client that never sent
+     *  it (server default), meaning the fallback approximation is used instead. */
+    screenWidth?: number;
+    screenHeight?: number;
     posInterp?: number;
     visible: boolean;
     dead: boolean;

@@ -57,7 +57,7 @@ export type SaleNotification = {
     price: number;
     /** Display name of the buyer (username, falling back to slug). */
     buyerName: string;
-    buyerPremium: boolean;
+    buyerRoleTag: RoleTag;
 };
 
 export const zUsernameRequest = z.object({
@@ -85,11 +85,20 @@ export type AccountSettings = {
     offersDisabled: boolean;
     /** When true, this user's loadout is hidden on the stats + advanced-game-stats pages. */
     loadoutPrivate: boolean;
+    /** Each independently gates the account's [ADMIN]/[MOD]/[PREM] name prefix (see
+     *  resolveRoleTag on the server) - a role whose toggle is off falls through to the
+     *  next-highest enabled role rather than hiding the prefix outright. */
+    showAdminPrefix: boolean;
+    showModPrefix: boolean;
+    showPremiumPrefix: boolean;
 };
 
 export const zSettingsRequest = z.object({
     offersDisabled: z.boolean().optional(),
     loadoutPrivate: z.boolean().optional(),
+    showAdminPrefix: z.boolean().optional(),
+    showModPrefix: z.boolean().optional(),
+    showPremiumPrefix: z.boolean().optional(),
 });
 export type SettingsRequest = z.infer<typeof zSettingsRequest>;
 export type SettingsResponse = { success: boolean; settings: AccountSettings };
@@ -236,7 +245,7 @@ export type MarketListing = {
     total: number;
     sellerSlug: string;
     sellerUsername: string;
-    sellerPremium: boolean;
+    sellerRoleTag: RoleTag;
     /** Epoch ms the listing was created. */
     createdAt: number;
     /** Provenance of the underlying item instance, shown to buyers. */
@@ -336,10 +345,10 @@ export type Auction = {
     /** Highest bid so far, or null before the first bid. */
     currentBid: number | null;
     currentBidderSlug: string | null;
-    currentBidderPremium: boolean;
+    currentBidderRoleTag: RoleTag;
     sellerSlug: string;
     sellerUsername: string;
-    sellerPremium: boolean;
+    sellerRoleTag: RoleTag;
     /** Epoch ms the auction ends (drives the countdown). */
     endsAt: number;
     createdAt: number;
@@ -396,7 +405,7 @@ export type AuctionNotification = {
     kind: "won" | "sold" | "no_bids";
     /** Other party's display name (winner for the seller, seller for the winner). */
     otherName: string;
-    otherPremium: boolean;
+    otherRoleTag: RoleTag;
 };
 
 export const zAckAuctionsRequest = z.object({
@@ -430,10 +439,10 @@ export type Offer = {
     status: string;
     fromSlug: string;
     fromUsername: string;
-    fromPremium: boolean;
+    fromRoleTag: RoleTag;
     toSlug: string;
     toUsername: string;
-    toPremium: boolean;
+    toRoleTag: RoleTag;
     createdAt: number;
     updatedAt: number;
 };
@@ -487,7 +496,7 @@ export type EquippedInstancesResponse = { success: boolean };
 export type ItemOwner = {
     slug: string;
     username: string;
-    premium: boolean;
+    roleTag: RoleTag;
     copies: number;
 };
 
@@ -509,7 +518,7 @@ export type ItemOwnersResponse = {
 };
 
 /** A user match for the gift-recipient picker. */
-export type UserSearchResult = { slug: string; username: string; premium: boolean };
+export type UserSearchResult = { slug: string; username: string; roleTag: RoleTag };
 
 export const zUserSearchRequest = z.object({
     query: z.string().trim().min(1).max(64),
@@ -550,8 +559,8 @@ export type GiftNotification = {
     id: number;
     /** Display name of the gifter (username, falling back to slug). */
     fromName: string;
-    /** The gifter's CURRENT premium status (not a snapshot from send time). */
-    fromPremium: boolean;
+    /** The gifter's CURRENT role tag (not a snapshot from send time). */
+    fromRoleTag: RoleTag;
     kind: "fries" | "item";
     /** Golden Fries amount (kind = "fries"). */
     amount: number;
@@ -569,7 +578,20 @@ export type AckGiftsResponse = { success: boolean };
 // FRIENDS (directional list) + recently-played players
 //
 
-export type Friend = { slug: string; username: string; premium: boolean };
+/**
+ * The [ADMIN]/[MOD]/[PREM] name-prefix tag to show, or none - see resolveRoleTag.
+ * The wire encode/decode for this (see shared/net/updateMsg.ts, joinFeedMsg.ts) lives
+ * in shared/net/roleTagCodec.ts, NOT here - that file only type-imports RoleTag (erased
+ * at compile time), which keeps shared/net/* from ever runtime-importing this file.
+ * This file already runtime-imports FROM shared/net/net.ts (for Constants below), so a
+ * runtime import the other way would form an import cycle and break module init order
+ * (this bit us once already: Constants was undefined at zUsernameRequest's evaluation
+ * time because of exactly this cycle).
+ */
+export type RoleTag = "admin" | "mod" | "premium" | null;
+export const zRoleTag = z.enum(["admin", "mod", "premium"]).nullable();
+
+export type Friend = { slug: string; username: string; roleTag: RoleTag };
 
 /** A live game a friend is currently in (region + gameId, to spectate). */
 export type LiveGame = { region: string; gameId: string };
@@ -578,7 +600,7 @@ export type LiveGame = { region: string; gameId: string };
 export type FriendEntry = {
     slug: string;
     username: string;
-    premium: boolean;
+    roleTag: RoleTag;
     /** Epoch ms of their most recent finished game, or null if none. */
     lastGame: number | null;
     /** Set when they're currently in a spectatable live game. */
@@ -589,12 +611,12 @@ export type FriendEntry = {
 export type RecentPlayer = {
     slug: string;
     username: string;
-    premium: boolean;
+    roleTag: RoleTag;
     relation: "with" | "against";
 };
 
 /** An account the caller has blocked (shown in the Social panel's Blocked list). */
-export type BlockedUser = { slug: string; username: string; premium: boolean };
+export type BlockedUser = { slug: string; username: string; roleTag: RoleTag };
 
 export type FriendsResponse = {
     success: boolean;

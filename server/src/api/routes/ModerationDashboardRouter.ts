@@ -29,7 +29,7 @@
  *   POST /moderation/api/apps/review                → approve/reject a pending OAuth app
  */
 
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
@@ -65,7 +65,14 @@ import {
 } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
 import { listApps, reviewApp } from "../db/oauth";
-import { grantPremiumMonths, removePremium } from "../db/premium";
+import {
+    grantPremiumMonths,
+    grantPremiumPassXp,
+    grantPremiumPermanent,
+    isPremiumActive,
+    removePremium,
+    revokePremiumPassXp,
+} from "../db/premium";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
@@ -513,8 +520,9 @@ async function moderatorSusOnlyDenial(
  * Tags a live player list with the staff roles from the accounts DB.
  *
  * The game process only knows the `admin` flag it was handed at join time and nothing
- * at all about moderators, so the API server (the only side with DB access) resolves
- * both here. Only staff rows are fetched, so a normal lobby costs one small query.
+ * at all about moderators or Premium, so the API server (the only side with DB access)
+ * resolves all three here. Only rows that actually have one of these flags are fetched,
+ * so a normal lobby costs one small query.
  */
 async function withStaffFlags(players: any[]): Promise<any[]> {
     const userIds = [...new Set(players.map((p) => p.userId).filter(Boolean))];
@@ -525,12 +533,17 @@ async function withStaffFlags(players: any[]): Promise<any[]> {
             id: usersTable.id,
             admin: usersTable.admin,
             moderator: usersTable.moderator,
+            premiumUntil: usersTable.premiumUntil,
         })
         .from(usersTable)
         .where(
             and(
                 inArray(usersTable.id, userIds),
-                or(eq(usersTable.admin, true), eq(usersTable.moderator, true)),
+                or(
+                    eq(usersTable.admin, true),
+                    eq(usersTable.moderator, true),
+                    isNotNull(usersTable.premiumUntil),
+                ),
             ),
         );
     if (!staff.length) return players;
@@ -539,7 +552,12 @@ async function withStaffFlags(players: any[]): Promise<any[]> {
     return players.map((p) => {
         const u = p.userId ? byId.get(p.userId) : undefined;
         if (!u) return p;
-        return { ...p, isAdmin: p.isAdmin || u.admin, isModerator: u.moderator };
+        return {
+            ...p,
+            isAdmin: p.isAdmin || u.admin,
+            isModerator: u.moderator,
+            isPremium: isPremiumActive(u.premiumUntil),
+        };
     });
 }
 
@@ -3083,6 +3101,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 authId: usersTable.authId,
                 linkedDiscord: usersTable.linkedDiscord,
                 linkedGoogle: usersTable.linkedGoogle,
+                premiumUntil: usersTable.premiumUntil,
             })
             .from(usersTable);
 
@@ -3112,6 +3131,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             discordId: u.linkedDiscord ? u.authId : null,
             lastIp: ipByUser.get(u.id) ?? null,
             passes: Object.fromEntries((xpByUser.get(u.id) ?? new Map()).entries()),
+            premium: isPremiumActive(u.premiumUntil),
         }));
 
         return c.json({ accounts, passTypes });
@@ -3188,13 +3208,25 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, moderator });
         },
     )
-    /** Grants (extends) Premium on an account for free - admin action, no Golden Fries involved. */
+    /**
+     * Grants (extends) Premium on an account for free - admin action, no Golden Fries
+     * involved. `permanent` grants Premium that never expires instead of `months`
+     * (see PERMANENT_PREMIUM_DATE); `xpTimes` optionally also fires the same XP bonus
+     * a real purchase gives, `xpTimes` times over (0 = none).
+     */
     .post(
         "/api/account/premium/grant",
-        validateParams(z.object({ slug: z.string().min(1), months: z.number().int().min(1).max(24) })),
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                months: z.number().int().min(1).max(24),
+                permanent: z.boolean().optional(),
+                xpTimes: z.number().int().min(0).max(20).optional(),
+            }),
+        ),
         async (c) => {
             const admin = c.get("user")!;
-            const { slug, months } = c.req.valid("json");
+            const { slug, months, permanent, xpTimes } = c.req.valid("json");
 
             const target = await db.query.usersTable.findFirst({
                 where: eq(usersTable.slug, slug),
@@ -3202,14 +3234,18 @@ export const ModerationDashboardRouter = new Hono<Context>()
             });
             if (!target) return c.json({ error: "account_not_found" }, 404);
 
-            const premiumUntil = await grantPremiumMonths(target.id, months);
+            const premiumUntil = permanent
+                ? await grantPremiumPermanent(target.id)
+                : await grantPremiumMonths(target.id, months);
+            if (xpTimes) await grantPremiumPassXp(target.id, xpTimes);
 
             void logModerationAction(
                 "⭐ Premium granted",
                 [
                     { name: "Account", value: slug },
-                    { name: "Months", value: String(months) },
-                    { name: "Now until", value: premiumUntil.toISOString() },
+                    { name: "Duration", value: permanent ? "permanent" : `${months} months` },
+                    { name: "Now until", value: permanent ? "permanent" : premiumUntil.toISOString() },
+                    { name: "XP bonus", value: xpTimes ? `×${xpTimes}` : "no" },
                     { name: "By admin", value: adminTag(admin) },
                 ],
                 0xf2d63b,
@@ -3217,13 +3253,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, premiumUntil: premiumUntil.getTime() });
         },
     )
-    /** Immediately clears Premium on an account - admin action. */
+    /** Immediately clears Premium on an account - admin action. `withXp` optionally also
+     *  reverts every XP bonus Premium ever granted this account (see revokePremiumPassXp). */
     .post(
         "/api/account/premium/remove",
-        validateParams(z.object({ slug: z.string().min(1) })),
+        validateParams(z.object({ slug: z.string().min(1), withXp: z.boolean().optional() })),
         async (c) => {
             const admin = c.get("user")!;
-            const { slug } = c.req.valid("json");
+            const { slug, withXp } = c.req.valid("json");
 
             const target = await db.query.usersTable.findFirst({
                 where: eq(usersTable.slug, slug),
@@ -3232,11 +3269,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
             if (!target) return c.json({ error: "account_not_found" }, 404);
 
             await removePremium(target.id);
+            if (withXp) await revokePremiumPassXp(target.id);
 
             void logModerationAction(
                 "⭐ Premium removed",
                 [
                     { name: "Account", value: slug },
+                    { name: "XP bonus reverted", value: withXp ? "yes" : "no" },
                     { name: "By admin", value: adminTag(admin) },
                 ],
                 0xf2d63b,

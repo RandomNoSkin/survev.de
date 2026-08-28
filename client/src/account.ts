@@ -102,7 +102,13 @@ export class Account {
     /** The item instance the caller currently has up for auction, or null (one at a time). */
     activeAuctionItemId: number | null = null;
     /** Account settings (offers/loadout privacy), from the profile response. */
-    settings: AccountSettings = { offersDisabled: false, loadoutPrivate: false };
+    settings: AccountSettings = {
+        offersDisabled: false,
+        loadoutPrivate: false,
+        showAdminPrefix: true,
+        showModPrefix: true,
+        showPremiumPrefix: true,
+    };
     quests: Quest[] = [];
     questPriv = "";
     pass: Record<string, PassType> = {};

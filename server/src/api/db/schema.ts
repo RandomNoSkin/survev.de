@@ -72,6 +72,14 @@ export const usersTable = pgTable("users", {
     offersDisabled: boolean("offers_disabled").notNull().default(false),
     // when true, this user's loadout is hidden on the stats + advanced-game-stats pages.
     loadoutPrivate: boolean("loadout_private").notNull().default(false),
+    // Each independently gates whether this account's [ADMIN]/[MOD]/[PREM] name prefix
+    // (see resolveRoleTag in db/roleTag.ts) is shown to others - opt-out (default true),
+    // not opt-in. A role whose own toggle is off falls through to the next-highest
+    // enabled role rather than hiding the prefix outright (e.g. an admin with the ADMIN
+    // toggle off but PREM toggle on still shows [PREM]).
+    showAdminPrefix: boolean("show_admin_prefix").notNull().default(true),
+    showModPrefix: boolean("show_mod_prefix").notNull().default(true),
+    showPremiumPrefix: boolean("show_premium_prefix").notNull().default(true),
     // Instance ids the player had selected/equipped at their last game join, so match
     // stats can attach to the exact owned copy (snapshot per game; falls back to the
     // oldest instance of a type when absent). The client reports these on join.
@@ -687,12 +695,15 @@ export const userXpTable = pgTable(
 );
 
 /**
- * Append-only audit log of every XP grant from a Premium purchase/renewal (see
- * grantPremiumPassXp) - lets the moderation dashboard show how much of an account's
- * XP came from Premium separately from XP earned in matches, instead of a Premium
- * XP jump getting mistaken for account boosting on the XP-gain leaderboard.
- * Purely informational: it does NOT gate the reconcile job, which already can't
- * revert this XP regardless (setPassXp anchors reconcileBaseXp/reconcileFrom to the
+ * Append-only, signed ledger of every XP grant (positive) or admin revocation
+ * (negative, see revokePremiumPassXp) from Premium (see grantPremiumPassXp) - same
+ * idea as goldenFriesLedgerTable. SUM(xpGranted) per (user, pass) is how much of that
+ * pass's current XP is currently attributable to Premium, which the moderation
+ * dashboard shows separately from XP earned in matches (so a Premium XP jump doesn't
+ * get mistaken for account boosting on the XP-gain leaderboard), and which the admin
+ * "remove Premium + XP" action reads to know exactly how much to subtract back out.
+ * Doesn't gate the reconcile job, which already can't revert Premium-granted XP on
+ * its own regardless (setPassXp anchors reconcileBaseXp/reconcileFrom to the
  * post-grant total, and reconcileAllPasses only ever raises XP, never lowers it).
  */
 export const premiumXpGrantsTable = pgTable(

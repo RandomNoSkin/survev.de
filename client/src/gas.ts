@@ -246,5 +246,11 @@ export class Gas {
         const pos = camera.m_pointToScreen(circle.pos);
         const scale = camera.m_scaleToScreen(circle.rad);
         this.gasRenderer.render(pos, scale, this.isActive());
+        // Advanced spectator "transparent zone": the fill's own 0.6 alpha (see the
+        // constructor) is baked into the graphics/canvas texture itself, but a
+        // PIXI DisplayObject's `.alpha` composes multiplicatively on top of whatever
+        // it draws - cheaper than rebuilding the fill, and works the same for both the
+        // PIXI-graphics and canvas-texture render paths since both are DisplayObjects.
+        this.gasRenderer.display!.alpha = camera.m_advSpecZoneTransparent ? 0.35 : 1;
     }
 }

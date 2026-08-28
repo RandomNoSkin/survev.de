@@ -13,7 +13,7 @@ import type {
 } from "../../../../shared/types/user";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
-import { isPremiumActive } from "./premium";
+import { resolveRoleTag } from "./roleTag";
 import {
     auctionsTable,
     blocksTable,
@@ -395,10 +395,20 @@ function mapOffer(r: {
     status: string;
     fromSlug: string;
     fromUsername: string | null;
+    fromAdmin?: boolean | null;
+    fromModerator?: boolean | null;
     fromPremiumUntil?: Date | null;
+    fromShowAdminPrefix?: boolean | null;
+    fromShowModPrefix?: boolean | null;
+    fromShowPremiumPrefix?: boolean | null;
     toSlug: string;
     toUsername: string | null;
+    toAdmin?: boolean | null;
+    toModerator?: boolean | null;
     toPremiumUntil?: Date | null;
+    toShowAdminPrefix?: boolean | null;
+    toShowModPrefix?: boolean | null;
+    toShowPremiumPrefix?: boolean | null;
     createdAt: Date;
     updatedAt: Date;
 }): Offer {
@@ -411,10 +421,24 @@ function mapOffer(r: {
         status: r.status,
         fromSlug: r.fromSlug,
         fromUsername: r.fromUsername ?? "",
-        fromPremium: isPremiumActive(r.fromPremiumUntil ?? null),
+        fromRoleTag: resolveRoleTag({
+            admin: r.fromAdmin,
+            moderator: r.fromModerator,
+            premiumUntil: r.fromPremiumUntil,
+            showAdminPrefix: r.fromShowAdminPrefix,
+            showModPrefix: r.fromShowModPrefix,
+            showPremiumPrefix: r.fromShowPremiumPrefix,
+        }),
         toSlug: r.toSlug,
         toUsername: r.toUsername ?? "",
-        toPremium: isPremiumActive(r.toPremiumUntil ?? null),
+        toRoleTag: resolveRoleTag({
+            admin: r.toAdmin,
+            moderator: r.toModerator,
+            premiumUntil: r.toPremiumUntil,
+            showAdminPrefix: r.toShowAdminPrefix,
+            showModPrefix: r.toShowModPrefix,
+            showPremiumPrefix: r.toShowPremiumPrefix,
+        }),
         createdAt: r.createdAt.getTime(),
         updatedAt: r.updatedAt.getTime(),
     };
@@ -439,7 +463,12 @@ export async function getOffersForUser(userId: string): Promise<OfferListRespons
         .select({
             ...base,
             fromUsername: usersTable.username,
+            fromAdmin: usersTable.admin,
+            fromModerator: usersTable.moderator,
             fromPremiumUntil: usersTable.premiumUntil,
+            fromShowAdminPrefix: usersTable.showAdminPrefix,
+            fromShowModPrefix: usersTable.showModPrefix,
+            fromShowPremiumPrefix: usersTable.showPremiumPrefix,
         })
         .from(offersTable)
         .leftJoin(usersTable, eq(usersTable.id, offersTable.fromUserId))
@@ -455,7 +484,12 @@ export async function getOffersForUser(userId: string): Promise<OfferListRespons
         .select({
             ...base,
             toUsername: usersTable.username,
+            toAdmin: usersTable.admin,
+            toModerator: usersTable.moderator,
             toPremiumUntil: usersTable.premiumUntil,
+            toShowAdminPrefix: usersTable.showAdminPrefix,
+            toShowModPrefix: usersTable.showModPrefix,
+            toShowPremiumPrefix: usersTable.showPremiumPrefix,
         })
         .from(offersTable)
         .leftJoin(usersTable, eq(usersTable.id, offersTable.toUserId))

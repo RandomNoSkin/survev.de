@@ -5,7 +5,7 @@ import {
     type UserStatsResponse,
 } from "../../../../shared/types/stats.ts";
 import { db } from "./index.ts";
-import { isPremiumActive } from "./premium.ts";
+import { resolveRoleTag } from "./roleTag.ts";
 import { getRatingTier } from "./ratingTiers.ts";
 import { matchDataTable, regionGroupsTable, usersTable } from "./schema.ts";
 
@@ -13,7 +13,7 @@ import { matchDataTable, regionGroupsTable, usersTable } from "./schema.ts";
 export const emptyUserStats = {
     slug: "",
     username: "",
-    premium: false,
+    roleTag: null,
     assists: 0,
     primaryRegion: null,
     modes: [],
@@ -90,7 +90,12 @@ export async function userStatsSqlQuery(
             slug: usersTable.slug,
             username: usersTable.username,
             banned: usersTable.banned,
+            admin: usersTable.admin,
+            moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showAdminPrefix: usersTable.showAdminPrefix,
+            showModPrefix: usersTable.showModPrefix,
+            showPremiumPrefix: usersTable.showPremiumPrefix,
             primaryRegion: sql`NULLIF(${usersTable.primaryRegion}, '')`,
             player_icon: sql`JSON_EXTRACT_PATH(ANY_VALUE(${usersTable.loadout}), 'player_icon')`,
             games: sql`COALESCE(SUM("mode_stats".games), 0)`,
@@ -125,19 +130,31 @@ export async function userStatsSqlQuery(
             usersTable.slug,
             usersTable.username,
             usersTable.banned,
+            usersTable.admin,
+            usersTable.moderator,
             usersTable.premiumUntil,
+            usersTable.showAdminPrefix,
+            usersTable.showModPrefix,
+            usersTable.showPremiumPrefix,
             usersTable.primaryRegion,
         )
         .limit(1);
 
-    const userStats = res[0] as UserStatsResponse & { premiumUntil: Date | null };
+    const userStats = res[0] as UserStatsResponse & {
+        admin: boolean;
+        moderator: boolean;
+        premiumUntil: Date | null;
+        showAdminPrefix: boolean;
+        showModPrefix: boolean;
+        showPremiumPrefix: boolean;
+    };
 
     if (!userStats || !userStats.slug) return emptyUserStats as unknown as UserStatsResponse;
 
     const modes = userStats?.modes;
     const formatedData: UserStatsResponse = {
         ...userStats,
-        premium: isPremiumActive(userStats.premiumUntil),
+        roleTag: resolveRoleTag(userStats),
         // sql fuckery, it returns [null] where no result
         modes: (modes[0] === null ? [] : modes).map((mode) => ({
             ...mode,

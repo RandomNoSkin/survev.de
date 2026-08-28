@@ -14,11 +14,13 @@ import {
     type TeamPlayGameMsg,
     zTeamClientMsg,
 } from "../../shared/types/team";
+import type { RoleTag } from "../../shared/types/user";
 import { assert, util } from "../../shared/utils/util";
 import type { ApiServer } from "./api/apiServer";
 import { validateSessionToken } from "./api/auth";
 import { getOwnedLoadouts } from "./api/db/loadouts";
 import { isPremiumActive } from "./api/db/premium";
+import { resolveRoleTag } from "./api/db/roleTag";
 import { hashIp, isBanned } from "./api/routes/private/ModerationRouter";
 import { Config } from "./config";
 import { ServerLogger } from "./utils/logger";
@@ -60,7 +62,7 @@ class Player {
             inGame: this.inGame,
             isLeader: this.isLeader,
             playerId: this.playerId,
-            premium: this.premium,
+            roleTag: this.roleTag,
         };
     }
 
@@ -71,6 +73,11 @@ class Player {
     encodedIp: string;
     admin: boolean;
     premium: boolean;
+    /** The team-menu member list's display tag - resolved once at connection time from
+     *  the full account row (see TeamMenu#onOpen), independent of `admin`/`premium`
+     *  above (which stay as-is: they feed FindGamePrivateBody for the actual game join,
+     *  not display). */
+    roleTag: RoleTag;
 
     constructor(
         public socket: WSContext<SocketData>,
@@ -79,9 +86,11 @@ class Player {
         public ip: string,
         admin = false,
         premium = false,
+        roleTag: RoleTag = null,
     ) {
         this.admin = admin;
         this.premium = premium;
+        this.roleTag = roleTag;
         this.encodedIp = hashIp(ip);
         // disconnect if didn't join a room in 5 seconds
         this.disconnectTimeout = setTimeout(() => {
@@ -297,7 +306,7 @@ class Room {
                 userId: p.userId,
                 ip: p.ip,
                 admin: p.admin,
-                premium: p.premium,
+                roleTag: p.roleTag,
                 loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
             } satisfies FindGamePrivateBody["playerData"][0];
         });
@@ -474,6 +483,7 @@ export class TeamMenu {
                 let userId: string | null = null;
                 let admin = false;
                 let premium = false;
+                let roleTag: RoleTag = null;
                 const sessionId = getCookie(c, "session") ?? null;
 
                 if (sessionId) {
@@ -482,11 +492,13 @@ export class TeamMenu {
                         userId = account.user?.id || null;
                         admin = account.user?.admin ?? false;
                         premium = isPremiumActive(account.user?.premiumUntil ?? null);
+                        roleTag = account.user ? resolveRoleTag(account.user) : null;
 
                         if (account.user?.banned) {
                             userId = null;
                             admin = false;
                             premium = false;
+                            roleTag = null;
                         }
                     } catch (err) {
                         this.logger.error(`Failed to validate session:`, err);
@@ -521,7 +533,7 @@ export class TeamMenu {
                             ws.close();
                             return;
                         }
-                        teamMenu.onOpen(ws as WSContext<SocketData>, userId, ip!, admin, premium);
+                        teamMenu.onOpen(ws as WSContext<SocketData>, userId, ip!, admin, premium, roleTag);
                     },
 
                     onMessage(event, ws) {
@@ -561,8 +573,9 @@ export class TeamMenu {
         ip: string,
         admin: boolean,
         premium: boolean,
+        roleTag: RoleTag = null,
     ) {
-        const player = new Player(ws, this, userId, ip, admin, premium);
+        const player = new Player(ws, this, userId, ip, admin, premium, roleTag);
         ws.raw!.player = player;
 
         let players = this.playersByIp.get(player.encodedIp);

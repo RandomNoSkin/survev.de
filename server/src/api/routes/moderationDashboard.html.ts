@@ -3536,6 +3536,7 @@ function renderPlayers() {
     const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
     const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>'
       : p.isModerator ? '<span class="badge badge-mod">MODERATOR</span>' : '';
+    const premiumBadge = p.isPremium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '';
     const isSelf     = p.userId === currentAdminId;
     const selfBadge  = isSelf ? '<span class="badge badge-self">YOU</span>' : '';
     // No kick/ban buttons for self or already-disconnected players
@@ -3543,7 +3544,7 @@ function renderPlayers() {
         <button class="btn btn-red  btn-sm" onclick="gameCmd({action:'kick',target:'\${esc(p.username)}'})">KICK</button>
         <button class="btn btn-red  btn-sm" style="background:var(--red-dim)" onclick="quickBanPlayer('\${esc(p.username)}','\${esc(p.encodedIp)}')">BAN</button>\`;
     return \`<tr style="\${p.disconnected ? 'opacity:.5' : ''}">
-      <td>\${esc(p.username)} \${adminBadge} \${selfBadge}</td>
+      <td>\${esc(p.username)} \${adminBadge} \${premiumBadge} \${selfBadge}</td>
       <td>\${ipLink(p.encodedIp)}</td>
       <td>\${p.kills ?? 0}</td>
       <td>\${p.assists ?? 0}</td>
@@ -3774,6 +3775,7 @@ function renderAccounts() {
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
         \${a.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : ''}
+        \${a.premium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
       </td>
       <td style="text-align:center;white-space:nowrap;">
@@ -3858,10 +3860,17 @@ function buildCosmeticOptions() {
   ).join('');
 }
 
+// Mirrors the server's PERMANENT_PREMIUM_DATE sentinel (year 9999) closely enough to
+// tell "permanent" apart from a real expiry date without hardcoding the exact value.
+function isPermanentPremium(premiumUntil) {
+  return !!premiumUntil && new Date(premiumUntil).getFullYear() >= 9000;
+}
+
 function renderAccountDetail(data) {
   const u = data.user;
   const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
   const premiumActive = u.premiumUntil && new Date(u.premiumUntil).getTime() > Date.now();
+  const premiumPermanent = premiumActive && isPermanentPremium(u.premiumUntil);
   const flags = [
     u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
     u.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : '',
@@ -3888,9 +3897,11 @@ function renderAccountDetail(data) {
             '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
       </div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:11px;color:var(--text-dim);">⭐ Premium: \${premiumActive ? ('active until ' + fmtDate(u.premiumUntil)) : 'not active'}</span>
-        <button class="btn btn-blue btn-sm" onclick="accGrantPremium()">+2 months</button>
+        <span style="font-size:11px;color:var(--text-dim);">⭐ Premium: \${premiumActive ? (premiumPermanent ? 'permanent' : ('active until ' + fmtDate(u.premiumUntil))) : 'not active'}</span>
+        <button class="btn btn-blue btn-sm" onclick="accGrantPremium()">⭐ Grant Premium…</button>
         \${premiumActive ? '<button class="btn btn-gray btn-sm" onclick="accRemovePremium()">Remove premium</button>' : ''}
+        \${premiumActive ? '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim);cursor:pointer;" title="Also reverts every XP bonus Premium ever granted this account.">' +
+          '<input type="checkbox" id="acc-premium-xp-toggle"> also revert XP bonus</label>' : ''}
       </div>
     </div>\`;
 
@@ -4227,18 +4238,58 @@ async function accSetModerator(makeMod) {
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }
 
+// Toggles the months input's disabled state when "Permanent" is (un)checked, inside
+// the Grant Premium dialog body (see accGrantPremium).
+function syncGrantPremiumFields() {
+  const permanent = document.getElementById('grant-prem-permanent')?.checked;
+  const monthsInput = document.getElementById('grant-prem-months');
+  if (monthsInput) monthsInput.disabled = !!permanent;
+}
+
 async function accGrantPremium() {
+  const body = '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">Duration</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<input type="number" id="grant-prem-months" value="2" min="1" max="24" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;"> months' +
+          '<label style="display:flex;align-items:center;gap:4px;margin-left:12px;cursor:pointer;">' +
+            '<input type="checkbox" id="grant-prem-permanent" onchange="syncGrantPremiumFields()"> Permanent' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">XP bonus</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<input type="number" id="grant-prem-xp-times" value="0" min="0" max="20" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;">' +
+          '<span style="font-size:11px;color:var(--text-muted);">× the normal Premium XP bonus (0 = none, 1 = one purchase\\'s worth, ...)</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const ok = await askConfirm({
+    title: '⭐ Grant Premium',
+    body,
+    confirmLabel: 'Grant',
+    confirmClass: 'btn-blue',
+  });
+  if (!ok) return;
+
+  const permanent = !!document.getElementById('grant-prem-permanent')?.checked;
+  const months = Math.max(1, Math.min(24, parseInt(document.getElementById('grant-prem-months')?.value, 10) || 2));
+  const xpTimes = Math.max(0, Math.min(20, parseInt(document.getElementById('grant-prem-xp-times')?.value, 10) || 0));
+
   try {
-    await post('/api/account/premium/grant', { slug: currentAccountSlug, months: 2 });
-    toast('⭐ Premium extended by 2 months');
+    await post('/api/account/premium/grant', { slug: currentAccountSlug, months, permanent, xpTimes });
+    toast('⭐ Premium granted' + (permanent ? ' (permanent)' : ' (' + months + ' months)') + (xpTimes ? ' + XP ×' + xpTimes : ''));
     openAccountDetail(currentAccountSlug);
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }
 
 async function accRemovePremium() {
+  const withXp = !!document.getElementById('acc-premium-xp-toggle')?.checked;
   try {
-    await post('/api/account/premium/remove', { slug: currentAccountSlug });
-    toast('Premium removed');
+    await post('/api/account/premium/remove', { slug: currentAccountSlug, withXp });
+    toast('Premium removed' + (withXp ? ' (+ XP bonus reverted)' : ''));
     openAccountDetail(currentAccountSlug);
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }

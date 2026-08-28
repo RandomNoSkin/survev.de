@@ -139,7 +139,7 @@ function getPlayerCardData(
         username: userData.username,
         // Pre-escaped + [PREM]-tagged HTML for the name itself - the EJS template
         // renders this unescaped (<%- %>), since <%= %> would escape the tag's <span>.
-        usernameHtml: helpers.formatUsername(userData.username, userData.premium),
+        usernameHtml: helpers.formatUsername(userData.username, userData.roleTag),
         slugToShow: tmpslugToShow,
         banned: userData.banned,
         region: userData.primaryRegion,
@@ -480,19 +480,19 @@ export class PlayerView {
                 found?: boolean;
                 private?: boolean;
                 username?: string;
-                premium?: boolean;
+                roleTag?: "admin" | "mod" | "premium" | null;
                 slug?: string;
                 loadout?: Record<string, string | string[]>;
                 items?: OwnedItem[];
             }) => {
                 if (data?.private) {
-                    this.showLoadoutPrivate(data.username || "", !!data.premium);
+                    this.showLoadoutPrivate(data.username || "", data.roleTag ?? null);
                     return;
                 }
                 if (data?.found) {
                     this.renderLoadoutModal(
                         data.username || "",
-                        !!data.premium,
+                        data.roleTag ?? null,
                         data.slug || slug,
                         data.loadout || {},
                         data.items || [],
@@ -503,13 +503,13 @@ export class PlayerView {
     }
 
     /** Shown instead of the collection when the player marked their loadout private. */
-    showLoadoutPrivate(username: string, premium = false) {
+    showLoadoutPrivate(username: string, roleTag: "admin" | "mod" | "premium" | null = null) {
         $(".loadout-modal-overlay").remove();
         const $modal = $(
             `<div class="loadout-modal-overlay">` +
                 `<style>${LOADOUT_MODAL_CSS}</style>` +
                 `<div class="loadout-modal">` +
-                `<div class="ld-header"><span>Collection — ${helpers.formatUsername(username, premium)}</span><span class="ld-close">✕</span></div>` +
+                `<div class="ld-header"><span>Collection — ${helpers.formatUsername(username, roleTag)}</span><span class="ld-close">✕</span></div>` +
                 `<div class="ld-body"><div class="ld-empty">This player's loadout is private.</div></div>` +
                 `</div></div>`,
         );
@@ -526,7 +526,7 @@ export class PlayerView {
 
     renderLoadoutModal(
         username: string,
-        premium: boolean,
+        roleTag: "admin" | "mod" | "premium" | null,
         slug: string,
         loadout: Record<string, string | string[]>,
         items: OwnedItem[],
@@ -654,7 +654,7 @@ export class PlayerView {
             `<div class="loadout-modal-overlay">` +
             `<style>${LOADOUT_MODAL_CSS}</style>` +
             `<div class="loadout-modal">` +
-            `<div class="ld-header"><span>Collection — ${helpers.formatUsername(username, premium)}</span><span class="ld-close">✕</span></div>` +
+            `<div class="ld-header"><span>Collection — ${helpers.formatUsername(username, roleTag)}</span><span class="ld-close">✕</span></div>` +
             (shown.length
                 ? `<div class="ld-valuebar">Inventory value <span class="ld-value-num">${totalValue.toLocaleString("en-US")}</span><span class="ld-fries"></span></div>`
                 : "") +

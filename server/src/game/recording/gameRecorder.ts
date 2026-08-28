@@ -615,6 +615,37 @@ async function readDayMetas(
 }
 
 /**
+ * Reads one specific game's `meta.json` directly, without going through
+ * listRecordings()'s recent-games cap - for callers (like the replay-token/POV-list
+ * endpoints) that already know the exact gameId they want and would otherwise wrongly
+ * get "not found" for a legitimately-retained game that isn't among the most recent N
+ * across the whole region. Cheap even in the not-found case: one `readFile` attempt per
+ * retention day (ENOENT and move on), not reading every game's meta.json like
+ * listRecordings() does.
+ */
+export async function getRecordingMeta(gameId: string): Promise<GameRecordingInfo | null> {
+    const root = recordingsRoot();
+    let days: string[];
+    try {
+        days = await fs.promises.readdir(root);
+    } catch {
+        return null;
+    }
+    for (const day of days) {
+        try {
+            const raw = await fs.promises.readFile(
+                path.join(root, day, gameId, "meta.json"),
+                "utf8",
+            );
+            return JSON.parse(raw) as GameRecordingInfo;
+        } catch {
+            /* not in this day dir — keep looking */
+        }
+    }
+    return null;
+}
+
+/**
  * Lists recorded games on this host, newest first, read from their `meta.json`.
  *
  * Retention caps total bytes and age, not the number of games, so a busy host holds many
@@ -684,6 +715,38 @@ export async function readRecordingFile(
         }
     }
     return null;
+}
+
+/** Same targeted, unbounded day-dir walk as readRecordingFile, but a directory-listing
+ *  check only (no file read) - for callers that just need to know a specific player's
+ *  POV recording is still on disk (e.g. before minting a token for it), not the bytes
+ *  themselves. Deliberately NOT implemented via listRecordings()/listReplays(), which
+ *  cap at the most recent N games for dashboard-listing performance - capping this
+ *  lookup the same way means a legitimately-retained but non-recent game (e.g. from
+ *  earlier today, once >= the cap of games have already been played today) gets
+ *  reported as missing even though its file is sitting right there on disk. */
+export async function recordingFileExists(gameId: string, playerId: number): Promise<boolean> {
+    const root = recordingsRoot();
+    let days: string[];
+    try {
+        days = await fs.promises.readdir(root);
+    } catch {
+        return false;
+    }
+    for (const day of days) {
+        const gameDir = path.join(root, day, gameId);
+        let files: string[];
+        try {
+            files = await fs.promises.readdir(gameDir);
+        } catch {
+            continue;
+        }
+        const prefix = `${playerId}-`;
+        if (files.some((f) => f.startsWith(prefix) && f.endsWith(".svrep.gz"))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** Reads a game's god-view track side-file (`_tracks.svtrk.gz`). Null if not present. */

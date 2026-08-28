@@ -416,6 +416,15 @@ export class LoadoutMenu {
             $("#setting-loadout-private").on("click", () =>
                 this.toggleSetting("loadoutPrivate", "#setting-loadout-private"),
             );
+            $("#setting-show-admin-prefix").on("click", () =>
+                this.toggleSetting("showAdminPrefix", "#setting-show-admin-prefix"),
+            );
+            $("#setting-show-mod-prefix").on("click", () =>
+                this.toggleSetting("showModPrefix", "#setting-show-mod-prefix"),
+            );
+            $("#setting-show-premium-prefix").on("click", () =>
+                this.toggleSetting("showPremiumPrefix", "#setting-show-premium-prefix"),
+            );
             // Clicking an item's rarity jumps to the shop's "Owners" view for that item.
             const openOwners = () => {
                 const type = this.selectedItem?.type;
@@ -916,6 +925,18 @@ export class LoadoutMenu {
             "loadout-toggle-on",
             this.account.settings.loadoutPrivate,
         );
+        $("#setting-show-admin-prefix").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.showAdminPrefix,
+        );
+        $("#setting-show-mod-prefix").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.showModPrefix,
+        );
+        $("#setting-show-premium-prefix").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.showPremiumPrefix,
+        );
         $("#loadout-settings-status").text("");
         $("#loadout-settings-panel").css("display", "block");
 
@@ -1000,7 +1021,15 @@ export class LoadoutMenu {
     }
 
     /** Flips one setting, updates its toggle optimistically, and persists it. */
-    private toggleSetting(key: "offersDisabled" | "loadoutPrivate", sel: string) {
+    private toggleSetting(
+        key:
+            | "offersDisabled"
+            | "loadoutPrivate"
+            | "showAdminPrefix"
+            | "showModPrefix"
+            | "showPremiumPrefix",
+        sel: string,
+    ) {
         const next = !this.account.settings[key];
         $(sel).toggleClass("loadout-toggle-on", next);
         $("#loadout-settings-status").text("Saving…");
