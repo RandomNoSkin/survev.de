@@ -5,7 +5,7 @@ import { PingDefs } from "../../../shared/defs/gameObjects/pingDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import type { MapDef } from "../../../shared/defs/mapDefs";
 import { TeamColor } from "../../../shared/defs/maps/factionDefs";
-import { Action, GameConfig, GasMode, TeamMode } from "../../../shared/gameConfig";
+import { Action, GameConfig, GasMode, Input, TeamMode } from "../../../shared/gameConfig";
 import type { PlayerStatsMsg } from "../../../shared/net/playerStatsMsg";
 import type { MapIndicator, PlayerStatus } from "../../../shared/net/updateMsg";
 import { coldet } from "../../../shared/utils/coldet";
@@ -558,7 +558,11 @@ export class UiManager {
             this.weapSwitches.on("mousedown", (e) => {
                 // Re-checked live (not just at listener-attach time) so a settings
                 // change takes effect immediately without needing to rejoin/reload.
-                if (!this.game.m_hudLayoutManager.getElementConfig("weaponSlots").clickable) {
+                // isBindDown lets HudClickOverride force it through regardless.
+                if (
+                    !this.game.m_hudLayoutManager.getElementConfig("weaponSlots").clickable &&
+                    !this.inputBinds.isBindDown(Input.HudClickOverride)
+                ) {
                     return;
                 }
                 const elem = e.currentTarget;
