@@ -11,7 +11,8 @@ import type { Localization } from "./ui/localization.ts";
 // the new action's default key. v2 added AdvSpecToggle. v3 added the Spectator
 // category binds (ToggleSpectateUi + advanced spectator sub-toggles). v4 added
 // AdvSpecZoneTransparent/AdvSpecFoliageTransparent. v5 added AdvSpecVisionRadius.
-const BINDS_VERSION = 5;
+// v6 added HudClickOverride.
+const BINDS_VERSION = 6;
 
 type BindCategory = "controls" | "spectator";
 
@@ -96,6 +97,10 @@ const BindDefs = {
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
     [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
     [GameInput.SwitchAmmo]: def("Switch Ammo", inputKey(Key.B), "controls", true),
+    // Hold + click a HUD element to trigger its click-action even if you've disabled
+    // clicking on it (see the "Clickable" toggle in HUD customization) - a deliberate
+    // override rather than having to re-enable/disable clicking every time.
+    [GameInput.HudClickOverride]: def("Force HUD Click", null, "controls", true),
     [GameInput.AdvSpecToggle]: def("Toggle Advanced Spectator", inputKey(Key.N), "spectator"),
     [GameInput.ToggleSpectateUi]: def("Hide Spectate UI", null, "spectator"),
     [GameInput.AdvSpecCollapse]: def("Collapse Advanced Spectator Panel", null, "spectator"),
@@ -234,6 +239,7 @@ export class InputBinds {
             GameInput.AdvSpecZoneTransparent,
             GameInput.AdvSpecFoliageTransparent,
             GameInput.AdvSpecVisionRadius,
+            GameInput.HudClickOverride,
         ];
 
         for (const bind of newBinds) {

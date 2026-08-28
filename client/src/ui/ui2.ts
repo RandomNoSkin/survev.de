@@ -562,7 +562,10 @@ export class UiManager2 {
         for (let i = 0; i < this.itemActions.length; i++) {
             const item = this.itemActions[i];
             setEventListener("mousedown", item.div, (e) => {
-                if (!this.hudLayoutManager.getElementConfig(item.elementId).clickable) {
+                if (
+                    !this.hudLayoutManager.getElementConfig(item.elementId).clickable &&
+                    !this.inputBinds.isBindDown(Input.HudClickOverride)
+                ) {
                     return;
                 }
                 if (
@@ -585,7 +588,10 @@ export class UiManager2 {
                 }
             });
             setEventListener("touchstart", item.div, (e) => {
-                if (!this.hudLayoutManager.getElementConfig(item.elementId).clickable) {
+                if (
+                    !this.hudLayoutManager.getElementConfig(item.elementId).clickable &&
+                    !this.inputBinds.isBindDown(Input.HudClickOverride)
+                ) {
                     return;
                 }
                 if (e.changedTouches.length > 0) {
