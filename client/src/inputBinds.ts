@@ -9,8 +9,9 @@ import type { Localization } from "./ui/localization.ts";
 
 // Bump when adding a bind so existing saved configs run upgradeBinds() and pick up
 // the new action's default key. v2 added AdvSpecToggle. v3 added the Spectator
-// category binds (ToggleSpectateUi + advanced spectator sub-toggles).
-const BINDS_VERSION = 3;
+// category binds (ToggleSpectateUi + advanced spectator sub-toggles). v4 added
+// AdvSpecZoneTransparent/AdvSpecFoliageTransparent. v5 added AdvSpecVisionRadius.
+const BINDS_VERSION = 5;
 
 type BindCategory = "controls" | "spectator";
 
@@ -108,6 +109,9 @@ const BindDefs = {
     [GameInput.AdvSpecEsp]: def("Toggle ESP Lines", null, "spectator"),
     [GameInput.AdvSpecLabels]: def("Toggle Enemy Labels", null, "spectator"),
     [GameInput.AdvSpecNades]: def("Toggle Grenade ESP", null, "spectator"),
+    [GameInput.AdvSpecZoneTransparent]: def("Toggle Zone Transparency", null, "spectator"),
+    [GameInput.AdvSpecFoliageTransparent]: def("Toggle Foliage Transparency", null, "spectator"),
+    [GameInput.AdvSpecVisionRadius]: def("Toggle Vision Radius", null, "spectator"),
     [GameInput.ReplayTogglePause]: def("Play/Pause Replay", null, "spectator"),
     [GameInput.ReplaySkipBack]: def("Skip Back 5s", null, "spectator"),
     [GameInput.ReplaySkipForward]: def("Skip Forward 5s", null, "spectator"),
@@ -227,6 +231,9 @@ export class InputBinds {
             GameInput.AdvSpecEsp,
             GameInput.AdvSpecLabels,
             GameInput.AdvSpecNades,
+            GameInput.AdvSpecZoneTransparent,
+            GameInput.AdvSpecFoliageTransparent,
+            GameInput.AdvSpecVisionRadius,
         ];
 
         for (const bind of newBinds) {

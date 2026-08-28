@@ -465,7 +465,7 @@ export class MarketUi {
         );
 
         const other = side === "incoming" ? o.fromUsername || o.fromSlug : o.toUsername || o.toSlug;
-        const otherPremium = side === "incoming" ? o.fromPremium : o.toPremium;
+        const otherRoleTag = side === "incoming" ? o.fromRoleTag : o.toRoleTag;
         const price = o.counterAmount ?? o.amount;
         const priceLabel =
             o.status === "countered"
@@ -474,7 +474,7 @@ export class MarketUi {
         row.append(
             `<div class="market-offer-main">` +
                 `<div class="market-offer-name">${helpers.htmlEscape(this.itemName(o.type))}</div>` +
-                `<div class="market-offer-meta">${side === "incoming" ? "from" : "to"} ${helpers.formatUsername(other, otherPremium)} · ${priceLabel} 🍟</div>` +
+                `<div class="market-offer-meta">${side === "incoming" ? "from" : "to"} ${helpers.formatUsername(other, otherRoleTag)} · ${priceLabel} 🍟</div>` +
                 `</div>`,
         );
 
@@ -686,7 +686,7 @@ export class MarketUi {
         const seller = $(
             `<div class="market-seller market-link">${helpers.formatUsername(
                 listing.sellerUsername || listing.sellerSlug,
-                listing.sellerPremium,
+                listing.sellerRoleTag,
             )}</div>`,
         );
         seller.on("click", () => this.openStorefront(listing.sellerSlug));

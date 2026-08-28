@@ -198,10 +198,17 @@ export class UiManager {
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");
     advTransparentButton = $("#btn-adv-transparent");
+    advTransparentCollapseButton = $("#btn-adv-transparent-collapse");
+    advTransparentSublist = $("#ui-spectate-transparent-sublist");
+    // Starts collapsed, same as the outer Options list (advCollapsed).
+    advTransparentCollapsed = true;
+    advZoneTransparentButton = $("#btn-adv-zone-transparent");
+    advFoliageTransparentButton = $("#btn-adv-foliage-transparent");
     advEnemiesMapButton = $("#btn-adv-enemies-map");
     advEspButton = $("#btn-adv-esp");
     advLabelsButton = $("#btn-adv-labels");
     advNadesButton = $("#btn-adv-nades");
+    advVisionButton = $("#btn-adv-vision");
 
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
@@ -263,6 +270,10 @@ export class UiManager {
     bigmapDisplayed = false;
     screenScaleFactor = 1;
     minimapPos!: Vec2;
+    /** In-progress minimap drag offset, set live by HudLayoutManager#onMinimapDrag
+     *  while the player is actively dragging it (see redraw()) - null the rest of the
+     *  time, when redraw() falls back to the persisted HudLayoutManager config. */
+    liveMinimapDragOffset: { dx: number; dy: number } | null = null;
 
     dead = false;
 
@@ -334,6 +345,19 @@ export class UiManager {
 
         $("#ui-map-wrapper").css("display", "block");
         $("#ui-team").css("display", "block");
+        // Both of the above are HUD-customizable elements (minimap, team health bars) -
+        // re-apply the player's saved visibility/opacity/offset on top of this default
+        // reset, so a hidden element doesn't come back visible on every new game.
+        this.game.m_hudLayoutManager.applyElementStyles();
+
+        // Live-repaint the minimap sprite/border/mask while it's actively being
+        // dragged (see redraw() and HudLayoutManager#onMinimapDrag) - the DOM wrapper's
+        // own transform already moves live via HudLayoutManager, but the PIXI-drawn
+        // terrain needs this explicit nudge since it doesn't read CSS at all.
+        this.game.m_hudLayoutManager.onMinimapDrag = (live) => {
+            this.liveMinimapDragOffset = live;
+            this.redraw(this.game.m_camera);
+        };
 
         $(".ui-map-expand").on("mousedown", (e) => {
             e.stopPropagation();
@@ -466,6 +490,15 @@ export class UiManager {
         this.advTransparentButton.off("click.advspec").on("click.advspec", () => {
             this.toggleTransparent();
         });
+        this.advTransparentCollapseButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleTransparentCollapse();
+        });
+        this.advZoneTransparentButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleZoneTransparent();
+        });
+        this.advFoliageTransparentButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleFoliageTransparent();
+        });
         this.advEnemiesMapButton.off("click.advspec").on("click.advspec", () => {
             this.toggleEnemiesOnMap();
         });
@@ -477,6 +510,9 @@ export class UiManager {
         });
         this.advNadesButton.off("click.advspec").on("click.advspec", () => {
             this.toggleNadeEsp();
+        });
+        this.advVisionButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleVisionRadius();
         });
         // Collapse only hides the option list; the enabled features keep running.
         this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
@@ -520,6 +556,11 @@ export class UiManager {
         };
         if (!device.touch) {
             this.weapSwitches.on("mousedown", (e) => {
+                // Re-checked live (not just at listener-attach time) so a settings
+                // change takes effect immediately without needing to rejoin/reload.
+                if (!this.game.m_hudLayoutManager.getElementConfig("weaponSlots").clickable) {
+                    return;
+                }
                 const elem = e.currentTarget;
                 if (e.button == 0) {
                     this.weapDraggedDiv = $(elem);
@@ -907,7 +948,7 @@ export class UiManager {
                 // Team UI
                 this.updateTeam(
                     i,
-                    helpers.formatUsername(playerInfo.name, playerInfo.premium),
+                    helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
                     playerStatus.health!,
                     {
                         disconnected: playerStatus.disconnected,
@@ -1694,7 +1735,7 @@ export class UiManager {
                     B.append(
                         $("<div/>", {
                             class: "ui-stats-info-player-name",
-                            html: helpers.formatUsername(playerInfo.name, playerInfo.premium),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
                         }),
                     );
                     B.append(
@@ -1934,7 +1975,7 @@ export class UiManager {
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            html: helpers.formatUsername(playerInfo.name, playerInfo.premium),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -2229,7 +2270,7 @@ export class UiManager {
             this.spectatedPlayerId = targetId;
             this.spectatedPlayerName = helpers.formatUsername(
                 name,
-                playerBarn.getPlayerInfo(targetId).premium,
+                playerBarn.getPlayerInfo(targetId).roleTag,
             );
             this.updateSpectateText();
             this.actionSeq = -1;
@@ -2332,8 +2373,36 @@ export class UiManager {
     }
 
     toggleTransparent() {
-        this.game.m_advSpec.transparentSurfaces = !this.game.m_advSpec.transparentSurfaces;
+        const advSpec = this.game.m_advSpec;
+        advSpec.transparentSurfaces = !advSpec.transparentSurfaces;
+        // The master switch drives both sub-toggles to match its own new state - ON
+        // gives the full "everything transparent" effect with one click, OFF resets
+        // both back off too. Either sub-toggle can still be flipped back on (or off,
+        // see toggleZoneTransparent/toggleFoliageTransparent) independently afterward;
+        // this only sets their state at the moment the master switch itself changes.
+        advSpec.zoneTransparency = advSpec.transparentSurfaces;
+        advSpec.foliageTransparency = advSpec.transparentSurfaces;
         this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleZoneTransparent() {
+        this.game.m_advSpec.zoneTransparency = !this.game.m_advSpec.zoneTransparency;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleFoliageTransparent() {
+        this.game.m_advSpec.foliageTransparency = !this.game.m_advSpec.foliageTransparency;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    // Same purely-visual, not-persisted collapse pattern as toggleCollapse() (the
+    // outer Options list) - only hides/shows the Zone/Foliage sub-buttons, doesn't
+    // touch their enabled state.
+    toggleTransparentCollapse() {
+        this.advTransparentCollapsed = !this.advTransparentCollapsed;
         this.updateAdvancedSpectatorUi();
     }
 
@@ -2357,6 +2426,12 @@ export class UiManager {
 
     toggleNadeEsp() {
         this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleVisionRadius() {
+        this.game.m_advSpec.visionRadius = !this.game.m_advSpec.visionRadius;
         this.saveAdvSpec();
         this.updateAdvancedSpectatorUi();
     }
@@ -2413,10 +2488,22 @@ export class UiManager {
         this.advZoomButton.toggleClass("active", advSpec.zoom);
         this.advLayerButton.toggleClass("active", advSpec.layer === 1);
         this.advTransparentButton.toggleClass("active", advSpec.transparentSurfaces);
+        // Same "shown when enabled, hidden/shown by its own collapse flag" pattern as
+        // specAdvancedList/advCollapsed above, just scoped to this one sub-group.
+        this.advTransparentSublist.css(
+            "display",
+            advSpec.enabled && !this.advTransparentCollapsed ? "block" : "none",
+        );
+        this.advTransparentCollapseButton.html(
+            this.advTransparentCollapsed ? "▸ Sub-Options" : "▾ Sub-Options",
+        );
+        this.advZoneTransparentButton.toggleClass("active", advSpec.zoneTransparency);
+        this.advFoliageTransparentButton.toggleClass("active", advSpec.foliageTransparency);
         this.advEnemiesMapButton.toggleClass("active", advSpec.enemiesOnMap);
         this.advEspButton.toggleClass("active", advSpec.espLines);
         this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
         this.advNadesButton.toggleClass("active", advSpec.nadeEsp);
+        this.advVisionButton.toggleClass("active", advSpec.visionRadius);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {
@@ -2846,6 +2933,23 @@ export class UiManager {
                 thisMinimapMarginYAdjust += 32;
             }
         }
+
+        // HUD customization drag offset (see hudLayoutManager.ts): the minimap's actual
+        // terrain is a PIXI sprite positioned by this function's math, NOT by the
+        // #ui-map-wrapper DOM element's CSS transform HudLayoutManager sets (that only
+        // moves the small icon chrome layered on top of it) - thisMinimapMarginXAdjust/
+        // YAdjust already flow into minimapPos, the border draw, and the mask draw
+        // below, so folding the offset in here moves the sprite, border, and clip mask
+        // together in one place. Only applies to the small corner minimap, not the
+        // full-screen big-map view (see the `bigmapDisplayed` branch below). Prefers
+        // `liveMinimapDragOffset` (set live while actively dragging, see the
+        // constructor's onMinimapDrag wiring) over the persisted config, which only
+        // updates once the drag ends.
+        const minimapDragOffset = this.liveMinimapDragOffset
+            ?? this.game.m_hudLayoutManager.getElementConfig("minimap");
+        thisMinimapMarginXAdjust += minimapDragOffset.dx;
+        thisMinimapMarginYAdjust += minimapDragOffset.dy;
+
         const thisMinimapSize = this.getMinimapSize();
         const thisMinimapBorderWidth = this.getMinimapBorderWidth();
         const layoutSm = device.uiLayout == device.UiLayout.Sm;
@@ -2988,6 +3092,14 @@ export class UiManager {
             this.inputBindUi.refresh();
         } else {
             this.inputBindUi.cancelBind();
+        }
+        if (this.currentGameTab == "hud") {
+            this.game.m_hudLayoutManager.renderSettingsPanel();
+        } else {
+            // Leaving the HUD tab (including via the esc-menu close path, which
+            // always routes through here first) always exits edit mode, so dragging
+            // never stays armed once the panel isn't visible to explain it.
+            this.game.m_hudLayoutManager.setEditMode(false);
         }
     }
 

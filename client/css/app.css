@@ -2186,7 +2186,8 @@ a:active {
   padding-top: 8px;
 }
 
-#private-lobby-settings-tabs {
+#private-lobby-settings-tabs,
+#modal-settings-tabs {
   display: flex;
   flex-shrink: 0;
   gap: 4px;
@@ -6162,8 +6163,19 @@ a:active {
   height: 20px;
   background: url(/img/icon_kofi.png) center/contain no-repeat;
 }
-/* The [PREM] tag prepended by helpers.formatUsername() wherever a Premium
- * account's name is rendered (chat, market, social, team menu, dashboard, ...). */
+/* The [ADMIN]/[MOD]/[PREM] tag prepended by helpers.formatUsername() wherever an
+ * account's name is rendered (chat, market, social, team menu, dashboard, ...). Only
+ * one ever shows at a time (server-resolved priority ADMIN > MOD > PREM). */
+.username-admin-tag {
+  color: #ff4d4d;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(255, 77, 77, 0.55);
+}
+.username-mod-tag {
+  color: #4dc9ff;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(77, 201, 255, 0.55);
+}
 .username-premium-tag {
   color: #f2d63b;
   font-weight: 700;

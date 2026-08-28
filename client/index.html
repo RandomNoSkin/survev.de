@@ -38,6 +38,7 @@
     <div id="fb-root"></div>
     <canvas tabindex="1" id="cvs"></canvas>
     <div id="game-area-wrapper" style="display: none" oncontextmenu="return false;">
+      <div id="hud-preview-backdrop"></div>
       <div id="game-touch-area"></div>
       <!-- Class Select -->
       <div id="ui-role-menu-wrapper">
@@ -75,6 +76,9 @@
                 <a id="btn-game-keybinds" class="btn-game-tab-select btn-game-menu btn-darken" data-tab="keybinds"></a>
                 <div class="btn-double-row game-menu-icon-static keybind-icon"></div>
               </div>
+              <div class="btn-game-container">
+                <a id="btn-game-hud" class="btn-game-tab-select btn-game-menu btn-darken" data-tab="hud">HUD</a>
+              </div>
             </div>
             <div id="ui-game-tab-settings" class="ui-game-tab">
               <a id="btn-game-fullscreen" class="btn-fullscreen-toggle btn-game-menu btn-darken" data-l10n="game-full-screen">Full Screen</a>
@@ -108,6 +112,11 @@
               <div class="js-keybind-category-tabs"></div>
               <div id="ui-keybind-list" class="js-keybind-list"></div>
               <a class="js-btn-keybind-restore btn-keybind-restore btn-game-menu btn-darken" data-l10n="game-restore-defaults">Restore Defaults</a>
+            </div>
+            <div id="ui-game-tab-hud" class="ui-game-tab">
+              <a id="btn-hud-edit-toggle" class="btn-game-menu btn-darken">Edit HUD Layout</a>
+              <div id="ui-hud-settings-list" class="js-hud-settings-list"></div>
+              <a id="btn-hud-reset-all" class="btn-keybind-restore btn-game-menu btn-darken">Reset All to Default</a>
             </div>
             <a id="btn-game-resume" class="btn-game-menu btn-darken" data-l10n="game-return-to-game">Return to Game</a>
           </div>
@@ -213,6 +222,7 @@
           <div class="ui-indicator-ping-border" data-id="4"></div>
         </div>
         <div id="ui-right-center" class="ui-right-center-desktop js-ui-map-hidden">
+          <div id="hud-wrap-lootRow" class="hud-drag-wrapper">
           <div id="ui-medical-interactive">
             <div id="ui-loot-bandage" class="ui-loot ui-outline-hover ui-scale-hover ui-medical tooltip">
               <div class="tooltip-text">
@@ -339,11 +349,12 @@
               <div class="ui-loot-overlay" style="background: rgba(76, 41, 4, 0.986)"></div>
             </div>
           </div>
+          </div>
           <div id="ui-emote-button"></div>
           <div id="ui-chat-button"></div>
         </div>
         <div id="ui-top-left" class="js-ui-hud-show click-through">
-          <div id="ui-team" class="js-ui-mobile-map-hidden">
+          <div id="ui-team" class="js-ui-mobile-map-hidden hud-drag-wrapper">
             <div class="ui-team-member ui-bg-standard" data-id="0">
               <div class="ui-team-member-name"></div>
               <div class="ui-team-member-color ui-background-yellow"></div>
@@ -377,8 +388,10 @@
               </div>
             </div>
           </div>
+          <div id="hud-wrap-fpsCounter" class="hud-drag-wrapper hud-numeric-readout hud-corner-readout">FPS: <span id="ui-fps-counter">0</span></div>
+          <div id="hud-wrap-pingCounter" class="hud-drag-wrapper hud-numeric-readout hud-corner-readout">Ping: <span id="ui-ping-counter">0</span>ms</div>
         </div>
-        <div id="ui-map-wrapper" class="ui-map-wrapper-desktop click-through">
+        <div id="ui-map-wrapper" class="ui-map-wrapper-desktop click-through hud-drag-wrapper">
           <div id="ui-map-container">
             <div id="ui-map-info" class="js-ui-map-hidden js-ui-hud-show">
               <div id="ui-gas-icon" class="gas-icon"></div>
@@ -411,18 +424,20 @@
         </div>
         <div id="ui-kill-leader-container">
           <div id="ui-kill-leader-wrapper" class="js-ui-map-hidden js-ui-hud-show hide-on-mobile">
+            <div id="hud-wrap-killLeader" class="hud-drag-wrapper">
             <div id="ui-kill-leader-name">Waiting for new leader</div>
             <div id="ui-kill-leader-icon"></div>
             <div id="ui-kill-leader-count">0</div>
+            </div>
           </div>
         </div>
         <div id="ui-killfeed-wrapper">
-          <div id="ui-killfeed" class="js-ui-map-hidden js-ui-hud-show">
+          <div id="ui-killfeed" class="js-ui-map-hidden js-ui-hud-show hud-drag-wrapper">
             <div id="ui-killfeed-contents"></div>
           </div>
         </div>
         <div id="ui-leaderboard-wrapper">
-          <div id="ui-leaderboard" class="js-ui-hud-show">
+          <div id="ui-leaderboard" class="js-ui-hud-show hud-drag-wrapper">
             <div id="ui-leaderboard-alive">
               <span class="ui-players-alive js-ui-players-alive">0</span>
             </div>
@@ -440,7 +455,7 @@
           </div>
         </div>
         <div id="ui-top-center-scopes-wrapper">
-          <div id="ui-top-center-scopes" class="click-through js-ui-map-hidden">
+          <div id="ui-top-center-scopes" class="click-through js-ui-map-hidden hud-drag-wrapper">
             <div id="ui-scope-1xscope" class="ui-scope ui-zoom">
               <div class="ui-zoom-text">
                 <div class="ui-zoom-level">1<span class="ui-zoom-append">x</span></div>
@@ -505,7 +520,7 @@
             <div id="ui-perk-message-acquired" class="notify-message"></div>
           </div>
         </div>
-        <div id="ui-equipped-ammo-wrapper" class="js-ui-map-hidden js-ui-hud-show">
+        <div id="ui-equipped-ammo-wrapper" class="js-ui-map-hidden js-ui-hud-show hud-drag-wrapper">
           <div id="ui-equipped-ammo">
             <div id="ui-bullet-counter">
               <div id="ui-second-clip">0</div>
@@ -518,30 +533,41 @@
           </div>
         </div>
         <div id="ui-bottom-center-0" class="click-through js-ui-map-hidden js-ui-hud-show">
-          <div id="ui-boost-counter">
-            <div class="ui-boost-base" id="ui-boost-counter-0">
-              <div class="ui-bar-inner"></div>
-            </div>
-            <div class="ui-boost-base" id="ui-boost-counter-1">
-              <div class="ui-bar-inner"></div>
-            </div>
-            <div class="ui-boost-base" id="ui-boost-counter-2">
-              <div class="ui-bar-inner"></div>
-            </div>
-            <div class="ui-boost-base" id="ui-boost-counter-3">
-              <div class="ui-bar-inner"></div>
+          <div id="hud-wrap-boostBar" class="hud-drag-wrapper">
+            <div id="ui-boost-counter">
+              <div class="ui-boost-base" id="ui-boost-counter-0">
+                <div class="ui-bar-inner"></div>
+              </div>
+              <div class="ui-boost-base" id="ui-boost-counter-1">
+                <div class="ui-bar-inner"></div>
+              </div>
+              <div class="ui-boost-base" id="ui-boost-counter-2">
+                <div class="ui-bar-inner"></div>
+              </div>
+              <div class="ui-boost-base" id="ui-boost-counter-3">
+                <div class="ui-bar-inner"></div>
+              </div>
             </div>
           </div>
-          <div id="ui-health-counter">
-            <div id="ui-health-flair-left" class="ui-health-flair"></div>
-            <div id="ui-health-flair-right" class="ui-health-flair"></div>
-            <div id="ui-health-container">
-              <div class="ui-bar-inner" id="ui-health-actual"></div>
-              <div class="ui-bar-inner" id="ui-health-depleted"></div>
+          <div id="hud-wrap-healthBar" class="hud-drag-wrapper">
+            <div id="ui-health-counter">
+              <div id="ui-health-flair-left" class="ui-health-flair"></div>
+              <div id="ui-health-flair-right" class="ui-health-flair"></div>
+              <div id="ui-health-container">
+                <div class="ui-bar-inner" id="ui-health-actual"></div>
+                <div class="ui-bar-inner" id="ui-health-depleted"></div>
+              </div>
             </div>
+          </div>
+          <div id="hud-wrap-hpNumeric" class="hud-drag-wrapper hud-numeric-readout">
+            <span id="ui-health-numeric">100</span>
+          </div>
+          <div id="hud-wrap-adrenalineNumeric" class="hud-drag-wrapper hud-numeric-readout">
+            <span id="ui-boost-numeric">0</span>
           </div>
         </div>
         <div id="ui-bottom-center-left" class="js-ui-map-hidden">
+          <div id="hud-wrap-perkRow" class="hud-drag-wrapper">
           <div id="ui-perk-0" class="ui-armor-counter tooltip-perk ui-outline-hover">
             <div class="tooltip-text">
               <div class="tooltip-title"></div>
@@ -570,8 +596,10 @@
             </div>
             <img class="ui-armor-image ui-loot-image" src="">
           </div>
+          </div>
         </div>
         <div id="ui-bottom-center-right" class="js-ui-map-hidden">
+          <div id="hud-wrap-gearRow" class="hud-drag-wrapper">
           <div id="ui-armor-helmet" class="ui-armor-counter ui-outline-hover">
             <div class="ui-armor-counter-inner"></div>
             <div class="ui-armor-level"></div>
@@ -587,9 +615,10 @@
             <div class="ui-armor-level"></div>
             <img class="ui-armor-image ui-loot-image" src="">
           </div>
+          </div>
         </div>
         <div id="ui-bottom-right" class="js-ui-map-hidden">
-          <div id="ui-weapon-container">
+          <div id="ui-weapon-container" class="hud-drag-wrapper">
             <div class="ui-weapon-info">
               <div class="ui-weapon-switch ui-outline-hover" id="ui-weapon-id-1" data-slot="1">
                 <div class="ui-weapon-name"></div>
@@ -624,7 +653,7 @@
           </div>
         </div>
         <div id="ui-spectate-options-wrapper">
-          <div id="ui-spectate-options" class="ui-spectate-mode js-ui-hud-show click-through">
+          <div id="ui-spectate-options" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
             <div id="ui-spectate-buttons" class="ui-bg-standard">
               <a class="menu-option btn-darken" id="btn-spectate-next-player" data-l10n="game-next-teammate">Next Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-prev-player" data-l10n="game-previous-teammate">Previous Teammate</a>
@@ -639,10 +668,16 @@
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zoom">Zoom</a>
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-layer">Underground</a>
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-transparent">Transparent Surfaces</a>
+                <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-transparent-collapse">▸ Sub-Options</a>
+                <div id="ui-spectate-transparent-sublist" style="display: none;">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zone-transparent">Transparent Zone</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-foliage-transparent">Transparent Foliage</a>
+                </div>
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-enemies-map">Enemies on Map</a>
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-esp">ESP Lines</a>
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-labels">Player Info</a>
                 <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-nades">Grenade Info</a>
+                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-vision">Vision Radius</a>
               </div>
             </div>
             <div id="ui-spectate-stats" class="ui-bg-standard">
@@ -1446,6 +1481,27 @@
                   </div>
                   <div id="setting-loadout-private" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
                 </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Show [ADMIN] tag</div>
+                    <div class="loadout-setting-desc">Show the golden admin tag next to your name (web &amp; in-game).</div>
+                  </div>
+                  <div id="setting-show-admin-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Show [MOD] tag</div>
+                    <div class="loadout-setting-desc">Show the moderator tag next to your name (web &amp; in-game).</div>
+                  </div>
+                  <div id="setting-show-mod-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Show [PREM] tag</div>
+                    <div class="loadout-setting-desc">Show the Premium tag next to your name (web &amp; in-game).</div>
+                  </div>
+                  <div id="setting-show-premium-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
                 <div id="loadout-settings-status" class="loadout-settings-status"></div>
                 <div class="loadout-settings-title loadout-settings-title-spaced">Connected accounts</div>
                 <div class="loadout-setting-row">
@@ -1582,49 +1638,74 @@
                 <select class="language-select"></select>
               </div>
             </div>
-            <div id="modal-settings-high-res" class="modal-settings-item">
-              <input id="highResTex" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-high-resolution">High resolution (check to increase visual quality)</p>
+
+            <div id="modal-settings-tabs">
+              <div class="private-lobby-settings-tab private-lobby-settings-tab-active" data-settings-tab="graphics">Graphics</div>
+              <div class="private-lobby-settings-tab" data-settings-tab="gameplay">Gameplay</div>
+              <div class="private-lobby-settings-tab" data-settings-tab="audio">Audio</div>
+              <div class="private-lobby-settings-tab" data-settings-tab="hud">HUD</div>
             </div>
-            <div id="modal-settings-interp" class="modal-settings-item">
-              <input id="interpolation" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-client-side-interp">Client side interpolation</p>
-            </div>
+
+            <div id="modal-settings-tab-graphics" class="modal-settings-tab-pane">
+              <div id="modal-settings-high-res" class="modal-settings-item">
+                <input id="highResTex" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-high-resolution">High resolution (check to increase visual quality)</p>
+              </div>
+              <div id="modal-settings-interp" class="modal-settings-item">
+                <input id="interpolation" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-client-side-interp">Client side interpolation</p>
+              </div>
               <div id="modal-settings-rotation" class="modal-settings-item hide-on-mobile">
-              <input id="localRotation" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-client-side-rotation">Client side player rotation</p>
+                <input id="localRotation" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-client-side-rotation">Client side player rotation</p>
+              </div>
+              <div class="modal-settings-item hide-on-mobile">
+                <input id="screenShake" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-screen-shake">Screen shake</p>
+              </div>
+              <div class="modal-settings-item hide-on-mobile" title="Disables vsync - may cause screen tearing, uses more GPU/CPU">
+                <input id="uncapFps" type="checkbox"><p class="modal-settings-checkbox-text">Uncap FPS</p>
+              </div>
             </div>
-            <div class="modal-settings-item hide-on-mobile">
-              <input id="screenShake" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-screen-shake">Screen shake</p>
+
+            <div id="modal-settings-tab-gameplay" class="modal-settings-tab-pane" style="display:none">
+              <div class="modal-settings-item">
+                <input id="anonPlayerNames" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-anon-player-names">Anonymize player names</p>
+              </div>
+              <div class="modal-settings-item">
+                <input id="onlyGhilliePickup" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-only-ghillie-pickup">Only pick up Ghillie suits</p>
+              </div>
+              <div class="modal-settings-item">
+                <input id="autoDownloadStats" type="checkbox"><p class="modal-settings-checkbox-text">Auto-Download Stats</p>
+              </div>
+              <div class="modal-settings-item show-on-mobile">
+                <input id="touchAimAssist" type="checkbox"><p class="modal-settings-checkbox-text">Aim assist</p>
+              </div>
+              <div class="modal-settings-item show-on-mobile">
+                <input id="touchAutoSwitch" type="checkbox"><p class="modal-settings-checkbox-text">Auto switch weapon</p>
+              </div>
             </div>
-            <div class="modal-settings-item">
-              <input id="anonPlayerNames" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-anon-player-names">Anonymize player names</p>
+
+            <div id="modal-settings-tab-audio" class="modal-settings-tab-pane" style="display:none">
+              <div class="modal-settings-item slider-container main-volume-slider">
+                <p class="modal-slider-text" data-l10n="index-master-volume">Master Volume</p>
+                <input type="range" min="0" max="100" value="50" class="slider sl-master-volume" id="">
+              </div>
+              <div class="modal-settings-item slider-container main-volume-slider">
+                <p class="modal-slider-text" data-l10n="index-sfx-volume">SFX Volume</p>
+                <input type="range" min="0" max="100" value="50" class="slider sl-sound-volume" id="">
+              </div>
+              <div class="modal-settings-item slider-container main-volume-slider">
+                <p class="modal-slider-text" data-l10n="index-music-volume">Music Volume</p>
+                <input type="range" min="0" max="100" value="50" class="slider sl-music-volume" id="">
+              </div>
+              <div class="modal-settings-item slider-container main-volume-slider">
+                <p class="modal-slider-text" data-l10n="index-game-music-volume">Building Music Volume</p>
+                <input type="range" min="0" max="100" value="50" class="slider sl-game-music-volume" id="">
+              </div>
             </div>
-            <div class="modal-settings-item">
-              <input id="onlyGhilliePickup" type="checkbox"><p class="modal-settings-checkbox-text" data-l10n="index-only-ghillie-pickup">Only pick up Ghillie suits</p>
+
+            <div id="modal-settings-tab-hud" class="modal-settings-tab-pane" style="display:none">
+              <p class="modal-settings-tab-hud-desc">Drag, resize and toggle HUD elements in a live game preview.</p>
+              <a id="btn-hud-preview-toggle" class="btn-game-menu btn-darken">Edit HUD Layout</a>
             </div>
-            <div class="modal-settings-item">
-              <input id="autoDownloadStats" type="checkbox"><p class="modal-settings-checkbox-text">Auto-Download Stats</p>
-            </div>
-            <div class="modal-settings-item show-on-mobile">
-              <input id="touchAimAssist" type="checkbox"><p class="modal-settings-checkbox-text">Aim assist</p>
-            </div>
-            <div class="modal-settings-item show-on-mobile">
-              <input id="touchAutoSwitch" type="checkbox"><p class="modal-settings-checkbox-text">Auto switch weapon</p>
-            </div>
-            <div class="modal-settings-item slider-container main-volume-slider">
-              <p class="modal-slider-text" data-l10n="index-master-volume">Master Volume</p>
-              <input type="range" min="0" max="100" value="50" class="slider sl-master-volume" id="">
-            </div>
-            <div class="modal-settings-item slider-container main-volume-slider">
-              <p class="modal-slider-text" data-l10n="index-sfx-volume">SFX Volume</p>
-              <input type="range" min="0" max="100" value="50" class="slider sl-sound-volume" id="">
-            </div>
-            <div class="modal-settings-item slider-container main-volume-slider">
-              <p class="modal-slider-text" data-l10n="index-music-volume">Music Volume</p>
-              <input type="range" min="0" max="100" value="50" class="slider sl-music-volume" id="">
-            </div>
-            <div class="modal-settings-item slider-container main-volume-slider">
-              <p class="modal-slider-text" data-l10n="index-game-music-volume">Building Music Volume</p>
-              <input type="range" min="0" max="100" value="50" class="slider sl-game-music-volume" id="">
-            </div>
+
             <div id="settings-links">
               <!--
               <a href="privacy.html" target="_blank" class="footer-after" data-l10n="index-privacy">privacy</a>

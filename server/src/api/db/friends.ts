@@ -6,8 +6,18 @@ import type {
 } from "../../../../shared/types/user";
 import { isBlockedBetween } from "./blocks";
 import { db } from "./index";
-import { isPremiumActive } from "./premium";
+import { resolveRoleTag } from "./roleTag";
 import { friendsTable, matchDataTable, usersTable } from "./schema";
+
+/** Columns `resolveRoleTag` needs, added to every select that displays a username. */
+const roleTagColumns = {
+    admin: usersTable.admin,
+    moderator: usersTable.moderator,
+    premiumUntil: usersTable.premiumUntil,
+    showAdminPrefix: usersTable.showAdminPrefix,
+    showModPrefix: usersTable.showModPrefix,
+    showPremiumPrefix: usersTable.showPremiumPrefix,
+};
 
 /** Resolves a slug to a user id (null if no such user). */
 async function resolveUser(slug: string): Promise<string | null> {
@@ -123,7 +133,7 @@ export async function getFriends(userId: string): Promise<Friend[]> {
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
-            premiumUntil: usersTable.premiumUntil,
+            ...roleTagColumns,
         })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.friendId))
@@ -132,7 +142,7 @@ export async function getFriends(userId: string): Promise<Friend[]> {
     return rows.map((r) => ({
         slug: r.slug,
         username: r.username,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
     }));
 }
 
@@ -146,7 +156,7 @@ export async function getFriendsDetailed(
         username: string;
         userId: string;
         lastGame: number | null;
-        premium: boolean;
+        roleTag: "admin" | "mod" | "premium" | null;
     }>
 > {
     const rows = await db
@@ -154,7 +164,7 @@ export async function getFriendsDetailed(
             slug: usersTable.slug,
             username: usersTable.username,
             friendId: friendsTable.friendId,
-            premiumUntil: usersTable.premiumUntil,
+            ...roleTagColumns,
         })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.friendId))
@@ -181,7 +191,7 @@ export async function getFriendsDetailed(
         username: r.username,
         userId: r.friendId,
         lastGame: lastMap.get(r.friendId) ?? null,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
     }));
 }
 
@@ -191,7 +201,7 @@ export async function getIncomingRequests(userId: string): Promise<Friend[]> {
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
-            premiumUntil: usersTable.premiumUntil,
+            ...roleTagColumns,
         })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.userId))
@@ -200,7 +210,7 @@ export async function getIncomingRequests(userId: string): Promise<Friend[]> {
     return rows.map((r) => ({
         slug: r.slug,
         username: r.username,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
     }));
 }
 
@@ -210,7 +220,7 @@ export async function getOutgoingRequests(userId: string): Promise<Friend[]> {
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
-            premiumUntil: usersTable.premiumUntil,
+            ...roleTagColumns,
         })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.friendId))
@@ -219,7 +229,7 @@ export async function getOutgoingRequests(userId: string): Promise<Friend[]> {
     return rows.map((r) => ({
         slug: r.slug,
         username: r.username,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
     }));
 }
 
@@ -256,7 +266,7 @@ export async function getRecentPlayers(
             teamId: matchDataTable.teamId,
             slug: usersTable.slug,
             username: usersTable.username,
-            premiumUntil: usersTable.premiumUntil,
+            ...roleTagColumns,
         })
         .from(matchDataTable)
         .innerJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
@@ -278,7 +288,7 @@ export async function getRecentPlayers(
         recent.push({
             slug: o.slug,
             username: o.username,
-            premium: isPremiumActive(o.premiumUntil),
+            roleTag: resolveRoleTag(o),
             relation: myTeam != null && o.teamId === myTeam ? "with" : "against",
         });
         if (recent.length >= limit) break;

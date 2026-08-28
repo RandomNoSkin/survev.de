@@ -15,7 +15,7 @@ import { isBlockedBetween } from "./blocks";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { getOwnedLoadouts } from "./loadouts";
-import { isPremiumActive } from "./premium";
+import { resolveRoleTag } from "./roleTag";
 import {
     auctionsTable,
     giftNotificationsTable,
@@ -239,7 +239,12 @@ export async function searchUsers(
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            admin: usersTable.admin,
+            moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showAdminPrefix: usersTable.showAdminPrefix,
+            showModPrefix: usersTable.showModPrefix,
+            showPremiumPrefix: usersTable.showPremiumPrefix,
         })
         .from(usersTable)
         .where(
@@ -254,7 +259,7 @@ export async function searchUsers(
     return rows.map((r) => ({
         slug: r.slug,
         username: r.username,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
     }));
 }
 
@@ -277,13 +282,28 @@ export async function getItemOwners(
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            admin: usersTable.admin,
+            moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showAdminPrefix: usersTable.showAdminPrefix,
+            showModPrefix: usersTable.showModPrefix,
+            showPremiumPrefix: usersTable.showPremiumPrefix,
             copies: sql<number>`count(*)::int`,
         })
         .from(itemsTable)
         .innerJoin(usersTable, eq(usersTable.id, itemsTable.userId))
         .where(and(...conds))
-        .groupBy(usersTable.id, usersTable.slug, usersTable.username, usersTable.premiumUntil)
+        .groupBy(
+            usersTable.id,
+            usersTable.slug,
+            usersTable.username,
+            usersTable.admin,
+            usersTable.moderator,
+            usersTable.premiumUntil,
+            usersTable.showAdminPrefix,
+            usersTable.showModPrefix,
+            usersTable.showPremiumPrefix,
+        )
         .orderBy(desc(sql`count(*)`), usersTable.username)
         .limit(OWNERS_PAGE_SIZE + 1)
         .offset(p * OWNERS_PAGE_SIZE);
@@ -292,7 +312,7 @@ export async function getItemOwners(
     const owners: ItemOwner[] = rows.slice(0, OWNERS_PAGE_SIZE).map((r) => ({
         slug: r.slug,
         username: r.username,
-        premium: isPremiumActive(r.premiumUntil),
+        roleTag: resolveRoleTag(r),
         copies: r.copies,
     }));
 
@@ -315,9 +335,14 @@ export async function getGiftNotifications(userId: string): Promise<GiftNotifica
             kind: giftNotificationsTable.kind,
             amount: giftNotificationsTable.amount,
             itemType: giftNotificationsTable.itemType,
-            // The sender's CURRENT premium status (fromName/fromSlug are a snapshot
-            // taken at gift-send time, but there's no reason to freeze premium too).
+            // The sender's CURRENT role tag (fromName/fromSlug are a snapshot taken at
+            // gift-send time, but there's no reason to freeze the tag too).
+            fromAdmin: usersTable.admin,
+            fromModerator: usersTable.moderator,
             fromPremiumUntil: usersTable.premiumUntil,
+            fromShowAdminPrefix: usersTable.showAdminPrefix,
+            fromShowModPrefix: usersTable.showModPrefix,
+            fromShowPremiumPrefix: usersTable.showPremiumPrefix,
         })
         .from(giftNotificationsTable)
         .leftJoin(usersTable, eq(usersTable.slug, giftNotificationsTable.fromSlug))
@@ -332,7 +357,14 @@ export async function getGiftNotifications(userId: string): Promise<GiftNotifica
     return rows.map((r) => ({
         id: r.id,
         fromName: r.fromName || r.fromSlug,
-        fromPremium: isPremiumActive(r.fromPremiumUntil),
+        fromRoleTag: resolveRoleTag({
+            admin: r.fromAdmin,
+            moderator: r.fromModerator,
+            premiumUntil: r.fromPremiumUntil,
+            showAdminPrefix: r.fromShowAdminPrefix,
+            showModPrefix: r.fromShowModPrefix,
+            showPremiumPrefix: r.fromShowPremiumPrefix,
+        }),
         kind: r.kind === "item" ? "item" : "fries",
         amount: r.amount,
         itemType: r.itemType,

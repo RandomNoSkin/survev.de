@@ -3000,7 +3000,7 @@ export class PlayerBarn {
             teamId: info.teamId,
             groupId: info.groupId,
             name: info.name,
-            premium: info.premium,
+            roleTag: info.roleTag,
             nameTruncated: helpers.truncateString(
                 info.name || "",
                 "bold 16px arial",
@@ -3166,6 +3166,12 @@ export class PlayerBarn {
         }
         if (newStatus.boost !== undefined) {
             status.boost = newStatus.boost;
+        }
+        if (newStatus.screenWidth !== undefined) {
+            status.screenWidth = newStatus.screenWidth;
+        }
+        if (newStatus.screenHeight !== undefined) {
+            status.screenHeight = newStatus.screenHeight;
         }
         if (newStatus.disconnected !== undefined) {
             status.disconnected = newStatus.disconnected;

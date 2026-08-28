@@ -81,6 +81,37 @@ export const debugHUDConfig = {
 
 export type DebugRenderOpts = typeof debugRenderConfig;
 
+/**
+ * Per-element HUD customization (position/visibility/opacity/click) - see
+ * client/src/ui/hudLayoutManager.ts, which owns reading/writing this. Stored as a flat
+ * Record keyed by HUD element id rather than one `defaultConfig` field per element, so
+ * new elements (Stage 7/9) never need a defaultConfig change - an id absent from this
+ * record just resolves to HUD_ELEMENT_DEFAULTS (all four fields at their "untouched"
+ * value), exactly like `hudLayout: {}` being the default for the whole record.
+ */
+export interface HudElementConfig {
+    /** Drag offset from the element's normal CSS position, in px. */
+    dx: number;
+    dy: number;
+    visible: boolean;
+    /** 0-1. */
+    opacity: number;
+    /** Only meaningful for elements with a click action (see HUD_ELEMENTS.hasClickAction) - ignored otherwise. */
+    clickable: boolean;
+    /** Per-element size multiplier, on top of `hudGlobalScale` below - set by dragging
+     *  the resize handle in the corner of the element while in HUD edit mode. */
+    scale: number;
+}
+
+export const HUD_ELEMENT_DEFAULTS: HudElementConfig = {
+    dx: 0,
+    dy: 0,
+    visible: true,
+    opacity: 1,
+    clickable: true,
+    scale: 1,
+};
+
 export const BuildingEditorConfig = {
     zoom: 1,
     pos: v2.create(0, 0),
@@ -154,6 +185,22 @@ const defaultConfig = {
     goldenFriesSeenSlug: "",
     cachedBgImg: "img/main_splash.png",
     version: 1,
+    /** Per-element HUD customization (position/visibility/opacity/click), keyed by HUD
+     *  element id. An absent id means "untouched" (see HUD_ELEMENT_DEFAULTS) - this
+     *  starts empty rather than pre-populated with every element's defaults. */
+    hudLayout: {} as Record<string, HudElementConfig>,
+    /** Global size multiplier applied on top of every element's own `scale` (see
+     *  HudElementConfig) - the "resize everything at once" switch, as opposed to the
+     *  per-element resize handle. */
+    hudGlobalScale: 1,
+    /** Global opacity multiplier applied on top of every element's own `opacity` (see
+     *  HudElementConfig) - the "fade everything at once" switch, as opposed to each
+     *  element's own opacity slider. */
+    hudGlobalOpacity: 1,
+    /** Renders the loop via a non-vsync setTimeout(0) instead of PIXI's default
+     *  requestAnimationFrame ticker, to exceed the monitor's refresh rate (see
+     *  Game#setRenderLoopMode in main.ts). Off by default: rAF/vsync stays the norm. */
+    uncapFps: false,
     /* STRIP_FROM_PROD_CLIENT:START */
     debugTools: debugToolsConfig,
     debugRenderer: debugRenderConfig,

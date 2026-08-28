@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MapId, TeamMode } from "../gameConfig.ts";
 import type { ImpactBreakdown } from "../impactScore.ts";
+import type { RoleTag } from "./user.ts";
 
 //
 // Match History
@@ -68,7 +69,7 @@ export type MatchDataResponse = MatchData[];
 export type MatchData = {
     slug: string | null;
     username: string;
-    premium: boolean;
+    roleTag: RoleTag;
     player_id: number;
     team_id: number;
     time_alive: number;
@@ -108,7 +109,7 @@ export type UserStatsRequest = z.infer<typeof zUserStatsRequest>;
 export type UserStatsResponse = {
     slug: string;
     username: string;
-    premium: boolean;
+    roleTag: RoleTag;
     player_icon: string;
     banned: boolean;
     /** Geographic region group (e.g. "eu", "as") this account plays most of its rated matches

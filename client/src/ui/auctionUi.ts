@@ -158,7 +158,7 @@ export class AuctionUi {
         card.append(
             `<div class="market-seller">by ${helpers.formatUsername(
                 a.sellerUsername || a.sellerSlug,
-                a.sellerPremium,
+                a.sellerRoleTag,
             )}</div>`,
         );
 
@@ -166,7 +166,7 @@ export class AuctionUi {
             a.currentBid != null
                 ? `Current bid <b>${a.currentBid}</b>${
                       a.currentBidderSlug
-                          ? ` · ${helpers.formatUsername(a.currentBidderSlug, a.currentBidderPremium)}`
+                          ? ` · ${helpers.formatUsername(a.currentBidderSlug, a.currentBidderRoleTag)}`
                           : ""
                   }`
                 : `Min bid <b>${a.minBid}</b> · no bids yet`;

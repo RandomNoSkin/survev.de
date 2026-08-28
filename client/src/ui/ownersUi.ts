@@ -238,7 +238,7 @@ export class OwnersUi {
             `<div class="owners-row">` +
                 `<span class="owners-name market-link">${helpers.formatUsername(
                     name,
-                    o.premium,
+                    o.roleTag,
                 )}</span>` +
                 (o.copies > 1
                     ? `<span class="owners-copies">×${o.copies}</span>`

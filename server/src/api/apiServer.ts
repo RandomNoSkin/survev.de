@@ -142,6 +142,29 @@ class Region {
         return data?.recordings ?? [];
     }
 
+    /** Fetches one specific game's recording meta from this region's game server,
+     *  without listReplays()'s recent-games cap - for a caller that already knows the
+     *  exact gameId it wants (see gameRecorder.ts's getRecordingMeta doc comment). */
+    async getReplayMeta(gameId: string): Promise<any | null> {
+        const data = await this.fetch<{ recording: any | null }>("api/dashboard/replay_meta", {
+            gameId,
+        });
+        return data?.recording ?? null;
+    }
+
+    /** Checks whether a specific player's replay recording for a game still exists on
+     *  this region's game server, without transferring its (potentially large) bytes -
+     *  unbounded/targeted, unlike listReplays()'s recent-games cap (see
+     *  recordingFileExists's doc comment in gameRecorder.ts for why that distinction
+     *  matters for a single-game lookup like this one). */
+    async replayExists(gameId: string, playerId: number): Promise<boolean> {
+        const data = await this.fetch<{ exists: boolean }>("api/dashboard/replay_exists", {
+            gameId,
+            playerId,
+        });
+        return data?.exists ?? false;
+    }
+
     /** Fetches one per-player replay file (raw gzip bytes) from this region's game server. */
     async streamReplayFile(
         gameId: string,
@@ -419,6 +442,18 @@ export class ApiServer {
     /** Lists replay recordings stored on a region's game server. */
     async listReplays(region: string, limit?: number): Promise<any[]> {
         return (await this.regions[region]?.listReplays(limit)) ?? [];
+    }
+
+    /** Fetches one specific game's recording meta from a region's game server - see
+     *  Region#getReplayMeta for why this is unbounded, unlike listReplays(). */
+    async getReplayMeta(region: string, gameId: string): Promise<any | null> {
+        return (await this.regions[region]?.getReplayMeta(gameId)) ?? null;
+    }
+
+    /** Checks whether a specific player's replay recording for a game still exists on
+     *  a region's game server - see Region#replayExists for why this is unbounded. */
+    async replayExists(region: string, gameId: string, playerId: number): Promise<boolean> {
+        return (await this.regions[region]?.replayExists(gameId, playerId)) ?? false;
     }
 
     /** Fetches a per-player replay file (raw gzip bytes) from a region's game server. */
