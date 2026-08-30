@@ -7,6 +7,7 @@ import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
 import { computeImpactScore } from "../../../shared/impactScore.ts";
 import * as net from "../../../shared/net/net";
+import type { RoleTag } from "../../../shared/types/user";
 import type { Loadout } from "../../../shared/utils/loadout";
 import { math } from "../../../shared/utils/math";
 import { v2 } from "../../../shared/utils/v2";
@@ -51,6 +52,7 @@ export interface JoinTokenData {
     /** Per-player resolved Custom Loadout (see `Room.getPlayerCustomLoadout`); overrides `Game.customLoadout` for this player when `Game.customLoadoutEnabled` is true. */
     customLoadout?: CustomLoadoutConfig;
     admin: boolean;
+    roleTag: RoleTag;
     groupData: {
         autoFill: boolean;
         playerCount: number;
@@ -889,6 +891,7 @@ export class Game {
                 loadout: token.loadout,
                 customLoadout: token.customLoadout,
                 admin: token.admin,
+                roleTag: token.roleTag,
             });
         }
     }
@@ -912,6 +915,7 @@ export class Game {
                 loadout: token.loadout,
                 customLoadout: token.customLoadout,
                 admin: token.admin,
+                roleTag: token.roleTag,
             });
         }
     }
@@ -941,6 +945,7 @@ export class Game {
                     loadout: token.loadout,
                     customLoadout: token.customLoadout,
                     admin: token.admin,
+                    roleTag: token.roleTag,
                 });
             }
         }
@@ -1078,6 +1083,10 @@ export class Game {
                 region: Config.gameServer.thisRegion,
                 username: player.name,
                 playerId: player.matchDataId,
+                // The recording system keys players by __id (see GameRecorder), not
+                // matchDataId - store it too so the Premium self-service replay lookup
+                // can find the right POV file (see recordingPlayerId's schema comment).
+                recordingPlayerId: player.__id,
                 // Snapshot the player's non-default equipped cosmetics for the match, so the
                 // advanced game stats page can show each loadout + its worth.
                 equippedCosmetics: player.equippedCosmetics,

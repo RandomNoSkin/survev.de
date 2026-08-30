@@ -14,7 +14,8 @@ import { SDK } from "../sdk/sdk";
 
 export interface MatchData {
     zone: string;
-    gameId: number;
+    /** UUID - was previously (incorrectly) typed as number; only ever used for URL interpolation/display. */
+    gameId: string;
     useHttps: boolean;
     hosts: string[];
     addrs: string[];

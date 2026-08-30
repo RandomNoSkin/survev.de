@@ -4,6 +4,7 @@ import type { MapDefs } from "../../../shared/defs/mapDefs";
 import { TeamMode } from "../../../shared/gameConfig";
 import type { FindGameError } from "../../../shared/types/api";
 import { zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
+import { zRoleTag } from "../../../shared/types/user";
 import { loadoutSchema } from "../../../shared/utils/loadout";
 import type { MatchDataTable } from "../api/db/schema";
 
@@ -103,6 +104,7 @@ export const zFindGamePrivateBody = z.object({
             userId: z.string().nullable(),
             ip: z.string(),
             admin: z.boolean(),
+            roleTag: zRoleTag,
             loadout: loadoutSchema.optional(),
             customLoadout: zCustomLoadoutConfig.optional(),
         }),
@@ -116,6 +118,7 @@ const zPrivateLobbyPlayerData = z.object({
     userId: z.string().nullable(),
     ip: z.string(),
     admin: z.boolean(),
+    roleTag: zRoleTag,
     loadout: loadoutSchema.optional(),
     customLoadout: zCustomLoadoutConfig.optional(),
 });

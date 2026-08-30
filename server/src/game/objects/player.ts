@@ -41,6 +41,7 @@ import {
 import * as net from "../../../../shared/net/net";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import type { GroupStatus } from "../../../../shared/net/updateMsg";
+import type { RoleTag } from "../../../../shared/types/user";
 import { type Circle, coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
 import type { Loadout } from "../../../../shared/utils/loadout";
@@ -275,6 +276,7 @@ export class PlayerBarn {
             joinData.findGameIp,
             joinData.userId,
             joinData.admin,
+            joinData.roleTag,
             joinData.loadout,
             joinData.customLoadout,
         );
@@ -360,6 +362,7 @@ export class PlayerBarn {
             joinData.findGameIp,
             joinData.userId,
             joinData.admin,
+            joinData.roleTag,
             joinData.loadout,
             joinData.customLoadout,
         );
@@ -416,6 +419,7 @@ export class PlayerBarn {
 
             let joinFeedMsg = new net.JoinFeedMsg();
             joinFeedMsg.name = player.name;
+            joinFeedMsg.roleTag = player.roleTag;
             this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
         this.game.pluginManager.emit("playerJoin", player);
@@ -476,6 +480,7 @@ export class PlayerBarn {
             "",
             null,
             false,
+            null,
         );
 
         this.activatePlayer(player, group, team);
@@ -1866,6 +1871,11 @@ export class Player extends BaseGameObject {
 
     name: string;
     isMobile: boolean;
+    /** From JoinMsg, sent once at join, never updated on resize - see
+     *  PlayerStatus.screenWidth/Height in updateMsg.ts for where this reaches admin
+     *  advanced-spectator clients. 0 for a client that never sent it. */
+    screenWidth: number;
+    screenHeight: number;
 
     bot: boolean;
 
@@ -2011,6 +2021,8 @@ export class Player extends BaseGameObject {
     userId: string | null = null;
     ip: string;
     isAdmin: boolean;
+    /** [ADMIN]/[MOD]/[PREM] tag - drives the client-side name tag (see PlayerInfo/JoinFeedMsg). */
+    roleTag: RoleTag;
     // see comment on server/src/api/schema.ts
     // about logging find_game IP's
     findGameIp: string;
@@ -2026,6 +2038,7 @@ export class Player extends BaseGameObject {
         findGameIp: string,
         userId: string | null,
         admin: boolean,
+        roleTag: RoleTag,
         loadout?: Loadout,
         customLoadout?: CustomLoadoutConfig,
     ) {
@@ -2045,8 +2058,11 @@ export class Player extends BaseGameObject {
         this.findGameIp = findGameIp;
         this.userId = userId;
         this.isAdmin = admin;
+        this.roleTag = roleTag;
 
         this.isMobile = joinMsg.isMobile;
+        this.screenWidth = joinMsg.screenWidth;
+        this.screenHeight = joinMsg.screenHeight;
         this.onlyGhilliePickup = joinMsg.onlyGhilliePickup;
 
         this.weapons = this.weaponManager.weapons;
@@ -3742,6 +3758,8 @@ export class Player extends BaseGameObject {
             params.damageType !== GameConfig.DamageType.Bleeding &&
             params.damageType !== GameConfig.DamageType.Airdrop
         ) {
+            finalDamage *= this.game.map.mapDef.gameConfig.damageMult ?? 1;
+
             const gameSourceDef = GameObjectDefs.typeToDefSafe(params.gameSourceType ?? "");
             /*
             let isHeadShot = false;
@@ -5224,6 +5242,8 @@ export class Player extends BaseGameObject {
                     role: p.role,
                     health: p.health,
                     boost: p.boost,
+                    screenWidth: p.screenWidth,
+                    screenHeight: p.screenHeight,
                 };
             });
         }

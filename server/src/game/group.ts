@@ -32,8 +32,14 @@ class BasePlayerGroup {
     }
 
     checkPlayers(): void {
-        this.livingPlayers = this.players.filter((p) => !p.dead);
-        this.allDeadOrDisconnected = this.players.every((p) => p.dead || p.disconnected);
+        // Spectators never die/disconnect from the group's perspective (they can't take
+        // damage), so they must be excluded here - otherwise a spectator attached to a
+        // real Team (faction mode; duo/squad spectators get their own isolated group
+        // and never hit this) permanently keeps the team "alive"/"not wiped", which
+        // corrupts win detection and can let a spectator get credited with rank 1.
+        const real = this.players.filter((p) => !p.spectator);
+        this.livingPlayers = real.filter((p) => !p.dead);
+        this.allDeadOrDisconnected = real.every((p) => p.dead || p.disconnected);
     }
 
     addPlayer(player: Player) {
@@ -41,7 +47,6 @@ class BasePlayerGroup {
         (player[this.type] as BasePlayerGroup) = this;
 
         this.players.push(player);
-        this.livingPlayers.push(player);
         this.allDeadOrDisconnected = false;
         this.checkPlayers();
     }

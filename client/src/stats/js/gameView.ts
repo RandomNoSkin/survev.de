@@ -88,6 +88,8 @@ export class GameView {
     private impact = new Map<string, { score: number; breakdown: ImpactBreakdown }>();
     /** Account slug per player name, null for guests (see `fetchLoadouts`). */
     private slugs = new Map<string, string | null>();
+    /** Premium status per player name (see `fetchLoadouts`). */
+    private roleTags = new Map<string, "admin" | "mod" | "premium" | null>();
     private meta = new Map<number, PlayerMeta>();
     private paths = new Map<number, PathPoint[]>();
     private deaths = new Map<number, PathPoint>();
@@ -193,6 +195,7 @@ export class GameView {
                 if (this.loadouts.has(r.username)) ambiguous.add(r.username);
                 this.loadouts.set(r.username, r.equipped_cosmetics ?? []);
                 this.slugs.set(r.username, r.slug);
+                this.roleTags.set(r.username, r.roleTag);
                 if (r.impact_score !== null && r.impact_breakdown) {
                     this.impact.set(r.username, {
                         score: r.impact_score,
@@ -204,6 +207,7 @@ export class GameView {
                 this.loadouts.delete(name);
                 this.impact.delete(name);
                 this.slugs.delete(name);
+                this.roleTags.delete(name);
             }
         } catch {
             /* loadouts are optional — the rest of the view works without them */
@@ -716,7 +720,7 @@ export class GameView {
         this.el.find(".gv-loadout-btn").on("click", (e) => {
             const pid = Number($(e.currentTarget).attr("data-pid"));
             const name = this.meta.get(pid)?.name ?? "";
-            showMatchLoadout(name, this.loadouts.get(name) ?? []);
+            showMatchLoadout(name, this.roleTags.get(name) ?? null, this.loadouts.get(name) ?? []);
         });
 
         this.el.find(".gv-legend-row").on("click", (e) => {

@@ -33,6 +33,7 @@ import {
 import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
+import { resolveRoleTag } from "./db/roleTag";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
 import { grantCreatorItems } from "./db/creatorGrants";
@@ -125,16 +126,24 @@ app.get("/api/replay/povs", async (c) => {
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
     }
-    const recordings = await server.listReplays(data.region);
-    const rec = recordings.find((r: any) => r.gameId === data.gameId);
+    // Targeted lookup for this one known gameId, not the moderation dashboard's
+    // recent-games-capped listReplays() - that cap could otherwise miss a
+    // legitimately-retained game on a busy region simply because it isn't among the
+    // most recent N, wrongly 404ing a token that was already verified as valid above.
+    const rec = await server.getReplayMeta(data.region, data.gameId);
     if (!rec) {
         return c.json({ error: "not_found" }, 404);
     }
+    // A player-scoped (Premium self-service) token only ever lists its own POV,
+    // so the client's POV-switch UI naturally has nothing else to switch to.
+    const players = (rec.players ?? []).filter(
+        (p: any) => data.playerId === undefined || p.playerId === data.playerId,
+    );
     return c.json({
         gameId: rec.gameId,
         mapName: rec.mapName,
         teamMode: rec.teamMode,
-        players: (rec.players ?? []).map((p: any) => ({
+        players: players.map((p: any) => ({
             playerId: p.playerId,
             playerName: p.playerName,
         })),
@@ -157,6 +166,11 @@ app.get("/api/replay", async (c) => {
     if (!Number.isFinite(playerId)) {
         return c.json({ error: "invalid_player" }, 400);
     }
+    // Player-scoped tokens (Premium self-service) may only ever fetch their own POV -
+    // this is the privacy boundary that keeps other players' recordings from leaking.
+    if (data.playerId !== undefined && data.playerId !== playerId) {
+        return c.json({ error: "forbidden" }, 403);
+    }
     const file = await server.streamReplayFile(data.region, data.gameId, playerId);
     if (!file) {
         return c.json({ error: "not_found" }, 404);
@@ -177,6 +191,12 @@ app.get("/api/replay/tracks", async (c) => {
     const data = verifyReplayToken(c.req.query("token") ?? "");
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
+    }
+    // God-view tracks show every player's position for the whole game - that's fine
+    // for an admin-dashboard token (game-scoped, any POV), but a player-scoped
+    // (Premium self-service) token must never see other players' positions.
+    if (data.playerId !== undefined) {
+        return c.json({ error: "forbidden" }, 403);
     }
     const file = await server.streamReplayTracks(data.region, data.gameId);
     if (!file) {
@@ -290,6 +310,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 ip,
                 loadout: userLoadout,
                 admin: user?.admin ?? false,
+                roleTag: user ? resolveRoleTag(user) : null,
             },
         ],
     });

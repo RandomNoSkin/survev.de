@@ -3,6 +3,7 @@ import type {
     AuctionListResponse,
     AuctionNotification,
     BuyListingResponse,
+    BuyPremiumResponse,
     BuyShopResponse,
     CancelListingResponse,
     CreateAuctionResponse,
@@ -24,6 +25,7 @@ import type {
     OfferActionResponse,
     OfferListResponse,
     PlaceBidResponse,
+    PremiumReplayTokenResponse,
     ProfileResponse,
     RefreshQuestRequest,
     RefreshQuestResponse,
@@ -78,6 +80,7 @@ export class Account {
         slug: "",
         usernameChangeTime: 0,
         goldenFries: 0,
+        premiumUntil: null as number | null,
     };
 
     loadout = loadouts.defaultLoadout();
@@ -99,7 +102,13 @@ export class Account {
     /** The item instance the caller currently has up for auction, or null (one at a time). */
     activeAuctionItemId: number | null = null;
     /** Account settings (offers/loadout privacy), from the profile response. */
-    settings: AccountSettings = { offersDisabled: false, loadoutPrivate: false };
+    settings: AccountSettings = {
+        offersDisabled: false,
+        loadoutPrivate: false,
+        showAdminPrefix: true,
+        showModPrefix: true,
+        showPremiumPrefix: true,
+    };
     quests: Quest[] = [];
     questPriv = "";
     pass: Record<string, PassType> = {};
@@ -505,6 +514,34 @@ export class Account {
             }
             cb(err, res);
         });
+    }
+
+    buyPremium(cb: (err: unknown, res?: BuyPremiumResponse) => void) {
+        this.ajaxRequest("/api/user/premium/buy", {}, (err, res: BuyPremiumResponse) => {
+            if (err) {
+                errorLogManager.storeGeneric("account", "buy_premium_error");
+            } else if (res.success) {
+                // Refresh balance + premiumUntil after a purchase.
+                this.loadProfile();
+            }
+            cb(err, res);
+        });
+    }
+
+    getPremiumReplayToken(
+        gameId: string,
+        cb: (err: unknown, res?: PremiumReplayTokenResponse) => void,
+    ) {
+        this.ajaxRequest(
+            "/api/user/premium/replay_token",
+            { gameId },
+            (err, res: PremiumReplayTokenResponse) => {
+                if (err) {
+                    errorLogManager.storeGeneric("account", "premium_replay_token_error");
+                }
+                cb(err, res);
+            },
+        );
     }
 
     //

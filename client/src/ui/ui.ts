@@ -5,7 +5,7 @@ import { PingDefs } from "../../../shared/defs/gameObjects/pingDefs";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
 import type { MapDef } from "../../../shared/defs/mapDefs";
 import { TeamColor } from "../../../shared/defs/maps/factionDefs";
-import { Action, GameConfig, GasMode, TeamMode } from "../../../shared/gameConfig";
+import { Action, GameConfig, GasMode, Input, TeamMode } from "../../../shared/gameConfig";
 import type { PlayerStatsMsg } from "../../../shared/net/playerStatsMsg";
 import type { MapIndicator, PlayerStatus } from "../../../shared/net/updateMsg";
 import { coldet } from "../../../shared/utils/coldet";
@@ -192,14 +192,23 @@ export class UiManager {
     advCollapseButton = $("#btn-adv-collapse");
     // Start collapsed: the option list is hidden until the spectator expands it.
     advCollapsed = true;
+    /** True while the manual "Hide Spectate UI" toggle (or an active recording) is forcing the spectate HUD hidden. */
+    spectateUiHidden = false;
     advFreecamButton = $("#btn-adv-freecam");
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");
     advTransparentButton = $("#btn-adv-transparent");
+    advTransparentCollapseButton = $("#btn-adv-transparent-collapse");
+    advTransparentSublist = $("#ui-spectate-transparent-sublist");
+    // Starts collapsed, same as the outer Options list (advCollapsed).
+    advTransparentCollapsed = true;
+    advZoneTransparentButton = $("#btn-adv-zone-transparent");
+    advFoliageTransparentButton = $("#btn-adv-foliage-transparent");
     advEnemiesMapButton = $("#btn-adv-enemies-map");
     advEspButton = $("#btn-adv-esp");
     advLabelsButton = $("#btn-adv-labels");
     advNadesButton = $("#btn-adv-nades");
+    advVisionButton = $("#btn-adv-vision");
 
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
@@ -261,6 +270,10 @@ export class UiManager {
     bigmapDisplayed = false;
     screenScaleFactor = 1;
     minimapPos!: Vec2;
+    /** In-progress minimap drag offset, set live by HudLayoutManager#onMinimapDrag
+     *  while the player is actively dragging it (see redraw()) - null the rest of the
+     *  time, when redraw() falls back to the persisted HudLayoutManager config. */
+    liveMinimapDragOffset: { dx: number; dy: number } | null = null;
 
     dead = false;
 
@@ -332,6 +345,19 @@ export class UiManager {
 
         $("#ui-map-wrapper").css("display", "block");
         $("#ui-team").css("display", "block");
+        // Both of the above are HUD-customizable elements (minimap, team health bars) -
+        // re-apply the player's saved visibility/opacity/offset on top of this default
+        // reset, so a hidden element doesn't come back visible on every new game.
+        this.game.m_hudLayoutManager.applyElementStyles();
+
+        // Live-repaint the minimap sprite/border/mask while it's actively being
+        // dragged (see redraw() and HudLayoutManager#onMinimapDrag) - the DOM wrapper's
+        // own transform already moves live via HudLayoutManager, but the PIXI-drawn
+        // terrain needs this explicit nudge since it doesn't read CSS at all.
+        this.game.m_hudLayoutManager.onMinimapDrag = (live) => {
+            this.liveMinimapDragOffset = live;
+            this.redraw(this.game.m_camera);
+        };
 
         $(".ui-map-expand").on("mousedown", (e) => {
             e.stopPropagation();
@@ -447,52 +473,50 @@ export class UiManager {
 
         // Advanced spectator toggles. Namespaced + off() first because the buttons
         // live in static HTML but UiManager is recreated each game, so a plain
-        // .on() would stack handlers (and double-toggle the booleans).
+        // .on() would stack handlers (and double-toggle the booleans). Each button
+        // calls the same named method a keybind can also call (see game.ts).
         this.specAdvancedButton.off("click.advspec").on("click.advspec", () => {
             this.toggleAdvancedSpectator();
         });
-        const advToggle = (btn: JQuery, flip: () => void) => {
-            btn.off("click.advspec").on("click.advspec", () => {
-                flip();
-                this.saveAdvSpec();
-                this.updateAdvancedSpectatorUi();
-            });
-        };
-        advToggle(this.advFreecamButton, () => {
-            const adv = this.game.m_advSpec;
-            adv.freecam = !adv.freecam;
-            // ESP lines run from the screen center, which has no player in freecam,
-            // so turn them off when entering freecam.
-            if (adv.freecam) adv.espLines = false;
-            this.updateSpectateText();
+        this.advFreecamButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleFreecam();
         });
-        advToggle(this.advZoomButton, () => {
-            this.game.m_advSpec.zoom = !this.game.m_advSpec.zoom;
+        this.advZoomButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleZoomMode();
         });
-        advToggle(this.advLayerButton, () => {
-            // Toggle the viewed render layer (0 = surface, 1 = underground).
-            this.game.m_advSpec.layer = this.game.m_advSpec.layer === 1 ? 0 : 1;
+        this.advLayerButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleLayer();
         });
-        advToggle(this.advTransparentButton, () => {
-            this.game.m_advSpec.transparentSurfaces =
-                !this.game.m_advSpec.transparentSurfaces;
+        this.advTransparentButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleTransparent();
         });
-        advToggle(this.advEnemiesMapButton, () => {
-            this.game.m_advSpec.enemiesOnMap = !this.game.m_advSpec.enemiesOnMap;
+        this.advTransparentCollapseButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleTransparentCollapse();
         });
-        advToggle(this.advEspButton, () => {
-            this.game.m_advSpec.espLines = !this.game.m_advSpec.espLines;
+        this.advZoneTransparentButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleZoneTransparent();
         });
-        advToggle(this.advLabelsButton, () => {
-            this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
+        this.advFoliageTransparentButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleFoliageTransparent();
         });
-        advToggle(this.advNadesButton, () => {
-            this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        this.advEnemiesMapButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleEnemiesOnMap();
+        });
+        this.advEspButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleEsp();
+        });
+        this.advLabelsButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleLabels();
+        });
+        this.advNadesButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleNadeEsp();
+        });
+        this.advVisionButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleVisionRadius();
         });
         // Collapse only hides the option list; the enabled features keep running.
         this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
-            this.advCollapsed = !this.advCollapsed;
-            this.updateAdvancedSpectatorUi();
+            this.toggleCollapse();
         });
 
         // Touch specific buttons
@@ -532,6 +556,15 @@ export class UiManager {
         };
         if (!device.touch) {
             this.weapSwitches.on("mousedown", (e) => {
+                // Re-checked live (not just at listener-attach time) so a settings
+                // change takes effect immediately without needing to rejoin/reload.
+                // isBindDown lets HudClickOverride force it through regardless.
+                if (
+                    !this.game.m_hudLayoutManager.getElementConfig("weaponSlots").clickable &&
+                    !this.inputBinds.isBindDown(Input.HudClickOverride)
+                ) {
+                    return;
+                }
                 const elem = e.currentTarget;
                 if (e.button == 0) {
                     this.weapDraggedDiv = $(elem);
@@ -919,7 +952,7 @@ export class UiManager {
                 // Team UI
                 this.updateTeam(
                     i,
-                    helpers.htmlEscape(playerInfo.name),
+                    helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
                     playerStatus.health!,
                     {
                         disconnected: playerStatus.disconnected,
@@ -1665,6 +1698,12 @@ export class UiManager {
                             class: "ui-stats-header-overview",
                             html: z,
                         }),
+                    )
+                    .append(
+                        $("<div/>", {
+                            class: "ui-stats-header-gameid",
+                            text: this.game.m_gameId ? `Game ID: ${this.game.m_gameId}` : "",
+                        }),
                     );
                 this.statsHeader.html(I as unknown as HTMLElement);
                 const T = (e: string, t: string | number) =>
@@ -1700,7 +1739,7 @@ export class UiManager {
                     B.append(
                         $("<div/>", {
                             class: "ui-stats-info-player-name",
-                            html: helpers.htmlEscape(playerInfo.name),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
                         }),
                     );
                     B.append(
@@ -1885,6 +1924,14 @@ export class UiManager {
                     class: "ui-stats-title",
                     text: "Battle Result",
                 });
+                if (this.game.m_gameId) {
+                    title.append(
+                        $("<div/>", {
+                            class: "ui-stats-header-gameid",
+                            text: `Game ID: ${this.game.m_gameId}`,
+                        }),
+                    );
+                }
 
                 const tableContainer = $("<div/>", {
                     class: "ui-stats-table-container",
@@ -1932,7 +1979,7 @@ export class UiManager {
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            text: helpers.htmlEscape(playerInfo.name),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -2225,7 +2272,10 @@ export class UiManager {
             this.setSpectating(true, teamMode);
             const name = playerBarn.getPlayerName(targetId, localId, false);
             this.spectatedPlayerId = targetId;
-            this.spectatedPlayerName = helpers.htmlEscape(name);
+            this.spectatedPlayerName = helpers.formatUsername(
+                name,
+                playerBarn.getPlayerInfo(targetId).roleTag,
+            );
             this.updateSpectateText();
             this.actionSeq = -1;
             this.m_pieTimer.stop();
@@ -2294,6 +2344,123 @@ export class UiManager {
         this.updateSpectateText();
     }
 
+    // Advanced spectator sub-toggles. Each is shared by its on-screen button and the
+    // matching keybind (see game.ts) - both call these, never duplicate the logic.
+    toggleFreecam() {
+        const adv = this.game.m_advSpec;
+        adv.freecam = !adv.freecam;
+        // ESP lines run from the screen center, which has no player in freecam, so
+        // turn them off when entering freecam.
+        if (adv.freecam) adv.espLines = false;
+        this.updateSpectateText();
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleZoomMode() {
+        this.game.m_advSpec.zoom = !this.game.m_advSpec.zoom;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    /** Adjusts the custom zoom level directly (keybind path); mirrors the mouse-wheel path in game.ts. */
+    adjustZoom(delta: number) {
+        this.game.m_advSpec.adjustZoom(delta);
+        this.saveAdvSpec();
+    }
+
+    toggleLayer() {
+        // Toggle the viewed render layer (0 = surface, 1 = underground).
+        this.game.m_advSpec.layer = this.game.m_advSpec.layer === 1 ? 0 : 1;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleTransparent() {
+        const advSpec = this.game.m_advSpec;
+        advSpec.transparentSurfaces = !advSpec.transparentSurfaces;
+        // The master switch drives both sub-toggles to match its own new state - ON
+        // gives the full "everything transparent" effect with one click, OFF resets
+        // both back off too. Either sub-toggle can still be flipped back on (or off,
+        // see toggleZoneTransparent/toggleFoliageTransparent) independently afterward;
+        // this only sets their state at the moment the master switch itself changes.
+        advSpec.zoneTransparency = advSpec.transparentSurfaces;
+        advSpec.foliageTransparency = advSpec.transparentSurfaces;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleZoneTransparent() {
+        this.game.m_advSpec.zoneTransparency = !this.game.m_advSpec.zoneTransparency;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleFoliageTransparent() {
+        this.game.m_advSpec.foliageTransparency = !this.game.m_advSpec.foliageTransparency;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    // Same purely-visual, not-persisted collapse pattern as toggleCollapse() (the
+    // outer Options list) - only hides/shows the Zone/Foliage sub-buttons, doesn't
+    // touch their enabled state.
+    toggleTransparentCollapse() {
+        this.advTransparentCollapsed = !this.advTransparentCollapsed;
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleEnemiesOnMap() {
+        this.game.m_advSpec.enemiesOnMap = !this.game.m_advSpec.enemiesOnMap;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleEsp() {
+        this.game.m_advSpec.espLines = !this.game.m_advSpec.espLines;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleLabels() {
+        this.game.m_advSpec.enemyLabels = !this.game.m_advSpec.enemyLabels;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleNadeEsp() {
+        this.game.m_advSpec.nadeEsp = !this.game.m_advSpec.nadeEsp;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleVisionRadius() {
+        this.game.m_advSpec.visionRadius = !this.game.m_advSpec.visionRadius;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    // Collapse only hides the option list; the enabled features keep running. Not
+    // persisted, purely a UI convenience (matches the previous inline behavior).
+    toggleCollapse() {
+        this.advCollapsed = !this.advCollapsed;
+        this.updateAdvancedSpectatorUi();
+    }
+
+    /**
+     * Forces spectate buttons (HUD + advanced-spectator panel) hidden or shown -
+     * driven by the manual ToggleSpectateUi keybind and by an active tab-capture
+     * video recording (see ReplayPlayer.toggleRecord). Layered on top of the normal
+     * display:block/none logic via a !important CSS class so it can't fight
+     * setSpectating()/updateAdvancedSpectatorUi().
+     */
+    setSpectateUiHidden(hidden: boolean) {
+        this.spectateUiHidden = hidden;
+        this.spectateMode.toggleClass("js-force-hide-spectate-ui", hidden);
+        this.spectateOptionsWrapper.toggleClass("js-force-hide-spectate-ui", hidden);
+        this.game.m_onToggleSpectateUiHidden?.(hidden);
+    }
+
     // Reflects the advanced spectator state onto the buttons. The master button is
     // shown when the server allows advanced spectator (any player that joined as a
     // spectator); the sub-toggles only appear once the mode is enabled.
@@ -2325,10 +2492,22 @@ export class UiManager {
         this.advZoomButton.toggleClass("active", advSpec.zoom);
         this.advLayerButton.toggleClass("active", advSpec.layer === 1);
         this.advTransparentButton.toggleClass("active", advSpec.transparentSurfaces);
+        // Same "shown when enabled, hidden/shown by its own collapse flag" pattern as
+        // specAdvancedList/advCollapsed above, just scoped to this one sub-group.
+        this.advTransparentSublist.css(
+            "display",
+            advSpec.enabled && !this.advTransparentCollapsed ? "block" : "none",
+        );
+        this.advTransparentCollapseButton.html(
+            this.advTransparentCollapsed ? "▸ Sub-Options" : "▾ Sub-Options",
+        );
+        this.advZoneTransparentButton.toggleClass("active", advSpec.zoneTransparency);
+        this.advFoliageTransparentButton.toggleClass("active", advSpec.foliageTransparency);
         this.advEnemiesMapButton.toggleClass("active", advSpec.enemiesOnMap);
         this.advEspButton.toggleClass("active", advSpec.espLines);
         this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
         this.advNadesButton.toggleClass("active", advSpec.nadeEsp);
+        this.advVisionButton.toggleClass("active", advSpec.visionRadius);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {
@@ -2758,6 +2937,23 @@ export class UiManager {
                 thisMinimapMarginYAdjust += 32;
             }
         }
+
+        // HUD customization drag offset (see hudLayoutManager.ts): the minimap's actual
+        // terrain is a PIXI sprite positioned by this function's math, NOT by the
+        // #ui-map-wrapper DOM element's CSS transform HudLayoutManager sets (that only
+        // moves the small icon chrome layered on top of it) - thisMinimapMarginXAdjust/
+        // YAdjust already flow into minimapPos, the border draw, and the mask draw
+        // below, so folding the offset in here moves the sprite, border, and clip mask
+        // together in one place. Only applies to the small corner minimap, not the
+        // full-screen big-map view (see the `bigmapDisplayed` branch below). Prefers
+        // `liveMinimapDragOffset` (set live while actively dragging, see the
+        // constructor's onMinimapDrag wiring) over the persisted config, which only
+        // updates once the drag ends.
+        const minimapDragOffset = this.liveMinimapDragOffset
+            ?? this.game.m_hudLayoutManager.getElementConfig("minimap");
+        thisMinimapMarginXAdjust += minimapDragOffset.dx;
+        thisMinimapMarginYAdjust += minimapDragOffset.dy;
+
         const thisMinimapSize = this.getMinimapSize();
         const thisMinimapBorderWidth = this.getMinimapBorderWidth();
         const layoutSm = device.uiLayout == device.UiLayout.Sm;
@@ -2900,6 +3096,14 @@ export class UiManager {
             this.inputBindUi.refresh();
         } else {
             this.inputBindUi.cancelBind();
+        }
+        if (this.currentGameTab == "hud") {
+            this.game.m_hudLayoutManager.renderSettingsPanel();
+        } else {
+            // Leaving the HUD tab (including via the esc-menu close path, which
+            // always routes through here first) always exits edit mode, so dragging
+            // never stays armed once the panel isn't visible to explain it.
+            this.game.m_hudLayoutManager.setEditMode(false);
         }
     }
 

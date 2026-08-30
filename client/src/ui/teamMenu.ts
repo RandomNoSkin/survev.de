@@ -73,6 +73,7 @@ export class TeamMenu {
         inGame: boolean;
         name: string;
         isLeader: boolean;
+        roleTag: "admin" | "mod" | "premium" | null;
     }> = [];
 
     prevPlayerCount = 0;
@@ -614,11 +615,19 @@ export class TeamMenu {
             const teamMembers = $("#team-menu-member-list");
             teamMembers.empty();
             for (let t = 0; t < this.roomData.maxPlayers; t++) {
-                let playerStatus = {
+                let playerStatus: {
+                    name: string;
+                    playerId: number;
+                    isLeader: boolean;
+                    inGame: boolean;
+                    roleTag: "admin" | "mod" | "premium" | null;
+                    self: boolean;
+                } = {
                     name: "",
                     playerId: 0,
                     isLeader: false,
                     inGame: false,
+                    roleTag: null,
                     self: false,
                 };
                 if (t < this.players.length) {
@@ -628,6 +637,7 @@ export class TeamMenu {
                         playerId: player.playerId,
                         isLeader: player.isLeader,
                         inGame: player.inGame,
+                        roleTag: player.roleTag,
                         self: player.playerId == this.localPlayerId,
                     };
                 }
@@ -702,7 +712,7 @@ export class TeamMenu {
                     }
                     const nameDiv = $("<div/>", {
                         class: `name menu-option ${nameClass}`,
-                        html: helpers.htmlEscape(playerStatus.name),
+                        html: helpers.formatUsername(playerStatus.name, playerStatus.roleTag),
                     });
                     if (playerStatus.self) {
                         nameDiv.on("click", () => {

@@ -48,6 +48,7 @@ import type { ResourceManager } from "./resources";
 import { SDK } from "./sdk/sdk";
 import { AdvancedSpectator } from "./ui/advancedSpectator";
 import { ChatUi } from "./ui/chat";
+import type { HudLayoutManager } from "./ui/hudLayoutManager";
 import type { Localization } from "./ui/localization";
 import { Touch } from "./ui/touch";
 import { UiManager } from "./ui/ui";
@@ -130,6 +131,17 @@ export class Game {
 
     /** True when this Game is playing back a recorded replay (no socket, no input sent). */
     m_replayMode = false;
+    /** Current match's gameId - set by main.ts at join/spectate time, or by ReplayPlayer when loading a recording. Shown in the game-over header. */
+    m_gameId = "";
+    /** Bridge to the replay bar's visibility, set by ReplayPlayer while active (Game has no direct reference to it). */
+    m_onToggleSpectateUiHidden?: (hidden: boolean) => void;
+    /** Bridge to the replay-control keybinds (play/pause, speed, skip, frame step), set by ReplayPlayer while active. */
+    m_replayControls?: {
+        togglePause(): void;
+        adjustSpeed(dir: 1 | -1): void;
+        skip(deltaMs: number): void;
+        stepFrame(dir: 1 | -1): void;
+    };
     /**
      * God-view player snapshot during replay (all players' pos/health, regardless of
      * POV culling). Fed by the replay player; consumed by the advanced spectator +
@@ -146,12 +158,23 @@ export class Game {
     debugPingTime!: number;
     lastUpdateTime!: number;
     updateIntervals!: number[];
+    /** Last value written to the opt-in FPS HUD counter - only touches the DOM when
+     *  the rounded value actually changes, so this doesn't add a per-frame DOM write
+     *  for players who don't even have the counter enabled... well, it still reads
+     *  the ticker every frame, but skips the write. */
+    m_lastFpsDisplayed = -1;
+    /** Timestamps of the last FPS/ping HUD counter DOM writes - both are throttled to
+     *  once/second (see `update`/`onMsg`), since the raw per-frame FPS and per-packet
+     *  ping values bounce around too fast to actually read otherwise. */
+    m_lastFpsCounterTime = 0;
+    m_lastPingCounterTime = 0;
 
     constructor(
         public m_pixi: PIXI.Application,
         public m_audioManager: AudioManager,
         public m_localization: Localization,
         public m_config: ConfigManager,
+        public m_hudLayoutManager: HudLayoutManager,
         public m_input: InputHandler,
         public m_inputBinds: InputBinds,
         public m_inputBindUi: InputBindUi,
@@ -213,6 +236,12 @@ export class Game {
                     joinMessage.bot = false;
                     joinMessage.onlyGhilliePickup =
                         this.m_config.get("onlyGhilliePickup") ?? true;
+                    // Sent once, never updated on resize - see JoinMsg's own doc
+                    // comment. window.innerWidth/Height rather than m_camera's, since
+                    // the camera isn't necessarily sized yet this early in the connect
+                    // flow (this fires right after the socket opens, before init()).
+                    joinMessage.screenWidth = window.innerWidth;
+                    joinMessage.screenHeight = window.innerHeight;
                     // Validate so a stale/incomplete stored loadout can never break the
                     // join by serializing an undefined game type.
                     joinMessage.loadout = loadoutHelper.validate(
@@ -368,7 +397,11 @@ export class Game {
             this.m_inputBinds,
             this.m_inputBindUi,
         );
-        this.m_ui2Manager = new UiManager2(this.m_localization, this.m_inputBinds);
+        this.m_ui2Manager = new UiManager2(
+            this.m_localization,
+            this.m_inputBinds,
+            this.m_hudLayoutManager,
+        );
         this.m_emoteBarn = new EmoteBarn(
             this.m_audioManager,
             this.m_uiManager,
@@ -519,6 +552,21 @@ export class Game {
     update(dt: number) {
         this.debugHUD.m_update(dt, this);
 
+        // Opt-in FPS counter (see hudLayoutManager.ts) - PIXI's ticker already tracks
+        // this internally (same source debugHUD's own FPS graph reads from), so this
+        // is just a cheap read + a DOM write, throttled to once/second (the raw
+        // per-frame value bounces around too fast to actually read otherwise).
+        const fpsCounterNow = performance.now();
+        if (fpsCounterNow - this.m_lastFpsCounterTime >= 1000) {
+            this.m_lastFpsCounterTime = fpsCounterNow;
+            const fps = Math.round(this.m_pixi.ticker.FPS);
+            if (fps !== this.m_lastFpsDisplayed) {
+                this.m_lastFpsDisplayed = fps;
+                const el = document.getElementById("ui-fps-counter");
+                if (el) el.textContent = String(fps);
+            }
+        }
+
         if (IS_DEV) {
             if (this.m_input.keyPressed(Key.F2)) {
                 this.editor.setEnabled(!this.editor.enabled);
@@ -566,6 +614,8 @@ export class Game {
         const advSpec = this.m_advSpec;
         const advActive = advSpec.enabled && this.m_spectating;
         this.m_camera.m_advSpecTransparent = advActive && advSpec.transparentSurfaces;
+        this.m_camera.m_advSpecZoneTransparent = advActive && advSpec.zoneTransparency;
+        this.m_camera.m_advSpecFoliageTransparent = advActive && advSpec.foliageTransparency;
         // Manual layer override so the spectator can look into bunkers / underground
         // even with no player down there. Runs before the renderer's m_update below.
         // In follow mode on the surface (layer 0) we leave the layer alone so it
@@ -1014,6 +1064,87 @@ export class Game {
             this.m_advancedSpectatorAllowed
         ) {
             this.m_uiManager.toggleAdvancedSpectator();
+        }
+
+        // Keybind to hide/show spectate buttons + the replay bar. Works whenever
+        // spectating (live or replay); not gated by advanced spectator being enabled.
+        if (this.m_inputBinds.isBindPressed(Input.ToggleSpectateUi) && this.m_spectating) {
+            this.m_uiManager.setSpectateUiHidden(!this.m_uiManager.spectateUiHidden);
+        }
+
+        // Keybinds for the advanced spectator sub-toggles - same guard as the master
+        // toggle, plus advanced spectator must actually be enabled.
+        if (this.m_spectating && this.m_advancedSpectatorAllowed && this.m_advSpec.enabled) {
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecCollapse)) {
+                this.m_uiManager.toggleCollapse();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecFreecam)) {
+                this.m_uiManager.toggleFreecam();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecZoomToggle)) {
+                this.m_uiManager.toggleZoomMode();
+            }
+            if (this.m_advSpec.zoom && this.m_inputBinds.isBindPressed(Input.AdvSpecZoomIn)) {
+                this.m_uiManager.adjustZoom(-6);
+            }
+            if (this.m_advSpec.zoom && this.m_inputBinds.isBindPressed(Input.AdvSpecZoomOut)) {
+                this.m_uiManager.adjustZoom(6);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecLayer)) {
+                this.m_uiManager.toggleLayer();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecTransparent)) {
+                this.m_uiManager.toggleTransparent();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecZoneTransparent)) {
+                this.m_uiManager.toggleZoneTransparent();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecFoliageTransparent)) {
+                this.m_uiManager.toggleFoliageTransparent();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecEnemiesOnMap)) {
+                this.m_uiManager.toggleEnemiesOnMap();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecEsp)) {
+                this.m_uiManager.toggleEsp();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecLabels)) {
+                this.m_uiManager.toggleLabels();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecNades)) {
+                this.m_uiManager.toggleNadeEsp();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.AdvSpecVisionRadius)) {
+                this.m_uiManager.toggleVisionRadius();
+            }
+        }
+
+        // Keybinds for the replay-bar controls (play/pause, skip, speed, frame step).
+        // Only meaningful in replay mode - m_replayControls is only set while a
+        // ReplayPlayer is active.
+        if (this.m_replayMode && this.m_replayControls) {
+            const rc = this.m_replayControls;
+            if (this.m_inputBinds.isBindPressed(Input.ReplayTogglePause)) {
+                rc.togglePause();
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySkipBack)) {
+                rc.skip(-5000);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySkipForward)) {
+                rc.skip(5000);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySpeedUp)) {
+                rc.adjustSpeed(1);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplaySpeedDown)) {
+                rc.adjustSpeed(-1);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplayFrameBack)) {
+                rc.stepFrame(-1);
+            }
+            if (this.m_inputBinds.isBindPressed(Input.ReplayFrameForward)) {
+                rc.stepFrame(1);
+            }
         }
 
         this.m_uiManager.reloadTouched = false;
@@ -1528,6 +1659,15 @@ export class Game {
             const ping = now - this.seqSendTime;
             this.debugHUD.pingGraph.addEntry(ping);
             this.pings.push(ping);
+            // Opt-in ping counter (see hudLayoutManager.ts) - same measurement
+            // debugHUD's own ping graph already uses, just also written to the
+            // player-facing element, throttled to once/second (raw per-packet values
+            // bounce around too fast to actually read otherwise).
+            if (now - this.m_lastPingCounterTime >= 1000) {
+                this.m_lastPingCounterTime = now;
+                const pingEl = document.getElementById("ui-ping-counter");
+                if (pingEl) pingEl.textContent = String(ping);
+            }
         }
         if (this.lastUpdateTime > 0) {
             const interval = now - this.lastUpdateTime;
@@ -1665,9 +1805,12 @@ export class Game {
                     this.m_activeId,
                     true,
                 );
-                targetName = helpers.htmlEscape(targetName);
-                killerName = helpers.htmlEscape(killerName);
-                killfeedKillerName = helpers.htmlEscape(killfeedKillerName);
+                targetName = helpers.formatUsername(targetName, targetInfo.roleTag);
+                killerName = helpers.formatUsername(killerName, killerInfo.roleTag);
+                killfeedKillerName = helpers.formatUsername(
+                    killfeedKillerName,
+                    killfeedKillerInfo.roleTag,
+                );
                 // Display the kill / downed notification for the active player
                 if (msg.killCreditId == this.m_activeId) {
                     const completeKill = msg.killerId == this.m_activeId;
@@ -1749,7 +1892,7 @@ export class Game {
                 const group1 = msg.group1;
                 const group2 = msg.group2;
                 if (group1.length <= 0) {
-                    const text = this.m_ui2Manager.getJoinedText(playerName);
+                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.roleTag);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 } else {
                     const group1Text = this.m_ui2Manager.getEnemieText(group1);
@@ -2010,9 +2153,13 @@ export class Game {
                 msg.deserialize(stream);
                 if (msg.assisterId == this.m_activeId) {
                     const targetInfo = this.m_playerBarn.getPlayerInfo(msg.targetId);
+                    const targetNameHtml = helpers.formatUsername(
+                        targetInfo.name,
+                        targetInfo.roleTag,
+                    );
                     // Add to killfeed
                     this.m_ui2Manager.addKillFeedMessage(
-                        `Assist on ${targetInfo.name} (${msg.damageAmount} dmg)`,
+                        `Assist on ${targetNameHtml} (${msg.damageAmount} dmg)`,
                         "#00bfff",
                     );
                     // Show assist notification box at bottom
@@ -2022,7 +2169,7 @@ export class Game {
                     let assistCountText =
                         assistCount === 1 ? "1 Assist" : `${assistCount} Assists`;
                     this.m_ui2Manager.displayAssistMessage(
-                        `Assist on ${targetInfo.name} (${msg.damageAmount} dmg)`,
+                        `Assist on ${targetNameHtml} (${msg.damageAmount} dmg)`,
                         assistCountText,
                     );
                 }

@@ -29,7 +29,7 @@
  *   POST /moderation/api/apps/review                → approve/reject a pending OAuth app
  */
 
-import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNotNull, isNull, lte, notInArray, or, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
@@ -45,12 +45,13 @@ import {
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
+import { Config } from "../../config";
 import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
 import { OAUTH_APP_STATUSES, type OAuthAppStatus, zAppReviewRequest } from "../../../../shared/types/oauth.ts";
 import { util } from "../../../../shared/utils/util";
 import { logModerationAction } from "../../utils/serverHelpers";
 import type { Context } from "..";
-import { server } from "../apiServer";
+import { REPLAY_LIST_DEFAULT_LIMIT, server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
@@ -64,6 +65,14 @@ import {
 } from "../db/gameModeration";
 import { awardGoldenFries } from "../db/goldenFries";
 import { listApps, reviewApp } from "../db/oauth";
+import {
+    grantPremiumMonths,
+    grantPremiumPassXp,
+    grantPremiumPermanent,
+    isPremiumActive,
+    removePremium,
+    revokePremiumPassXp,
+} from "../db/premium";
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
@@ -80,6 +89,7 @@ import {
     marketListingsTable,
     matchDataTable,
     offersTable,
+    premiumXpGrantsTable,
     usersTable,
     userXpTable,
 } from "../db/schema";
@@ -106,8 +116,32 @@ const MAX_WINDOW_MS = 3650 * 24 * 60 * 60 * 1000;
 /** How many already-resolved sus reports the Sus tab keeps around, newest first. */
 const SOLVED_SUS_LIMIT = 10;
 
-/** Recordings per region the Replays tab loads when it doesn't ask for a specific count. */
-const REPLAY_LIST_DEFAULT_LIMIT = 200;
+/**
+ * Whether an archived client build exists for a given protocol version, so an
+ * old-protocol replay can actually be watched (see `client/scripts/archiveBuild.mjs`,
+ * published under `CLIENT_URL/archive/<version>/`). Checked over HTTP rather than the
+ * filesystem because this API process and the nginx-served client dist aren't
+ * necessarily the same machine/process. Cached in-memory - the archive only changes on
+ * deploy, and the set of distinct protocol versions seen at any time is tiny.
+ */
+const archivedBuildExistsCache = new Map<number, boolean>();
+async function archivedBuildExists(protocolVersion: number): Promise<boolean> {
+    if (protocolVersion === GameConfig.protocolVersion) return true;
+    const cached = archivedBuildExistsCache.get(protocolVersion);
+    if (cached !== undefined) return cached;
+    let exists = false;
+    try {
+        const res = await fetch(
+            `${Config.oauthRedirectURI}/archive/${protocolVersion}/index.html`,
+            { method: "HEAD" },
+        );
+        exists = res.ok;
+    } catch {
+        exists = false;
+    }
+    archivedBuildExistsCache.set(protocolVersion, exists);
+    return exists;
+}
 
 /**
  * Length of a moderation time window, parsed from `<n>h` / `<n>d`.
@@ -486,8 +520,9 @@ async function moderatorSusOnlyDenial(
  * Tags a live player list with the staff roles from the accounts DB.
  *
  * The game process only knows the `admin` flag it was handed at join time and nothing
- * at all about moderators, so the API server (the only side with DB access) resolves
- * both here. Only staff rows are fetched, so a normal lobby costs one small query.
+ * at all about moderators or Premium, so the API server (the only side with DB access)
+ * resolves all three here. Only rows that actually have one of these flags are fetched,
+ * so a normal lobby costs one small query.
  */
 async function withStaffFlags(players: any[]): Promise<any[]> {
     const userIds = [...new Set(players.map((p) => p.userId).filter(Boolean))];
@@ -498,12 +533,17 @@ async function withStaffFlags(players: any[]): Promise<any[]> {
             id: usersTable.id,
             admin: usersTable.admin,
             moderator: usersTable.moderator,
+            premiumUntil: usersTable.premiumUntil,
         })
         .from(usersTable)
         .where(
             and(
                 inArray(usersTable.id, userIds),
-                or(eq(usersTable.admin, true), eq(usersTable.moderator, true)),
+                or(
+                    eq(usersTable.admin, true),
+                    eq(usersTable.moderator, true),
+                    isNotNull(usersTable.premiumUntil),
+                ),
             ),
         );
     if (!staff.length) return players;
@@ -512,7 +552,12 @@ async function withStaffFlags(players: any[]): Promise<any[]> {
     return players.map((p) => {
         const u = p.userId ? byId.get(p.userId) : undefined;
         if (!u) return p;
-        return { ...p, isAdmin: p.isAdmin || u.admin, isModerator: u.moderator };
+        return {
+            ...p,
+            isAdmin: p.isAdmin || u.admin,
+            isModerator: u.moderator,
+            isPremium: isPremiumActive(u.premiumUntil),
+        };
     });
 }
 
@@ -1457,6 +1502,25 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ),
         ];
 
+        // Resolve "is this replay's protocol version actually archived?" once per
+        // distinct version (usually 1-2), not once per replay row.
+        const protocolVersions = [
+            ...new Set(
+                regions.flatMap((r) =>
+                    (r.recordings as any[]).map((rec) => rec.protocolVersion).filter(
+                        (v) => typeof v === "number",
+                    )
+                ),
+            ),
+        ];
+        const archivedByVersion = new Map(
+            await Promise.all(
+                protocolVersions.map(
+                    async (v) => [v, await archivedBuildExists(v)] as const,
+                ),
+            ),
+        );
+
         const [rows, mods] = await Promise.all([
             gameIds.length
                 ? db
@@ -1509,6 +1573,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 regionId: r.regionId,
                 recordings: (r.recordings as any[]).map((rec) => ({
                     ...rec,
+                    // Whether an archived client build exists for this replay's
+                    // protocol version (always true for the current version).
+                    archived: typeof rec.protocolVersion === "number"
+                        ? (archivedByVersion.get(rec.protocolVersion) ?? false)
+                        : true,
                     // A flag on the game as a whole (mod key "").
                     gameStatus: modByKey.get(`${rec.gameId}|`) ?? null,
                     players: (rec.players ?? []).map((p: any) => {
@@ -3032,6 +3101,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 authId: usersTable.authId,
                 linkedDiscord: usersTable.linkedDiscord,
                 linkedGoogle: usersTable.linkedGoogle,
+                premiumUntil: usersTable.premiumUntil,
             })
             .from(usersTable);
 
@@ -3061,6 +3131,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             discordId: u.linkedDiscord ? u.authId : null,
             lastIp: ipByUser.get(u.id) ?? null,
             passes: Object.fromEntries((xpByUser.get(u.id) ?? new Map()).entries()),
+            premium: isPremiumActive(u.premiumUntil),
         }));
 
         return c.json({ accounts, passTypes });
@@ -3137,6 +3208,81 @@ export const ModerationDashboardRouter = new Hono<Context>()
             return c.json({ ok: true, moderator });
         },
     )
+    /**
+     * Grants (extends) Premium on an account for free - admin action, no Golden Fries
+     * involved. `permanent` grants Premium that never expires instead of `months`
+     * (see PERMANENT_PREMIUM_DATE); `xpTimes` optionally also fires the same XP bonus
+     * a real purchase gives, `xpTimes` times over (0 = none).
+     */
+    .post(
+        "/api/account/premium/grant",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                months: z.number().int().min(1).max(24),
+                permanent: z.boolean().optional(),
+                xpTimes: z.number().int().min(0).max(20).optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, months, permanent, xpTimes } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+
+            const premiumUntil = permanent
+                ? await grantPremiumPermanent(target.id)
+                : await grantPremiumMonths(target.id, months);
+            if (xpTimes) await grantPremiumPassXp(target.id, xpTimes);
+
+            void logModerationAction(
+                "⭐ Premium granted",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Duration", value: permanent ? "permanent" : `${months} months` },
+                    { name: "Now until", value: permanent ? "permanent" : premiumUntil.toISOString() },
+                    { name: "XP bonus", value: xpTimes ? `×${xpTimes}` : "no" },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xf2d63b,
+            );
+            return c.json({ ok: true, premiumUntil: premiumUntil.getTime() });
+        },
+    )
+    /** Immediately clears Premium on an account - admin action. `withXp` optionally also
+     *  reverts every XP bonus Premium ever granted this account (see revokePremiumPassXp). */
+    .post(
+        "/api/account/premium/remove",
+        validateParams(z.object({ slug: z.string().min(1), withXp: z.boolean().optional() })),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, withXp } = c.req.valid("json");
+
+            const target = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!target) return c.json({ error: "account_not_found" }, 404);
+
+            await removePremium(target.id);
+            if (withXp) await revokePremiumPassXp(target.id);
+
+            void logModerationAction(
+                "⭐ Premium removed",
+                [
+                    { name: "Account", value: slug },
+                    { name: "XP bonus reverted", value: withXp ? "yes" : "no" },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xf2d63b,
+            );
+            return c.json({ ok: true });
+        },
+    )
     /** Full account detail: identity (incl. discord id), per-pass XP, owned items grouped by source, recent matches. */
     .get("/api/account/:slug", async (c) => {
         const slug = c.req.param("slug");
@@ -3156,6 +3302,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 admin: true,
                 moderator: true,
                 goldenFries: true,
+                premiumUntil: true,
                 userCreated: true,
             },
         });
@@ -3163,7 +3310,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         const passTypes = Object.keys((GameConfig.serverSettings as any).passes ?? {});
 
-        const [xpRows, items, matches] = await Promise.all([
+        const [xpRows, items, matches, premiumXpRows] = await Promise.all([
             db.select().from(userXpTable).where(eq(userXpTable.userId, user.id)),
             db
                 .select({
@@ -3190,12 +3337,26 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 .where(eq(matchDataTable.userId, user.id))
                 .orderBy(desc(matchDataTable.createdAt))
                 .limit(25),
+            // Per-pass total XP granted via Premium purchases - shown next to the pass's
+            // total XP so a jump doesn't get mistaken for account boosting.
+            db
+                .select({
+                    passType: premiumXpGrantsTable.passType,
+                    total: sql<string>`sum(${premiumXpGrantsTable.xpGranted})`,
+                })
+                .from(premiumXpGrantsTable)
+                .where(eq(premiumXpGrantsTable.userId, user.id))
+                .groupBy(premiumXpGrantsTable.passType),
         ]);
+
+        const premiumXpByPass: Record<string, number> = {};
+        for (const r of premiumXpRows) premiumXpByPass[r.passType] = Number(r.total);
 
         const xp = xpRows.map((r) => ({
             passType: r.passType,
             level: r.level,
             xp: Number(r.xp),
+            premiumXp: premiumXpByPass[r.passType] ?? 0,
         }));
 
         // Owned items grouped by source so a whole source group (e.g. an S2 pass)

@@ -17,6 +17,8 @@ import {
     type UserStatsRequest,
     type UserStatsResponse,
 } from "../../../../shared/types/stats.ts";
+import type { PremiumReplayTokenResponse } from "../../../../shared/types/user.ts";
+import { ajaxRequest } from "../../ajax.ts";
 import { api } from "../../api.ts";
 import { device } from "../../device.ts";
 import { helpers } from "../../helpers.ts";
@@ -135,6 +137,9 @@ function getPlayerCardData(
 
     const profile = {
         username: userData.username,
+        // Pre-escaped + [PREM]-tagged HTML for the name itself - the EJS template
+        // renders this unescaped (<%- %>), since <%= %> would escape the tag's <span>.
+        usernameHtml: helpers.formatUsername(userData.username, userData.roleTag),
         slugToShow: tmpslugToShow,
         banned: userData.banned,
         region: userData.primaryRegion,
@@ -475,17 +480,19 @@ export class PlayerView {
                 found?: boolean;
                 private?: boolean;
                 username?: string;
+                roleTag?: "admin" | "mod" | "premium" | null;
                 slug?: string;
                 loadout?: Record<string, string | string[]>;
                 items?: OwnedItem[];
             }) => {
                 if (data?.private) {
-                    this.showLoadoutPrivate(data.username || "");
+                    this.showLoadoutPrivate(data.username || "", data.roleTag ?? null);
                     return;
                 }
                 if (data?.found) {
                     this.renderLoadoutModal(
                         data.username || "",
+                        data.roleTag ?? null,
                         data.slug || slug,
                         data.loadout || {},
                         data.items || [],
@@ -496,13 +503,13 @@ export class PlayerView {
     }
 
     /** Shown instead of the collection when the player marked their loadout private. */
-    showLoadoutPrivate(username: string) {
+    showLoadoutPrivate(username: string, roleTag: "admin" | "mod" | "premium" | null = null) {
         $(".loadout-modal-overlay").remove();
         const $modal = $(
             `<div class="loadout-modal-overlay">` +
                 `<style>${LOADOUT_MODAL_CSS}</style>` +
                 `<div class="loadout-modal">` +
-                `<div class="ld-header"><span>Collection — ${helpers.htmlEscape(username)}</span><span class="ld-close">✕</span></div>` +
+                `<div class="ld-header"><span>Collection — ${helpers.formatUsername(username, roleTag)}</span><span class="ld-close">✕</span></div>` +
                 `<div class="ld-body"><div class="ld-empty">This player's loadout is private.</div></div>` +
                 `</div></div>`,
         );
@@ -519,6 +526,7 @@ export class PlayerView {
 
     renderLoadoutModal(
         username: string,
+        roleTag: "admin" | "mod" | "premium" | null,
         slug: string,
         loadout: Record<string, string | string[]>,
         items: OwnedItem[],
@@ -646,7 +654,7 @@ export class PlayerView {
             `<div class="loadout-modal-overlay">` +
             `<style>${LOADOUT_MODAL_CSS}</style>` +
             `<div class="loadout-modal">` +
-            `<div class="ld-header"><span>Collection — ${helpers.htmlEscape(username)}</span><span class="ld-close">✕</span></div>` +
+            `<div class="ld-header"><span>Collection — ${helpers.formatUsername(username, roleTag)}</span><span class="ld-close">✕</span></div>` +
             (shown.length
                 ? `<div class="ld-valuebar">Inventory value <span class="ld-value-num">${totalValue.toLocaleString("en-US")}</span><span class="ld-fries"></span></div>`
                 : "") +
@@ -827,6 +835,8 @@ export class PlayerView {
                 type: "match_history",
             });
         } else {
+            const myProfile = this.app.config.get("profile");
+            const isOwnProfile = !!myProfile && myProfile.slug === params.slug;
             historyContent = templates.matchHistory({
                 games: this.games,
                 moreGamesAvailable: this.moreGamesAvailable,
@@ -834,6 +844,7 @@ export class PlayerView {
                 error: this.matchHistory.error,
                 formatTime: helpers.formatTime,
                 slugify,
+                isOwnProfile,
             });
         }
 
@@ -845,6 +856,45 @@ export class PlayerView {
                 if (!$(e.target).is("a")) {
                     this.toggleMatchData($(e.currentTarget).data("game-id"));
                 }
+            });
+
+            // Premium-only: watch the full replay of one of the viewer's own past
+            // matches (server re-checks Premium + ownership - this button is shown
+            // to anyone viewing their own profile regardless of Premium status).
+            $(".gv-replay-btn").on("click", (e) => {
+                e.stopPropagation();
+                const btn = $(e.currentTarget);
+                if (btn.hasClass("gv-replay-loading")) return;
+                const gameId = btn.closest(".js-match-data").data("game-id") as string;
+                const originalText = btn.text();
+                btn.addClass("gv-replay-loading").text("...");
+                ajaxRequest(
+                    "/api/user/premium/replay_token",
+                    { gameId },
+                    (err, res?: PremiumReplayTokenResponse) => {
+                        btn.removeClass("gv-replay-loading").text(originalText);
+                        if (err || !res || !res.success) {
+                            if (res?.error === "premium_required") {
+                                alert(
+                                    "Watching full replays requires Premium. Buy it in the Shop.",
+                                );
+                            } else if (res?.error === "expired") {
+                                alert(
+                                    "This replay is no longer available - it's too old and has been cleaned up.",
+                                );
+                            } else if (res?.error === "not_your_game") {
+                                alert("This isn't one of your matches.");
+                            } else {
+                                alert("Could not open the replay.");
+                            }
+                            return;
+                        }
+                        const url =
+                            `${window.location.origin}/?replay=${encodeURIComponent(res.token!)}` +
+                            `&pov=${res.playerId}`;
+                        window.open(url, "_blank");
+                    },
+                );
             });
 
             $(".js-match-load-more").on("click", (_e) => {

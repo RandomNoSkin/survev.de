@@ -236,8 +236,9 @@ export class OwnersUi {
         const name = o.username || o.slug;
         const row = $(
             `<div class="owners-row">` +
-                `<span class="owners-name market-link">${helpers.htmlEscape(
+                `<span class="owners-name market-link">${helpers.formatUsername(
                     name,
+                    o.roleTag,
                 )}</span>` +
                 (o.copies > 1
                     ? `<span class="owners-copies">×${o.copies}</span>`

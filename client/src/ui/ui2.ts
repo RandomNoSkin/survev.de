@@ -32,6 +32,7 @@ import type { Map } from "../map";
 import type { Loot, LootBarn } from "../objects/loot";
 import type { Obstacle } from "../objects/obstacle";
 import type { Player, PlayerBarn } from "../objects/player";
+import type { HudLayoutManager } from "./hudLayoutManager";
 import type { Localization } from "./localization";
 
 const maxKillFeedLines = 6;
@@ -253,6 +254,12 @@ export class UiManager2 {
     oldState = new UiState();
     newState = new UiState();
     frameCount = 0;
+    /** Set by chat.ts's joinChat/leaveChat - while true, the killFeed fade timer (see
+     *  m_update's KillFeed section) stops advancing CHAT entries (marked via
+     *  `outline`, see addChatMessage) past the "fully visible" plateau, so open chat
+     *  never has its own messages fade out from under the player while they're reading
+     *  it. Kill feed entries (`outline: false`) are unaffected either way. */
+    chatOpen = false;
 
     // DOM
     dom = {
@@ -310,6 +317,7 @@ export class UiManager2 {
         health: {
             inner: domElemById("ui-health-actual"),
             depleted: domElemById("ui-health-depleted"),
+            numeric: domElemById("ui-health-numeric"),
         },
         boost: {
             div: domElemById("ui-boost-counter"),
@@ -319,6 +327,7 @@ export class UiManager2 {
                 domElemById("ui-boost-counter-2").firstElementChild,
                 domElemById("ui-boost-counter-3").firstElementChild,
             ] as HTMLElement[],
+            numeric: domElemById("ui-boost-numeric"),
         },
         scopes: [] as Array<{
             scopeType: string;
@@ -357,6 +366,11 @@ export class UiManager2 {
     itemActions = [] as Array<{
         action: string;
         type: string;
+        /** HUD_ELEMENTS id this item's div visually belongs to - NOT the same grouping
+         *  as `type` (e.g. `type: "loot"` covers both the loot row's consumables and
+         *  the gear row's drop actions, two different HUD elements). Used to gate
+         *  clicking per-element (see the mousedown/touchstart handlers below). */
+        elementId: string;
         data: string;
         div: HTMLElement;
         actionQueued: boolean;
@@ -367,6 +381,7 @@ export class UiManager2 {
     constructor(
         public localization: Localization,
         public inputBinds: InputBinds,
+        public hudLayoutManager: HudLayoutManager,
     ) {
         // KillFeed
         for (let i = 0; i < maxKillFeedLines; i++) {
@@ -483,12 +498,14 @@ export class UiManager2 {
         const addItemAction = (
             action: string,
             type: string,
+            elementId: string,
             data: string,
             div: HTMLElement,
         ) => {
             this.itemActions.push({
                 action,
                 type,
+                elementId,
                 data,
                 div,
                 actionQueued: false,
@@ -500,43 +517,57 @@ export class UiManager2 {
             addItemAction(
                 "use",
                 "weapon",
+                "weaponSlots",
                 i as unknown as string,
                 this.dom.weapons[i].div,
             );
             addItemAction(
                 "drop",
                 "weapon",
+                "weaponSlots",
                 i as unknown as string,
                 this.dom.weapons[i].div,
             );
         }
         for (let i = 0; i < this.dom.scopes.length; i++) {
             const W = this.dom.scopes[i];
-            addItemAction("use", "scope", W.scopeType, W.div);
+            addItemAction("use", "scope", "scopeRow", W.scopeType, W.div);
             if (W.scopeType != "1xscope") {
-                addItemAction("drop", "loot", W.scopeType, W.div);
+                addItemAction("drop", "loot", "scopeRow", W.scopeType, W.div);
             }
         }
         for (let i = 0; i < this.dom.loot.length; i++) {
             const loot = this.dom.loot[i];
             const def = GameObjectDefs.typeToDefSafe(loot.lootType);
             if (def && (def.type == "heal" || def.type == "boost")) {
-                addItemAction("use", "loot", loot.lootType, loot.div);
+                addItemAction("use", "loot", "lootRow", loot.lootType, loot.div);
             }
-            addItemAction("drop", "loot", loot.lootType, loot.div);
+            addItemAction("drop", "loot", "lootRow", loot.lootType, loot.div);
         }
         for (let i = 0; i < this.dom.gear.length; i++) {
             const gear = this.dom.gear[i];
             if (gear.gearType != "backpack") {
-                addItemAction("drop", "loot", gear.gearType, gear.div);
+                addItemAction("drop", "loot", "gearRow", gear.gearType, gear.div);
             }
         }
         for (let i = 0; i < this.dom.perks.length; i++) {
-            addItemAction("drop", "perk", i as unknown as string, this.dom.perks[i].div);
+            addItemAction(
+                "drop",
+                "perk",
+                "perkRow",
+                i as unknown as string,
+                this.dom.perks[i].div,
+            );
         }
         for (let i = 0; i < this.itemActions.length; i++) {
             const item = this.itemActions[i];
             setEventListener("mousedown", item.div, (e) => {
+                if (
+                    !this.hudLayoutManager.getElementConfig(item.elementId).clickable &&
+                    !this.inputBinds.isBindDown(Input.HudClickOverride)
+                ) {
+                    return;
+                }
                 if (
                     (item.action == "use" && isLmb(e)) ||
                     (item.action == "drop" && isRmb(e))
@@ -557,6 +588,12 @@ export class UiManager2 {
                 }
             });
             setEventListener("touchstart", item.div, (e) => {
+                if (
+                    !this.hudLayoutManager.getElementConfig(item.elementId).clickable &&
+                    !this.inputBinds.isBindDown(Input.HudClickOverride)
+                ) {
+                    return;
+                }
                 if (e.changedTouches.length > 0) {
                     e.stopPropagation();
                     item.actionQueued = true;
@@ -713,7 +750,15 @@ export class UiManager2 {
         let offset = 0;
         for (let i = 0; i < state.killFeed.length; i++) {
             const line = state.killFeed[i];
-            line.ticker += dt;
+            // While chat is open, CHAT entries (not kill messages) stop advancing past
+            // 5.5 - safely inside the "fully visible" plateau (fade-out only starts at
+            // 6) but still lets a brand new message finish its normal 0->0.25 fade-in
+            // first. This also immediately snaps any already-faded chat message (ticker
+            // far past 6.5) back down to 5.5/fully visible the moment chat opens - no
+            // separate "reveal" step needed.
+            line.ticker = this.chatOpen && line.outline
+                ? math.min(line.ticker + dt, 5.5)
+                : line.ticker + dt;
             const E = line.ticker;
             line.offset = offset;
             line.opacity = math.smoothstep(E, 0, 0.25) * (1 - math.smoothstep(E, 6, 6.5));
@@ -1229,6 +1274,7 @@ export class UiManager2 {
             } else {
                 dom.health.inner.classList.add("ui-bar-danger");
             }
+            dom.health.numeric.textContent = `${Math.ceil(state.health)}`;
         }
         if (patch.boost) {
             const breakPoints = GameConfig.player.boostBreakpoints;
@@ -1242,6 +1288,7 @@ export class UiManager2 {
                 dom.boost.bars[i].style.width = `${widthT * 100}%`;
             }
             dom.boost.div.style.opacity = String(state.boost == 0 ? 0 : 1);
+            dom.boost.numeric.textContent = `${Math.ceil(state.boost)}`;
         }
         if (patch.interaction.type) {
             dom.interaction.div.style.display =
@@ -1816,9 +1863,9 @@ export class UiManager2 {
         return `${killerTxt} knocked ${youTxt} out`;
     }
 
-    getJoinedText(name: string){
+    getJoinedText(name: string, roleTag: "admin" | "mod" | "premium" | null = null){
         const joinTxt = this.localization.translate("game-joined");
-        return `${name} ${joinTxt}`;
+        return `${helpers.formatUsername(name, roleTag)} ${joinTxt}`;
     }
 
     getEnemieText(group1: string[]){
@@ -1853,6 +1900,7 @@ export class UiManager2 {
             return a.ticker - b.ticker;
         });
     }
+
 
     getChatMessage(player: string, text:string, chatType?: number){
 

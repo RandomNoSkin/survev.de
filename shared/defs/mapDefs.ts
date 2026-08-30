@@ -240,6 +240,7 @@ export interface MapDef {
         bagSizes: Record<string, number[]>;
         bleedDamage: number;
         bleedDamageMult: number;
+        damageMult?: number;
     };
 
     defaultItems?: {

@@ -21,6 +21,7 @@ import {
     type AckSalesResponse,
     type AuctionListResponse,
     type BuyListingResponse,
+    type BuyPremiumResponse,
     type BuyShopResponse,
     type CancelListingResponse,
     type CreateAuctionResponse,
@@ -40,6 +41,7 @@ import {
     type OfferActionResponse,
     type OfferListResponse,
     type PlaceBidResponse,
+    type PremiumReplayTokenResponse,
     type ProfileResponse,
     type RefreshQuestResponse,
     type SetPassUnlockResponse,
@@ -68,6 +70,7 @@ import {
     zMarketBrowseRequest,
     zOfferIdRequest,
     zPlaceBidRequest,
+    zPremiumReplayTokenRequest,
     zRefreshQuestRequest,
     zSetItemStatusRequest,
     zSetPassUnlockRequest,
@@ -135,8 +138,11 @@ import {
     withdrawOffer,
 } from "../../db/offers";
 import { grantPassItems } from "../../db/passGrants";
+import { buyPremium, grantPremiumPassXp, isPremiumActive } from "../../db/premium";
+import { grantPremiumUnlocks } from "../../db/premiumUnlocks";
 import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
 import { buyShopOffer, getShopForUser } from "../../db/shop";
+import { signReplayToken } from "../../replayToken";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
@@ -165,6 +171,7 @@ UserRouter.post("/profile", async (c) => {
         banReason,
         banExpiresAt,
         goldenFries,
+        premiumUntil,
     } = user;
 
     // A time-limited account ban whose duration has run out is treated as lifted
@@ -220,6 +227,7 @@ UserRouter.post("/profile", async (c) => {
                 usernameSet,
                 usernameChangeTime: timeUntilNextChange,
                 goldenFries,
+                premiumUntil: premiumUntil ? premiumUntil.getTime() : null,
             },
             loadout,
             items: items,
@@ -232,6 +240,9 @@ UserRouter.post("/profile", async (c) => {
             settings: {
                 offersDisabled: user.offersDisabled,
                 loadoutPrivate: user.loadoutPrivate,
+                showAdminPrefix: user.showAdminPrefix,
+                showModPrefix: user.showModPrefix,
+                showPremiumPrefix: user.showPremiumPrefix,
             },
             ...(await (async () => {
                 const offers = await getOffersForUser(user.id);
@@ -299,10 +310,25 @@ UserRouter.post(
 
 UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const user = c.get("user")!;
-    const { offersDisabled, loadoutPrivate } = c.req.valid("json");
-    const patch: Partial<{ offersDisabled: boolean; loadoutPrivate: boolean }> = {};
+    const {
+        offersDisabled,
+        loadoutPrivate,
+        showAdminPrefix,
+        showModPrefix,
+        showPremiumPrefix,
+    } = c.req.valid("json");
+    const patch: Partial<{
+        offersDisabled: boolean;
+        loadoutPrivate: boolean;
+        showAdminPrefix: boolean;
+        showModPrefix: boolean;
+        showPremiumPrefix: boolean;
+    }> = {};
     if (offersDisabled !== undefined) patch.offersDisabled = offersDisabled;
     if (loadoutPrivate !== undefined) patch.loadoutPrivate = loadoutPrivate;
+    if (showAdminPrefix !== undefined) patch.showAdminPrefix = showAdminPrefix;
+    if (showModPrefix !== undefined) patch.showModPrefix = showModPrefix;
+    if (showPremiumPrefix !== undefined) patch.showPremiumPrefix = showPremiumPrefix;
     if (Object.keys(patch).length) {
         await db.update(usersTable).set(patch).where(eq(usersTable.id, user.id));
     }
@@ -311,6 +337,9 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
         settings: {
             offersDisabled: offersDisabled ?? user.offersDisabled,
             loadoutPrivate: loadoutPrivate ?? user.loadoutPrivate,
+            showAdminPrefix: showAdminPrefix ?? user.showAdminPrefix,
+            showModPrefix: showModPrefix ?? user.showModPrefix,
+            showPremiumPrefix: showPremiumPrefix ?? user.showPremiumPrefix,
         },
     });
 });
@@ -394,9 +423,116 @@ UserRouter.post("/shop", async (c) => {
 UserRouter.post("/shop/buy", validateParams(zBuyShopRequest), async (c) => {
     const user = c.get("user")!;
     const { slot } = c.req.valid("json");
-    const result = await buyShopOffer(user.id, slot);
+    const result = await buyShopOffer(user.id, slot, isPremiumActive(user.premiumUntil));
     return c.json<BuyShopResponse>(result, 200);
 });
+
+UserRouter.post("/premium/buy", async (c) => {
+    const user = c.get("user")!;
+    const result = await buyPremium(user.id);
+    if (result.success) {
+        // Every successful purchase/renewal also gifts pass XP + any premium-exclusive
+        // cosmetic unlocks. Awaited (not fire-and-forget) so the client's post-purchase
+        // profile refresh already reflects the new level/cosmetics/fries. A failure
+        // here must not undo or mask the Premium purchase itself (fries are already
+        // spent) - just log it.
+        try {
+            await grantPremiumPassXp(user.id);
+            await grantPremiumUnlocks(user.id);
+        } catch (err) {
+            server.logger.error("premium/buy: failed to grant bonus pass XP/unlocks", err);
+        }
+    }
+    return c.json<BuyPremiumResponse>(
+        {
+            success: result.success,
+            error: result.error,
+            balance: result.balance,
+            premiumUntil: result.premiumUntil?.getTime(),
+        },
+        200,
+    );
+});
+
+// Mints a token so a Premium account can watch the full replay of a game THEY played
+// in - scoped to their own POV only (see verifyReplayToken/ReplayTokenData.playerId
+// and the playerId-aware checks in the /api/replay* routes).
+UserRouter.post(
+    "/premium/replay_token",
+    validateParams(zPremiumReplayTokenRequest),
+    async (c) => {
+        const user = c.get("user")!;
+        if (!isPremiumActive(user.premiumUntil)) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "premium_required" },
+                200,
+            );
+        }
+
+        const { gameId } = c.req.valid("json");
+
+        const row = await db.query.matchDataTable.findFirst({
+            where: and(eq(matchDataTable.gameId, gameId), eq(matchDataTable.userId, user.id)),
+        });
+        if (!row) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "not_your_game" },
+                200,
+            );
+        }
+
+        // A region this API server has no route for is a config/availability problem,
+        // not "this replay is old" - don't conflate the two or a legitimate outage
+        // would falsely tell the player their replay is gone forever.
+        if (!server.regions[row.region]) {
+            server.logger.warn(
+                `/premium/replay_token: no region route for "${row.region}" (game ${gameId})`,
+            );
+            return c.json<PremiumReplayTokenResponse>({ success: false, error: "error" }, 200);
+        }
+
+        // Games saved before recordingPlayerId existed can't be resolved to a POV file
+        // anymore - row.playerId (matchDataId) is a different id space than the
+        // recording system's __id and was never usable for this lookup.
+        if (row.recordingPlayerId == null) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "expired" },
+                200,
+            );
+        }
+
+        // Confirm the recording (and this player's POV file specifically) hasn't
+        // already been pruned by retention, instead of minting a token that would just
+        // 404 when the client tries to fetch it. This used to go through the same
+        // bounded listReplays() the moderation dashboard's Replays tab uses - but that
+        // caps at the N most recent games across the WHOLE region for dashboard-listing
+        // performance, not a time window, so on a busy region it could miss a
+        // legitimately-retained game that's simply not among the most recent N (e.g.
+        // from earlier the same day, once that day alone had passed the cap) and wrongly
+        // report it "expired". replayExists() is a single targeted disk check for this
+        // exact (gameId, playerId) instead - cheap (a directory-listing attempt per
+        // retention day until it's found, not reading every game's meta.json like an
+        // unbounded listReplays() would), so it doesn't reintroduce the timeout that cap
+        // was originally added to fix either.
+        const exists = await server.replayExists(row.region, gameId, row.recordingPlayerId);
+        if (!exists) {
+            return c.json<PremiumReplayTokenResponse>(
+                { success: false, error: "expired" },
+                200,
+            );
+        }
+
+        const token = signReplayToken({
+            region: row.region,
+            gameId,
+            playerId: row.recordingPlayerId,
+        });
+        return c.json<PremiumReplayTokenResponse>(
+            { success: true, token, playerId: row.recordingPlayerId },
+            200,
+        );
+    },
+);
 
 //
 // MARKET (player-to-player marketplace)
@@ -617,6 +753,7 @@ UserRouter.post("/friends/list", async (c) => {
     const friends: FriendEntry[] = detailed.map((f) => ({
         slug: f.slug,
         username: f.username,
+        roleTag: f.roleTag,
         lastGame: f.lastGame,
         live: liveMap.get(f.userId) ?? null,
     }));

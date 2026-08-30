@@ -6,7 +6,18 @@ import type {
 } from "../../../../shared/types/user";
 import { isBlockedBetween } from "./blocks";
 import { db } from "./index";
+import { resolveRoleTag } from "./roleTag";
 import { friendsTable, matchDataTable, usersTable } from "./schema";
+
+/** Columns `resolveRoleTag` needs, added to every select that displays a username. */
+const roleTagColumns = {
+    admin: usersTable.admin,
+    moderator: usersTable.moderator,
+    premiumUntil: usersTable.premiumUntil,
+    showAdminPrefix: usersTable.showAdminPrefix,
+    showModPrefix: usersTable.showModPrefix,
+    showPremiumPrefix: usersTable.showPremiumPrefix,
+};
 
 /** Resolves a slug to a user id (null if no such user). */
 async function resolveUser(slug: string): Promise<string | null> {
@@ -119,12 +130,20 @@ export async function removeFriend(
 /** The caller's accepted friends (most-recently-added first). */
 export async function getFriends(userId: string): Promise<Friend[]> {
     const rows = await db
-        .select({ slug: usersTable.slug, username: usersTable.username })
+        .select({
+            slug: usersTable.slug,
+            username: usersTable.username,
+            ...roleTagColumns,
+        })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.friendId))
         .where(and(eq(friendsTable.userId, userId), eq(friendsTable.status, "accepted")))
         .orderBy(desc(friendsTable.createdAt));
-    return rows.map((r) => ({ slug: r.slug, username: r.username }));
+    return rows.map((r) => ({
+        slug: r.slug,
+        username: r.username,
+        roleTag: resolveRoleTag(r),
+    }));
 }
 
 /** The caller's accepted friends with their account id + last-game time (for the friends
@@ -132,13 +151,20 @@ export async function getFriends(userId: string): Promise<Friend[]> {
 export async function getFriendsDetailed(
     userId: string,
 ): Promise<
-    Array<{ slug: string; username: string; userId: string; lastGame: number | null }>
+    Array<{
+        slug: string;
+        username: string;
+        userId: string;
+        lastGame: number | null;
+        roleTag: "admin" | "mod" | "premium" | null;
+    }>
 > {
     const rows = await db
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
             friendId: friendsTable.friendId,
+            ...roleTagColumns,
         })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.friendId))
@@ -165,29 +191,46 @@ export async function getFriendsDetailed(
         username: r.username,
         userId: r.friendId,
         lastGame: lastMap.get(r.friendId) ?? null,
+        roleTag: resolveRoleTag(r),
     }));
 }
 
 /** Friend requests the caller has received (pending), showing the requester. */
 export async function getIncomingRequests(userId: string): Promise<Friend[]> {
     const rows = await db
-        .select({ slug: usersTable.slug, username: usersTable.username })
+        .select({
+            slug: usersTable.slug,
+            username: usersTable.username,
+            ...roleTagColumns,
+        })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.userId))
         .where(and(eq(friendsTable.friendId, userId), eq(friendsTable.status, "pending")))
         .orderBy(desc(friendsTable.createdAt));
-    return rows.map((r) => ({ slug: r.slug, username: r.username }));
+    return rows.map((r) => ({
+        slug: r.slug,
+        username: r.username,
+        roleTag: resolveRoleTag(r),
+    }));
 }
 
 /** Friend requests the caller has sent (pending), showing the addressee. */
 export async function getOutgoingRequests(userId: string): Promise<Friend[]> {
     const rows = await db
-        .select({ slug: usersTable.slug, username: usersTable.username })
+        .select({
+            slug: usersTable.slug,
+            username: usersTable.username,
+            ...roleTagColumns,
+        })
         .from(friendsTable)
         .innerJoin(usersTable, eq(usersTable.id, friendsTable.friendId))
         .where(and(eq(friendsTable.userId, userId), eq(friendsTable.status, "pending")))
         .orderBy(desc(friendsTable.createdAt));
-    return rows.map((r) => ({ slug: r.slug, username: r.username }));
+    return rows.map((r) => ({
+        slug: r.slug,
+        username: r.username,
+        roleTag: resolveRoleTag(r),
+    }));
 }
 
 /**
@@ -223,6 +266,7 @@ export async function getRecentPlayers(
             teamId: matchDataTable.teamId,
             slug: usersTable.slug,
             username: usersTable.username,
+            ...roleTagColumns,
         })
         .from(matchDataTable)
         .innerJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
@@ -244,6 +288,7 @@ export async function getRecentPlayers(
         recent.push({
             slug: o.slug,
             username: o.username,
+            roleTag: resolveRoleTag(o),
             relation: myTeam != null && o.teamId === myTeam ? "with" : "against",
         });
         if (recent.length >= limit) break;

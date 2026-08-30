@@ -123,6 +123,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     @keyframes flashrow { from { background: var(--blue-dim); } to { background: transparent; } }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; letter-spacing: .3px; }
     .badge-admin  { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
+    .badge-premium { background: rgba(242, 214, 59, 0.15); color: #f2d63b; border: 1px solid #f2d63b; }
     .badge-mod    { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .badge-self   { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
     .badge-alive  { background: var(--green-dim);  color: var(--green-t);  }
@@ -144,6 +145,8 @@ export const dashboardHtml = `<!DOCTYPE html>
     /* ── Buttons ── */
     .btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 11px; font-family: inherit; font-weight: 600; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
+    .btn:disabled { cursor: not-allowed; opacity: .5; }
+    .btn:disabled:hover { opacity: .5; }
     .btn-red    { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
     .btn-blue   { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .btn-green  { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
@@ -1197,7 +1200,9 @@ function renderReplays() {
         <td><span class="rep-modcell" data-key="\${esc(rec.gameId + '|' + (p.modKey || ''))}">\${modBadge(p.modStatus)}</span></td>
         <td style="white-space:nowrap">
           <span style="display:inline-flex;gap:5px;align-items:center;">
-            <button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>
+            \${rec.archived === false
+              ? \`<button class="btn btn-gray btn-sm" disabled title="No archived client build exists for protocol \${rec.protocolVersion} — this replay can no longer be played back">Not Watchable</button>\`
+              : \`<button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>\`}
             \${p.modKey
               ? \`<button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" data-repname="\${esc(p.playerName)}" title="Flag this \${p.guest ? 'guest' : 'player'} in this game as suspicious">⚑ sus</button>\`
               : ''}
@@ -1218,7 +1223,9 @@ function renderReplays() {
           <span>\${esc(rec.mapName)} · \${mode}</span>
           <span>\${durStr}</span>
           \${rec.protocolVersion && rec.protocolVersion !== PROTOCOL_VERSION
-            ? \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version; 404 means it was never archived">proto \${rec.protocolVersion}</span>\`
+            ? rec.archived === false
+              ? \`<span class="badge badge-perm" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — no archived client build exists for this version, so it can no longer be played back">not watchable</span>\`
+              : \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version">proto \${rec.protocolVersion}</span>\`
             : ''}
           <span class="rep-modcell" data-key="\${esc(rec.gameId + '|')}">\${modBadge(rec.gameStatus)}</span>
           <button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" title="Flag this whole game as suspicious">⚑ sus game</button>
@@ -3529,6 +3536,7 @@ function renderPlayers() {
     const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
     const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>'
       : p.isModerator ? '<span class="badge badge-mod">MODERATOR</span>' : '';
+    const premiumBadge = p.isPremium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '';
     const isSelf     = p.userId === currentAdminId;
     const selfBadge  = isSelf ? '<span class="badge badge-self">YOU</span>' : '';
     // No kick/ban buttons for self or already-disconnected players
@@ -3536,7 +3544,7 @@ function renderPlayers() {
         <button class="btn btn-red  btn-sm" onclick="gameCmd({action:'kick',target:'\${esc(p.username)}'})">KICK</button>
         <button class="btn btn-red  btn-sm" style="background:var(--red-dim)" onclick="quickBanPlayer('\${esc(p.username)}','\${esc(p.encodedIp)}')">BAN</button>\`;
     return \`<tr style="\${p.disconnected ? 'opacity:.5' : ''}">
-      <td>\${esc(p.username)} \${adminBadge} \${selfBadge}</td>
+      <td>\${esc(p.username)} \${adminBadge} \${premiumBadge} \${selfBadge}</td>
       <td>\${ipLink(p.encodedIp)}</td>
       <td>\${p.kills ?? 0}</td>
       <td>\${p.assists ?? 0}</td>
@@ -3767,6 +3775,7 @@ function renderAccounts() {
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
         \${a.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : ''}
+        \${a.premium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
       </td>
       <td style="text-align:center;white-space:nowrap;">
@@ -3851,13 +3860,22 @@ function buildCosmeticOptions() {
   ).join('');
 }
 
+// Mirrors the server's PERMANENT_PREMIUM_DATE sentinel (year 9999) closely enough to
+// tell "permanent" apart from a real expiry date without hardcoding the exact value.
+function isPermanentPremium(premiumUntil) {
+  return !!premiumUntil && new Date(premiumUntil).getFullYear() >= 9000;
+}
+
 function renderAccountDetail(data) {
   const u = data.user;
   const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
+  const premiumActive = u.premiumUntil && new Date(u.premiumUntil).getTime() > Date.now();
+  const premiumPermanent = premiumActive && isPermanentPremium(u.premiumUntil);
   const flags = [
     u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
     u.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : '',
     u.banned ? '<span class="badge badge-perm">BANNED</span>'  : '',
+    premiumActive ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '',
   ].join(' ');
 
   const identity = \`
@@ -3878,24 +3896,32 @@ function renderAccountDetail(data) {
               : '<button class="btn btn-blue btn-sm" onclick="accSetModerator(true)" title="Grant replays-only dashboard access">🛡 Make moderator</button>') +
             '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-dim);">⭐ Premium: \${premiumActive ? (premiumPermanent ? 'permanent' : ('active until ' + fmtDate(u.premiumUntil))) : 'not active'}</span>
+        <button class="btn btn-blue btn-sm" onclick="accGrantPremium()">⭐ Grant Premium…</button>
+        \${premiumActive ? '<button class="btn btn-gray btn-sm" onclick="accRemovePremium()">Remove premium</button>' : ''}
+        \${premiumActive ? '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim);cursor:pointer;" title="Also reverts every XP bonus Premium ever granted this account.">' +
+          '<input type="checkbox" id="acc-premium-xp-toggle"> also revert XP bonus</label>' : ''}
+      </div>
     </div>\`;
 
   const xpByType = {};
   for (const x of (data.xp||[])) xpByType[x.passType] = x;
   const xpRows = (data.passTypes||[]).map(pt => {
-    const cur = xpByType[pt] || { level: 0, xp: 0 };
+    const cur = xpByType[pt] || { level: 0, xp: 0, premiumXp: 0 };
     return \`<tr>
       <td style="font-size:11px;">\${esc(pt)}</td>
       <td><input type="number" id="xp-lvl-\${esc(pt)}" value="\${cur.level}" readonly title="auto-derived from XP" style="width:70px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);padding:3px 6px;font-family:inherit;"></td>
       <td><input type="number" id="xp-xp-\${esc(pt)}" value="\${cur.xp}" min="0" oninput="updateLvlFromXp('\${esc(pt)}')" style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:inherit;"></td>
+      <td style="font-size:11px;color:#f2d63b;" title="XP granted by Premium purchases/renewals, already included in Total XP">\${cur.premiumXp ? ('⭐ ' + cur.premiumXp.toLocaleString()) : '–'}</td>
       <td><button class="btn btn-blue btn-sm" onclick="accSetXp('\${esc(pt)}')">Set</button></td>
     </tr>\`;
   }).join('');
   const xpCard = \`
     <div class="detail-card" style="margin-top:12px;" data-card="xp">
       <h3>XP / Pass Levels <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(level is derived from XP; setting it grants/revokes the matching unlocks)</span></h3>
-      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th></th></tr></thead>
-      <tbody>\${xpRows || '<tr><td colspan="4" class="empty">No passes.</td></tr>'}</tbody></table>
+      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th>from Premium</th><th></th></tr></thead>
+      <tbody>\${xpRows || '<tr><td colspan="5" class="empty">No passes.</td></tr>'}</tbody></table>
     </div>\`;
 
   const gpCard = \`
@@ -4208,6 +4234,62 @@ async function accSetModerator(makeMod) {
   try {
     await post('/api/account/moderator', { slug: currentAccountSlug, moderator: makeMod });
     toast(makeMod ? 'Moderator added — replays-only access' : 'Moderator role removed');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
+// Toggles the months input's disabled state when "Permanent" is (un)checked, inside
+// the Grant Premium dialog body (see accGrantPremium).
+function syncGrantPremiumFields() {
+  const permanent = document.getElementById('grant-prem-permanent')?.checked;
+  const monthsInput = document.getElementById('grant-prem-months');
+  if (monthsInput) monthsInput.disabled = !!permanent;
+}
+
+async function accGrantPremium() {
+  const body = '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">Duration</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<input type="number" id="grant-prem-months" value="2" min="1" max="24" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;"> months' +
+          '<label style="display:flex;align-items:center;gap:4px;margin-left:12px;cursor:pointer;">' +
+            '<input type="checkbox" id="grant-prem-permanent" onchange="syncGrantPremiumFields()"> Permanent' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">XP bonus</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<input type="number" id="grant-prem-xp-times" value="0" min="0" max="20" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;">' +
+          '<span style="font-size:11px;color:var(--text-muted);">× the normal Premium XP bonus (0 = none, 1 = one purchase\\'s worth, ...)</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const ok = await askConfirm({
+    title: '⭐ Grant Premium',
+    body,
+    confirmLabel: 'Grant',
+    confirmClass: 'btn-blue',
+  });
+  if (!ok) return;
+
+  const permanent = !!document.getElementById('grant-prem-permanent')?.checked;
+  const months = Math.max(1, Math.min(24, parseInt(document.getElementById('grant-prem-months')?.value, 10) || 2));
+  const xpTimes = Math.max(0, Math.min(20, parseInt(document.getElementById('grant-prem-xp-times')?.value, 10) || 0));
+
+  try {
+    await post('/api/account/premium/grant', { slug: currentAccountSlug, months, permanent, xpTimes });
+    toast('⭐ Premium granted' + (permanent ? ' (permanent)' : ' (' + months + ' months)') + (xpTimes ? ' + XP ×' + xpTimes : ''));
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
+async function accRemovePremium() {
+  const withXp = !!document.getElementById('acc-premium-xp-toggle')?.checked;
+  try {
+    await post('/api/account/premium/remove', { slug: currentAccountSlug, withXp });
+    toast('Premium removed' + (withXp ? ' (+ XP bonus reverted)' : ''));
     openAccountDetail(currentAccountSlug);
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }

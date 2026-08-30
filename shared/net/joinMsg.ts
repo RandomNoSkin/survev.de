@@ -10,6 +10,12 @@ export class JoinMsg implements AbstractMsg {
     bot = false;
     /** Client setting: only pick up Ghillie suits in-game (keeps the loadout skin). */
     onlyGhilliePickup = true;
+    /** Sent once at join so admin advanced-spectator clients can compute this
+     *  player's REAL camera viewport (see PlayerStatus.screenWidth/Height in
+     *  updateMsg.ts) instead of approximating it with the spectator's own aspect
+     *  ratio - never updated again even if the window is resized mid-game. */
+    screenWidth = 0;
+    screenHeight = 0;
     loadout = {
         outfit: "",
         melee: "",
@@ -31,6 +37,8 @@ export class JoinMsg implements AbstractMsg {
         s.writeBoolean(this.isMobile);
         s.writeBoolean(this.bot);
         s.writeBoolean(this.onlyGhilliePickup);
+        s.writeUint16(this.screenWidth);
+        s.writeUint16(this.screenHeight);
 
         s.writeGameType(this.loadout.outfit);
         s.writeGameType(this.loadout.melee);
@@ -53,6 +61,8 @@ export class JoinMsg implements AbstractMsg {
         this.isMobile = s.readBoolean();
         this.bot = s.readBoolean();
         this.onlyGhilliePickup = s.readBoolean();
+        this.screenWidth = s.readUint16();
+        this.screenHeight = s.readUint16();
 
         this.loadout.outfit = s.readGameType();
         this.loadout.melee = s.readGameType();

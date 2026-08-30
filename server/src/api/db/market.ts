@@ -33,6 +33,7 @@ import type {
 } from "../../../../shared/types/user";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
+import { resolveRoleTag } from "./roleTag";
 import {
     auctionsTable,
     goldenFriesLedgerTable,
@@ -381,6 +382,12 @@ async function queryListings(conds: SQL[], page: number): Promise<MarketListResp
             sellerSlug: marketListingsTable.sellerSlug,
             createdAt: marketListingsTable.createdAt,
             sellerUsername: usersTable.username,
+            sellerAdmin: usersTable.admin,
+            sellerModerator: usersTable.moderator,
+            sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowAdminPrefix: usersTable.showAdminPrefix,
+            sellerShowModPrefix: usersTable.showModPrefix,
+            sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
             source: itemsTable.source,
             previousOwners: itemsTable.previousOwners,
             games: itemsTable.games,
@@ -406,6 +413,14 @@ async function queryListings(conds: SQL[], page: number): Promise<MarketListResp
         total: getMarketTotal(r.price),
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
+        sellerRoleTag: resolveRoleTag({
+            admin: r.sellerAdmin,
+            moderator: r.sellerModerator,
+            premiumUntil: r.sellerPremiumUntil,
+            showAdminPrefix: r.sellerShowAdminPrefix,
+            showModPrefix: r.sellerShowModPrefix,
+            showPremiumPrefix: r.sellerShowPremiumPrefix,
+        }),
         createdAt: r.createdAt.getTime(),
         source: r.source ?? "",
         previousOwners: r.previousOwners ?? [],
@@ -495,6 +510,12 @@ export async function getUnackedSales(userId: string): Promise<SaleNotification[
             price: marketListingsTable.price,
             buyerUsername: usersTable.username,
             buyerSlug: usersTable.slug,
+            buyerAdmin: usersTable.admin,
+            buyerModerator: usersTable.moderator,
+            buyerPremiumUntil: usersTable.premiumUntil,
+            buyerShowAdminPrefix: usersTable.showAdminPrefix,
+            buyerShowModPrefix: usersTable.showModPrefix,
+            buyerShowPremiumPrefix: usersTable.showPremiumPrefix,
         })
         .from(marketListingsTable)
         .leftJoin(usersTable, eq(usersTable.id, marketListingsTable.buyerId))
@@ -512,6 +533,14 @@ export async function getUnackedSales(userId: string): Promise<SaleNotification[
         type: r.type,
         price: r.price,
         buyerName: r.buyerUsername || r.buyerSlug || "someone",
+        buyerRoleTag: resolveRoleTag({
+            admin: r.buyerAdmin,
+            moderator: r.buyerModerator,
+            premiumUntil: r.buyerPremiumUntil,
+            showAdminPrefix: r.buyerShowAdminPrefix,
+            showModPrefix: r.buyerShowModPrefix,
+            showPremiumPrefix: r.buyerShowPremiumPrefix,
+        }),
     }));
 }
 

@@ -1,3 +1,5 @@
+import { ReplayRecorder } from "./replayRecorder";
+
 /**
  * Minimal playback overlay for replay mode: title, play/pause, a speed dropdown,
  * a clickable progress bar and a time readout. Pure DOM, appended to <body>.
@@ -103,6 +105,9 @@ export class ReplayUI {
         this.recBtn.textContent = "⏺";
         this.recBtn.title = "Record video (pick “This tab” for UI + sound)";
         this.recBtn.onclick = () => this.cb.onToggleRecord();
+        // No point showing a dead button in browsers that can't record at all.
+        const supported = ReplayRecorder.isSupported() || !!navigator.mediaDevices?.getDisplayMedia;
+        this.recBtn.style.display = supported ? "" : "none";
 
         const bar = document.createElement("div");
         bar.style.cssText =
@@ -157,6 +162,17 @@ export class ReplayUI {
         const frac = durationMs > 0 ? Math.min(1, elapsedMs / durationMs) : 0;
         this.barFill.style.width = `${frac * 100}%`;
         this.timeLabel.textContent = `${fmtTime(elapsedMs)} / ${fmtTime(durationMs)}`;
+    }
+
+    /** Shows/hides the whole bar - used by the manual spectate-UI toggle and to keep it out of tab-capture recordings. */
+    setVisible(visible: boolean) {
+        this.root.style.display = visible ? "flex" : "none";
+    }
+
+    /** Hides the POV prev/next buttons when the loaded token only has one POV to switch to. */
+    setPovButtonsVisible(visible: boolean) {
+        this.prevPovBtn.style.display = visible ? "" : "none";
+        this.nextPovBtn.style.display = visible ? "" : "none";
     }
 
     destroy() {

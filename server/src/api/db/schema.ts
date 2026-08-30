@@ -50,6 +50,11 @@ export const usersTable = pgTable("users", {
     // When the account ban auto-expires. null = permanent (or no ban). Temporary
     // account bans are lifted by the ban-expiry sweep (see db/banExpiry.ts).
     banExpiresAt: timestamp("ban_expires_at", { withTimezone: true }),
+    // Premium account subscription (bought with golden fries, or admin-granted). null =
+    // never purchased/not active. A lazy `premiumUntil.getTime() > Date.now()` check
+    // (same idea as banActive above) determines whether it's currently active - a
+    // lapsed subscription just leaves this in the past rather than being cleared.
+    premiumUntil: timestamp("premium_until", { withTimezone: true }),
     username: text("username").notNull().default(""),
     usernameSet: boolean("username_set").notNull().default(false),
     userCreated: timestamp("user_created", { withTimezone: true }).notNull().defaultNow(),
@@ -67,6 +72,14 @@ export const usersTable = pgTable("users", {
     offersDisabled: boolean("offers_disabled").notNull().default(false),
     // when true, this user's loadout is hidden on the stats + advanced-game-stats pages.
     loadoutPrivate: boolean("loadout_private").notNull().default(false),
+    // Each independently gates whether this account's [ADMIN]/[MOD]/[PREM] name prefix
+    // (see resolveRoleTag in db/roleTag.ts) is shown to others - opt-out (default true),
+    // not opt-in. A role whose own toggle is off falls through to the next-highest
+    // enabled role rather than hiding the prefix outright (e.g. an admin with the ADMIN
+    // toggle off but PREM toggle on still shows [PREM]).
+    showAdminPrefix: boolean("show_admin_prefix").notNull().default(true),
+    showModPrefix: boolean("show_mod_prefix").notNull().default(true),
+    showPremiumPrefix: boolean("show_premium_prefix").notNull().default(true),
     // Instance ids the player had selected/equipped at their last game join, so match
     // stats can attach to the exact owned copy (snapshot per game; falls back to the
     // oldest instance of a type when absent). The client reports these on join.
@@ -337,7 +350,18 @@ export const matchDataTable = pgTable(
         gameId: uuid("game_id").notNull(),
         mapSeed: bigint("map_seed", { mode: "number" }).notNull(),
         username: text("username").notNull(),
+        // Stable per-match id used for kill/assist credit (killerId/killedIds/assistedIds
+        // all reference THIS, never the recording id below) - `Player.matchDataId`, a
+        // monotonic per-game counter that's never reused, unlike the network `__id`.
         playerId: integer("player_id").notNull(),
+        // The recording system's player id (`Player.__id`) at save time - DIFFERENT from
+        // `playerId` above and NOT safe to use for kill credit (it's a network slot id
+        // that can be recycled mid-match). This is what `players[].playerId` in a game's
+        // meta.json / the per-player `.svrep.gz` filename actually key off, so it's what
+        // the Premium self-service replay lookup (getReplayMeta/listReplays match) must
+        // use to find THIS player's own POV recording. Null for matches saved before this
+        // column existed - those can't be resolved to a POV file anymore.
+        recordingPlayerId: integer("recording_player_id"),
         // Non-default cosmetic types this player had equipped for the match (snapshot),
         // shown on the advanced game stats page (with total worth). Hidden there when the
         // owning account has loadout_private set.
@@ -669,6 +693,37 @@ export const userXpTable = pgTable(
         pk: primaryKey({ columns: [table.userId, table.passType] }),
     }),
 );
+
+/**
+ * Append-only, signed ledger of every XP grant (positive) or admin revocation
+ * (negative, see revokePremiumPassXp) from Premium (see grantPremiumPassXp) - same
+ * idea as goldenFriesLedgerTable. SUM(xpGranted) per (user, pass) is how much of that
+ * pass's current XP is currently attributable to Premium, which the moderation
+ * dashboard shows separately from XP earned in matches (so a Premium XP jump doesn't
+ * get mistaken for account boosting on the XP-gain leaderboard), and which the admin
+ * "remove Premium + XP" action reads to know exactly how much to subtract back out.
+ * Doesn't gate the reconcile job, which already can't revert Premium-granted XP on
+ * its own regardless (setPassXp anchors reconcileBaseXp/reconcileFrom to the
+ * post-grant total, and reconcileAllPasses only ever raises XP, never lowers it).
+ */
+export const premiumXpGrantsTable = pgTable(
+    "premium_xp_grants",
+    {
+        id: serial().primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        passType: text("pass_type").notNull(),
+        xpGranted: numeric("xp_granted").notNull(),
+        grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [index("premium_xp_grants_user_idx").on(table.userId, table.grantedAt)],
+);
+
+export type PremiumXpGrantsTable = typeof premiumXpGrantsTable.$inferSelect;
 
 /**
  * Per-user daily/rotating quests. Currently unused by gameplay code (the table exists

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { type MatchDataResponse, zMatchDataRequest } from "../../../../../shared/types/stats.ts";
 import { databaseEnabledMiddleware, rateLimitMiddleware, validateParams } from "../../auth/middleware.ts";
 import { db } from "../../db/index.ts";
+import { resolveRoleTag } from "../../db/roleTag.ts";
 import { matchDataTable, usersTable } from "../../db/schema.ts";
 import type { Context } from "../../index.ts";
 
@@ -32,6 +33,12 @@ matchDataRouter.post(
                 killed_ids: matchDataTable.killedIds,
                 equipped_cosmetics: matchDataTable.equippedCosmetics,
                 loadout_private: usersTable.loadoutPrivate,
+                admin: usersTable.admin,
+                moderator: usersTable.moderator,
+                premiumUntil: usersTable.premiumUntil,
+                showAdminPrefix: usersTable.showAdminPrefix,
+                showModPrefix: usersTable.showModPrefix,
+                showPremiumPrefix: usersTable.showPremiumPrefix,
                 role: matchDataTable.role,
                 revives: matchDataTable.revives,
                 teammate_saves: matchDataTable.teammateSaves,
@@ -44,10 +51,29 @@ matchDataRouter.post(
             .where(eq(matchDataTable.gameId, gameId));
 
         // Hide the loadout for accounts that marked it private.
-        const result: MatchDataResponse = rows.map(({ loadout_private, ...r }) => ({
-            ...r,
-            equipped_cosmetics: loadout_private ? [] : (r.equipped_cosmetics ?? []),
-        }));
+        const result: MatchDataResponse = rows.map(
+            ({
+                loadout_private,
+                admin,
+                moderator,
+                premiumUntil,
+                showAdminPrefix,
+                showModPrefix,
+                showPremiumPrefix,
+                ...r
+            }) => ({
+                ...r,
+                equipped_cosmetics: loadout_private ? [] : (r.equipped_cosmetics ?? []),
+                roleTag: resolveRoleTag({
+                    admin,
+                    moderator,
+                    premiumUntil,
+                    showAdminPrefix,
+                    showModPrefix,
+                    showPremiumPrefix,
+                }),
+            }),
+        );
 
         return c.json<MatchDataResponse>(result);
     },
