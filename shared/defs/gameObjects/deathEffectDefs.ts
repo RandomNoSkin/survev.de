@@ -153,7 +153,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_pixel_explosion: { // above death effects
         type: "death_effect",
         name: "Pixel Explosion",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Epic,
         texture: "loot-pixel-explosion.img",
         particle: "pixelExplosionDeath",
@@ -176,7 +176,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_pulse: { // above death effects
         type: "death_effect",
         name: "Pulse Death",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Epic,
         texture: "loot-pulse-death.img",
         particle: "pulseDeath",
@@ -197,7 +197,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_smoke: { // above death effects
         type: "death_effect",
         name: "Smoke Death",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Epic,
         texture: "loot-smoke-death.img",
         particle: "smokeDeath",
@@ -232,7 +232,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_touhou: { // above death effects
         type: "death_effect",
         name: "Touhou Death",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Mythic,
         texture: "loot-touhou-death.img",
         particle: "touhouDeath",
@@ -243,7 +243,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_bubble: { // above death effects
         type: "death_effect",
         name: "Bubble Death",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Mythic,
         texture: "loot-bubble-death.img",
         particle: "bubbleDeath",
@@ -254,7 +254,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_shattered_glass: { // above death effects
         type: "death_effect",
         name: "Shattered Glass",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Mythic,
         texture: "loot-shattered-glass-death.img",
         particle: "shatteredGlassDeath",
@@ -265,7 +265,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_xp_orb: { // above death effects
         type: "death_effect",
         name: "XP Orb",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Mythic,
         texture: "loot-xp-orb-death.img",
         particle: "xpOrbDeath",
@@ -276,7 +276,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_alphabet_soup: { // above death effects
         type: "death_effect",
         name: "Alphabet Soup",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Mythic,
         texture: "loot-alphabet-soup-death.img",
         particle: "alphabetSoupDeath",
@@ -287,7 +287,7 @@ export const DeathEffectDefs: Record<string, DeathEffectDef> = {
     death_drop_cellphone: { // above death effects
         type: "death_effect",
         name: "Drop Cellphone",
-        creatorDiscordId: 1468016902650462313,
+        creatorDiscordId: "1468016902650462313",
         rarity: Rarity.Mythic,
         texture: "loot-drop-cellphone.img",
         particle: "dropCellphoneDeath",
