@@ -290,4 +290,104 @@ export const PassDefs: Record<string, PassDef> = {
         ],
         donatorSkin: "outfitVillageNinja",
     },
+    pass_survivr4: {
+        type: "pass",
+        xp: [
+            10,10,10,10,10,
+            25,25,25,25,25,
+            40,40,40,40,40,
+            55,55,55,55,55,
+            70,70,70,70,70,
+            85,85,85,85,85,
+            100,100,100,100,100,
+            115,115,115,115,115,
+            //bonus pass
+            130,130,130,130,130,
+            130,130,130,130,130,
+            145,145,145,145,145,
+            145,145,145,145,145,
+            160,160,160,160,160,
+            160,160,160,160,160,
+            175,175,175,175,175,
+            175,175,175,175,175,
+            190,190,190,190,190,
+            190,190,190,190,190,
+            205,205,205,205,205,
+            205,205,205,205,
+            ],
+        items: [
+            { level: 2,  item: "emote_dove" },//
+            { level: 3,  item: "golden_fries", amount: 130 },
+            { level: 4,  item: "outfitMeteor" },//
+            { level: 5,  item: "emote_saturn" },//
+            { level: 6,  item: "death_black_hole" },//
+            { level: 7,  item: "golden_fries", amount: 135 },
+            { level: 8,  item: "emote_smh" },//
+            { level: 9,  item: "golden_fries", amount: 140 },
+            { level: 10, item: "outfitNoir" },//
+            { level: 11, item: "golden_fries", amount: 145 },
+            { level: 12, item: "emote_rocket" },//
+            { level: 13, item: "golden_fries", amount: 150 },
+            { level: 14, item: "heal_nebula" },//
+            { level: 15, item: "emote_ufo" },//
+            { level: 16, item: "outfitSunset" },//
+            { level: 17, item: "golden_fries", amount: 155 },
+            { level: 18, item: "emote_comet" },//
+            { level: 19, item: "golden_fries", amount: 165 },
+            { level: 20, item: "boost_nova" },//
+            { level: 21, item: "golden_fries", amount: 170 },
+            { level: 22, item: "emote_astrohelmet" },//
+            { level: 23, item: "golden_fries", amount: 175 },
+            { level: 24, item: "outfitGalaxy" },//
+            { level: 25, item: "heal_stardust" },//
+            { level: 26, item: "outfitYinyang" },//
+            { level: 27, item: "golden_fries", amount: 180 },
+            { level: 28, item: "emote_shootingstar" },//
+            { level: 29, item: "golden_fries", amount: 185 },
+            { level: 30, item: "death_sparkle" },//
+            { level: 31, item: "golden_fries", amount: 190 },
+            { level: 32, item: "outfitAstronaut" },//
+            { level: 33, item: "golden_fries", amount: 195 },
+            { level: 34, item: "emote_blackhole" },//
+            { level: 35, item: "karambit_woodland" },//
+            { level: 36, item: "death_magic_spark" },//
+            { level: 37, item: "golden_fries", amount: 200 },
+            { level: 38, item: "huntsman_burnished" }, //
+            { level: 39, item: "golden_fries", amount: 205 },
+            { level: 40, item: "outfitKingGalaxy" },//
+            //bonus pass
+            { level: 42, item: "golden_fries", amount: 55 },
+            { level: 44, item: "golden_fries", amount: 60 },
+            { level: 46, item: "golden_fries", amount: 60 },
+            { level: 48, item: "golden_fries", amount: 65 },
+            { level: 50, item: "boost_cosmic" }, //
+            { level: 52, item: "golden_fries", amount: 65 },
+            { level: 54, item: "golden_fries", amount: 70 },
+            { level: 56, item: "golden_fries", amount: 70 },
+            { level: 58, item: "golden_fries", amount: 75 },
+            { level: 60, item: "golden_fries", amount: 75 },
+            { level: 62, item: "golden_fries", amount: 80 },
+            { level: 64, item: "golden_fries", amount: 80 },
+            { level: 66, item: "golden_fries", amount: 85 },
+            { level: 68, item: "golden_fries", amount: 85 },
+            { level: 70, item: "golden_fries", amount: 90 },
+            { level: 72, item: "golden_fries", amount: 90 },
+            { level: 74, item: "golden_fries", amount: 95 },
+            { level: 75, item: "karambit_drowned" },//
+            { level: 76, item: "golden_fries", amount: 95 },
+            { level: 78, item: "golden_fries", amount: 100 },
+            { level: 80, item: "golden_fries", amount: 100 },
+            { level: 82, item: "golden_fries", amount: 105 },
+            { level: 84, item: "golden_fries", amount: 105 },
+            { level: 86, item: "golden_fries", amount: 110 },
+            { level: 88, item: "golden_fries", amount: 110 },
+            { level: 90, item: "golden_fries", amount: 115 },
+            { level: 92, item: "golden_fries", amount: 115 },
+            { level: 94, item: "golden_fries", amount: 120 },
+            { level: 96, item: "golden_fries", amount: 120 },
+            { level: 98, item: "golden_fries", amount: 130 },
+            { level: 99, item: "outfitDisasteroid" },//
+        ],
+        donatorSkin: "outfitVillageNinja",
+    },
 };
