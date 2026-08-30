@@ -1365,6 +1365,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDropOnDeath: true,
         name: "Twilight",
         rarity: Rarity.Epic,
+        creatorDiscordId: "1400580472735662101",
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-outfitTwilight.img",

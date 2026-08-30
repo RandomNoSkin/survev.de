@@ -186,6 +186,8 @@ export const _allowedEmotes = [
     "emote_thumbsup",
     "emote_sadface",
     "emote_happyface",
+    "emote_mog",
+    "emote_unamused",
     "emote_boffy",
     "emote_surviv",
     "emote_gg",
