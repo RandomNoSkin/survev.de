@@ -1361,6 +1361,25 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0x000000,
         },
     }),
+    outfitTwilight: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Twilight",
+        rarity: Rarity.Epic,
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitTwilight.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-Twilight.img",
+            footTint: 0x1c1c1c,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-circle-base-Twilight.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x000000,
+        },
+    }),
     outfitSortablue: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Sorta Blue",

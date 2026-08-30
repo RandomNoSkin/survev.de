@@ -108,6 +108,7 @@ export const _allowedOutfits = [
     "outfitAuronV2",
     "outfitHorizon",
     "outfitSortablue",
+    "outfitTwilight",
     "outfitDotexe",
     "outfitMarbleGreen",
     "outfitMarbelPink",
