@@ -146,9 +146,10 @@ class Region {
      *  without listReplays()'s recent-games cap - for a caller that already knows the
      *  exact gameId it wants (see gameRecorder.ts's getRecordingMeta doc comment). */
     async getReplayMeta(gameId: string): Promise<any | null> {
-        const data = await this.fetch<{ recording: any | null }>("api/dashboard/replay_meta", {
-            gameId,
-        });
+        const data = await this.fetch<{ recording: any | null }>(
+            "api/dashboard/replay_recording_meta",
+            { gameId },
+        );
         return data?.recording ?? null;
     }
 

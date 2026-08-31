@@ -1202,7 +1202,7 @@ function renderReplays() {
           <span style="display:inline-flex;gap:5px;align-items:center;">
             \${rec.archived === false
               ? \`<button class="btn btn-gray btn-sm" disabled title="No archived client build exists for protocol \${rec.protocolVersion} — this replay can no longer be played back">Not Watchable</button>\`
-              : \`<button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>\`}
+              : \`<button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0},\${!!rec.isCurrentProtocol})">▶ Watch</button>\`}
             \${p.modKey
               ? \`<button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" data-repname="\${esc(p.playerName)}" title="Flag this \${p.guest ? 'guest' : 'player'} in this game as suspicious">⚑ sus</button>\`
               : ''}
@@ -1222,7 +1222,7 @@ function renderReplays() {
           <span>\${esc(regionId)}</span>
           <span>\${esc(rec.mapName)} · \${mode}</span>
           <span>\${durStr}</span>
-          \${rec.protocolVersion && rec.protocolVersion !== PROTOCOL_VERSION
+          \${rec.protocolVersion && !rec.isCurrentProtocol
             ? rec.archived === false
               ? \`<span class="badge badge-perm" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — no archived client build exists for this version, so it can no longer be played back">not watchable</span>\`
               : \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version">proto \${rec.protocolVersion}</span>\`
@@ -1271,14 +1271,19 @@ async function markReplaySus(gameId, playerName) {
 }
 
 /** Mints a game-scoped replay token and opens the client in replay mode (with an initial POV). */
-async function watchReplay(region, gameId, playerId, protocolVersion) {
+async function watchReplay(region, gameId, playerId, protocolVersion, isCurrentProtocol) {
   try {
     const params = new URLSearchParams({ region, gameId });
     const { token } = await get('/api/replays/token?' + params.toString());
     if (!token) { toast('Failed to get replay token', true); return; }
     // Old-protocol recordings need the archived client build of that version — the
     // current client would misdecode the byte stream. 404 = build was never archived.
-    const base = protocolVersion && protocolVersion !== PROTOCOL_VERSION
+    // isCurrentProtocol comes from the last /api/replays fetch (checked live against the
+    // running server), NOT the PROTOCOL_VERSION constant below — that's baked into this
+    // HTML at render time, so a dashboard tab left open across a deploy that bumps the
+    // protocol would otherwise route a brand-new recording through a /archive/<version>/
+    // path that was never published (falls back to the plain site root instead).
+    const base = protocolVersion && !isCurrentProtocol
       ? CLIENT_URL + '/archive/' + protocolVersion
       : CLIENT_URL;
     const url = base + '/?replay=' + encodeURIComponent(token) + '&pov=' + playerId;
