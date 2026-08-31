@@ -1361,6 +1361,26 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0x000000,
         },
     }),
+    outfitTwilight: defineOutfitSkin("outfitBase", {
+        noDropOnDeath: true,
+        name: "Twilight",
+        rarity: Rarity.Epic,
+        creatorDiscordId: "1400580472735662101",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitTwilight.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-Twilight.img",
+            footTint: 0x1c1c1c,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-circle-base-Twilight.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0x000000,
+        },
+    }),
     outfitSortablue: defineOutfitSkin("outfitBase", {
         noDropOnDeath: true,
         name: "Sorta Blue",
@@ -2980,6 +3000,27 @@ const SkinDefs: Record<string, OutfitDef> = {
         lootImg: {
             sprite: "loot-rsrv-tag.img",
             tint: 0xffffff,
+        },
+    }),
+
+    outfitLog: defineOutfitSkin("outfitBase", {
+        name: "Log",
+        noDropOnDeath: true,
+        rarity: 5,
+        lore: "You might be chopped",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-log.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-log.img",
+            footTint: 9065728,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-circle-base-log.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 9065728,
         },
     }),
 };

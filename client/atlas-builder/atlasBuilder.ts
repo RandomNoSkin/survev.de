@@ -243,14 +243,20 @@ export class AtlasManager {
             const imagePath = Path.join(imageFolder, file);
             if (!fs.existsSync(imagePath)) {
                 atlasLogger.error(`File ${imagePath} doesn't exist`);
+                atlasHash += `-missing-${hashBuff(Buffer.from(file))}`;
                 continue;
             }
             const data = fs.readFileSync(imagePath);
 
             const scale = scaledSprites[file] ?? 1;
-            // Include the version so a builder-logic change re-renders every image
-            // (otherwise unchanged source files keep their stale cached PNGs).
-            const hash = `${hashBuff(data)}-${100 * scale}-${ATLAS_HASH_VERSION}`;
+            // Include both the path and the bytes in the hash so a renamed sprite,
+            // or a restored file with the same content under a different name,
+            // invalidates cached atlases instead of silently reusing stale ones.
+            const hash = `${hashBuff(Buffer.concat([
+                Buffer.from(file),
+                Buffer.from([0]),
+                data,
+            ]))}-${100 * scale}-${ATLAS_HASH_VERSION}`;
 
             if (
                 this.imageCache.get(file)?.hash !== hash
