@@ -1578,6 +1578,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     archived: typeof rec.protocolVersion === "number"
                         ? (archivedByVersion.get(rec.protocolVersion) ?? false)
                         : true,
+                    // Computed live against the running server's GameConfig, unlike the
+                    // dashboard page's PROTOCOL_VERSION constant (baked in at HTML render
+                    // time — stale if the tab has been open since before a deploy bumped
+                    // the protocol). watchReplay() must key off this, not that constant,
+                    // or a just-recorded (current-protocol) replay gets routed through a
+                    // /archive/<version>/ path that was never published.
+                    isCurrentProtocol: rec.protocolVersion === GameConfig.protocolVersion,
                     // A flag on the game as a whole (mod key "").
                     gameStatus: modByKey.get(`${rec.gameId}|`) ?? null,
                     players: (rec.players ?? []).map((p: any) => {

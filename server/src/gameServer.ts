@@ -876,8 +876,11 @@ app.post("/api/dashboard/replays", (res, req) => {
 });
 
 /** Reads one specific game's recording meta directly, without listRecordings()'s
- *  recent-games cap - for callers that already know the exact gameId they want. */
-app.post("/api/dashboard/replay_meta", (res, req) => {
+ *  recent-games cap - for callers that already know the exact gameId they want.
+ *  Named distinctly from `/api/dashboard/replay_meta` below (combined game-view
+ *  meta: damage + map) - they used to collide on the same path, which made uWS
+ *  keep only the later registration and silently 404 every replay lookup. */
+app.post("/api/dashboard/replay_recording_meta", (res, req) => {
     res.onAborted(() => {
         res.aborted = true;
     });
@@ -1032,7 +1035,9 @@ app.post("/api/dashboard/replay_tracks", (res, req) => {
     );
 });
 
-/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON. */
+/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON.
+ *  Distinct from `/api/dashboard/replay_recording_meta` above (one recording's own meta.json) -
+ *  keep these two paths apart, they collided here once already. */
 app.post("/api/dashboard/replay_meta", (res, req) => {
     res.onAborted(() => {
         res.aborted = true;
