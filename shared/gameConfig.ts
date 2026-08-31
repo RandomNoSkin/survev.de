@@ -232,7 +232,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1027,
+    protocolVersion: 1028,
     Action,
     Anim,
     DamageType,
@@ -282,7 +282,12 @@ export const GameConfig = {
             pass_survivr3: {
                 passMaxLevel: 99,
                 seasonStart: "2026-07-08T00:00:00",
-                seasonEnd: "2026-10-31T23:59:30",
+                seasonEnd: "2026-08-31T23:59:59",
+            },
+            pass_survivr4: {
+                passMaxLevel: 99,
+                seasonStart: "2026-09-01T00:00:00",
+                seasonEnd: "2027-01-31T23:59:30",
             },
         } as Record<
             string,
