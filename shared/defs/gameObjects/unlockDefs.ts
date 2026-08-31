@@ -130,6 +130,7 @@ export const _allowedOutfits = [
     "outfitBluebell",
     "outfitAegis",
     "outfitUmbra",
+    "outfitLog",
 
     // resurviv skin accessories
     "outfitSnowman",
@@ -405,8 +406,6 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "crosshair_184",
             "crosshair_godak",
             "emote_thumbsup",
-            "emote_violence",// delete these two later
-            "emote_confetti",
             "emote_sadface",
             "emote_happyface",
             "emote_boffy",

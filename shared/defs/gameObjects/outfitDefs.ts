@@ -3002,6 +3002,27 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0xffffff,
         },
     }),
+
+    outfitLog: defineOutfitSkin("outfitBase", {
+        name: "Log",
+        noDropOnDeath: true,
+        rarity: 5,
+        lore: "You might be chopped",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitlog.img",
+            handTint: 9065728,
+            handSprite: "player-hands-01.img",
+            footTint: 9065728,
+            footSprite: "player-feet-01.img",
+            backpackTint: 9065728,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 9065728,
+        },
+    }),
 };
 
 export const OutfitDefs = { ...BaseDefs, ...SkinDefs };
