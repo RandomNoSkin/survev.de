@@ -2003,4 +2003,25 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         teamOnly: false,
         category: EmoteCategory.Other,
     },
+    emote_violence: {
+        type: "emote",
+        name: "Violence",
+        rarity: Rarity.Common,
+        texture: "violence.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    },
+    emote_confetti: {
+        type: "emote",
+        name: "Confetti",
+        rarity: Rarity.Common,
+        texture: "confetti.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    }
+
 };
