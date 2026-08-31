@@ -3010,13 +3010,13 @@ const SkinDefs: Record<string, OutfitDef> = {
         lore: "You might be chopped",
         skinImg: {
             baseTint: 0xffffff,
-            baseSprite: "player-base-outfitlog.img",
-            handTint: 9065728,
-            handSprite: "player-hands-01.img",
+            baseSprite: "player-base-log.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-log.img",
             footTint: 9065728,
             footSprite: "player-feet-01.img",
-            backpackTint: 9065728,
-            backpackSprite: "player-circle-base-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-circle-base-log.img",
         },
         lootImg: {
             sprite: "loot-shirt-01.img",
