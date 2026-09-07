@@ -67,7 +67,7 @@ function perksEqual(a: Array<{ type: string }>, b: Array<{ type: string }>) {
 }
 function createPlayerNameText() {
     const nameStyle = {
-        fontFamily: "Arial",
+        fontFamily: "Roboto Condensed",
         fontWeight: "bold",
         fontSize: device.pixelRatio > 1 ? 30 : 22,
         align: "center",
@@ -3003,7 +3003,7 @@ export class PlayerBarn {
             roleTag: info.roleTag,
             nameTruncated: helpers.truncateString(
                 info.name || "",
-                "bold 16px arial",
+                "bold 16px 'Roboto Condensed'",
                 180,
             ),
             anonName: `Player${info.playerId - 2750}`,
