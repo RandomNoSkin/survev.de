@@ -23,6 +23,8 @@ export interface EmoteDef {
     teamOnly?: boolean;
     category: number;
     noCustom?: boolean;
+    // Discord snowflake as a string - a JS number would lose precision.
+    creatorDiscordId?: string;
 }
 
 export const EmotesDefs: Record<string, EmoteDef> = {
@@ -271,6 +273,28 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         name: "Happy Face",
         rarity: Rarity.Common,
         texture: "face-happy.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
+    emote_mog: {
+        type: "emote",
+        name: "Mogging",
+        rarity: Rarity.Common,
+        creatorDiscordId: "619649889332232192",
+        texture: "face-mog.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
+    emote_unamused: {
+        type: "emote",
+        name: "Unamused",
+        rarity: Rarity.Common,
+        creatorDiscordId: "619649889332232192",
+        texture: "face-expressionless.img",
         sound: "emote_01",
         channel: "ui",
         teamOnly: false,
@@ -1979,4 +2003,25 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         teamOnly: false,
         category: EmoteCategory.Other,
     },
+    emote_violence: {
+        type: "emote",
+        name: "Violence",
+        rarity: Rarity.Common,
+        texture: "violence.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    },
+    emote_confetti: {
+        type: "emote",
+        name: "Confetti",
+        rarity: Rarity.Common,
+        texture: "confetti.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    }
+
 };

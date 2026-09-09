@@ -275,7 +275,7 @@ export class BulletBarn {
                         1,
                     );
                     // Actuasl calculation for how fast a bullet fades when suppressedOnDist is true, with a minimum alpha of 0.1
-                    b.bulletTrail.alpha = math.max(0.08, 1 - 5 * travelDist); // to change strength Adjust x in: 0.1, 1 - x * travelDist
+                    b.bulletTrail.alpha = math.max(0.05, 1 - 5 * travelDist); // to change strength Adjust x in: 0.1, 1 - x * travelDist
                 } else if (b.tracerAlphaRate && b.suppressed) {
                     const rate = b.tracerAlphaRate;
                     b.bulletTrail.alpha = math.max(

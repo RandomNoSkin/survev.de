@@ -53,6 +53,7 @@ export class WeaponManager {
         cooldown: number;
         recoilTime: number;
         shotCount: number;
+        ammoPreserveCounter?: number;
         backpackFed?: boolean;
         // Granaten-Launcher (modified_hk416_grenade): in der Kammer geladener
         // Wurfwaffen-Typ und das gestashte Magazin des inaktiven Modus.
@@ -84,6 +85,7 @@ export class WeaponManager {
                 cooldown: 0,
                 recoilTime: Infinity,
                 shotCount: 0,
+                ammoPreserveCounter: 0,
                 backpackFed: false,
                 loadedThrowable: undefined,
                 secondaryClip: undefined,
@@ -133,6 +135,16 @@ export class WeaponManager {
         )
             return;
 */
+        // Release a cooked throwable BEFORE the slot changes (same as upstream). Doing it
+        // afterwards — which is what the `curWeapIdx != Throwable` branch in update() ends
+        // up doing a tick later — makes the server play the Throw anim while a melee/gun
+        // is already equipped. The client then runs the throw anim's effects against the
+        // new weapon def and dies on `typeToDef(activeWeapon, "throwable")`, taking down
+        // the client of everyone who could see the throw.
+        if (this.cookingThrowable && idx !== WeaponSlot.Throwable) {
+            this.throwThrowable(true);
+        }
+
         this.player.cancelAnim();
 
         if (cancelSlowdown) {
@@ -185,6 +197,8 @@ export class WeaponManager {
 
         this.lastWeaponIdx = this._curWeapIdx;
         this._curWeapIdx = idx;
+        // Reset preserve counter on weapon switch so the preserve pattern restarts
+        if (this.weapons[idx]) this.weapons[idx].ammoPreserveCounter = 0;
         if (cancelAction) {
             this.player.cancelAction();
         }
@@ -279,6 +293,7 @@ export class WeaponManager {
         this.weapons[idx].type = type;
         this.weapons[idx].cooldown = 0;
         this.weapons[idx].ammo = ammo;
+        this.weapons[idx].ammoPreserveCounter = 0;
         if (weaponDef?.type === "gun") {
             this.weapons[idx].recoilTime = weaponDef.recoilTime;
             this.weapons[idx].backpackFed = !!weaponDef.backpackFed;
@@ -300,6 +315,25 @@ export class WeaponManager {
     }
 
     bufferInput = false;
+
+    /**
+     * Last-resort fix up for an active slot that doesn't hold a valid weapon: fall back
+     * to the melee slot (restoring fists if that one is empty too). Only reachable if
+     * some weapon state bug slipped through — it exists so such a bug can't crash the
+     * game tick, which would kill the whole match.
+     */
+    recoverFromInvalidWeapon(): void {
+        if (!GameObjectDefs.typeToDefSafe(this.weapons[WeaponSlot.Melee].type)) {
+            this.weapons[WeaponSlot.Melee].type = "fists";
+            this.weapons[WeaponSlot.Melee].cooldown = 0;
+        }
+        this._curWeapIdx = WeaponSlot.Melee;
+        this.cookingThrowable = false;
+        this.bursts.length = 0;
+        this.meleeAttacks.length = 0;
+        this.player.setDirty();
+        this.player.weapsDirty = true;
+    }
 
     update(dt: number) {
         const player = this.player;
@@ -323,7 +357,21 @@ export class WeaponManager {
             this.tryReload();
         }
 
-        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon)!;
+        // The active slot must always hold a known weapon. If any code path left it
+        // empty/bogus, dereferencing the def here throws INSIDE the game tick, which
+        // kills the entire game (gameProcess -> stopCrashedGame -> every player kicked).
+        // Recover to melee and log it instead, so a weapon state bug stays a bug report
+        // instead of taking the match down with it.
+        let itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
+        if (!itemDef) {
+            this.player.game.logger.warn(
+                `Player ${this.player.name} had an invalid active weapon ` +
+                    `("${this.activeWeapon}" in slot ${this.curWeapIdx}), recovering to melee`,
+            );
+            this.recoverFromInvalidWeapon();
+            itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon);
+            if (!itemDef) return;
+        }
 
         switch (itemDef.type) {
             case "gun": {
@@ -655,6 +703,7 @@ export class WeaponManager {
             );
             if (taken <= 0) return;
             weapon.ammo += taken;
+            weapon.ammoPreserveCounter = 0;
             weapon.loadedThrowable = throwableType;
             this.player.weapsDirty = true;
             this.bursts.length = 0;
@@ -693,6 +742,7 @@ export class WeaponManager {
         }
 
         weapon.ammo += amountToReload;
+        weapon.ammoPreserveCounter = 0;
 
         // reload again if we still have ammo in the inventory but didnt fill the weapon
         // for single reload shotguns
@@ -736,6 +786,7 @@ export class WeaponManager {
                 );
                 if (taken <= 0) continue;
                 weapon.ammo = math.min(maxClip, curAmmo + taken);
+                weapon.ammoPreserveCounter = 0;
                 weapon.loadedThrowable = throwableType;
                 continue;
             }
@@ -752,6 +803,7 @@ export class WeaponManager {
 
             weapon.ammo = curAmmo + add;
             if (weapon.ammo > maxClip) weapon.ammo = maxClip;
+            weapon.ammoPreserveCounter = 0;
         }
 
         this.player.reloadAgain = false;
@@ -913,8 +965,6 @@ export class WeaponManager {
     fireWeapon(offHand: boolean, forceFire?: boolean) {
         const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef;
 
-        // Granaten-Launcher (modified_hk416_grenade): verschießt die geladene
-        // Wurfwaffe cursor-gezielt statt normaler Kugeln.
         if (itemDef.launchThrowable) {
             this.fireThrowableLauncher(offHand);
             return;
@@ -966,6 +1016,13 @@ export class WeaponManager {
                 this.player.invManager.has(itemDef.ammo as InventoryItem)
             ) {
                 this.player.invManager.take(itemDef.ammo, 1);
+            }
+        } else if (itemDef.ammoPreserve) {
+            // Count shots per-weapon and consume ammo only on the configured
+            // shot number (e.g. ammoPreserve=2 => consume every 2nd shot).
+            weapon.ammoPreserveCounter = (weapon.ammoPreserveCounter ?? 0) + 1;
+            if (weapon.ammoPreserveCounter % itemDef.ammoPreserve === 0) {
+                weapon.ammo--;
             }
         } else {
             weapon.ammo--;
@@ -1196,7 +1253,60 @@ export class WeaponManager {
                     `Invalid projectile type: ${itemDef.projType}`,
                 );
 
-                const vel = v2.mul(shotDir, projDef.throwPhysics.speed);
+                let projectileSpeed = projDef.throwPhysics.speed;
+                let projectileDirection = shotDir;
+                let projectileVelocityZ: number | undefined;
+                if (projDef.exactAimDistance) {
+                    const gravity = 10.5;
+                    const launchHeight = 0.5;
+                    const launchVelocityZ = projDef.throwPhysics.velZ;
+                    const computedFlightTime =
+                        (launchVelocityZ
+                            + Math.sqrt(
+                                launchVelocityZ * launchVelocityZ
+                                    + 2 * gravity * launchHeight,
+                            )) / gravity;
+                    const baseFlightTime =
+                        projDef.exactAimFlightTime ?? computedFlightTime;
+                    const targetPos = v2.add(
+                        this.player.pos,
+                        v2.mul(direction, this.player.toMouseLen),
+                    );
+                    const targetDistance = math.max(
+                        v2.dot(v2.sub(targetPos, shotPos), direction),
+                        0,
+                    );
+                    const distanceRatio = math.clamp(
+                        targetDistance
+                            / (GameConfig.player.throwableMaxMouseDist * 1.8),
+                        0,
+                        1,
+                    );
+                    const flightTime =
+                        baseFlightTime
+                        * (1
+                            - (projDef.exactAimFlightTimeVariation ?? 0)
+                                * (1 - distanceRatio));
+                    projectileSpeed = targetDistance / flightTime;
+                    projectileVelocityZ =
+                        (0.5 * gravity * flightTime * flightTime - launchHeight)
+                        / flightTime;
+                } else if (itemDef.projectileUsesAimDistance) {
+                    const maxAimDistance =
+                        itemDef.projectileMaxAimDistance
+                        ?? GameConfig.player.throwableMaxMouseDist * 1.8;
+                    const aimDistanceMultiplier =
+                        math.clamp(
+                            this.player.toMouseLen,
+                            0,
+                            maxAimDistance,
+                        ) / 15;
+                    projectileSpeed *= aimDistanceMultiplier;
+                }
+                const vel = v2.mul(
+                    projectileDirection,
+                    projectileSpeed,
+                );
                 projectile = this.player.game.projectileBarn.addProjectile(
                     this.player.__id,
                     itemDef.projType,
@@ -1206,7 +1316,10 @@ export class WeaponManager {
                     vel,
                     projDef.fuseTime,
                     GameConfig.DamageType.Player,
-                    shotDir,
+                    projectileDirection,
+                    undefined,
+                    undefined,
+                    projectileVelocityZ,
                 );
             }
 
@@ -1303,13 +1416,22 @@ export class WeaponManager {
      * Flugbahn-Simulation wird die (immer schnelle) Geschwindigkeit gewählt, mit
      * der die Granate genau am Crosshair des Spielers detoniert.
      */
-    computeLauncherVel(throwableDef: ThrowableDef, spawnPos: Vec2, dir: Vec2): Vec2 {
+    computeLauncherVel(
+        throwableDef: ThrowableDef,
+        spawnPos: Vec2,
+        dir: Vec2,
+        maxAimDistance?: number,
+    ): Vec2 {
         // Zielpunkt = Mausposition des Spielers
-        const target = v2.add(this.player.pos, v2.mul(dir, this.player.toMouseLen));
+        const targetDistance = math.min(
+            this.player.toMouseLen,
+            maxAimDistance ?? Infinity,
+        );
+        const target = v2.add(this.player.pos, v2.mul(dir, targetDistance));
         const targetDist = v2.length(v2.sub(target, spawnPos));
 
-        // immer "ziemlich schnell" -> hoher Geschwindigkeitsbereich
-        const minSpeed = 30;
+        // Allow close cursor targets to produce genuinely short throws.
+        const minSpeed = 0;
         const maxSpeed = 130;
         let lo = minSpeed;
         let hi = maxSpeed;
@@ -1425,7 +1547,12 @@ export class WeaponManager {
             }
         }
 
-        const vel = this.computeLauncherVel(throwableDef, spawnPos, direction);
+        const vel = this.computeLauncherVel(
+            throwableDef,
+            spawnPos,
+            direction,
+            itemDef.projectileMaxAimDistance,
+        );
 
         let fuseTime = 1;
         let multiplier = 1;
@@ -1641,12 +1768,21 @@ export class WeaponManager {
         ) {
             return;
         }
+        // Runs from the game tick, so a bad state must never throw here (that kills the
+        // whole match). Just don't start cooking if the slot isn't a throwable we
+        // actually own — cooking one the player has 0 of leaves the throw path with
+        // nothing to consume.
+        const throwableType = this.activeWeapon;
+        const itemDef = GameObjectDefs.typeToDefSafe(throwableType);
+        if (itemDef?.type !== "throwable") return;
+        if (
+            !this.player.invManager.isValid(throwableType) ||
+            !this.player.invManager.has(throwableType)
+        ) {
+            return;
+        }
+
         this.player.cancelAction();
-        const itemDef = GameObjectDefs.typeToDefSafe(this.activeWeapon)!;
-        assert(
-            itemDef.type === "throwable",
-            `Invalid projectile type: ${this.activeWeapon}`,
-        );
 
         this.cookingThrowable = true;
         this.cookTicker = 0;
@@ -1695,33 +1831,66 @@ export class WeaponManager {
         return false;
     }
 
+    /** Ends a cook anim left over from a throw that never happened. */
+    cancelCookAnim(): void {
+        if (this.player.animType === GameConfig.Anim.Cook) {
+            this.player.cancelAnim();
+        }
+    }
+
     throwThrowable(noSpeed?: boolean): void {
         if (!this.cookingThrowable) return;
         this.cookingThrowable = false;
 
         if (this.cookTicker < GameConfig.player.cookTime) {
+            // Throw aborted before the minimum cook time (switching or cycling slots
+            // right after pulling the pin). The cook anim would otherwise keep running —
+            // for non cookable throwables it's started with an Infinity duration — and
+            // `cookThrowable()` refuses to start while it plays, leaving the player
+            // unable to throw anything until they switch weapons again.
+            this.cancelCookAnim();
             return;
         }
 
         const oldThrowableType = this.weapons[GameConfig.WeaponSlot.Throwable].type;
-        const amount = this.player.invManager.get(oldThrowableType as InventoryItem);
-        if (amount <= 0) return;
+
+        // NOTE: invManager.get() returns undefined for an empty/unknown type and
+        // `undefined <= 0` is false, so an empty throwable slot used to slip past the
+        // old count check and blow up on the def lookup below — inside the game tick.
+        // Validate the type itself instead of trusting the count.
+        if (
+            !this.player.invManager.isValid(oldThrowableType) ||
+            this.player.invManager.get(oldThrowableType) <= 0
+        ) {
+            this.cancelCookAnim();
+            return;
+        }
 
         // need to store this incase throwableType gets replaced with its "heavy" variant like snowball => snowball_heavy
         // used to manage inventory since snowball_heavy isnt stored in inventory, when it's thrown you decrement "snowball" from inv
 
-        let throwableType = this.weapons[GameConfig.WeaponSlot.Throwable].type;
-        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType)!;
+        let throwableType: string = oldThrowableType;
+        let throwableDef = GameObjectDefs.typeToDefSafe(throwableType);
 
-        assert(throwableDef.type === "throwable");
+        if (throwableDef?.type !== "throwable") {
+            this.player.game.logger.warn(
+                `Player ${this.player.name} tried to throw a non throwable ` +
+                    `("${throwableType}"), ignoring`,
+            );
+            this.cancelCookAnim();
+            return;
+        }
 
         if (throwableDef.heavyType && throwableDef.changeTime) {
             if (this.cookTicker >= throwableDef.changeTime) {
-                throwableType = throwableDef.heavyType;
-                throwableDef = GameObjectDefs.typeToDefSafe(throwableType) as ThrowableDef;
+                const heavyDef = GameObjectDefs.typeToDefSafe(throwableDef.heavyType);
+                // fall back to the light variant if the heavy one isn't a real def
+                if (heavyDef?.type === "throwable") {
+                    throwableType = throwableDef.heavyType;
+                    throwableDef = heavyDef;
+                }
             }
         }
-        assert(throwableDef.type === "throwable");
 
         let multiplier: number;
         if (throwableDef.forceMaxThrowDistance) {
@@ -1836,14 +2005,22 @@ export class WeaponManager {
             this.setupStrobe(projectile, throwableDef);
         }
 
-        const animationDuration = GameConfig.player.throwTime;
-        this.player.playAnim(GameConfig.Anim.Throw, animationDuration);
+        // Only animate the throw while the throwable is still the equipped weapon. The
+        // throw anim's client side effects resolve the *active weapon* as a throwable, so
+        // sending it with a gun/melee equipped (throws triggered by a slot switch, going
+        // down, dying) crashes every client that sees this player.
+        if (this.curWeapIdx === GameConfig.WeaponSlot.Throwable) {
+            const animationDuration = GameConfig.player.throwTime;
+            this.player.playAnim(GameConfig.Anim.Throw, animationDuration);
+        } else {
+            this.cancelCookAnim();
+        }
 
         /**
          * Remove the throwable from the inventory
          * This will handle showing next throwables or switching weapons if theres none left
          */
-        this.player.invManager.take(oldThrowableType as InventoryItem, 1);
+        this.player.invManager.take(oldThrowableType, 1);
     }
 
     /**

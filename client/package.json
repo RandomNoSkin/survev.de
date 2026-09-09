@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/archiveBuild.mjs",
     "archive": "node scripts/archiveBuild.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "vite dev",

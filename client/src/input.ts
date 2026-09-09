@@ -159,6 +159,16 @@ export class InputHandler {
 
     // Keyboard
     onKeyDown(event: KeyboardEvent) {
+        // OS-level auto-repeat (holding a key down fires repeated keydowns with
+        // repeat:true) is a text-editing concept, not a game input one - `keys[X]` is
+        // already true from the initial, non-repeat press, so ignoring repeats here
+        // never affects continuous-hold behavior (movement, etc). It matters for a
+        // specific edge case though: e.g. chat.ts explicitly resets Enter's state
+        // after sending a message so game.ts's "Open Chat" keybind poll (also on
+        // Enter) doesn't immediately reopen it - if Enter was still physically held at
+        // that instant, a repeat keydown (now landing on whatever regained focus,
+        // since chat blurred) would otherwise silently undo that reset a moment later.
+        if (event.repeat) return;
         if(this.isTyping && event.keyCode !== Key.Enter && event.keyCode !== Key.Escape && event.keyCode !== Key.F4){
             return;
         }

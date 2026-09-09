@@ -23,13 +23,15 @@ export const mapDef: PartialMapDef = {
     },
     assets: {
         audio: [
-            { name: "club_music_01", channel: "ambient" },
-            { name: "club_music_02", channel: "ambient" },
+            { name: "club_music_01", channel: "gameMusic" },
+            { name: "club_music_02", channel: "gameMusic" },
+            { name: "lodge_music_01", channel: "gameMusic" },
             { name: "ambient_steam_01", channel: "ambient" },
+            { name: "ambient_fireplace_01", channel: "ambient" },
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach"],
+        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
     },
     biome: {
         colors: {
@@ -1056,7 +1058,34 @@ export const mapDef: PartialMapDef = {
             shoreInset: 48,
             grassInset: 18,
             rivers: {
-                lakes: [],
+                lakes: [
+                    {
+                        odds: 1,
+                        innerRad: 22,
+                        outerRad: 36,
+                        centerObj: "teapavilion_01comp",
+                        riverConnection: true,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 200,
+                        },
+                    },
+                    {
+                        odds: 1,
+                        innerRad: 10,
+                        outerRad: 20,
+                        centerObj: "oasis_01comp",
+                        riverConnection: false,
+                        riverMaskRad: 48,
+                        lakeRiverbankColor: 0xcdb35b,
+                        lakeWaterColor: 0x2f93b7,
+                        lakeWaterRippleColor: 0xb3f0ff,
+                        spawnBound: {
+                            pos: v2.create(0.5, 0.5),
+                            rad: 300,
+                        },
+                    },
+                ],
                 weights: [
                     { weight: 0.1, widths: [4] },
                     { weight: 0.15, widths: [8] },
@@ -1115,12 +1144,12 @@ export const mapDef: PartialMapDef = {
         },
         customSpawnRules: {
             locationSpawns: [
-                {
+                /*{
                     type: "club_complex_01",
                     pos: v2.create(0.5, 0.5),
                     rad: 10,
                     retryOnFailure: true,
-                },
+                },*/
                 {
                     type: "stone_04",
                     pos: v2.create(0.5, 0.5),
@@ -1191,6 +1220,7 @@ export const mapDef: PartialMapDef = {
                 hut_01: 14, // huts
                 hut_02: 3, // spas hut
                 hut_03: 2, // scout hut
+                hut_04: 1,
                 shack_03a: 7, // small river / sea cabins
                 shack_03b: { small: 7, large: 7,}, // small river / sea cabins
                 greenhouse_01: { small: 2, large: 2,}, // greenhouses
@@ -1214,14 +1244,14 @@ export const mapDef: PartialMapDef = {
             },
         ],
         randomSpawns: [
-            /*{
-                spawns: ["mansion_structure_01", "police_01", "bank_01"],
-                choose: 3,
-            },*/
+            {
+                spawns: ["club_complex_01", "reserve_complex_01"],
+                choose: 1,
+            },
         ],
         spawnReplacements: [{}],
         importantSpawns: ["club_complex_01", "teahouse_complex_01su", "mansion_structure_01", "police_01", "bank_01", "warehouse_complex_01", "greenhouse_01", "workshop_complex_01"],
-        spawnOnRiver: ["club_complex_01", "warehouse_complex_01"],
+        spawnOnRiver: ["club_complex_01", "warehouse_complex_01", "reserve_complex_01"],
     },
     /* STRIP_FROM_PROD_CLIENT:END */
 };

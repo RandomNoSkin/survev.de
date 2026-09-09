@@ -33,13 +33,19 @@ import {
 import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
+import { resolveRoleTag } from "./db/roleTag";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
+import { grantCreatorItems } from "./db/creatorGrants";
+import { cleanupExpiredOAuthArtifacts } from "./db/oauth";
 import { backfillPassItemGrants } from "./db/passGrants";
 import { reconcileAllPasses } from "./db/passReconcile";
-import type { SessionTableSelect, UsersTableSelect } from "./db/schema";
+import { computeRatingTiers, warmRatingTiers } from "./db/ratingTiers";
+import type { OAuthGrantSelect, SessionTableSelect, UsersTableSelect } from "./db/schema";
 import { verifyReplayToken } from "./replayToken";
 import { ModerationDashboardRouter } from "./routes/ModerationDashboardRouter";
+import { ExternalRouter } from "./routes/external/ExternalRouter";
+import { OAuthRouter } from "./routes/oauth/OAuthRouter";
 import { cleanupOldLogs, isBanned } from "./routes/private/ModerationRouter";
 import { PrivateRouter } from "./routes/private/private";
 import { StatsRouter } from "./routes/stats/StatsRouter";
@@ -50,6 +56,8 @@ export type Context = {
     Variables: {
         user: UsersTableSelect | null;
         session: SessionTableSelect | null;
+        // Only set on /api/external/* requests, by requireOAuthScope (bearer-token auth).
+        oauthGrant?: OAuthGrantSelect | null;
     };
 };
 
@@ -89,6 +97,8 @@ app.use(
 app.route("/api/user/", UserRouter);
 app.route("/api/auth/", AuthRouter);
 app.route("/api/", StatsRouter);
+app.route("/api/oauth/", OAuthRouter);
+app.route("/api/external/", ExternalRouter);
 app.route("/private/", PrivateRouter);
 // The dashboard SPA lives at "/moderation" (no trailing slash); redirect the
 // slashed variant so a hand-typed "/moderation/" doesn't 404.
@@ -116,16 +126,24 @@ app.get("/api/replay/povs", async (c) => {
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
     }
-    const recordings = await server.listReplays(data.region);
-    const rec = recordings.find((r: any) => r.gameId === data.gameId);
+    // Targeted lookup for this one known gameId, not the moderation dashboard's
+    // recent-games-capped listReplays() - that cap could otherwise miss a
+    // legitimately-retained game on a busy region simply because it isn't among the
+    // most recent N, wrongly 404ing a token that was already verified as valid above.
+    const rec = await server.getReplayMeta(data.region, data.gameId);
     if (!rec) {
         return c.json({ error: "not_found" }, 404);
     }
+    // A player-scoped (Premium self-service) token only ever lists its own POV,
+    // so the client's POV-switch UI naturally has nothing else to switch to.
+    const players = (rec.players ?? []).filter(
+        (p: any) => data.playerId === undefined || p.playerId === data.playerId,
+    );
     return c.json({
         gameId: rec.gameId,
         mapName: rec.mapName,
         teamMode: rec.teamMode,
-        players: (rec.players ?? []).map((p: any) => ({
+        players: players.map((p: any) => ({
             playerId: p.playerId,
             playerName: p.playerName,
         })),
@@ -148,6 +166,11 @@ app.get("/api/replay", async (c) => {
     if (!Number.isFinite(playerId)) {
         return c.json({ error: "invalid_player" }, 400);
     }
+    // Player-scoped tokens (Premium self-service) may only ever fetch their own POV -
+    // this is the privacy boundary that keeps other players' recordings from leaking.
+    if (data.playerId !== undefined && data.playerId !== playerId) {
+        return c.json({ error: "forbidden" }, 403);
+    }
     const file = await server.streamReplayFile(data.region, data.gameId, playerId);
     if (!file) {
         return c.json({ error: "not_found" }, 404);
@@ -168,6 +191,12 @@ app.get("/api/replay/tracks", async (c) => {
     const data = verifyReplayToken(c.req.query("token") ?? "");
     if (!data) {
         return c.json({ error: "invalid_or_expired_token" }, 403);
+    }
+    // God-view tracks show every player's position for the whole game - that's fine
+    // for an admin-dashboard token (game-scoped, any POV), but a player-scoped
+    // (Premium self-service) token must never see other players' positions.
+    if (data.playerId !== undefined) {
+        return c.json({ error: "forbidden" }, 403);
     }
     const file = await server.streamReplayTracks(data.region, data.gameId);
     if (!file) {
@@ -281,6 +310,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 ip,
                 loadout: userLoadout,
                 admin: user?.admin ?? false,
+                roleTag: user ? resolveRoleTag(user) : null,
             },
         ],
     });
@@ -480,6 +510,19 @@ try {
     server.logger.error("Failed to backfill pass item grants", err);
 }
 
+// Grant creator-credit cosmetics (defs with a `creatorDiscordId`) to their creators.
+// Idempotent - see grantCreatorItems for how repeat runs avoid re-granting.
+try {
+    const { granted, pending } = await grantCreatorItems();
+    if (granted > 0 || pending > 0) {
+        server.logger.info(
+            `Creator item grants: ${granted} granted, ${pending} pending (creator not signed in yet)`,
+        );
+    }
+} catch (err) {
+    server.logger.error("Failed to grant creator items", err);
+}
+
 const honoServer = serve({
     fetch: app.fetch,
     port: Config.apiServer.port,
@@ -489,12 +532,16 @@ injectWebSocket(honoServer);
 // Warm the ownership-based cosmetic rarity cache once at boot (then on-demand per request).
 warmCosmeticStats();
 
+// Warm the region-scoped rating percentile-tier cache once at boot (then daily via cron below).
+warmRatingTiers();
+
 // run clean up scripts every midnight
 new Cron("0 0 * * *", async () => {
     try {
         await cleanupOldLogs();
         await deleteExpiredSessions();
-        server.logger.info("Deleted old logs and expired sessions");
+        await cleanupExpiredOAuthArtifacts();
+        server.logger.info("Deleted old logs, expired sessions, and expired OAuth codes");
     } catch (err) {
         server.logger.error("Failed to run cleanup script", err);
     }
@@ -517,6 +564,13 @@ new Cron("0 0 * * *", async () => {
         server.logger.info("Recomputed cosmetic ownership stats");
     } catch (err) {
         server.logger.error("Failed to recompute cosmetic stats", err);
+    }
+
+    // Recompute primary regions + region-scoped rating percentile tiers for the new day.
+    try {
+        await computeRatingTiers();
+    } catch (err) {
+        server.logger.error("Failed to recompute rating tiers", err);
     }
 });
 

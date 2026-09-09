@@ -164,7 +164,7 @@ export async function reconcileAllPasses(): Promise<{
     };
 }
 
-function getPassLevelXp(passType: string, level: number): number {
+export function getPassLevelXp(passType: string, level: number): number {
     const passDef = PassDefs[passType as keyof typeof PassDefs];
     const levelIdx = level - 1;
     return levelIdx < passDef.xp.length

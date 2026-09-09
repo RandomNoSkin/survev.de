@@ -8,13 +8,33 @@ import { crc16 } from "./lib/crc.ts";
 import type { Localization } from "./ui/localization.ts";
 
 // Bump when adding a bind so existing saved configs run upgradeBinds() and pick up
-// the new action's default key. v2 added AdvSpecToggle.
-const BINDS_VERSION = 2;
+// the new action's default key. v2 added AdvSpecToggle. v3 added the Spectator
+// category binds (ToggleSpectateUi + advanced spectator sub-toggles). v4 added
+// AdvSpecZoneTransparent/AdvSpecFoliageTransparent. v5 added AdvSpecVisionRadius.
+// v6 added HudClickOverride.
+const BINDS_VERSION = 6;
 
-function def(name: string, defaultValue: InputValue | null) {
+type BindCategory = "controls" | "spectator";
+
+/**
+ * `exclusiveToPlay` marks a "controls" bind that only ever fires while actively
+ * controlling your own player (movement, firing, equipping, healing, ...) - never
+ * while spectating or watching a replay. Only those binds are allowed to share a key
+ * with a "spectator" bind (see setBind()). Anything that keeps working while
+ * spectating (chat, map toggle, HUD toggle, fullscreen, emotes/pings, ...) must stay
+ * globally unique, since both binds could genuinely fire in the same frame.
+ */
+function def(
+    name: string,
+    defaultValue: InputValue | null,
+    category: BindCategory = "controls",
+    exclusiveToPlay = false,
+) {
     return {
         name,
         defaultValue,
+        category,
+        exclusiveToPlay,
     };
 }
 function inputKey(key: Key) {
@@ -28,43 +48,82 @@ function mouseWheel(wheel: MouseWheel) {
 }
 
 const BindDefs = {
-    [GameInput.MoveLeft]: def("Move Left", inputKey(Key.A)),
-    [GameInput.MoveRight]: def("Move Right", inputKey(Key.D)),
-    [GameInput.MoveUp]: def("Move Up", inputKey(Key.W)),
-    [GameInput.MoveDown]: def("Move Down", inputKey(Key.S)),
-    [GameInput.Fire]: def("Fire", mouseButton(MouseButton.Left)),
-    [GameInput.Reload]: def("Reload", inputKey(Key.R)),
-    [GameInput.Cancel]: def("Cancel", inputKey(Key.X)),
-    [GameInput.Interact]: def("Interact", inputKey(Key.F)),
-    [GameInput.Revive]: def("Revive", null),
-    [GameInput.Use]: def("Open/Use", null),
-    [GameInput.Loot]: def("Loot", null),
-    [GameInput.EquipPrimary]: def("Equip Primary", inputKey(Key.One)),
-    [GameInput.EquipSecondary]: def("Equip Secondary", inputKey(Key.Two)),
-    [GameInput.EquipMelee]: def("Equip Melee", inputKey(Key.Three)),
-    [GameInput.EquipThrowable]: def("Equip Throwable", inputKey(Key.Four)),
-    [GameInput.EquipNextWeap]: def("Equip Next Weapon", mouseWheel(MouseWheel.Down)),
-    [GameInput.EquipPrevWeap]: def("Equip Previous Weapon", mouseWheel(MouseWheel.Up)),
-    [GameInput.EquipLastWeap]: def("Equip Last Weapon", inputKey(Key.Q)),
-    [GameInput.StowWeapons]: def("Stow Weapons", inputKey(Key.E)),
-    [GameInput.EquipPrevScope]: def("Equip Previous Scope", null),
-    [GameInput.EquipNextScope]: def("Equip Next Scope", null),
-    [GameInput.UseBandage]: def("Use Bandage", inputKey(Key.Seven)),
-    [GameInput.UseHealthKit]: def("Use Med Kit", inputKey(Key.Eight)),
-    [GameInput.UseSoda]: def("Use Soda", inputKey(Key.Nine)),
-    [GameInput.UsePainkiller]: def("Use Pills", inputKey(Key.Zero)),
-    [GameInput.SwapWeapSlots]: def("Switch Gun Slots", inputKey(Key.T)),
+    [GameInput.MoveLeft]: def("Move Left", inputKey(Key.A), "controls", true),
+    [GameInput.MoveRight]: def("Move Right", inputKey(Key.D), "controls", true),
+    [GameInput.MoveUp]: def("Move Up", inputKey(Key.W), "controls", true),
+    [GameInput.MoveDown]: def("Move Down", inputKey(Key.S), "controls", true),
+    [GameInput.Fire]: def("Fire", mouseButton(MouseButton.Left), "controls", true),
+    [GameInput.Reload]: def("Reload", inputKey(Key.R), "controls", true),
+    [GameInput.Cancel]: def("Cancel", inputKey(Key.X), "controls", true),
+    [GameInput.Interact]: def("Interact", inputKey(Key.F), "controls", true),
+    [GameInput.Revive]: def("Revive", null, "controls", true),
+    [GameInput.Use]: def("Open/Use", null, "controls", true),
+    [GameInput.Loot]: def("Loot", null, "controls", true),
+    [GameInput.EquipPrimary]: def("Equip Primary", inputKey(Key.One), "controls", true),
+    [GameInput.EquipSecondary]: def("Equip Secondary", inputKey(Key.Two), "controls", true),
+    [GameInput.EquipMelee]: def("Equip Melee", inputKey(Key.Three), "controls", true),
+    [GameInput.EquipThrowable]: def("Equip Throwable", inputKey(Key.Four), "controls", true),
+    [GameInput.EquipNextWeap]: def(
+        "Equip Next Weapon",
+        mouseWheel(MouseWheel.Down),
+        "controls",
+        true,
+    ),
+    [GameInput.EquipPrevWeap]: def(
+        "Equip Previous Weapon",
+        mouseWheel(MouseWheel.Up),
+        "controls",
+        true,
+    ),
+    [GameInput.EquipLastWeap]: def("Equip Last Weapon", inputKey(Key.Q), "controls", true),
+    [GameInput.StowWeapons]: def("Stow Weapons", inputKey(Key.E), "controls", true),
+    [GameInput.EquipPrevScope]: def("Equip Previous Scope", null, "controls", true),
+    [GameInput.EquipNextScope]: def("Equip Next Scope", null, "controls", true),
+    [GameInput.UseBandage]: def("Use Bandage", inputKey(Key.Seven), "controls", true),
+    [GameInput.UseHealthKit]: def("Use Med Kit", inputKey(Key.Eight), "controls", true),
+    [GameInput.UseSoda]: def("Use Soda", inputKey(Key.Nine), "controls", true),
+    [GameInput.UsePainkiller]: def("Use Pills", inputKey(Key.Zero), "controls", true),
+    [GameInput.SwapWeapSlots]: def("Switch Gun Slots", inputKey(Key.T), "controls", true),
+    // Everything below still works while spectating/watching a replay (chat, map,
+    // HUD toggle, fullscreen, emotes/pings), so it must stay globally unique -
+    // NOT exclusiveToPlay - even though it's in the "controls" category.
     [GameInput.ToggleMap]: def("Toggle Map", inputKey(Key.M)),
     [GameInput.CycleUIMode]: def("Toggle Minimap", inputKey(Key.V)),
     [GameInput.EmoteMenu]: def("Emote Menu", mouseButton(MouseButton.Right)),
     [GameInput.TeamPingMenu]: def("Team Ping Hold", inputKey(Key.C)),
-    [GameInput.EquipOtherGun]: def("Equip Other Gun", null),
+    [GameInput.EquipOtherGun]: def("Equip Other Gun", null, "controls", true),
     [GameInput.Fullscreen]: def("Full Screen", inputKey(Key.L)),
     [GameInput.HideUI]: def("Hide UI", null),
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
     [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
-    [GameInput.SwitchAmmo]: def("Switch Ammo", inputKey(Key.B)),
-    [GameInput.AdvSpecToggle]: def("Toggle Advanced Spectator", inputKey(Key.N)),
+    [GameInput.SwitchAmmo]: def("Switch Ammo", inputKey(Key.B), "controls", true),
+    // Hold + click a HUD element to trigger its click-action even if you've disabled
+    // clicking on it (see the "Clickable" toggle in HUD customization) - a deliberate
+    // override rather than having to re-enable/disable clicking every time.
+    [GameInput.HudClickOverride]: def("Force HUD Click", null, "controls", true),
+    [GameInput.AdvSpecToggle]: def("Toggle Advanced Spectator", inputKey(Key.N), "spectator"),
+    [GameInput.ToggleSpectateUi]: def("Hide Spectate UI", null, "spectator"),
+    [GameInput.AdvSpecCollapse]: def("Collapse Advanced Spectator Panel", null, "spectator"),
+    [GameInput.AdvSpecFreecam]: def("Toggle Freecam", null, "spectator"),
+    [GameInput.AdvSpecZoomToggle]: def("Toggle Custom Zoom", null, "spectator"),
+    [GameInput.AdvSpecZoomIn]: def("Zoom In", null, "spectator"),
+    [GameInput.AdvSpecZoomOut]: def("Zoom Out", null, "spectator"),
+    [GameInput.AdvSpecLayer]: def("Toggle Surface/Underground Layer", null, "spectator"),
+    [GameInput.AdvSpecTransparent]: def("Toggle Transparent Surfaces", null, "spectator"),
+    [GameInput.AdvSpecEnemiesOnMap]: def("Toggle Enemies On Map", null, "spectator"),
+    [GameInput.AdvSpecEsp]: def("Toggle ESP Lines", null, "spectator"),
+    [GameInput.AdvSpecLabels]: def("Toggle Enemy Labels", null, "spectator"),
+    [GameInput.AdvSpecNades]: def("Toggle Grenade ESP", null, "spectator"),
+    [GameInput.AdvSpecZoneTransparent]: def("Toggle Zone Transparency", null, "spectator"),
+    [GameInput.AdvSpecFoliageTransparent]: def("Toggle Foliage Transparency", null, "spectator"),
+    [GameInput.AdvSpecVisionRadius]: def("Toggle Vision Radius", null, "spectator"),
+    [GameInput.ReplayTogglePause]: def("Play/Pause Replay", null, "spectator"),
+    [GameInput.ReplaySkipBack]: def("Skip Back 5s", null, "spectator"),
+    [GameInput.ReplaySkipForward]: def("Skip Forward 5s", null, "spectator"),
+    [GameInput.ReplaySpeedUp]: def("Increase Playback Speed", null, "spectator"),
+    [GameInput.ReplaySpeedDown]: def("Decrease Playback Speed", null, "spectator"),
+    [GameInput.ReplayFrameBack]: def("Step Back One Frame", null, "spectator"),
+    [GameInput.ReplayFrameForward]: def("Step Forward One Frame", null, "spectator"),
 };
 
 export class InputBinds {
@@ -163,7 +222,25 @@ export class InputBinds {
         // Binds added after older configs were saved. Apply each one's default key
         // for upgrading users, but never stomp a key they've already bound elsewhere
         // and never overwrite a bind they've already set for this action.
-        const newBinds: GameInput[] = [GameInput.AdvSpecToggle];
+        const newBinds: GameInput[] = [
+            GameInput.AdvSpecToggle,
+            GameInput.ToggleSpectateUi,
+            GameInput.AdvSpecCollapse,
+            GameInput.AdvSpecFreecam,
+            GameInput.AdvSpecZoomToggle,
+            GameInput.AdvSpecZoomIn,
+            GameInput.AdvSpecZoomOut,
+            GameInput.AdvSpecLayer,
+            GameInput.AdvSpecTransparent,
+            GameInput.AdvSpecEnemiesOnMap,
+            GameInput.AdvSpecEsp,
+            GameInput.AdvSpecLabels,
+            GameInput.AdvSpecNades,
+            GameInput.AdvSpecZoneTransparent,
+            GameInput.AdvSpecFoliageTransparent,
+            GameInput.AdvSpecVisionRadius,
+            GameInput.HudClickOverride,
+        ];
 
         for (const bind of newBinds) {
             if (this.binds[bind]) continue;
@@ -185,10 +262,20 @@ export class InputBinds {
 
     setBind(bind: number, inputValue: InputValue | null) {
         if (inputValue) {
+            // A key may only be shared between two binds when one is a "controls" bind
+            // marked exclusiveToPlay (only fires while controlling your own player) and
+            // the other is a "spectator" bind - those two truly never fire in the same
+            // frame. Everything else (same category, or a non-exclusiveToPlay controls
+            // bind like chat/map/HUD-toggle that still works while spectating) must
+            // stay globally unique.
+            const def = BindDefs[bind as keyof typeof BindDefs];
             for (let i = 0; i < this.binds.length; i++) {
-                if (this.binds[i]?.equals(inputValue)) {
-                    this.binds[i] = null;
-                }
+                if (!this.binds[i]?.equals(inputValue)) continue;
+                const otherDef = BindDefs[i as keyof typeof BindDefs];
+                const canShare = def && otherDef && def.category !== otherDef.category
+                    && ((def.category === "controls" && def.exclusiveToPlay)
+                        || (otherDef.category === "controls" && otherDef.exclusiveToPlay));
+                if (!canShare) this.binds[i] = null;
             }
         }
         const curBind = this.binds[bind];
@@ -240,7 +327,14 @@ export class InputBinds {
     }
 }
 
+const CATEGORY_LABELS: Record<BindCategory, string> = {
+    controls: "Controls",
+    spectator: "Spectator",
+};
+
 export class InputBindUi {
+    activeCategory: BindCategory = "controls";
+
     constructor(
         public input: InputHandler,
         public inputBinds: InputBinds,
@@ -257,8 +351,40 @@ export class InputBindUi {
         this.input.captureNextInput(null);
     }
 
+    private renderCategoryTabs() {
+        const categories = Object.keys(CATEGORY_LABELS) as BindCategory[];
+        const tabsContainers = $(".js-keybind-category-tabs");
+        tabsContainers.each((_i, el) => {
+            const container = $(el);
+            container.empty();
+            for (const category of categories) {
+                // Reuses the same tab look as the Team/Private Lobby settings tabs
+                // (translucent pill, lime-green outline when active).
+                const btn = $("<a/>", {
+                    class:
+                        "private-lobby-settings-tab"
+                        + (category === this.activeCategory
+                            ? " private-lobby-settings-tab-active"
+                            : ""),
+                    text: this.localization.translate(`bind-category-${category}`)
+                        || CATEGORY_LABELS[category],
+                });
+                btn.on("click", () => {
+                    if (this.activeCategory === category) return;
+                    this.activeCategory = category;
+                    this.refresh();
+                });
+                container.append(btn);
+            }
+        });
+    }
+
     refresh() {
-        const defKeys = Object.keys(BindDefs);
+        this.renderCategoryTabs();
+        const defKeys = Object.keys(BindDefs).filter((key) => {
+            const bindDef = BindDefs[key as unknown as keyof typeof BindDefs];
+            return (bindDef.category ?? "controls") === this.activeCategory;
+        });
         const binds = this.inputBinds.binds;
         const container = $(".js-keybind-list");
         container.empty();
@@ -313,15 +439,16 @@ export class InputBindUi {
                         return false;
                     }
                     targetElem.removeClass("btn-keybind-desc-selected");
-                    if (!inputValue.equals(inputKey(Key.Escape))) {
-                        let bindValue: InputValue | null = inputValue;
-                        if (inputValue.equals(inputKey(Key.Backspace))) {
-                            bindValue = null;
-                        }
-                        this.inputBinds.setBind(parseInt(key), bindValue);
-                        this.inputBinds.saveBinds();
-                        this.refresh();
-                    }
+                    // Escape and Backspace both clear the bind (Escape doubles as
+                    // "cancel by unbinding" rather than a no-op).
+                    const bindValue: InputValue | null =
+                        inputValue.equals(inputKey(Key.Escape))
+                            || inputValue.equals(inputKey(Key.Backspace))
+                            ? null
+                            : inputValue;
+                    this.inputBinds.setBind(parseInt(key), bindValue);
+                    this.inputBinds.saveBinds();
+                    this.refresh();
                     return true;
                 });
             });

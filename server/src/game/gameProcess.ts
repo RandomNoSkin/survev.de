@@ -136,8 +136,13 @@ process.on("message", async (msg: ProcessMsg) => {
             game.addJoinTokensAsSpectator(msg.tokens, false);
             break;
         case ProcessMsgType.SocketMsg:
-            const sMsg = msg.msgs[0];
-            game.handleMsg(sMsg.data as ArrayBuffer, sMsg.socketId, sMsg.ip);
+            // `msgs` is a batch (that's what the type says, and what this process sends
+            // back the other way) — only handling msgs[0] would silently drop every other
+            // client message in a batch, which shows up in game as lost inputs.
+            for (let i = 0; i < msg.msgs.length; i++) {
+                const sMsg = msg.msgs[i];
+                game.handleMsg(sMsg.data as ArrayBuffer, sMsg.socketId, sMsg.ip);
+            }
             break;
         case ProcessMsgType.SocketClose:
             game.handleSocketClose(msg.socketId);

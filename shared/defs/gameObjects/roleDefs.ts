@@ -615,12 +615,6 @@ export const RoleDefs: Record<string, RoleDef> = {
             assign: "",
             dead: "",
         },
-        mapIndicator: {
-            sprite: "player-the-hunted.img",
-            tint: 0xff8400,
-            pulse: true,
-            pulseTint: 0xff8400,
-        },
         perks: [],
     },
     healer: {

@@ -157,11 +157,12 @@ export interface MapDef {
         minPosSpawnRad?: number, // spawn radius away from other spawn points |default: 100
         spawnCenter?: boolean, // spawn in the center of the map
 
-        camperPunishmentDistance?: number, // distance player has to move to not get punished || default: 10
-        camperDecayTime?: number, // time in ms until punishment || default: 6000
-        camperPunishment?: boolean, // enables camper bunishment || default false
-        camperPunishmentTime?: number, // time in ms how long punishment lasts || default: 5000
-        camperGracePeriod?: number, // time in ms after spawn before camping checks start || default: 40000
+        camperPunishmentDistance?: number, // distance player has to move to reset the camping timer || default: 15
+        camperDecayTime?: number, // seconds stationary under cover before boost decays faster || default: 5
+        camperPunishment?: boolean, // enables the anti-camp boost decay + map ping reveal || default false
+        camperRevealDelay?: number, // extra seconds after boost decay starts before being revealed via a ping || default: 10
+        camperPingInterval?: number, // seconds between reveal ping refreshes while still camping || default: 5
+        camperGracePeriod?: number, // seconds after spawn before camping checks start || default: 40
 
         announceTeams?: boolean;
         enableChat?: boolean;
@@ -194,6 +195,8 @@ export interface MapDef {
             win: number;
             timeSurvived: number;
         };
+
+        impactWeight?: number; // multiplier applied to the final impact score (team modes only), 0 = disabled || default: 0
 
     };
     gameConfig: {
@@ -237,6 +240,7 @@ export interface MapDef {
         bagSizes: Record<string, number[]>;
         bleedDamage: number;
         bleedDamageMult: number;
+        damageMult?: number;
     };
 
     defaultItems?: {
@@ -307,6 +311,11 @@ export interface MapDef {
                     outerRad: number;
                     centerObj?: string;
                     riverMaskRad?: number;
+                    riverConnection?: boolean;
+                    riverConnectionWidth?: number;
+                    lakeRiverbankColor?: number;
+                    lakeWaterColor?: number;
+                    lakeWaterRippleColor?: number;
                     spawnBound: {
                         pos: Vec2;
                         rad: number;
@@ -351,10 +360,17 @@ export interface MapDef {
         randomSpawns: Array<{
             spawns: string[];
             choose: number;
+            // survev.de addition, have a chance to spawn any number of the random spawns between the amount defined by choose and choose + chooseMore 
+            chooseMore?: number; // defaults to 0 if not defined
         }>;
-        spawnReplacements: [Record<string, string>];
+        spawnReplacements: [Record<string, string | Array<{ type: string; weight: number }>>];
         importantSpawns: string[];
         spawnOnRiver?: string[];
+        /**
+         * Defines spawn count reductions for buildings.
+         * Used for rare structures not making extremely dense maps on occasion but instead making another building not spawn when they do spawn in
+         */
+        spawnReductions?: Record<string, Array<{ target: string; amount: number }>>;
     };
 }
 

@@ -1,0 +1,16 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M32 79.5849H39.0101V52.366L32 52.3649V79.5849ZM64 52.3649V79.5849H96V52.3649H64Z" fill="#F2B32D"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M62.8966 18.0145C79.2558 17.5337 96 29.0441 96 52.3649H64L62.8966 18.0145ZM48 22.0931C38.8164 27.2628 32 37.3368 32 52.3649L39.0101 52.366C39.0101 39.9292 40.0122 30.0125 48 22.0931Z" fill="#F6FFF4"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M64 52.3649L39.0101 52.366C39.0101 39.9292 40.0122 30.0125 48 22.0931C52.563 19.5245 57.7104 18.1669 62.8966 18.0145L64 52.3649Z" fill="#D6D9DE"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M39.0101 79.5849V52.366L64 52.3649V79.5849H39.0101Z" fill="#FDC344"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M39.0101 79.5849H64V100.717H57.9623L39.0101 79.5849Z" fill="#D4A338"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M32 79.5849H39.0101L57.9623 100.717H52.5283L32 79.5849Z" fill="#C38F1E"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M52.5283 109.17V100.717H57.9623V109.17H52.5283Z" fill="#311B0B"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M57.9623 100.717H64V109.17H57.9623V100.717Z" fill="#523115"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M64 109.17V100.717H74.8679V109.17H64Z" fill="#311B0B"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M74.8679 110.981H64V109.17H74.8679V110.981Z" fill="#C38F1E"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M52.5283 109.17H57.9623V110.981H52.5283V109.17Z" fill="#C38F1E"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M57.9623 109.17H64V110.981H57.9623V109.17Z" fill="#D4A338"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M64 79.5849H96L74.8679 100.717H64V79.5849Z" fill="#C38F1E"/>
+<path d="M62.75 13.0166C72.1192 12.7413 81.6964 15.8933 88.9688 22.584C96.3145 29.3422 101 39.4272 101 52.3652V79.585C101 80.911 100.473 82.1824 99.5352 83.1201L79.8682 102.787V110.981C79.868 113.743 77.6294 115.981 74.8682 115.981H52.5283C49.767 115.981 47.5285 113.743 47.5283 110.981V102.745L28.4141 83.0684C27.5076 82.1352 27 80.8859 27 79.585V52.3652L27.0059 51.585C27.2414 35.2764 34.8639 23.7502 45.5469 17.7363C50.8519 14.75 56.7978 13.1915 62.75 13.0166Z" stroke="#202020" stroke-width="10" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,348 @@
+/* Shared styling for the lightweight OAuth pages: dev dashboard (/apps),
+   redirect-flow consent screen (/oauth-authorize), device-flow entry (/link). */
+
+body.oauth-page {
+    margin: 0;
+    min-height: 100vh;
+    background: #14161c;
+    color: #e6e8ee;
+    font-family: "Roboto Condensed", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 64px;
+    box-sizing: border-box;
+}
+
+.oauth-header {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.oauth-header-wide {
+    max-width: 960px;
+}
+
+.oauth-header a {
+    color: #e6e8ee;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 18px;
+}
+
+/* Left-hand tab nav used by the dev dashboard (/apps): "My apps" / "Documentation". */
+.oauth-layout {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.oauth-sidebar {
+    flex: 0 0 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 32px;
+}
+
+.oauth-sidebar-tab {
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #9aa0b0;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.oauth-sidebar-tab:hover {
+    background: #1d2029;
+    color: #e6e8ee;
+}
+
+.oauth-sidebar-tab-active,
+.oauth-sidebar-tab-active:hover {
+    background: #1d2029;
+    color: #e6e8ee;
+    font-weight: bold;
+    box-shadow: inset 3px 0 0 #3fa34d;
+}
+
+.oauth-content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 640px) {
+    .oauth-layout {
+        flex-direction: column;
+    }
+    .oauth-sidebar {
+        flex-direction: row;
+        position: static;
+        width: 100%;
+    }
+    .oauth-sidebar-tab {
+        flex: 1 1 auto;
+        text-align: center;
+    }
+    .oauth-sidebar-tab-active {
+        box-shadow: inset 0 -3px 0 #3fa34d;
+    }
+}
+
+.oauth-card,
+.oauth-consent-card {
+    width: 100%;
+    max-width: 640px;
+    background: #1d2029;
+    border: 1px solid #2c303c;
+    border-radius: 10px;
+    padding: 24px;
+    box-sizing: border-box;
+    margin-bottom: 20px;
+}
+
+.oauth-card h1,
+.oauth-consent-card h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+}
+
+.oauth-consent-owner {
+    color: #9aa0b0;
+    font-size: 13px;
+    margin: 0 0 16px;
+}
+
+.oauth-consent-scopes {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 20px;
+}
+
+.oauth-consent-scopes li {
+    padding: 10px 12px;
+    background: #14161c;
+    border: 1px solid #2c303c;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.oauth-consent-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.oauth-btn {
+    flex: 1;
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: none;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.oauth-btn-approve {
+    background: #3fa34d;
+    color: #fff;
+}
+
+.oauth-btn-approve:hover {
+    background: #359142;
+}
+
+.oauth-btn-deny {
+    background: #2c303c;
+    color: #e6e8ee;
+}
+
+.oauth-btn-deny:hover {
+    background: #383d4b;
+}
+
+.oauth-error {
+    color: #ff8080;
+}
+
+.oauth-muted {
+    color: #9aa0b0;
+    font-size: 13px;
+}
+
+.oauth-field {
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.oauth-field label {
+    font-size: 13px;
+    color: #9aa0b0;
+}
+
+.oauth-field input,
+.oauth-field textarea {
+    background: #14161c;
+    border: 1px solid #2c303c;
+    border-radius: 6px;
+    color: #e6e8ee;
+    padding: 8px 10px;
+    font: inherit;
+    font-family: monospace;
+}
+
+.oauth-form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.oauth-secret-reveal {
+    background: #14161c;
+    border: 1px dashed #3fa34d;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 13px;
+    word-break: break-all;
+    margin: 12px 0;
+}
+
+.oauth-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.oauth-badge-pending {
+    background: #4a3d1a;
+    color: #e0c26a;
+}
+
+.oauth-badge-approved {
+    background: #1f3f26;
+    color: #6ee08a;
+}
+
+.oauth-badge-rejected,
+.oauth-badge-suspended {
+    background: #402323;
+    color: #f28b8b;
+}
+
+table.oauth-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+table.oauth-table th,
+table.oauth-table td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #2c303c;
+    vertical-align: top;
+}
+
+table.oauth-table th {
+    color: #9aa0b0;
+    font-weight: normal;
+    font-size: 12px;
+}
+
+.oauth-app-list-item-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.oauth-btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 5px;
+    border: 1px solid #2c303c;
+    background: #14161c;
+    color: #e6e8ee;
+    cursor: pointer;
+}
+
+.oauth-btn-sm:hover {
+    background: #2c303c;
+}
+
+.oauth-btn-sm.oauth-btn-danger {
+    border-color: #63302f;
+    color: #f28b8b;
+}
+
+.oauth-doc-h2 {
+    font-size: 16px;
+    margin: 28px 0 8px;
+    color: #f2d63b;
+}
+
+.oauth-doc-h2:first-of-type {
+    margin-top: 20px;
+}
+
+.oauth-doc-h3 {
+    font-size: 14px;
+    margin: 18px 0 6px;
+    color: #e6e8ee;
+}
+
+.oauth-card p,
+.oauth-card li {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #c7cad4;
+}
+
+.oauth-card code {
+    background: #14161c;
+    border: 1px solid #2c303c;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #e6e8ee;
+}
+
+.oauth-code {
+    background: #14161c;
+    border: 1px solid #2c303c;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #d7dae2;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 8px 0 16px;
+}
+
+.oauth-doc-list {
+    margin: 0 0 8px;
+    padding-left: 20px;
+}
+
+.oauth-doc-list li {
+    margin-bottom: 6px;
+}

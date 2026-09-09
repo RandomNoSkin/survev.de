@@ -123,6 +123,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     @keyframes flashrow { from { background: var(--blue-dim); } to { background: transparent; } }
     .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; letter-spacing: .3px; }
     .badge-admin  { background: var(--orange-dim); color: var(--orange-t); border: 1px solid var(--orange); }
+    .badge-premium { background: rgba(242, 214, 59, 0.15); color: #f2d63b; border: 1px solid #f2d63b; }
     .badge-mod    { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .badge-self   { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
     .badge-alive  { background: var(--green-dim);  color: var(--green-t);  }
@@ -144,6 +145,8 @@ export const dashboardHtml = `<!DOCTYPE html>
     /* ── Buttons ── */
     .btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 11px; font-family: inherit; font-weight: 600; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
+    .btn:disabled { cursor: not-allowed; opacity: .5; }
+    .btn:disabled:hover { opacity: .5; }
     .btn-red    { background: var(--red-dim);    color: var(--red-t);    border: 1px solid var(--red); }
     .btn-blue   { background: var(--blue-dim);   color: var(--blue-t);   border: 1px solid var(--blue); }
     .btn-green  { background: var(--green-dim);  color: var(--green-t);  border: 1px solid var(--green); }
@@ -267,6 +270,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn"        data-tab="sus">Sus</button>
   <button class="tab-btn"        data-tab="leaderboard">Leaderboard</button>
   <button class="tab-btn"        data-tab="warnings">Warnings</button>
+  <button class="tab-btn"        data-tab="apps">Apps</button>
 </div>
 
 <div id="main">
@@ -334,7 +338,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <!-- ════════════════ TAB: GLOBAL CHAT LOG ════════════════ -->
   <div id="tab-chatlog" class="tab-pane">
     <div class="toolbar">
-      <input type="text" id="chatlog-search" placeholder="Search all chat messages…" style="max-width:420px">
+      <input type="text" id="chatlog-search" placeholder="Search all chat messages or a game id…" style="max-width:420px">
       <select id="chatlog-channel" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
         <option value="">All channels</option>
         <option value="0">Public (ALL)</option>
@@ -369,7 +373,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <option value="10">Show 10</option>
         <option value="50">Show 50</option>
         <option value="100">Show 100</option>
-        <option value="all">Show all</option>
+        <option value="all">Show all (slow)</option>
       </select>
       <button class="btn btn-gray" id="replays-refresh-btn">↻ Refresh</button>
     </div>
@@ -432,6 +436,7 @@ export const dashboardHtml = `<!DOCTYPE html>
         <option value="wins">Wins</option>
         <option value="kpg">K / Game</option>
         <option value="most_damage_dealt">Max Damage</option>
+        <option value="avg_rating">Rating</option>
       </select>
       <select id="lb-mode" title="Team mode" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
         <option value="1">Solo</option>
@@ -476,7 +481,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     <div class="toolbar">
       <input type="text" id="sus-search" placeholder="Search by player, reason, moderator or game id…" style="max-width:420px">
       <button class="btn btn-gray" id="sus-refresh-btn">↻ Refresh</button>
-      <span style="font-size:11px;color:var(--text-dim);">Everything staff flagged as suspicious, newest first — with the reason and who raised it.</span>
+      <span id="sus-hint" style="font-size:11px;color:var(--text-dim);">Everything staff flagged as suspicious, newest first — with the reason and who raised it.</span>
     </div>
     <div id="sus-container"><div class="loading">Loading…</div></div>
   </div>
@@ -497,10 +502,26 @@ export const dashboardHtml = `<!DOCTYPE html>
     <div id="warnings-container"><div class="loading">Loading…</div></div>
   </div>
 
+  <!-- ════════════════ TAB: APPS (third-party OAuth app registrations) ════════════════ -->
+  <div id="tab-apps" class="tab-pane">
+    <div class="toolbar">
+      <button class="btn btn-gray" id="apps-refresh-btn">↻ Refresh</button>
+      <select id="apps-status-filter" title="Filter by status" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:6px 8px;font-family:inherit;font-size:12px;">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="suspended">Suspended</option>
+      </select>
+      <span style="font-size:11px;color:var(--text-dim);">Third-party OAuth apps registered by users. New apps need approval before they can be used.</span>
+    </div>
+    <div id="apps-container"><div class="loading">Loading…</div></div>
+  </div>
+
   <!-- ════════════════ TAB 4: ACCOUNTS ════════════════ -->
   <div id="tab-accounts" class="tab-pane">
     <div class="toolbar">
-      <input type="text" id="accounts-search" placeholder="Search by username or slug…">
+      <input type="text" id="accounts-search" placeholder="Search by username, slug or Discord ID…">
       <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px;white-space:nowrap;">Created
         <input type="date" id="accounts-date-from" title="Created from (inclusive)"
           style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:5px 8px;font-family:inherit;font-size:12px;">
@@ -997,6 +1018,11 @@ function closeSSE() {
 // ── Tab switching ──────────────────────────────────────────────────────────
 
 function switchTab(name) {
+  // A deep link (or a stale hash) can name a tab a moderator has no access to. Their
+  // pane is hidden and its API 403s, so land them on their default instead of on a
+  // blank screen. Purely cosmetic — the server is what actually enforces this.
+  if (isModerator && !MODERATOR_TABS.includes(name)) name = 'replays';
+
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab-pane').forEach(p => {
     const active = p.id === 'tab-' + name;
@@ -1039,6 +1065,9 @@ function switchTab(name) {
   } else if (name === 'warnings') {
     closeSSE();
     loadWarnings();
+  } else if (name === 'apps') {
+    closeSSE();
+    loadApps();
   } else {
     closeSSE();
   }
@@ -1067,11 +1096,21 @@ document.querySelectorAll('.sub-tab-btn').forEach(b => b.addEventListener('click
 const TEAM_MODE_LABEL = { 1: 'Solo', 2: 'Duo', 4: 'Squad' };
 let replaysData = [];   // [{ regionId, recordings: [...] }]
 
+/**
+ * How many recordings per region to pull from the server. The list is filtered and
+ * paged client-side, so this fetches a good deal more than is displayed — but not the
+ * whole archive, which is a meta.json read per game on the host and was what made this
+ * tab take ages. "Show all" is the explicit opt-in to the slow, complete list.
+ */
+function replayFetchLimit() {
+  return document.getElementById('replays-limit').value === 'all' ? 5000 : 200;
+}
+
 async function loadReplays() {
   const container = document.getElementById('replays-container');
   container.innerHTML = '<div class="loading">Loading…</div>';
   try {
-    const data = await get('/api/replays');
+    const data = await get('/api/replays?limit=' + replayFetchLimit());
     replaysData = data.regions ?? [];
     renderReplays();
   } catch (e) {
@@ -1161,7 +1200,9 @@ function renderReplays() {
         <td><span class="rep-modcell" data-key="\${esc(rec.gameId + '|' + (p.modKey || ''))}">\${modBadge(p.modStatus)}</span></td>
         <td style="white-space:nowrap">
           <span style="display:inline-flex;gap:5px;align-items:center;">
-            <button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0})">▶ Watch</button>
+            \${rec.archived === false
+              ? \`<button class="btn btn-gray btn-sm" disabled title="No archived client build exists for protocol \${rec.protocolVersion} — this replay can no longer be played back">Not Watchable</button>\`
+              : \`<button class="btn btn-blue btn-sm" onclick="watchReplay('\${esc(regionId)}','\${esc(rec.gameId)}',\${p.playerId},\${rec.protocolVersion || 0},\${!!rec.isCurrentProtocol})">▶ Watch</button>\`}
             \${p.modKey
               ? \`<button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" data-repname="\${esc(p.playerName)}" title="Flag this \${p.guest ? 'guest' : 'player'} in this game as suspicious">⚑ sus</button>\`
               : ''}
@@ -1181,8 +1222,10 @@ function renderReplays() {
           <span>\${esc(regionId)}</span>
           <span>\${esc(rec.mapName)} · \${mode}</span>
           <span>\${durStr}</span>
-          \${rec.protocolVersion && rec.protocolVersion !== PROTOCOL_VERSION
-            ? \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version; 404 means it was never archived">proto \${rec.protocolVersion}</span>\`
+          \${rec.protocolVersion && !rec.isCurrentProtocol
+            ? rec.archived === false
+              ? \`<span class="badge badge-perm" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — no archived client build exists for this version, so it can no longer be played back">not watchable</span>\`
+              : \`<span class="badge badge-spec" title="Recorded on protocol \${rec.protocolVersion} (current: \${PROTOCOL_VERSION}) — Watch opens the archived client build of that version">proto \${rec.protocolVersion}</span>\`
             : ''}
           <span class="rep-modcell" data-key="\${esc(rec.gameId + '|')}">\${modBadge(rec.gameStatus)}</span>
           <button class="btn btn-orange btn-sm" data-repsus="\${esc(rec.gameId)}" title="Flag this whole game as suspicious">⚑ sus game</button>
@@ -1228,14 +1271,19 @@ async function markReplaySus(gameId, playerName) {
 }
 
 /** Mints a game-scoped replay token and opens the client in replay mode (with an initial POV). */
-async function watchReplay(region, gameId, playerId, protocolVersion) {
+async function watchReplay(region, gameId, playerId, protocolVersion, isCurrentProtocol) {
   try {
     const params = new URLSearchParams({ region, gameId });
     const { token } = await get('/api/replays/token?' + params.toString());
     if (!token) { toast('Failed to get replay token', true); return; }
     // Old-protocol recordings need the archived client build of that version — the
     // current client would misdecode the byte stream. 404 = build was never archived.
-    const base = protocolVersion && protocolVersion !== PROTOCOL_VERSION
+    // isCurrentProtocol comes from the last /api/replays fetch (checked live against the
+    // running server), NOT the PROTOCOL_VERSION constant below — that's baked into this
+    // HTML at render time, so a dashboard tab left open across a deploy that bumps the
+    // protocol would otherwise route a brand-new recording through a /archive/<version>/
+    // path that was never published (falls back to the plain site root instead).
+    const base = protocolVersion && !isCurrentProtocol
       ? CLIENT_URL + '/archive/' + protocolVersion
       : CLIENT_URL;
     const url = base + '/?replay=' + encodeURIComponent(token) + '&pov=' + playerId;
@@ -1249,7 +1297,11 @@ document.getElementById('replays-refresh-btn').addEventListener('click', loadRep
 document.getElementById('replays-search').addEventListener('input', renderReplays);
 document.getElementById('replays-date').addEventListener('change', renderReplays);
 document.getElementById('replays-window').addEventListener('change', renderReplays);
-document.getElementById('replays-limit').addEventListener('change', renderReplays);
+// "Show all" needs data the bounded fetch didn't load, so it refetches; the fixed sizes
+// are a pure display cut of what's already here.
+document.getElementById('replays-limit').addEventListener('change', function () {
+  if (this.value === 'all') loadReplays(); else renderReplays();
+});
 document.getElementById('replays-date-clear').addEventListener('click', () => {
   document.getElementById('replays-date').value = '';
   renderReplays();
@@ -1569,6 +1621,9 @@ function modBadge(status) {
   if (status === 'botted')  return '<span class="badge badge-botted">BOTTED</span>';
   if (status === 'sus')     return '<span class="badge badge-sus">SUS</span>';
   if (status === 'removed') return '<span class="badge badge-removed">REMOVED</span>';
+  // A report an admin has closed. Still a moderation row, but no longer an open flag —
+  // shown so a game already judged doesn't read as untouched in the roster.
+  if (status === 'resolved') return '<span class="badge badge-spec">SOLVED</span>';
   return '';
 }
 
@@ -1715,6 +1770,7 @@ function renderGameRoster(data) {
     : '';
   const header =
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">' + metaHtml +
+    navButton(hReplays(data.gameId), '▶ replay', { cls: 'btn-blue', title: 'Find this game in the Replays tab (Ctrl+click for a new tab)' }) +
     (isAdmin
       ? '<button class="btn btn-red btn-sm" data-delgame="' + esc(data.gameId) + '" style="margin-left:auto;" title="Permanently delete this whole game from stats, leaderboard and match history">🗑 Delete game</button>'
       : '') +
@@ -2005,7 +2061,7 @@ document.addEventListener('click', function (e) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 let lbLoadToken = 0;
-const LB_TYPE_LABEL = { kills: 'Kills', wins: 'Wins', kpg: 'K/G', most_damage_dealt: 'Max Dmg' };
+const LB_TYPE_LABEL = { kills: 'Kills', wins: 'Wins', kpg: 'K/G', most_damage_dealt: 'Max Dmg', avg_rating: 'Rating' };
 
 async function loadLeaderboard() {
   const container = document.getElementById('lb-container');
@@ -2154,6 +2210,13 @@ document.addEventListener('click', function (e) {
 });
 
 document.getElementById('lb-refresh-btn').addEventListener('click', loadLeaderboard);
+// Rating only exists for team modes — Solo would just be an empty table. Must run
+// before the generic loadLeaderboard listener below (registration order), so the
+// mode is already fixed up by the time that listener fires.
+document.getElementById('lb-type').addEventListener('change', function () {
+  const modeSel = document.getElementById('lb-mode');
+  if (this.value === 'avg_rating' && modeSel.value === '1') modeSel.value = '2';
+});
 ['lb-type', 'lb-mode', 'lb-interval', 'lb-map'].forEach(function (id) {
   document.getElementById(id).addEventListener('change', loadLeaderboard);
 });
@@ -2187,12 +2250,15 @@ function renderGamesList(games) {
       '<td>' + g.topKills + '</td>' +
       '<td>' + g.topDamage + '</td>' +
       '<td>' + (g.flagged ? '<span class="badge badge-perm">flagged</span>' : '') + '</td>' +
+      // Reviewing a game starts with watching it, so the replay is one click from the
+      // list rather than only from the expanded roster.
+      '<td style="white-space:nowrap;">' + navLink(hReplays(g.gameId), '▶ replay', { title: 'Find this game in the Replays tab' }) + '</td>' +
       '<td style="font-family:monospace;font-size:10px;color:var(--text-muted);">' + esc(g.gameId) + '</td>' +
     '</tr>'
   ).join('');
   cont.innerHTML =
-    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + games.length + ' game(s). Click a row to expand the full roster and moderate players.</div>' +
-    '<table class="data-table"><thead><tr><th>Time</th><th>Map · Mode</th><th>Region</th><th>Players</th><th>Top K</th><th>Top Dmg</th><th>Flags</th><th>Game ID</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + games.length + ' game(s). Click a row to expand the full roster and ' + (isAdmin ? 'moderate players' : 'flag players as suspicious') + '.</div>' +
+    '<table class="data-table"><thead><tr><th>Time</th><th>Map · Mode</th><th>Region</th><th>Players</th><th>Top K</th><th>Top Dmg</th><th>Flags</th><th>Replay</th><th>Game ID</th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 async function loadGamesSearch() {
@@ -2244,7 +2310,8 @@ document.getElementById('games-search').addEventListener('keydown', function (e)
 // tab, the XP Gain tab or a game roster — and carries a reason plus its author.
 // ═══════════════════════════════════════════════════════════════════════════
 
-let susData = [];
+let susData = [];        // open reports
+let susSolvedData = [];  // the newest few an admin has already closed
 
 async function loadSus() {
   const container = document.getElementById('sus-container');
@@ -2252,72 +2319,122 @@ async function loadSus() {
   try {
     const data = await get('/api/sus');
     susData = data.entries ?? [];
+    susSolvedData = data.solved ?? [];
     renderSus();
   } catch (e) {
     container.innerHTML = '<div class="empty">Failed to load sus flags.</div>';
   }
 }
 
+/** Matches one report against the search box. Solved rows also match their outcome. */
+function susMatches(e, q) {
+  if (!q) return true;
+  const hay = [e.username, e.slug, e.reason, e.markedByName, e.markedBy, e.gameId,
+    e.region, e.resolveNote, e.resolvedByName]
+    .filter(Boolean).join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+/** The shared leading cells of a report row — everything up to the outcome/actions. */
+function susRowCells(e) {
+  const scopeBadge = e.scope === 'game'
+    ? '<span class="badge badge-spec">WHOLE GAME</span>'
+    : e.scope === 'guest'
+      ? '<span class="badge badge-spec">GUEST</span>'
+      : '<span class="badge badge-sus">PLAYER</span>';
+  // Same cell as the game roster: the name goes to the IP this player used in the
+  // flagged game, the slug to their account. A game-wide flag names no player.
+  const who = e.scope === 'game'
+    ? '<span style="color:var(--text-muted)">— whole game —</span>'
+    : playerIpCell(e, e.userId || '(unknown)');
+  const banned = e.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
+  const roleBadge = e.markedByRole === 'admin'
+    ? ' <span class="badge badge-admin">ADMIN</span>'
+    : e.markedByRole === 'moderator' ? ' <span class="badge badge-mod">MOD</span>' : '';
+  const meta = e.mapName
+    ? esc(e.mapName) + ' · ' + (TEAM_MODE_LABEL[e.teamMode] || ('Mode ' + e.teamMode))
+    : '<span style="color:var(--text-muted)">— game deleted —</span>';
+  return '<td style="font-size:11px;white-space:nowrap;">' + fmtDate(e.markedAt) + '</td>' +
+    '<td>' + scopeBadge + '</td>' +
+    '<td>' + who + banned + '</td>' +
+    '<td style="max-width:320px;">' + esc(e.reason || '–') + '</td>' +
+    '<td style="white-space:nowrap;">' + esc(e.markedByName) + roleBadge + '</td>' +
+    '<td>' + meta + '</td>' +
+    '<td>' + esc(e.region || '–') + '</td>' +
+    '<td style="font-size:11px;white-space:nowrap;color:var(--text-muted);">' + (e.playedAt ? fmtDate(e.playedAt) : '–') + '</td>';
+}
+
+/** Game + replay links. Every role gets these — they're the point of a report. */
+function susOpenLinks(e) {
+  return navButton(hGame(e.gameId), '🎮 game', { cls: 'btn-blue', title: 'Open this game in the Games tab (Ctrl+click for a new tab)' }) +
+    navButton(hReplays(e.gameId), '▶ replay', { cls: 'btn-blue', title: 'Find this game in the Replays tab (Ctrl+click for a new tab)' });
+}
+
 function renderSus() {
   const container = document.getElementById('sus-container');
   const q = document.getElementById('sus-search').value.trim().toLowerCase();
-  const entries = q
-    ? susData.filter(function (e) {
-        const hay = [e.username, e.slug, e.reason, e.markedByName, e.markedBy, e.gameId, e.region]
-          .filter(Boolean).join(' ').toLowerCase();
-        return hay.includes(q);
-      })
-    : susData;
+  const entries = susData.filter(function (e) { return susMatches(e, q); });
+  const solved  = susSolvedData.filter(function (e) { return susMatches(e, q); });
 
-  if (!entries.length) {
-    container.innerHTML = susData.length
+  if (!entries.length && !solved.length) {
+    container.innerHTML = (susData.length || susSolvedData.length)
       ? '<div class="empty">No flags match.</div>'
-      : '<div class="empty">Nothing is flagged as suspicious.</div>';
+      : isModerator
+        ? '<div class="empty">You haven\\'t flagged anything as suspicious yet.</div>'
+        : '<div class="empty">Nothing is flagged as suspicious.</div>';
     return;
   }
 
   const rows = entries.map(function (e) {
-    const scopeBadge = e.scope === 'game'
-      ? '<span class="badge badge-spec">WHOLE GAME</span>'
-      : e.scope === 'guest'
-        ? '<span class="badge badge-spec">GUEST</span>'
-        : '<span class="badge badge-sus">PLAYER</span>';
-    // Same cell as the game roster: the name goes to the IP this player used in the
-    // flagged game, the slug to their account. A game-wide flag names no player.
-    const who = e.scope === 'game'
-      ? '<span style="color:var(--text-muted)">— whole game —</span>'
-      : playerIpCell(e, e.userId || '(unknown)');
-    const banned = e.banned ? ' <span class="badge badge-perm">BANNED</span>' : '';
-    const roleBadge = e.markedByRole === 'admin'
-      ? ' <span class="badge badge-admin">ADMIN</span>'
-      : e.markedByRole === 'moderator' ? ' <span class="badge badge-mod">MOD</span>' : '';
-    const meta = e.mapName
-      ? esc(e.mapName) + ' · ' + (TEAM_MODE_LABEL[e.teamMode] || ('Mode ' + e.teamMode))
-      : '<span style="color:var(--text-muted)">— game deleted —</span>';
-    return '<tr>' +
-      '<td style="font-size:11px;white-space:nowrap;">' + fmtDate(e.markedAt) + '</td>' +
-      '<td>' + scopeBadge + '</td>' +
-      '<td>' + who + banned + '</td>' +
-      '<td style="max-width:320px;">' + esc(e.reason || '–') + '</td>' +
-      '<td style="white-space:nowrap;">' + esc(e.markedByName) + roleBadge + '</td>' +
-      '<td>' + meta + '</td>' +
-      '<td>' + esc(e.region || '–') + '</td>' +
-      '<td style="font-size:11px;white-space:nowrap;color:var(--text-muted);">' + (e.playedAt ? fmtDate(e.playedAt) : '–') + '</td>' +
-      '<td>' +
-        '<span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;">' +
-          navButton(hGame(e.gameId), '🎮 game', { cls: 'btn-blue', title: 'Open this game in the Games tab (Ctrl+click for a new tab)' }) +
-          navButton(hReplays(e.gameId), '▶ replay', { cls: 'btn-blue', title: 'Find this game in the Replays tab (Ctrl+click for a new tab)' }) +
-          susRowActions(e) +
-          '<button class="btn btn-gray btn-sm" data-susclear="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId || '') + '" title="Remove this sus flag">clear</button>' +
-        '</span>' +
-      '</td>' +
+    // A moderator's page is a status view of their own reports: they can open the game
+    // and the replay, nothing else. Judging a report is the admins' job.
+    const actions = isAdmin
+      ? susOpenLinks(e) + susRowActions(e) +
+        '<button class="btn btn-green btn-sm" data-sussolve="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId || '') + '" title="Close this report with a written outcome — stays visible to the moderator who raised it">✅ solve</button>' +
+        '<button class="btn btn-gray btn-sm" data-susclear="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId || '') + '" title="Drop this sus flag without recording an outcome">clear</button>'
+      : susOpenLinks(e);
+    return '<tr>' + susRowCells(e) +
+      '<td><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;">' + actions + '</span></td>' +
     '</tr>';
   }).join('');
 
-  container.innerHTML =
-    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + entries.length + ' flag(s)' + (q ? ' of ' + susData.length : '') + '.</div>' +
-    '<table class="data-table"><thead><tr><th>Flagged</th><th>Scope</th><th>Player</th><th>Reason</th><th>By</th><th>Map · Mode</th><th>Region</th><th>Played</th><th>Actions</th></tr></thead>' +
-    '<tbody>' + rows + '</tbody></table>';
+  const openTable = entries.length
+    ? '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + entries.length + ' open report(s)' + (q ? ' of ' + susData.length : '') + '.</div>' +
+      '<table class="data-table"><thead><tr><th>Flagged</th><th>Scope</th><th>Player</th><th>Reason</th><th>By</th><th>Map · Mode</th><th>Region</th><th>Played</th><th>Actions</th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table>'
+    : '<div class="empty">No open reports.</div>';
+
+  container.innerHTML = openTable + renderSusSolved(solved, q);
+}
+
+/**
+ * The closed reports below the open ones: what an admin decided, and why. Read-only for
+ * everyone — the row is a record, and a moderator seeing the outcome of their own report
+ * is the whole reason it isn't just deleted.
+ */
+function renderSusSolved(solved, q) {
+  if (!solved.length) return '';
+
+  const rows = solved.map(function (e) {
+    return '<tr style="opacity:0.75;">' + susRowCells(e) +
+      '<td style="max-width:320px;">' +
+        '<div>' + esc(e.resolveNote || '–') + '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">' +
+          esc(e.resolvedByName || e.resolvedBy || '?') + ' · ' + (e.resolvedAt ? fmtDate(e.resolvedAt) : '–') +
+        '</div>' +
+      '</td>' +
+      '<td><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;">' + susOpenLinks(e) + '</span></td>' +
+    '</tr>';
+  }).join('');
+
+  return '<div style="margin-top:22px;">' +
+    '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">✅ Solved reports</div>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' +
+      'The ' + solved.length + ' most recently closed report(s)' + (q ? ' matching your search' : '') + ', with the outcome an admin recorded. Older ones are dropped.' +
+    '</div>' +
+    '<table class="data-table"><thead><tr><th>Flagged</th><th>Scope</th><th>Player</th><th>Reason</th><th>By</th><th>Map · Mode</th><th>Region</th><th>Played</th><th>Outcome</th><th>Actions</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>' +
+  '</div>';
 }
 
 /**
@@ -2346,9 +2463,40 @@ function susRowActions(e) {
 document.addEventListener('click', function (e) {
   const clr = e.target.closest('[data-susclear]');
   if (clr) { clearSusFlag(clr.dataset.susclear, clr.dataset.sususer || ''); return; }
+  const slv = e.target.closest('[data-sussolve]');
+  if (slv) { solveSusFlag(slv.dataset.sussolve, slv.dataset.sususer || ''); return; }
   const act = e.target.closest('[data-susact]');
   if (act) { runSusAction(act.dataset); }
 });
+
+/**
+ * Closes a report with a written outcome. Unlike "clear", which deletes the flag and
+ * leaves the reporting moderator guessing, this keeps the row and shows them what was
+ * decided on their own Sus page.
+ */
+async function solveSusFlag(gameId, userId) {
+  const reason = await askInput({
+    title: '✅ Solve sus report',
+    body: 'Closing the report on <span style="font-family:monospace;font-size:11px;">' + esc(gameId) + '</span>',
+    confirmLabel: '✅ Solve',
+    confirmClass: 'btn-green',
+    field: {
+      label: 'Outcome',
+      multiline: true,
+      maxlength: 500, // matches the server's z.string().max(500)
+      placeholder: 'What did you decide? e.g. reviewed the replay, clean — no action',
+      hint: 'Shown to the moderator who raised this report.',
+      required: true,
+      requiredMsg: 'An outcome is required to solve a report',
+    },
+  });
+  if (reason === null) return;
+  try {
+    await post('/api/game/' + encodeURIComponent(gameId) + '/resolve', { userId: userId, reason: reason });
+    await loadSus();
+    toast('Report solved');
+  } catch (e) { toast('Failed to solve: ' + e.message, true); }
+}
 
 /**
  * Runs an enforcement action from the Sus tab. Reuses the same endpoints and dialogs
@@ -2492,6 +2640,102 @@ function renderWarnings(data) {
 
 document.getElementById('warnings-refresh-btn').addEventListener('click', loadWarnings);
 document.getElementById('warnings-window').addEventListener('change', loadWarnings);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB – APPS (admin-only queue of third-party OAuth apps awaiting review)
+// ═══════════════════════════════════════════════════════════════════════════
+
+let appsData = []; // all apps matching the current status filter
+
+function appStatusBadge(status) {
+  if (status === 'pending')   return '<span class="badge badge-sus">PENDING</span>';
+  if (status === 'approved')  return '<span class="badge badge-alive">APPROVED</span>';
+  if (status === 'rejected')  return '<span class="badge badge-botted">REJECTED</span>';
+  if (status === 'suspended') return '<span class="badge badge-disc">SUSPENDED</span>';
+  return esc(status);
+}
+
+async function loadApps() {
+  const container = document.getElementById('apps-container');
+  container.innerHTML = '<div class="loading">Loading…</div>';
+  const status = document.getElementById('apps-status-filter').value;
+  try {
+    appsData = await get('/api/apps' + (status ? '?status=' + encodeURIComponent(status) : ''));
+    renderApps();
+  } catch (e) {
+    container.innerHTML = '<div class="empty">Failed to load apps.</div>';
+  }
+}
+
+function renderApps() {
+  const container = document.getElementById('apps-container');
+  if (!appsData.length) {
+    container.innerHTML = '<div class="empty">No apps match this filter.</div>';
+    return;
+  }
+
+  const rows = appsData.map(function (a) {
+    const uris = (a.redirectUris || []);
+    const uriList = uris.length
+      ? uris.map(function (u) { return esc(u); }).join('<br>')
+      : '<span style="color:var(--text-muted)">–</span>';
+    const actions = a.status === 'pending'
+      ? '<button class="btn btn-green btn-sm" data-appreview="approve" data-appid="' + esc(a.id) + '">✅ approve</button>' +
+        '<button class="btn btn-red btn-sm" data-appreview="reject" data-appid="' + esc(a.id) + '">❌ reject</button>'
+      : '<span style="font-size:11px;color:var(--text-dim);">' +
+          (a.reviewNote ? esc(a.reviewNote) : '–') +
+        '</span>';
+    return '<tr>' +
+      '<td>' + esc(a.name) + '</td>' +
+      '<td style="max-width:280px;">' + esc(a.description || '–') + '</td>' +
+      '<td>' + esc(a.ownerSlug) + '</td>' +
+      '<td>' + appStatusBadge(a.status) + '</td>' +
+      '<td style="font-size:11px;">' + uriList + '</td>' +
+      '<td style="font-size:11px;white-space:nowrap;">' + fmtDate(a.createdAt) + '</td>' +
+      '<td><span style="display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;">' + actions + '</span></td>' +
+    '</tr>';
+  }).join('');
+
+  container.innerHTML =
+    '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + appsData.length + ' app(s).</div>' +
+    '<table class="data-table"><thead><tr><th>Name</th><th>Description</th><th>Owner</th><th>Status</th><th>Redirect URIs</th><th>Created</th><th>Actions / Note</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table>';
+}
+
+document.getElementById('apps-status-filter').addEventListener('change', loadApps);
+
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-appreview]');
+  if (btn) { reviewAppFlag(btn.dataset.appid, btn.dataset.appreview); }
+});
+
+/** Approves or rejects a pending app, with an optional note explaining the decision. */
+async function reviewAppFlag(applicationId, decision) {
+  const approve = decision === 'approve';
+  const note = await askInput({
+    title: approve ? '✅ Approve app' : '❌ Reject app',
+    body: 'Application <span style="font-family:monospace;font-size:11px;">' + esc(applicationId) + '</span>',
+    confirmLabel: approve ? '✅ Approve' : '❌ Reject',
+    confirmClass: approve ? 'btn-green' : 'btn-red',
+    field: {
+      label: 'Note (optional)',
+      multiline: true,
+      maxlength: 280, // matches the server's z.string().max(280)
+      placeholder: approve ? 'Optional note for the developer' : 'Why is this being rejected?',
+      required: false,
+    },
+  });
+  if (note === null) return;
+  try {
+    await post('/api/apps/review', { applicationId: applicationId, decision: decision, note: note });
+    // Refetch (respecting the current status filter) instead of just dropping the row
+    // locally, since the reviewed app may still match the active filter (e.g. "All").
+    await loadApps();
+    toast(approve ? 'App approved' : 'App rejected');
+  } catch (e) { toast('Failed to review app: ' + e.message, true); }
+}
+
+document.getElementById('apps-refresh-btn').addEventListener('click', loadApps);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 – BAN MANAGEMENT (receives live "bans" events via SSE)
@@ -3297,6 +3541,7 @@ function renderPlayers() {
     const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
     const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>'
       : p.isModerator ? '<span class="badge badge-mod">MODERATOR</span>' : '';
+    const premiumBadge = p.isPremium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '';
     const isSelf     = p.userId === currentAdminId;
     const selfBadge  = isSelf ? '<span class="badge badge-self">YOU</span>' : '';
     // No kick/ban buttons for self or already-disconnected players
@@ -3304,7 +3549,7 @@ function renderPlayers() {
         <button class="btn btn-red  btn-sm" onclick="gameCmd({action:'kick',target:'\${esc(p.username)}'})">KICK</button>
         <button class="btn btn-red  btn-sm" style="background:var(--red-dim)" onclick="quickBanPlayer('\${esc(p.username)}','\${esc(p.encodedIp)}')">BAN</button>\`;
     return \`<tr style="\${p.disconnected ? 'opacity:.5' : ''}">
-      <td>\${esc(p.username)} \${adminBadge} \${selfBadge}</td>
+      <td>\${esc(p.username)} \${adminBadge} \${premiumBadge} \${selfBadge}</td>
       <td>\${ipLink(p.encodedIp)}</td>
       <td>\${p.kills ?? 0}</td>
       <td>\${p.assists ?? 0}</td>
@@ -3481,7 +3726,11 @@ function renderAccounts() {
   const hasDateFilter = loTs !== -Infinity || hiTs !== Infinity;
 
   let rows = accountsData.filter(a => {
-    if (q && !((a.username||'').toLowerCase().includes(q) || (a.slug||'').toLowerCase().includes(q))) return false;
+    // Discord ids are how a report names someone off-site, so the one box matches them
+    // too — as a substring, so a partial id pasted from Discord still finds the account.
+    if (q && !((a.username||'').toLowerCase().includes(q)
+            || (a.slug||'').toLowerCase().includes(q)
+            || (a.discordId||'').toLowerCase().includes(q))) return false;
     if (hasDateFilter) {
       const t = a.userCreated ? new Date(a.userCreated).getTime() : NaN;
       if (isNaN(t) || t < loTs || t > hiTs) return false;
@@ -3531,6 +3780,7 @@ function renderAccounts() {
       <td>
         \${a.admin ? '<span class="badge badge-admin">ADMIN</span>' : ''}
         \${a.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : ''}
+        \${a.premium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : ''}
         \${a.banned ? '<span class="badge badge-perm">BANNED</span>' : ''}
       </td>
       <td style="text-align:center;white-space:nowrap;">
@@ -3615,13 +3865,22 @@ function buildCosmeticOptions() {
   ).join('');
 }
 
+// Mirrors the server's PERMANENT_PREMIUM_DATE sentinel (year 9999) closely enough to
+// tell "permanent" apart from a real expiry date without hardcoding the exact value.
+function isPermanentPremium(premiumUntil) {
+  return !!premiumUntil && new Date(premiumUntil).getFullYear() >= 9000;
+}
+
 function renderAccountDetail(data) {
   const u = data.user;
   const linked = u.linkedDiscord ? 'Discord' : u.linkedGoogle ? 'Google' : 'Guest';
+  const premiumActive = u.premiumUntil && new Date(u.premiumUntil).getTime() > Date.now();
+  const premiumPermanent = premiumActive && isPermanentPremium(u.premiumUntil);
   const flags = [
     u.admin  ? '<span class="badge badge-admin">ADMIN</span>'  : '',
     u.moderator ? '<span class="badge badge-mod">MODERATOR</span>' : '',
     u.banned ? '<span class="badge badge-perm">BANNED</span>'  : '',
+    premiumActive ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '',
   ].join(' ');
 
   const identity = \`
@@ -3642,24 +3901,32 @@ function renderAccountDetail(data) {
               : '<button class="btn btn-blue btn-sm" onclick="accSetModerator(true)" title="Grant replays-only dashboard access">🛡 Make moderator</button>') +
             '<button class="btn btn-red btn-sm" onclick="accDeleteAccount()">🗑 Delete Account</button><span style="font-size:10px;color:var(--text-muted);">permanent — removes items, XP, passes, fries &amp; sessions; match history is anonymized</span>'}
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-dim);">⭐ Premium: \${premiumActive ? (premiumPermanent ? 'permanent' : ('active until ' + fmtDate(u.premiumUntil))) : 'not active'}</span>
+        <button class="btn btn-blue btn-sm" onclick="accGrantPremium()">⭐ Grant Premium…</button>
+        \${premiumActive ? '<button class="btn btn-gray btn-sm" onclick="accRemovePremium()">Remove premium</button>' : ''}
+        \${premiumActive ? '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim);cursor:pointer;" title="Also reverts every XP bonus Premium ever granted this account.">' +
+          '<input type="checkbox" id="acc-premium-xp-toggle"> also revert XP bonus</label>' : ''}
+      </div>
     </div>\`;
 
   const xpByType = {};
   for (const x of (data.xp||[])) xpByType[x.passType] = x;
   const xpRows = (data.passTypes||[]).map(pt => {
-    const cur = xpByType[pt] || { level: 0, xp: 0 };
+    const cur = xpByType[pt] || { level: 0, xp: 0, premiumXp: 0 };
     return \`<tr>
       <td style="font-size:11px;">\${esc(pt)}</td>
       <td><input type="number" id="xp-lvl-\${esc(pt)}" value="\${cur.level}" readonly title="auto-derived from XP" style="width:70px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text-dim);padding:3px 6px;font-family:inherit;"></td>
       <td><input type="number" id="xp-xp-\${esc(pt)}" value="\${cur.xp}" min="0" oninput="updateLvlFromXp('\${esc(pt)}')" style="width:90px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:inherit;"></td>
+      <td style="font-size:11px;color:#f2d63b;" title="XP granted by Premium purchases/renewals, already included in Total XP">\${cur.premiumXp ? ('⭐ ' + cur.premiumXp.toLocaleString()) : '–'}</td>
       <td><button class="btn btn-blue btn-sm" onclick="accSetXp('\${esc(pt)}')">Set</button></td>
     </tr>\`;
   }).join('');
   const xpCard = \`
     <div class="detail-card" style="margin-top:12px;" data-card="xp">
       <h3>XP / Pass Levels <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(level is derived from XP; setting it grants/revokes the matching unlocks)</span></h3>
-      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th></th></tr></thead>
-      <tbody>\${xpRows || '<tr><td colspan="4" class="empty">No passes.</td></tr>'}</tbody></table>
+      <table class="data-table"><thead><tr><th>Pass</th><th>Level</th><th>Total XP</th><th>from Premium</th><th></th></tr></thead>
+      <tbody>\${xpRows || '<tr><td colspan="5" class="empty">No passes.</td></tr>'}</tbody></table>
     </div>\`;
 
   const gpCard = \`
@@ -3976,6 +4243,62 @@ async function accSetModerator(makeMod) {
   } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
 }
 
+// Toggles the months input's disabled state when "Permanent" is (un)checked, inside
+// the Grant Premium dialog body (see accGrantPremium).
+function syncGrantPremiumFields() {
+  const permanent = document.getElementById('grant-prem-permanent')?.checked;
+  const monthsInput = document.getElementById('grant-prem-months');
+  if (monthsInput) monthsInput.disabled = !!permanent;
+}
+
+async function accGrantPremium() {
+  const body = '<div style="display:flex;flex-direction:column;gap:12px;">' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">Duration</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<input type="number" id="grant-prem-months" value="2" min="1" max="24" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;"> months' +
+          '<label style="display:flex;align-items:center;gap:4px;margin-left:12px;cursor:pointer;">' +
+            '<input type="checkbox" id="grant-prem-permanent" onchange="syncGrantPremiumFields()"> Permanent' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">XP bonus</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<input type="number" id="grant-prem-xp-times" value="0" min="0" max="20" style="width:70px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:5px 8px;font-family:inherit;">' +
+          '<span style="font-size:11px;color:var(--text-muted);">× the normal Premium XP bonus (0 = none, 1 = one purchase\\'s worth, ...)</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const ok = await askConfirm({
+    title: '⭐ Grant Premium',
+    body,
+    confirmLabel: 'Grant',
+    confirmClass: 'btn-blue',
+  });
+  if (!ok) return;
+
+  const permanent = !!document.getElementById('grant-prem-permanent')?.checked;
+  const months = Math.max(1, Math.min(24, parseInt(document.getElementById('grant-prem-months')?.value, 10) || 2));
+  const xpTimes = Math.max(0, Math.min(20, parseInt(document.getElementById('grant-prem-xp-times')?.value, 10) || 0));
+
+  try {
+    await post('/api/account/premium/grant', { slug: currentAccountSlug, months, permanent, xpTimes });
+    toast('⭐ Premium granted' + (permanent ? ' (permanent)' : ' (' + months + ' months)') + (xpTimes ? ' + XP ×' + xpTimes : ''));
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
+async function accRemovePremium() {
+  const withXp = !!document.getElementById('acc-premium-xp-toggle')?.checked;
+  try {
+    await post('/api/account/premium/remove', { slug: currentAccountSlug, withXp });
+    toast('Premium removed' + (withXp ? ' (+ XP bonus reverted)' : ''));
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + (e.message || 'failed'), true); }
+}
+
 document.getElementById('accounts-search').addEventListener('input', renderAccounts);
 document.getElementById('accounts-date-from').addEventListener('change', renderAccounts);
 document.getElementById('accounts-date-to').addEventListener('change', renderAccounts);
@@ -4037,8 +4360,13 @@ document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Tabs a moderator (non-admin) may open. Everything else is hidden for them. */
-const MODERATOR_TABS = ['replays', 'xp'];
+/**
+ * Tabs a moderator (non-admin) may open. Everything else is hidden for them.
+ *
+ * Games is read-only for them apart from raising a sus flag, and their Sus tab is their
+ * own report list — the server scopes and gates both independently.
+ */
+const MODERATOR_TABS = ['replays', 'xp', 'games', 'sus'];
 
 (async () => {
   try {
@@ -4048,18 +4376,24 @@ const MODERATOR_TABS = ['replays', 'xp'];
     isAdmin     = !!me.admin;
     isModerator = !!me.moderator && !me.admin;
     document.getElementById('topbar-user').textContent =
-      'Logged in as ' + (me.username || me.slug) + (isModerator ? ' · moderator (replays + XP gain)' : '');
+      'Logged in as ' + (me.username || me.slug) + (isModerator ? ' · moderator' : '');
   } catch { /* already redirected by server */ }
 
   renderXpExcludePanel();
 
   if (isModerator) {
-    // Moderators get Replays + XP Gain, and may only mark things sus. Hiding the rest
-    // is UX only — the server independently 403s every route they may not reach.
+    // Moderators get Replays, XP Gain, Games and their own Sus list, and may only mark
+    // things sus. Hiding the rest is UX only — the server independently 403s every route
+    // they may not reach, and scopes /api/sus to the flags they raised themselves.
     document.querySelectorAll('.tab-btn').forEach(b => {
       if (!MODERATOR_TABS.includes(b.dataset.tab)) b.style.display = 'none';
     });
-    switchTab('replays');
+    document.getElementById('sus-hint').textContent =
+      'The games you flagged as suspicious. Open the game or replay to review — solving a report is up to the admins, and their outcome shows up below.';
+    // Deep links still work within their tabs; switchTab redirects anything else.
+    routeFromHash(location.hash);
+    window.addEventListener('hashchange', () => routeFromHash(location.hash));
+    if (!location.hash) switchTab('replays');
     return;
   }
 

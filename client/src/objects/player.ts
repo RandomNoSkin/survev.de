@@ -188,6 +188,9 @@ export class Player implements AbstractObject {
     frontSprite = createSprite();
     deathEffectSprite = new PIXI.AnimatedSprite([PIXI.Texture.EMPTY]);
     deathEffectContainer = new PIXI.Container();
+    // world-space position captured at time of death; re-projected to screen
+    // space every frame in render() so the effect stays put as the camera pans
+    deathEffectWorldPos = v2.create(0, 0);
     chestSprite = createSprite();
     flakSprite = createSprite();
     steelskinSprite = createSprite();
@@ -342,6 +345,7 @@ export class Player implements AbstractObject {
         m_actionSeq: number;
         m_wearingPan: boolean;
         m_healEffect: boolean;
+        m_healRegionEffect: boolean;
         m_adrenalineEffect: boolean;
         m_frozen: boolean;
         m_frozenOri: number;
@@ -506,6 +510,7 @@ export class Player implements AbstractObject {
             m_actionSeq: 0,
             m_wearingPan: false,
             m_healEffect: false,
+            m_healRegionEffect: false,
             m_adrenalineEffect: false,
             m_frozen: false,
             m_frozenOri: 0,
@@ -586,6 +591,7 @@ export class Player implements AbstractObject {
             this.m_netData.m_actionSeq = data.actionSeq;
             this.m_netData.m_wearingPan = data.wearingPan;
             this.m_netData.m_healEffect = data.healEffect;
+            this.m_netData.m_healRegionEffect = data.healRegionEffect;
             this.m_netData.m_adrenalineEffect = data.lastStandEffect;
             this.m_netData.m_frozen = data.frozen;
             this.m_netData.m_frozenOri = data.frozenOri;
@@ -719,7 +725,9 @@ export class Player implements AbstractObject {
     }
 
     m_equippedWeaponType() {
-        return GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon).type;
+        // typeToDefSafe: an empty active weapon must not throw here, this is called from
+        // the render/update path where an exception takes the whole client down
+        return GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon)?.type ?? "";
     }
 
     m_hasWeaponInSlot(slot: WeaponSlot) {
@@ -1237,17 +1245,23 @@ export class Player implements AbstractObject {
             this.hasteEmitter.zOrd = this.renderZOrd + 1;
         }
 
+        const passiveHealRateMult = util.getPassiveHealParticleRateMult(
+            !!this.m_netData.m_healRegionEffect,
+        );
+
         // Passive heal effect
         if (this.m_netData.m_healEffect && !this.passiveHealEmitter) {
             this.passiveHealEmitter = particleBarn.addEmitter("heal_basic", {
                 pos: this.m_pos,
                 layer: this.layer,
+                rateMult: passiveHealRateMult,
             });
         } else if (!this.m_netData.m_healEffect && this.passiveHealEmitter) {
             this.passiveHealEmitter.stop();
             this.passiveHealEmitter = null;
         }
         if (this.passiveHealEmitter) {
+            this.passiveHealEmitter.rateMult = passiveHealRateMult;
             this.passiveHealEmitter.pos = v2.add(this.m_pos, v2.create(0, 0.1));
             this.passiveHealEmitter.layer = this.renderLayer;
             this.passiveHealEmitter.zOrd = this.renderZOrd + 1;
@@ -1281,12 +1295,16 @@ export class Player implements AbstractObject {
         if (isActivePlayer && !isSpectating) {
             const curWeapIdx = this.m_localData.m_curWeapIdx;
             const curWeap = this.m_localData.m_weapons[curWeapIdx];
-            const itemDef = GameObjectDefs.typeToDef(curWeap.type) as GunDef;
+            // typeToDefSafe: the slot can be empty for a frame while weapon and active
+            // index updates arrive, and typeToDef throws on ""
+            const itemDef = GameObjectDefs.typeToDefSafe(curWeap.type) as
+                | GunDef
+                | undefined;
 
             // Play dry fire sound when empty
             if (
                 !this.playedDryFire
-                && this.m_equippedWeaponType() == "gun"
+                && itemDef?.type === "gun"
                 && (inputBinds.isBindPressed(Input.Fire)
                     || (inputBinds.isBindDown(Input.Fire) && itemDef.fireMode == "auto"))
                 && this.m_action.type == Action.None
@@ -1401,6 +1419,12 @@ export class Player implements AbstractObject {
         this.container.visible = !this.m_netData.m_dead;
         this.auraContainer.position.set(screenPos.x, screenPos.y);
         this.auraContainer.scale.set(screenScale, screenScale);
+
+        if (this.deathEffectSprite.visible) {
+            const deathScreenPos = camera.m_pointToScreen(this.deathEffectWorldPos);
+            this.deathEffectContainer.position.set(deathScreenPos.x, deathScreenPos.y);
+            this.deathEffectContainer.scale.set(screenScale, screenScale);
+        }
 
         if (IS_DEV && debug.players) {
             debugLines.addCircle(this.m_pos, this.m_rad, 0xff0000, 0);
@@ -1815,17 +1839,42 @@ export class Player implements AbstractObject {
         }
         if (R.type == "melee" && this.m_netData.m_activeWeapon != "fists") {
             const V = R.worldImg!;
-            this.meleeSprite.texture = PIXI.Texture.from(V.sprite);
+            // Default melee sprite on the right hand.
+            this.meleeSprite.texture = PIXI.Texture.from(V.rightSprite || V.sprite);
             this.meleeSprite.pivot.set(-V.pos.x, -V.pos.y);
             this.meleeSprite.scale.set(V.scale.x / bodyScale, V.scale.y / bodyScale);
             this.meleeSprite.rotation = V.rot;
             this.meleeSprite.tint = V.tint;
             this.meleeSprite.visible = true;
             const U = this.handRContainer.getChildIndex(this.handRSprite);
-            const W = math.max(V.renderOnHand ? U + 1 : U - 1, 0);
+            const W = math.max(V.handUnder ? U - 1 : V.renderOnHand ? U + 1 : U - 1, 0);
             if (this.handRContainer.getChildIndex(this.meleeSprite) != W) {
                 this.handRContainer.addChildAt(this.meleeSprite, W);
             }
+
+            // Optional second sprite for the left hand.
+            if (V.leftSprite) {
+                this.objectLSprite.texture = PIXI.Texture.from(V.leftSprite);
+                this.objectLSprite.pivot.set(-V.pos.x, -V.pos.y);
+                this.objectLSprite.scale.set(V.scale.x / bodyScale, V.scale.y / bodyScale);
+                this.objectLSprite.rotation = V.rot;
+                this.objectLSprite.tint = V.tint;
+                this.objectLSprite.visible = true;
+
+                const handIndex = this.handLContainer.getChildIndex(this.handLSprite);
+                const objectIndex = this.handLContainer.getChildIndex(this.objectLSprite);
+                const targetIndex = V.leftHandUnder || V.handUnder
+                    ? handIndex - (objectIndex >= 0 && objectIndex < handIndex ? 1 : 0)
+                    : handIndex + (objectIndex >= 0 && objectIndex < handIndex ? 0 : 1);
+                const desiredIndex = math.clamp(targetIndex, 0, this.handLContainer.children.length - 1);
+                if (this.handLContainer.getChildIndex(this.objectLSprite) != desiredIndex) {
+                    this.handLContainer.addChildAt(this.objectLSprite, desiredIndex);
+                }
+            } else {
+                this.objectLSprite.visible = false;
+            }
+            this.objectRSprite.visible = false;
+
             const G = this.bodyContainer.getChildIndex(this.handRContainer);
             const X = math.max(V.leftHandOntop ? G + 1 : G - 1, 0);
             if (this.bodyContainer.getChildIndex(this.handLContainer) != X) {
@@ -1833,6 +1882,8 @@ export class Player implements AbstractObject {
             }
         } else {
             this.meleeSprite.visible = false;
+            this.objectLSprite.visible = false;
+            this.objectRSprite.visible = false;
         }
         if (R.type == "throwable") {
             const K = function(
@@ -1862,7 +1913,7 @@ export class Player implements AbstractObject {
             const Z = R.handImg?.[this.throwableState];
             K(this.objectLSprite, Z!.left);
             K(this.objectRSprite, Z!.right);
-        } else {
+        } else if (R.type !== "melee") {
             this.objectLSprite.visible = false;
             this.objectRSprite.visible = false;
         }
@@ -2310,6 +2361,22 @@ export class Player implements AbstractObject {
                 return anim("crawl_backward", true);
             case Anim.Melee: {
                 const def = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as MeleeDef;
+                const buildChain = (
+                    types: string[],
+                    startMirror = false,
+                ): { type: string; mirror: boolean; nextAnim?: unknown } => {
+                    const node: any = {
+                        type: types[0],
+                        mirror: startMirror,
+                    };
+                    if (types.length > 1) {
+                        node.nextAnim = buildChain(types.slice(1), !startMirror);
+                    }
+                    return node;
+                };
+                if (def.anim?.attackSequence && def.anim.attackSequence.length > 0) {
+                    return buildChain(def.anim.attackSequence, false) as any;
+                }
                 if (!def.anim?.attackAnims) {
                     return anim("fists", true);
                 }
@@ -2399,14 +2466,25 @@ export class Player implements AbstractObject {
                 }
             }
             if (w) {
+                const nextAnim = (this.anim.data as any).nextAnim;
+                if (nextAnim) {
+                    this.anim.data = nextAnim;
+                    this.anim.ticker = 0;
+                    return;
+                }
                 this.playAnim(Anim.None, this.anim.seq);
             }
         }
     }
 
     animPlaySound(animCtx: AnimCtx, args: { sound: string }) {
-        const itemDef = GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon) as MeleeDef;
-        const sound = itemDef.sound[args.sound];
+        // Anim effects can fire on the same frame the active weapon changed (the anim is
+        // networked separately from the weapon), so the def may not match the anim — and
+        // typeToDef throws on an empty/mismatched type, which would kill the whole client.
+        const itemDef = GameObjectDefs.typeToDefSafe(
+            this.m_netData.m_activeWeapon,
+        ) as MeleeDef | undefined;
+        const sound = itemDef?.sound?.[args.sound];
         if (sound) {
             animCtx.audioManager.playSound(sound, {
                 channel: "sfx",
@@ -2423,10 +2501,13 @@ export class Player implements AbstractObject {
     }
 
     animThrowableParticles(animCtx: AnimCtx, _args: unknown) {
-        if (
-            GameObjectDefs.typeToDef(this.m_netData.m_activeWeapon, "throwable")
-                .useThrowParticles
-        ) {
+        // Same as animPlaySound / animMeleeCollision: the throw anim can still be running
+        // (or arrive) while the player already holds something else — pulling a pin and
+        // switching to melee did exactly that, and typeToDef(x, "throwable") threw,
+        // crashing the client of everyone who could see that player.
+        const throwableDef = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon);
+        if (throwableDef?.type !== "throwable") return;
+        if (throwableDef.useThrowParticles) {
             // Pin
             const pinOff = v2.rotate(
                 v2.create(0.75, 0.75),
@@ -2919,6 +3000,7 @@ export class PlayerBarn {
             teamId: info.teamId,
             groupId: info.groupId,
             name: info.name,
+            roleTag: info.roleTag,
             nameTruncated: helpers.truncateString(
                 info.name || "",
                 "bold 16px arial",
@@ -3085,6 +3167,12 @@ export class PlayerBarn {
         if (newStatus.boost !== undefined) {
             status.boost = newStatus.boost;
         }
+        if (newStatus.screenWidth !== undefined) {
+            status.screenWidth = newStatus.screenWidth;
+        }
+        if (newStatus.screenHeight !== undefined) {
+            status.screenHeight = newStatus.screenHeight;
+        }
         if (newStatus.disconnected !== undefined) {
             status.disconnected = newStatus.disconnected;
         }
@@ -3221,9 +3309,17 @@ export class PlayerBarn {
                 sprite.position.set(0, 0);
                 sprite.visible = true;
 
+                // remember the world position so render() can keep re-projecting
+                // it to screen space every frame instead of leaving it pinned to
+                // a single stale screen position as the camera moves
+                target.deathEffectWorldPos = v2.copy(target.m_pos);
                 target.deathEffectContainer.position.set(
                     target.container.position.x,
                     target.container.position.y,
+                );
+                target.deathEffectContainer.scale.set(
+                    target.container.scale.x,
+                    target.container.scale.y,
                 );
                 target.deathEffectContainer.addChild(sprite);
                 renderer.addPIXIObj(

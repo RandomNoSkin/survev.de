@@ -34,6 +34,7 @@ export class AudioManager {
     masterVolume = 1;
     soundVolume = 1;
     musicVolume = 1;
+    gameMusicVolume = 1;
     baseVolume = 0.5;
     sounds: Record<
         string,
@@ -198,7 +199,9 @@ export class AudioManager {
         options.ignoreMinAllowable = options.ignoreMinAllowable || false;
         options.rangeMult = options.rangeMult || 1;
         options.offset = options.offset || 0;
-        options.ambient = options.channel == "ambient" || options.channel == "music";
+        options.ambient = options.channel == "ambient"
+            || options.channel == "music"
+            || options.channel == "gameMusic";
         options.detune = options.detune || 0;
         options.volumeScale = options.volumeScale || 1;
         let instance = null;
@@ -258,11 +261,10 @@ export class AudioManager {
                 });
             }
             // Add looped sounds and music to stored sounds
-            if (instance && (options.loop || options.channel == "music")) {
-                const type = options.channel == "music" ? "music" : "sound";
+            if (instance && (options.loop || a.type != "sound")) {
                 this.soundInstances.push({
                     instance,
-                    type,
+                    type: a.type,
                 });
             }
         }
@@ -340,6 +342,11 @@ export class AudioManager {
         this.musicVolume = volume;
     }
 
+    setGameMusicVolume(volume: number) {
+        this._setInstanceTypeVolume("gameMusic", volume);
+        this.gameMusicVolume = volume;
+    }
+
     setVolume(instance: SoundHandle, volume: number, type: string) {
         if (instance) {
             type = type || "sound";
@@ -415,6 +422,8 @@ export class AudioManager {
         switch (type) {
             case "music":
                 return this.musicVolume;
+            case "gameMusic":
+                return this.gameMusicVolume;
             case "sound":
                 return this.soundVolume;
             default:

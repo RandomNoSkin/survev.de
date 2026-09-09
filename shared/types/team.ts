@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import type { FindGameMatchData } from "./api.ts";
+import type { RoleTag } from "./user.ts";
 
 export type TeamMenuErrorType =
     | "join_full"
@@ -48,6 +49,7 @@ export interface TeamMenuPlayer {
     playerId: number;
     isLeader: boolean;
     inGame: boolean;
+    roleTag: RoleTag;
 }
 
 /**

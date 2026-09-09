@@ -644,6 +644,9 @@ export async function logPlayerIPs(data: SaveGameBody["matchData"]) {
             encodedIp: hashIp(matchData.ip),
             findGameEncodedIp: hashIp(matchData.findGameIp),
             isp: ispMap[matchData.ip] ?? "",
+            // matchData.createdAt crossed the game-server -> API RPC call as JSON, so it
+            // arrives here as an ISO string, not the Date drizzle's timestamp column expects.
+            createdAt: matchData.createdAt ? new Date(matchData.createdAt) : undefined,
         }));
         await db.insert(ipLogsTable).values(logsData);
     } catch (err) {

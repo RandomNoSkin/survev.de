@@ -4,6 +4,7 @@ import type { MapDefs } from "../../../shared/defs/mapDefs";
 import { TeamMode } from "../../../shared/gameConfig";
 import type { FindGameError } from "../../../shared/types/api";
 import { zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
+import { zRoleTag } from "../../../shared/types/user";
 import { loadoutSchema } from "../../../shared/utils/loadout";
 import type { MatchDataTable } from "../api/db/schema";
 
@@ -49,6 +50,14 @@ export interface SaveGameBody {
         damage: number;
         types: string[];
     }[];
+    /** Per-weapon damage/kills dealt this match, across all players, for the weapon
+     *  ranking stats page's daily rollup. Optional for backward-compat with
+     *  locally-saved "lost" games. */
+    weaponStats?: {
+        mapId: number;
+        teamMode: TeamMode;
+        entries: { weaponType: string; damage: number; kills: number }[];
+    };
 }
 
 export interface ServerGameConfig {
@@ -95,6 +104,7 @@ export const zFindGamePrivateBody = z.object({
             userId: z.string().nullable(),
             ip: z.string(),
             admin: z.boolean(),
+            roleTag: zRoleTag,
             loadout: loadoutSchema.optional(),
             customLoadout: zCustomLoadoutConfig.optional(),
         }),
@@ -108,6 +118,7 @@ const zPrivateLobbyPlayerData = z.object({
     userId: z.string().nullable(),
     ip: z.string(),
     admin: z.boolean(),
+    roleTag: zRoleTag,
     loadout: loadoutSchema.optional(),
     customLoadout: zCustomLoadoutConfig.optional(),
 });

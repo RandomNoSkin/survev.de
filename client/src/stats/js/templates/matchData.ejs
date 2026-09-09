@@ -12,6 +12,7 @@
   <div class='match-download-wrap'>
       <button type='button' class='match-download-btn'>⬇ Download Stats</button>
   </div>
+  <% var hasImpact = env.data.some(function (d) { return d.impact_score !== null && d.impact_score !== undefined; }); %>
   <div class='match-header-wrapper'>
       <table class='match-table'>
           <thead>
@@ -22,6 +23,9 @@
                   <th class='match-header-stat' scope="col" data-l10n='stats-kills' data-caps='true'>KILLS</th>
                   <th class='match-header-stat hide-xs' scope="col" data-l10n='stats-damage' data-caps='true'>DAMAGE</th>
                   <th class='match-header-stat' scope="col" data-l10n='stats-survived' data-caps='true'>SURVIVED</th>
+                  <% if (hasImpact) { %>
+                      <th class='match-header-stat hide-xs' scope="col" data-l10n='stats-impact' data-caps='true'>IMPACT</th>
+                  <% } %>
               </tr>
           </thead>
       </table>
@@ -36,6 +40,9 @@
               <th class='match-header-stat'></th>
               <th class='match-header-stat hide-xs'></th>
               <th class='match-header-stat'></th>
+              <% if (hasImpact) { %>
+                  <th class='match-header-stat hide-xs'></th>
+              <% } %>
           </tr>
         </thead>
         <tbody class='match-values'>
@@ -83,6 +90,16 @@
                   <td>
                       <%= env.formatTime(d.time_alive) %>
                   </td>
+                  <% if (hasImpact) { %>
+                      <td class='hide-xs'>
+                          <% if (d.impact_score !== null && d.impact_score !== undefined) { %>
+                              <% var b = d.impact_breakdown; %>
+                              <span <% if (b) { %>title="Combat: <%= b.combat.points %>/<%= b.combat.max %> (<%= b.combat.detail %>) · Support: <%= b.support.points %>/<%= b.support.max %> (<%= b.support.detail %>)"<% } %>><%= d.impact_score %></span>
+                          <% } else { %>
+                              -
+                          <% } %>
+                      </td>
+                  <% } %>
               </tr>
           <% } %>
         </tbody>

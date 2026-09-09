@@ -10,36 +10,44 @@ export const _allowedMeleeSkins = [
     "knuckles_rusted",
     "knuckles_heroic",
     "knuckles_OldMan",
-    "karambit",
     "karambit_rugged",
     "karambit_prismatic",
     "karambit_drowned",
     "karambit_fade",
+    "karambit_blazing",
     "karambit_dotexe",
     "karambit_woodland",
     "karambit_rust",
     "karambit_case_hardened",
     "karambit_ice",
     "bayonet_fade",
-    "bayonet",
+    "bayonet_m9_autotronic",
+    "bayonet_m9_vanilla",
+    "bayonet_m9_pink_crystal",
     "bayonet_rugged",
     "bayonet_woodland",
     "wakizashi",
     "wakizashi_rust",
     "wakizashi_ninja",
     "bayonet_glow",
-    "huntsman",
+    "bayonet_case_hardened",
     "huntsman_rugged",
     "huntsman_burnished",
     "huntsman_blackwater",
     "huntsman_ice",
     "huntsman_pink",
     "huntsman_purple",
-    "bowie",
+    "flip_technical",
+    "flip_pyrotechnical",
+    "flip_eclipse",
+    "ursus_rugged",
+    "ursus_safari",
+    "ursus_jade",
     "bowie_vintage",
     "bowie_frontier",
     "bowie_redtiger",
     "bowie_ice",
+    "combat_banana",
 ];
 export const _allowedOutfits = [
     "outfitBase",
@@ -94,6 +102,7 @@ export const _allowedOutfits = [
     "outfitAuronV2",
     "outfitHorizon",
     "outfitSortablue",
+    "outfitTwilight",
     "outfitDotexe",
     "outfitMarbleGreen",
     "outfitMarbelPink",
@@ -121,6 +130,7 @@ export const _allowedOutfits = [
     "outfitBluebell",
     "outfitAegis",
     "outfitUmbra",
+    "outfitLog",
 
     // resurviv skin accessories
     "outfitSnowman",
@@ -171,6 +181,8 @@ export const _allowedEmotes = [
     "emote_thumbsup",
     "emote_sadface",
     "emote_happyface",
+    "emote_mog",
+    "emote_unamused",
     "emote_boffy",
     "emote_surviv",
     "emote_gg",
@@ -337,6 +349,8 @@ export const _allowedEmotes = [
     "emote_astrohelmet",
     "emote_shootingstar",
     "emote_blackhole",
+    "emote_violence",
+    "emote_confetti",
 ];
 
 export interface UnlockDef {
@@ -344,9 +358,13 @@ export interface UnlockDef {
     name: string;
     unlocks: string[];
     free?: boolean;
+    /** Only granted to accounts with an active Premium subscription (see
+     *  `server/src/api/db/premiumUnlocks.ts`) - never handed out by account
+     *  creation or any other unlock path. */
+    premiumOnly?: boolean;
 }
 
-type UnlockDefKey = "unlock_default" | "unlock_new_account";
+type UnlockDefKey = "unlock_default" | "unlock_new_account" | "unlock_premium";
 export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
     unlock_default: {
         type: "unlock",
@@ -557,5 +575,17 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
         name: "new-account",
         free: true,
         unlocks: ["outfitDarkShirt"],
+    },
+    // Cosmetics ONLY obtainable by having an active Premium subscription - never
+    // shoppable, never a pass reward. Empty for now (no premium-exclusive cosmetics
+    // have been designed/added yet); granting is already wired up end-to-end (see
+    // `grantPremiumUnlocks` in `server/src/api/db/premiumUnlocks.ts`, called from the
+    // `/premium/buy` route) so adding a type here is the only step needed later - it
+    // starts granting automatically, no further code changes required.
+    unlock_premium: {
+        type: "unlock",
+        name: "premium",
+        premiumOnly: true,
+        unlocks: [],
     },
 };

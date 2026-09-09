@@ -146,6 +146,7 @@ export class Particle {
 interface EmitterOptions {
     pos?: Vec2;
     dir?: Vec2;
+    spriteRot?: number;
     scale?: number;
     layer?: number;
     duration?: number;
@@ -161,6 +162,7 @@ export class Emitter {
     type!: string;
     pos!: Vec2;
     dir!: Vec2;
+    spriteRot?: number;
     scale!: number;
     layer!: number;
     duration!: number;
@@ -181,6 +183,7 @@ export class Emitter {
         this.type = type;
         this.pos = options.pos ? v2.copy(options.pos) : v2.create(0, 0);
         this.dir = options.dir ? v2.copy(options.dir) : v2.create(0, 1);
+        this.spriteRot = options.spriteRot;
         this.scale = options.scale !== undefined ? options.scale : 1;
         this.layer = options.layer || 0;
         this.duration = options.duration !== undefined ? options.duration : Number.MAX_VALUE;
@@ -322,7 +325,7 @@ export class ParticleBarn {
                     const pos = v2.add(e.pos, util.randomPointInCircle(rad));
                     const dir = v2.rotate(e.dir, (Math.random() - 0.5) * def.angle);
                     const vel = v2.mul(dir, getRangeValue(def.speed));
-                    const rot = getRangeValue(def.rot!);
+                    const rot = e.spriteRot !== undefined ? e.spriteRot : getRangeValue(def.rot!);
                     const particle = this.addParticle(
                         def.particle,
                         e.layer,
@@ -1875,6 +1878,63 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return 0x330066;
         },
     },
+    pixelExplosionDeath: {
+        image: ["part-pixel-explosion-01.img", ],
+        life: new Range(1.0, 1.5),
+        drag: new Range(5.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.1, 0.2),
+            end: new Range(0.3, 0.5),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.8, 1),
+        },
+        color: function () {
+            return 0x330066;
+        },
+    },
+    pulseDeath: {
+        image: ["part-pulse-01.img", ],
+        life: new Range(1.0, 1.5),
+        drag: new Range(5.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.1, 0.2),
+            end: new Range(0.3, 0.5),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.8, 1),
+        },
+        color: function () {
+            return 0x330066;
+        },
+    },
+    smokeDeath: {
+        image: ["smoke-death-01.img", ],
+        life: new Range(1.0, 1.5),
+        drag: new Range(5.0, 10.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.1, 0.2),
+            end: new Range(0.3, 0.5),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.8, 1),
+        },
+        color: function () {
+            return 0x330066;
+        },
+    },
     magicSparkDeath: {
         image: [
             "part-magic-spark-01.img",
@@ -1922,6 +1982,164 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return 0xffffff;
         },
     },
+    xpOrbDeath: {
+        image: [
+            "part-xp-orb-1.img",
+            "part-xp-orb-2.img",
+            "part-xp-orb-3.img",
+            "part-xp-orb-4.img",
+            "part-xp-orb-5.img",
+            "part-xp-orb-6.img",
+        ],
+        life: new Range(2, 2.5),
+        drag: new Range(1, 1.5),
+        rotVel: 0,
+        scale: {
+            start: 0.3,
+            end: 0.2,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    alphabetSoupDeath: {
+        image: [
+            "part-alphabet-soup-01.img",
+            "part-alphabet-soup-02.img",
+            "part-alphabet-soup-03.img",
+            "part-alphabet-soup-04.img", 
+            "part-alphabet-soup-05.img",
+            "part-alphabet-soup-06.img",
+            "part-alphabet-soup-07.img",
+            "part-alphabet-soup-08.img",
+            "part-alphabet-soup-09.img",
+            "part-alphabet-soup-10.img",
+            "part-alphabet-soup-11.img",
+            "part-alphabet-soup-12.img",
+            "part-alphabet-soup-13.img",
+            "part-alphabet-soup-14.img",
+            "part-alphabet-soup-15.img",
+            "part-alphabet-soup-16.img",
+            "part-alphabet-soup-17.img",
+            "part-alphabet-soup-18.img",
+            "part-alphabet-soup-19.img",
+            "part-alphabet-soup-20.img",
+            "part-alphabet-soup-21.img",
+            "part-alphabet-soup-22.img",
+            "part-alphabet-soup-23.img",
+            "part-alphabet-soup-24.img",
+            "part-alphabet-soup-25.img",
+            "part-alphabet-soup-26.img",
+        ],
+        life: new Range(2.0, 2.5),
+        drag: new Range(1.5, 3.0),
+        rotVel: 0,
+        scale: {
+            start: 0.5,
+            end: 0.1,
+            lerp: new Range(0.95, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    bubbleDeath: {
+        image: ["bubble-death.img",],
+        life: new Range(0.7, 1.1),
+        drag: new Range(0.5, 1.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.2, 0.7),
+            end: new Range(0.8, 1.1),
+            lerp: new Range(0.95, 1),
+        },
+        alpha: {
+            start: 0.8,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            const colors = [0xADF5FF, 0xFFDEFE, 0xAEFF9C, 0xFFFCD4, 0xD8D4FF];
+            return colors[Math.floor(util.random(0, colors.length))];
+        },
+    },
+    shatteredGlassDeath: {
+        image: [
+            "glass-shard-death-01.img",
+            "glass-shard-death-02.img",
+            "glass-shard-death-03.img",
+            "glass-shard-death-04.img",
+            "glass-shard-death-05.img",
+            "glass-shard-death-06.img",
+        ],
+        life: new Range(1.0, 1.2),
+        drag: new Range(0.5, 3),
+        rotVel: new Range(0, Math.PI * 1),
+        scale: {
+            start: new Range(0.55, 0.60),
+            end: new Range(0.75, 0.80),
+            lerp: new Range(0.95, 1),
+        },
+        alpha: {
+            start: 0.8,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },        
+        color: function () {
+            return 0xffffff;
+        },
+    },
+    dropCellphoneDeath: {
+        image: ["drop-cellphone.img",],
+        life: 4,
+        drag: new Range(4.5, 8.2),
+        rotVel: 0,
+        scale: {
+            start: 0.2,
+            end: 0.2,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            const colors = [0x32374A, 0xF77E2D, 0xF5F5F5];
+            return colors[Math.floor(util.random(0, colors.length))];
+        },
+    },
+    touhouDeath: {
+        image: ["touhou-death.img",],
+        life: new Range(1.0, 1.8),
+        drag: new Range(2.0, 7.0),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.60, 0.65),
+            end: new Range(0.50, 0.55),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return 0xffffff;
+        },
+    },
+
     whiteChip: {
         image: ["part-spark-02.img"],
         life: 0.5,
@@ -2754,6 +2972,30 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.69, 0.695)));
+        },
+    },
+    lodgeFire: {
+        image: ["part-fire-01.img"],
+        life: new Range(3, 3.25),
+        drag: new Range(0.2, 0.22),
+        rotVel: new Range(0, 0),
+        scale: {
+            start: new Range(0.2, 0.25),
+            end: new Range(0.6, 0.65),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        alphaIn: {
+            start: 0.7,
+            end: 0.5,
+            lerp: new Range(0, 0.1),
+        },
+        color: function() {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.94, 0.99)));
         },
     },
     bathhouseSteam: {
@@ -3848,6 +4090,32 @@ const EmitterDefs: Record<string, EmitterDef> = {
         speed: new Range(1.5, 2),
         angle: Math.PI * 0.1,
         maxCount: Number.MAX_VALUE,
+    },
+    lodge_smoke: {
+        particle: "cabinSmoke",
+        rate: new Range(1.5, 2),
+        radius: 1,
+        speed: new Range(1, 1.5),
+        angle: Math.PI * 0.1,
+        maxCount: Number.MAX_VALUE,
+    },
+    lodge_fire: {
+        particle: "lodgeFire",
+        rate: new Range(1.2, 1.5),
+        radius: 0.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        maxCount: Number.MAX_VALUE,
+        rot: Math.PI,
+    },
+    lodge_fire_slow: {
+        particle: "lodgeFire",
+        rate: new Range(2, 3),
+        radius: 0.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        maxCount: Number.MAX_VALUE,
+        rot: Math.PI,
     },
     bunker_bubbles_01: {
         particle: "bunkerBubbles",

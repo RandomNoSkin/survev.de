@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="64"
+   height="64"
+   viewBox="0 0 64 64"
+   version="1.1"
+   xml:space="preserve"
+   style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;"
+   id="svg5"
+   sodipodi:docname="part-alphabet-soup-22.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+   id="namedview5"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="12.609375"
+   inkscape:cx="31.960347"
+   inkscape:cy="32"
+   inkscape:window-width="1920"
+   inkscape:window-height="1009"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg5" />
+    <g
+   transform="matrix(0.66194,0,0,0.987769,12.213354,-0.183759)"
+   id="g1">
+        <path
+   d="M11.981,43.71C10.904,40.69 5.156,30.86 2.833,26.955C0.681,23.335 0.142,14.12 4.483,12.54C11.313,10.056 19.019,10.941 22.348,13.174C24.15,14.382 27.416,14.377 29.892,14.291C37.741,14.021 42.042,10.803 47.551,10.817C53.337,10.832 57.162,12.72 58.285,15.773C59.406,18.82 56.847,23.258 55.24,25.648C53.138,28.777 48.894,36.716 48.934,39.897C48.993,44.643 47.819,53.239 38.718,54.117C32.597,54.707 23.782,57.867 17.086,52.463C13.462,49.538 13.248,47.262 11.981,43.71Z"
+   style="fill:url(#_Linear1);"
+   id="path1" />
+    </g>
+    <g
+   id="H"
+   transform="matrix(1,0,0,1,0.97034,-2.63454)">
+        <text
+   x="17.279px"
+   y="49.321px"
+   style="font-family:'Calibri-Bold', 'Calibri', sans-serif;font-weight:700;font-size:46.489px;fill:url(#_Linear2);"
+   id="text1">V</text>
+    </g>
+    <defs
+   id="defs5">
+        <linearGradient
+   id="_Linear1"
+   x1="0"
+   y1="0"
+   x2="1"
+   y2="0"
+   gradientUnits="userSpaceOnUse"
+   gradientTransform="matrix(34.754308,0,0,38.387771,15.193302,32.359328)"><stop
+     offset="0"
+     style="stop-color:rgb(255,75,0);stop-opacity:1"
+     id="stop1" /><stop
+     offset="1"
+     style="stop-color:rgb(232,78,16);stop-opacity:1"
+     id="stop2" /></linearGradient>
+        <linearGradient
+   id="_Linear2"
+   x1="0"
+   y1="0"
+   x2="1"
+   y2="0"
+   gradientUnits="userSpaceOnUse"
+   gradientTransform="matrix(27.042684,0,0,29.645515,17.853633,34.63454)"><stop
+     offset="0"
+     style="stop-color:rgb(201,138,9);stop-opacity:1"
+     id="stop3" /><stop
+     offset="0.37"
+     style="stop-color:rgb(255,201,117);stop-opacity:1"
+     id="stop4" /><stop
+     offset="1"
+     style="stop-color:rgb(255,155,0);stop-opacity:1"
+     id="stop5" /></linearGradient>
+    </defs>
+</svg>

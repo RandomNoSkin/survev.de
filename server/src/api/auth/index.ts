@@ -6,7 +6,7 @@ import { sessionTable, type SessionTableSelect, usersTable, type UsersTableSelec
 
 export const sessionCookieName = "auth_session";
 
-function toSha256(token: string): string {
+export function toSha256(token: string): string {
     return createHash("sha256").update(token).digest("hex");
 }
 

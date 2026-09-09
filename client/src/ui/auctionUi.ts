@@ -156,8 +156,9 @@ export class AuctionUi {
             }</div>`,
         );
         card.append(
-            `<div class="market-seller">by ${helpers.htmlEscape(
+            `<div class="market-seller">by ${helpers.formatUsername(
                 a.sellerUsername || a.sellerSlug,
+                a.sellerRoleTag,
             )}</div>`,
         );
 
@@ -165,7 +166,7 @@ export class AuctionUi {
             a.currentBid != null
                 ? `Current bid <b>${a.currentBid}</b>${
                       a.currentBidderSlug
-                          ? ` · ${helpers.htmlEscape(a.currentBidderSlug)}`
+                          ? ` · ${helpers.formatUsername(a.currentBidderSlug, a.currentBidderRoleTag)}`
                           : ""
                   }`
                 : `Min bid <b>${a.minBid}</b> · no bids yet`;

@@ -64,16 +64,15 @@ async function computeGameXpDeltas(gameId: string, userId: string): Promise<XpDe
             const cfg = allPasses?.[p.passType];
             if (!cfg) return true; // no season config → assume applicable
             return (
-                gameTime >= new Date(cfg.seasonStart).getTime() &&
-                gameTime <= new Date(cfg.seasonEnd).getTime()
+                gameTime >= new Date(cfg.seasonStart).getTime()
+                && gameTime <= new Date(cfg.seasonEnd).getTime()
             );
         })
         .map((p) => ({
             passType: p.passType,
-            xpDelta:
-                Math.round(
-                    baseXp * matchBoostMultiplier(p.passType, stat.mapId, r.createdAt) * 1e5,
-                ) / 1e5,
+            xpDelta: Math.round(
+                baseXp * matchBoostMultiplier(p.passType, stat.mapId, r.createdAt) * 1e5,
+            ) / 1e5,
         }))
         .filter((d) => d.xpDelta > 0);
 }
@@ -132,8 +131,52 @@ async function upsertModeration(
         .values({ gameId, userId, status, note, markedBy: adminSlug, xpDeltas })
         .onConflictDoUpdate({
             target: [gameModerationTable.gameId, gameModerationTable.userId],
-            set: { status, note, markedBy: adminSlug, markedAt: new Date(), xpDeltas },
+            set: {
+                status,
+                note,
+                markedBy: adminSlug,
+                markedAt: new Date(),
+                xpDeltas,
+                // Re-flagging reopens the case: a previous resolution no longer applies.
+                resolvedBy: null,
+                resolvedAt: null,
+                resolveNote: "",
+            },
         });
+}
+
+/**
+ * Closes a sus report with a written outcome instead of deleting it like "clear" does.
+ * The row stays, so the moderator who raised it sees what was decided; `markedBy` and
+ * `note` keep naming the original reporter and their reason.
+ *
+ * Only a row that is currently "sus" can be resolved — "botted" and "removed" carry XP
+ * state that has its own inverse, and resolving them would strand it.
+ */
+export async function resolveSusFlag(
+    gameId: string,
+    userId: string,
+    adminSlug: string,
+    resolveNote: string,
+): Promise<boolean> {
+    const updated = await db
+        .update(gameModerationTable)
+        .set({
+            status: "resolved",
+            resolvedBy: adminSlug,
+            resolvedAt: new Date(),
+            resolveNote,
+        })
+        .where(
+            and(
+                eq(gameModerationTable.gameId, gameId),
+                eq(gameModerationTable.userId, userId),
+                eq(gameModerationTable.status, "sus"),
+            ),
+        )
+        .returning({ gameId: gameModerationTable.gameId });
+
+    return updated.length > 0;
 }
 
 /**

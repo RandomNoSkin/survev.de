@@ -1,0 +1,1 @@
+ALTER TABLE "weapon_stats_daily" ADD COLUMN "max_damage" integer DEFAULT 0 NOT NULL;

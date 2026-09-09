@@ -45,11 +45,30 @@ export default defineConfig(({ mode }) => {
         port: Config.vite.port,
         host: Config.vite.host,
         proxy: {
-            // this redirects /stats to /stats/
-            // because vite is cringe and does not work without trailing slashes at the end of paths 😭
+            // this redirects /stats, /apps, /oauth-authorize, /link to their trailing-slash
+            // form because vite is cringe and does not work without trailing slashes at
+            // the end of paths 😭
             "^/stats(?!/$).*": {
                 target: `http://${Config.vite.host}:${Config.vite.port}`,
                 rewrite: (path) => path.replace(/^\/stats(?!\/$).*/, "/stats/"),
+                changeOrigin: true,
+                secure: false,
+            },
+            "^/apps(?!/$).*": {
+                target: `http://${Config.vite.host}:${Config.vite.port}`,
+                rewrite: (path) => path.replace(/^\/apps(?!\/$).*/, "/apps/"),
+                changeOrigin: true,
+                secure: false,
+            },
+            "^/oauth-authorize(?!/$).*": {
+                target: `http://${Config.vite.host}:${Config.vite.port}`,
+                rewrite: (path) => path.replace(/^\/oauth-authorize(?!\/$).*/, "/oauth-authorize/"),
+                changeOrigin: true,
+                secure: false,
+            },
+            "^/link(?!/$).*": {
+                target: `http://${Config.vite.host}:${Config.vite.port}`,
+                rewrite: (path) => path.replace(/^\/link(?!\/$).*/, "/link/"),
                 changeOrigin: true,
                 secure: false,
             },
@@ -83,6 +102,12 @@ export default defineConfig(({ mode }) => {
                 input: {
                     main: resolve(import.meta.dirname, "index.html"),
                     stats: resolve(import.meta.dirname, "stats/index.html"),
+                    apps: resolve(import.meta.dirname, "apps/index.html"),
+                    "oauth-authorize": resolve(
+                        import.meta.dirname,
+                        "oauth-authorize/index.html",
+                    ),
+                    link: resolve(import.meta.dirname, "link/index.html"),
                     ...(isDev
                         ? {
                             "building-editor": resolve(

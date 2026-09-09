@@ -346,6 +346,7 @@ export class LoadoutDisplay {
             actionItem: options.actionItem || "",
             wearingPan: false,
             healEffect: false,
+            healRegionEffect: false,
             lastStandEffect: false,
             frozen: false,
             frozenOri: 0,
@@ -366,6 +367,7 @@ export class LoadoutDisplay {
             teamId: 0,
             groupId: 0,
             name: "",
+            roleTag: null,
             loadout: {
                 heal: this.loadout.heal,
                 boost: this.loadout.boost,

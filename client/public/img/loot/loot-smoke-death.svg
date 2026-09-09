@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="128"
+   height="128"
+   viewBox="0 0 128 128"
+   version="1.1"
+   xml:space="preserve"
+   style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;"
+   id="svg1"
+   sodipodi:docname="loot-smoke-death.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><sodipodi:namedview
+   id="namedview1"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   inkscape:zoom="6.3046875"
+   inkscape:cx="63.920694"
+   inkscape:cy="64"
+   inkscape:window-width="1920"
+   inkscape:window-height="1009"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="svg1" />
+    <g
+   id="smoke-death-02.png"
+   transform="matrix(0.648304,0,0,0.648304,-110.075865,-29.355746)">
+        <use
+   xlink:href="#_Image1"
+   x="0"
+   y="0"
+   width="512px"
+   height="288px"
+   id="use1" />
+    </g>
+    <defs
+   id="defs1">
+        <image
+   id="_Image1"
+   width="512px"
+   height="288px"
+   xlink:href="data:image/png;base64,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" />
+    </defs>
+</svg>

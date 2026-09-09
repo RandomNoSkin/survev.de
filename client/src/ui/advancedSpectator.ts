@@ -19,6 +19,8 @@ const ENEMY_COLOR = 0xff4d4d;
 const SPECTATED_COLOR = 0x66ff7a;
 // Colour for grenade fuse timers + explosion-radius rings.
 const NADE_COLOR = 0xffcc33;
+// Colour for the followed player's vision-radius ring.
+const VISION_COLOR = 0x66ccff;
 
 // Default / clamp range for the requested culling-zoom radius (sent to the
 // server). Kept in sync with the server-side clamp in player.ts.
@@ -36,11 +38,14 @@ interface EnemyLabel {
 export interface AdvSpecSettings {
     freecam: boolean;
     transparentSurfaces: boolean;
+    zoneTransparency: boolean;
+    foliageTransparency: boolean;
     enemiesOnMap: boolean;
     zoom: boolean;
     espLines: boolean;
     enemyLabels: boolean;
     nadeEsp: boolean;
+    visionRadius: boolean;
     layer: number;
     zoomLevel: number;
 }
@@ -49,11 +54,14 @@ export function defaultAdvSpecSettings(): AdvSpecSettings {
     return {
         freecam: false,
         transparentSurfaces: false,
+        zoneTransparency: false,
+        foliageTransparency: false,
         enemiesOnMap: false,
         zoom: false,
         espLines: false,
         enemyLabels: false,
         nadeEsp: false,
+        visionRadius: false,
         layer: 0,
         zoomLevel: DEFAULT_ZOOM,
     };
@@ -89,12 +97,16 @@ export class AdvancedSpectator {
     enabled = false;
     freecam = false;
     transparentSurfaces = false;
+    zoneTransparency = false;
+    foliageTransparency = false;
     enemiesOnMap = false;
     zoom = false;
     espLines = false;
     enemyLabels = false;
     // Show fuse timers + explosion-radius rings on thrown grenades.
     nadeEsp = false;
+    // Ring around the followed player showing their current scope's view radius.
+    visionRadius = false;
 
     /** Render layer the spectator is viewing (0 = surface, 1 = underground). */
     layer = 0;
@@ -128,11 +140,14 @@ export class AdvancedSpectator {
         return {
             freecam: this.freecam,
             transparentSurfaces: this.transparentSurfaces,
+            zoneTransparency: this.zoneTransparency,
+            foliageTransparency: this.foliageTransparency,
             enemiesOnMap: this.enemiesOnMap,
             zoom: this.zoom,
             espLines: this.espLines,
             enemyLabels: this.enemyLabels,
             nadeEsp: this.nadeEsp,
+            visionRadius: this.visionRadius,
             layer: this.layer,
             zoomLevel: this.zoomLevel,
         };
@@ -144,11 +159,16 @@ export class AdvancedSpectator {
         if (typeof s.freecam === "boolean") this.freecam = s.freecam;
         if (typeof s.transparentSurfaces === "boolean")
             this.transparentSurfaces = s.transparentSurfaces;
+        if (typeof s.zoneTransparency === "boolean")
+            this.zoneTransparency = s.zoneTransparency;
+        if (typeof s.foliageTransparency === "boolean")
+            this.foliageTransparency = s.foliageTransparency;
         if (typeof s.enemiesOnMap === "boolean") this.enemiesOnMap = s.enemiesOnMap;
         if (typeof s.zoom === "boolean") this.zoom = s.zoom;
         if (typeof s.espLines === "boolean") this.espLines = s.espLines;
         if (typeof s.enemyLabels === "boolean") this.enemyLabels = s.enemyLabels;
         if (typeof s.nadeEsp === "boolean") this.nadeEsp = s.nadeEsp;
+        if (typeof s.visionRadius === "boolean") this.visionRadius = s.visionRadius;
         if (typeof s.layer === "number") this.layer = s.layer;
         if (typeof s.zoomLevel === "number")
             this.zoomLevel = math.clamp(s.zoomLevel, MIN_ZOOM, MAX_ZOOM);
@@ -199,11 +219,48 @@ export class AdvancedSpectator {
             text.visible = false;
         }
 
-        if (!this.enabled || (!this.espLines && !this.enemyLabels && !this.nadeEsp)) {
+        if (
+            !this.enabled
+            || (!this.espLines && !this.enemyLabels && !this.nadeEsp && !this.visionRadius)
+        ) {
             this.container.visible = false;
             return;
         }
         this.container.visible = true;
+
+        if (this.visionRadius) {
+            const followedPlayer = playerBarn.getPlayerById(activeId);
+            if (followedPlayer && !followedPlayer.m_netData.m_dead) {
+                const screenPos = camera.m_pointToScreen(followedPlayer.m_visualPos);
+                const zoom = followedPlayer.m_getZoom();
+                // A circle doesn't represent what's actually visible - players have
+                // rectangular screens, not round ones. This reproduces the exact math
+                // game.ts's Application.update uses to turn a player's zoom radius into
+                // an actual camera viewport (see its m_targetZoom calc). Prefers the
+                // followed player's REAL screen dimensions (sent once at join, see
+                // JoinMsg/PlayerStatus.screenWidth/Height) over our own as the aspect
+                // ratio source - falls back to our own screen only for a player whose
+                // client never sent it (0,0 - e.g. an old client from before this was
+                // added), which is the best approximation available in that case.
+                const status = playerBarn.getPlayerStatus(activeId);
+                const screenWidth = status?.screenWidth || camera.m_screenWidth;
+                const screenHeight = status?.screenHeight || camera.m_screenHeight;
+                const minDim = math.min(screenWidth, screenHeight);
+                const maxDim = math.max(screenWidth, screenHeight);
+                const maxScreenDim = math.max(minDim * (16 / 9), maxDim);
+                const halfWidthWorld = (screenWidth * zoom) / maxScreenDim;
+                const halfHeightWorld = (screenHeight * zoom) / maxScreenDim;
+                const halfWidthScreen = camera.m_scaleToScreen(halfWidthWorld);
+                const halfHeightScreen = camera.m_scaleToScreen(halfHeightWorld);
+                this.espGfx.lineStyle(1.5, VISION_COLOR, 0.6);
+                this.espGfx.drawRect(
+                    screenPos.x - halfWidthScreen,
+                    screenPos.y - halfHeightScreen,
+                    halfWidthScreen * 2,
+                    halfHeightScreen * 2,
+                );
+            }
+        }
 
         // Resolves a player's team. The god-view roster is preferred when it carries a
         // valid team (server-authoritative), but older/broken track files have an empty

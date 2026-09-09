@@ -7,6 +7,7 @@ import {
     getItemCategory,
     getItemPrice,
     getShopWeight,
+    RARITY_SHOP_WEIGHT_PREMIUM,
     SHARED_SHOP,
     type ShopCategory,
 } from "../../../../shared/defs/shopConfig";
@@ -110,6 +111,14 @@ export function isWeeklySlot(slot: number): boolean {
     return slot === 2 || slot === 3;
 }
 
+/** Slots 4 and 5: the two Premium Daily single-item offers (see buildPremiumOffers) -
+ *  each independently purchasable, part of the daily rotation (keyed by day, resets
+ *  at the same midnight), Premium-gated at purchase. */
+export const PREMIUM_SLOTS = [4, 5] as const;
+export function isPremiumSlot(slot: number): boolean {
+    return (PREMIUM_SLOTS as readonly number[]).includes(slot);
+}
+
 /** Epoch ms of the Monday 00:00 (server-local) starting the week that contains `t`. */
 function startOfServerWeek(t: number): number {
     const d = new Date(t);
@@ -167,15 +176,20 @@ function mulberry32(seed: number): () => number {
 
 /**
  * Weighted random pick from a list of item types: rarer items are less likely to be
- * chosen (weight from getShopWeight). Deterministic given the seeded `rng`.
+ * chosen (weight from getShopWeight). Deterministic given the seeded `rng`. Pass
+ * `weights` to use a different rarity curve (e.g. the Premium Daily offer).
  */
-function pick(rng: () => number, types: string[]): string | undefined {
+function pick(
+    rng: () => number,
+    types: string[],
+    weights?: Record<number, number>,
+): string | undefined {
     if (types.length === 0) return undefined;
     let total = 0;
-    for (const t of types) total += getShopWeight(t);
+    for (const t of types) total += getShopWeight(t, weights);
     let r = rng() * total;
     for (const t of types) {
-        r -= getShopWeight(t);
+        r -= getShopWeight(t, weights);
         if (r < 0) return t;
     }
     return types[types.length - 1]; // float-rounding safety net
@@ -238,13 +252,44 @@ function buildOffers(
     return offers;
 }
 
-/** Today's offers for a user — slot 0 single, slot 1 bundle (`purchased` filled later). */
+/**
+ * Premium Daily (slots 4 and 5): two SEPARATE, independently-purchasable single-cosmetic
+ * offers (any category, unlike the bundle's fixed one-per-category shape), using
+ * RARITY_SHOP_WEIGHT_PREMIUM so Rare+ items show up noticeably more often, each with its
+ * own 10% discount applied individually (not one combined price).
+ * Always generated (so non-Premium accounts can see/anticipate them too) - the Premium
+ * gate is enforced at purchase time in `buyShopOffer`, not here. Seeded independently
+ * from `buildOffers`'s single RNG stream (a distinct seed suffix, not shared draws),
+ * so adding these can never shift the existing slot 0/1 draws or break the moderation
+ * revert replay in `shopOfferItemTypes` for historical days.
+ */
+function buildPremiumOffers(userId: string, day: string, pool: string[]): ShopOffer[] {
+    const rng = mulberry32(hashSeed(`${userId}:${day}:premium`));
+    const offers: ShopOffer[] = [];
+    for (let i = 0; i < PREMIUM_SLOTS.length; i++) {
+        const t = pick(rng, pool, RARITY_SHOP_WEIGHT_PREMIUM);
+        if (!t) continue;
+        const item = toItem(t);
+        offers.push({
+            slot: PREMIUM_SLOTS[i],
+            items: [item],
+            price: Math.round(item.price * BUNDLE_DISCOUNT),
+            purchased: false,
+        });
+    }
+    return offers;
+}
+
+/** Today's offers for a user — slot 0 single, slot 1 bundle, slots 4+5 the two
+ *  Premium Daily single-item offers (`purchased` filled later). */
 export function generateDailyOffers(userId: string, day: string): ShopOffer[] {
     // SHARED_SHOP → seed by day only, so every player sees the same offers today.
     const seedKey = SHARED_SHOP ? day : `${userId}:${day}`;
     const rng = mulberry32(hashSeed(seedKey));
     const pool = [...completedPassItems(startOfServerDay(day)), ...SHOP_POOL];
-    return buildOffers(rng, pool, 0, 1);
+    const offers = buildOffers(rng, pool, 0, 1);
+    offers.push(...buildPremiumOffers(userId, day, pool));
+    return offers;
 }
 
 /**
@@ -322,12 +367,23 @@ class ShopError extends Error {
  * Buys a shop offer: regenerates the offer server-side (never trusts the client), then
  * atomically records the purchase, deducts Golden Fries (+ledger), and adds the item
  * instance(s) with source `shop:<key>`. The slot picks the rotation — daily (slots 0/1,
- * keyed by the day) or weekly (slots 2/3, keyed by the week). Idempotent per key/slot.
+ * keyed by the day), weekly (slots 2/3, keyed by the week), or Premium Daily (slots 4/5,
+ * each a separate single-item offer, keyed by the day, requires `isPremium`). Idempotent
+ * per key/slot.
  */
 export async function buyShopOffer(
     userId: string,
     slot: number,
+    isPremium: boolean,
 ): Promise<BuyShopResponse> {
+    if (isPremiumSlot(slot) && !isPremium) {
+        return {
+            success: false,
+            error: "premium_required",
+            balance: await getGoldenFries(userId),
+        };
+    }
+
     const weekly = isWeeklySlot(slot);
     const key = weekly ? serverWeek() : serverDay();
     const offer = (

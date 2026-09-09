@@ -14,6 +14,13 @@ import { Config } from "../config";
 export interface ReplayTokenData {
     region: string;
     gameId: string;
+    /**
+     * Restricts this token to a single player's POV within the game. Set for
+     * Premium self-service tokens (a player watching their own past match) so the
+     * serving routes can enforce "own POV only" - undefined (admin dashboard
+     * tokens) grants every POV in the game, matching the existing behavior.
+     */
+    playerId?: number;
     /** Expiry, unix ms. */
     exp: number;
 }
@@ -58,7 +65,8 @@ export function verifyReplayToken(token: string): ReplayTokenData | null {
             typeof data.exp !== "number" ||
             data.exp < Date.now() ||
             typeof data.region !== "string" ||
-            typeof data.gameId !== "string"
+            typeof data.gameId !== "string" ||
+            (data.playerId !== undefined && typeof data.playerId !== "number")
         ) {
             return null;
         }

@@ -135,9 +135,43 @@ export enum Input {
     JoinChat,
     SwitchAmmo,
     AdvSpecToggle,
+    ToggleSpectateUi,
+    AdvSpecCollapse,
+    AdvSpecFreecam,
+    AdvSpecZoomToggle,
+    AdvSpecZoomIn,
+    AdvSpecZoomOut,
+    AdvSpecLayer,
+    AdvSpecTransparent,
+    AdvSpecEnemiesOnMap,
+    AdvSpecEsp,
+    AdvSpecLabels,
+    AdvSpecNades,
+    ReplayTogglePause,
+    ReplaySkipBack,
+    ReplaySkipForward,
+    ReplaySpeedUp,
+    ReplaySpeedDown,
+    ReplayFrameBack,
+    ReplayFrameForward,
+    // Appended at the end (not inserted alphabetically among the other AdvSpec*
+    // entries above) so every existing member keeps its numeric value - this is a
+    // plain auto-incrementing enum, and its values get serialized (see
+    // inputBinds.ts's BitStream-based keybind code), so inserting in the middle would
+    // silently renumber everything after it.
+    AdvSpecZoneTransparent,
+    AdvSpecFoliageTransparent,
+    AdvSpecVisionRadius,
+    HudClickOverride,
     Count,
 }
 
+// Values are persisted as raw integers in match_data/ip_logs (see server/src/api/db/schema.ts)
+// and in old replays/stats. NEVER renumber or reorder existing entries - only append new
+// ones at the end, right before Custom stays last. Renumbering silently reclassifies every
+// historical row stored under the old numeric value (this happened once already: the
+// upstream merge in 6780659a re-typed this enum in a different order and swapped years of
+// Comp/2v2 stats with each other).
 export enum MapId {
     Main = 0,
     Desert = 1,
@@ -198,7 +232,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1024,
+    protocolVersion: 1028,
     Action,
     Anim,
     DamageType,
@@ -248,7 +282,12 @@ export const GameConfig = {
             pass_survivr3: {
                 passMaxLevel: 99,
                 seasonStart: "2026-07-08T00:00:00",
-                seasonEnd: "2026-10-31T23:59:30",
+                seasonEnd: "2026-08-31T23:59:59",
+            },
+            pass_survivr4: {
+                passMaxLevel: 99,
+                seasonStart: "2026-09-01T00:00:00",
+                seasonEnd: "2027-01-31T23:59:30",
             },
         } as Record<
             string,
@@ -349,6 +388,18 @@ export const GameConfig = {
                     end: "2026-07-26T23:59:59",
                     boost: 3,
                 },
+                "Fiance said it's double time": {
+                    maps: ["local", "comp"],
+                    start: "2026-08-08T23:30:00",
+                    end: "2026-08-09T23:59:59",
+                    boost: 2,
+                },
+                "The Last Dance": {
+                    maps: ["local", "comp"],
+                    start: "2026-08-27T23:59:00",
+                    end: "2026-08-31T23:59:59",
+                    boost: 4,
+                },
             },
         } as Record<
             string,
@@ -404,12 +455,15 @@ export const GameConfig = {
         minSpawnRad: 400, // spawn radius away from alive players
         minPosSpawnRad: 100, // spawn radius from other spawn locations
 
-        //boost decay settings to disable boostDecayAmount -> 0
-        camperPunishmentDistance: 15, // distance player has to move to not decay boost
-        camperDecayTime: 6, // time in *seconds* until boost decays
-        boostDecayAmount: 1.5, // amount of boost to decay per boostDecayDistance
-        camperPunishment: false, // if true, player will have enhanced decay for boostDecayTime after not moving for boostDecayTime
-        camperPunishmentTime: 3, // time in *seconds* after boost decay to punish player for not moving
+        // anti-camp: staying in one spot under cover triggers, in order,
+        // (1) faster boost decay, then (2) a periodic map ping revealing the
+        // camper's position instead of a live tracker
+        camperPunishmentDistance: 15, // distance player has to move to reset the camping timer
+        camperDecayTime: 5, // time in *seconds* stationary under cover before boost decays faster
+        camperBoostDecayMult: 3.5, // boost decay rate multiplier while camping
+        camperPunishment: false, // if true, enables the anti-camp boost decay + map ping reveal
+        camperRevealDelay: 10, // extra time in *seconds* after boost starts decaying faster before being revealed via a ping
+        camperPingInterval: 5, // how often (in *seconds*) the reveal ping refreshes while the player keeps camping
         camperGracePeriod: 40, // time in *seconds* after spawn before camping checks start
 
         /* STRIP_FROM_PROD_CLIENT:START */
@@ -469,7 +523,7 @@ export const GameConfig = {
     ],
     airdrop: {
         actionOffset: 0,
-        fallTime: 8,
+        fallTime: 15,
         crushDamage: 100,
         planeVel: 48,
         planeRad: 150,
@@ -493,7 +547,7 @@ export const GameConfig = {
     },
     supplydrop: {
         actionOffset: 0,
-        fallTime: 8,
+        fallTime: 15,
         crushDamage: 100,
         planeDelay: 40,
         planeVel: 200,

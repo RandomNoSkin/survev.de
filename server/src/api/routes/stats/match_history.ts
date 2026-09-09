@@ -1,16 +1,14 @@
-import { aliasedTable, and, desc, eq, gt, sum } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import type { TeamMode } from "../../../../../shared/gameConfig.ts";
-import { ALL_TEAM_MODES, type MatchHistoryResponse, zMatchHistoryRequest } from "../../../../../shared/types/stats.ts";
+import { type MatchHistoryResponse, zMatchHistoryRequest } from "../../../../../shared/types/stats.ts";
 import { util } from "../../../../../shared/utils/util.ts";
 import { databaseEnabledMiddleware, rateLimitMiddleware, validateParams } from "../../auth/middleware.ts";
 import { db } from "../../db/index.ts";
-import { matchDataTable, usersTable } from "../../db/schema.ts";
+import { matchHistoryQuery } from "../../db/matchHistory.ts";
+import { usersTable } from "../../db/schema.ts";
 import type { Context } from "../../index.ts";
 
 export const matchHistoryRouter = new Hono<Context>();
-
-const aliased = aliasedTable(matchDataTable, "aliased");
 
 matchHistoryRouter.post(
     "/",
@@ -32,59 +30,14 @@ matchHistoryRouter.post(
         }
 
         const { id: userId } = result;
-        const data = await db
-            .select({
-                guid: matchDataTable.gameId,
-                region: matchDataTable.region,
-                map_id: matchDataTable.mapId,
-                team_mode: matchDataTable.teamMode,
-                team_count: matchDataTable.teamCount,
-                team_total: matchDataTable.teamTotal,
-                end_time: matchDataTable.createdAt,
-                time_alive: matchDataTable.timeAlive,
-                rank: matchDataTable.rank,
-                kills: matchDataTable.kills,
-                team_kills: sum(aliased.kills).mapWith(Number),
-                damage_dealt: matchDataTable.damageDealt,
-                damage_taken: matchDataTable.damageTaken,
-                slug: usersTable.slug,
-            })
-            .from(matchDataTable)
-            .groupBy(
-                matchDataTable.gameId,
-                matchDataTable.region,
-                matchDataTable.mapId,
-                matchDataTable.teamMode,
-                matchDataTable.teamCount,
-                matchDataTable.teamTotal,
-                matchDataTable.createdAt,
-                matchDataTable.timeAlive,
-                matchDataTable.rank,
-                matchDataTable.kills,
-                matchDataTable.damageDealt,
-                matchDataTable.damageTaken,
-                usersTable.slug,
-            )
-            .leftJoin(
-                aliased,
-                and(
-                    eq(aliased.gameId, matchDataTable.gameId),
-                    eq(aliased.teamId, matchDataTable.teamId),
-                ),
-            )
-            .innerJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
-            .where(
-                and(
-                    eq(usersTable.id, userId),
-                    eq(matchDataTable.teamMode, teamModeFilter as TeamMode).if(
-                        teamModeFilter != ALL_TEAM_MODES,
-                    ),
-                    gt(matchDataTable.createdAt, new Date(Date.now() - util.daysToMs(7))),
-                ),
-            )
-            .orderBy(desc(matchDataTable.createdAt))
-            .offset(offset)
-            .limit(10);
+        const data = await matchHistoryQuery({
+            userId,
+            teamModeFilter,
+            from: new Date(Date.now() - util.daysToMs(7)),
+            to: new Date(),
+            offset,
+            limit: 10,
+        });
 
         return c.json<MatchHistoryResponse>(data);
     },

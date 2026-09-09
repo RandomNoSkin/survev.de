@@ -569,9 +569,204 @@ img {
 }
 
 #ui-game-tab-keybinds > #ui-keybind-list {
-  height: 295px;
+  height: 270px;
   overflow-y: scroll;
   pointer-events: all;
+}
+
+/**
+ * HUD customization tab (see client/src/ui/hudLayoutManager.ts)
+ */
+#ui-game-tab-hud {
+  display: none;
+  /* Auto instead of a fixed px budget - the fixed height (inherited from
+   * #ui-game-tab-keybinds, which this was originally copied from) had to be manually
+   * re-tuned by guesswork every time a row was added/removed above the settings list
+   * (twice, both times either overlapping #btn-game-resume below or leaving a large
+   * gap above it) - #ui-game-tab-settings already uses `height: initial` the same way,
+   * so this isn't a new pattern for this panel. */
+  height: initial;
+}
+
+#ui-game-tab-hud > #btn-hud-edit-toggle {
+  margin-bottom: 10px;
+}
+
+#ui-game-tab-hud > #btn-hud-reset-all {
+  margin-top: 10px;
+}
+
+#ui-hud-settings-list {
+  height: 250px;
+  overflow-y: scroll;
+  pointer-events: all;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hud-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+/* Global Scale/Opacity rows now live inside #ui-hud-settings-list (see
+ * HudLayoutManager#renderSettingsPanel) - its flex `gap` already spaces them
+ * consistently with every other row, no extra margin needed. */
+.hud-global-slider {
+  flex: 1;
+}
+
+.hud-settings-label {
+  flex: 1;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hud-settings-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Clips oversized emoji glyphs to a fixed box (see HudLayoutManager#makeIconGlyph) -
+ * some emoji render far larger than their declared font-size on certain platforms,
+ * which without this overflows into and visually overlaps neighboring settings rows. */
+.hud-icon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  overflow: hidden;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.hud-settings-opacity {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.hud-settings-reset-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  padding: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* While editing, HUD wrappers accept pointer events (normally `none` via
+ * `.click-through` on several of them, so gameplay clicks pass through to the canvas)
+ * and get a dashed outline so it's obvious what's draggable. */
+body.hud-edit-mode .hud-drag-wrapper {
+  pointer-events: auto !important;
+  cursor: move;
+  outline: 2px dashed #6fcf6f;
+  outline-offset: 4px;
+}
+
+/* Pre-game HUD preview (see HudLayoutManager#setPreviewMode): several wrappers
+ * (killfeed, kill-leader banner, spectator bar, team bars) are empty outside a real
+ * match and would otherwise collapse to nothing, making them impossible to see or grab
+ * - give every wrapper a minimum footprint and a faint fill so they're all draggable. */
+body.hud-preview-mode .hud-drag-wrapper {
+  min-width: 24px;
+  min-height: 24px;
+  background: rgba(111, 207, 111, 0.12);
+}
+
+/* Pre-game HUD preview: forces #game-area-wrapper visible. `!important` is required -
+ * main.ts#refreshUi runs on nearly every menu/config change and unconditionally sets
+ * plain (non-!important) inline `display`/`opacity` on this same element based on
+ * `this.active`, which would otherwise re-hide the preview the moment refreshUi next
+ * fires. Its other 3 children (touch controls, role-menu overlays) are force-hidden by
+ * HudLayoutManager via inline style instead, since nothing else touches them pre-game. */
+body.hud-preview-mode #game-area-wrapper {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+/* #start-menu-wrapper (the home screen: shop, logo, loadout/stats/leaderboards, donate
+ * box) sits later in the DOM than #game-area-wrapper with neither given a z-index, so
+ * in the same stacking context it paints on top and hides the entire preview behind it
+ * - `this.active` (which main.ts#refreshUi keys #start-menu-wrapper's display off of,
+ * same stomping problem as #game-area-wrapper above, same `!important` fix) stays true
+ * throughout the preview since we deliberately never touch setAppActive. */
+body.hud-preview-mode #start-menu-wrapper {
+  display: none !important;
+}
+
+/* Plain grass-green terrain stand-in behind the HUD, since no real Map/PIXI scene is
+ * rendered pre-game - sits as the first child of #game-area-wrapper (before #ui-game),
+ * so normal DOM paint order already puts every HUD element above it with no z-index
+ * needed. */
+#hud-preview-backdrop {
+  display: none;
+}
+
+body.hud-preview-mode #hud-preview-backdrop {
+  display: block;
+  position: absolute;
+  inset: 0;
+  background: #4a7c3c;
+}
+
+/* Stage 9: FPS/ping/HP/adrenaline numeric readouts - all opt-in (see
+ * HudElementDef.defaultVisible: false), so HudLayoutManager#applyElementStyles sets
+ * the initial `display:none` itself (same as it would for any other element the
+ * player hid) - no CSS-level `display:none` default here, or clearing the inline
+ * override to reveal one of these would have nothing to fall back to. */
+.hud-numeric-readout {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  padding: 2px 6px;
+  pointer-events: none;
+}
+
+/* Default position: sit in normal document flow right after #ui-team inside
+ * #ui-top-left (see client/index.html), rather than at a fixed pixel offset - #ui-team
+ * collapses to ~0 height when no teammates are shown (solo) and grows with the roster
+ * in a squad, so this automatically lands top-left with no team info, or directly below
+ * the roster once there is one, with no JS needed either way. `transform` (for
+ * dragging, see HudLayoutManager) doesn't affect flow layout, so this stays fully
+ * compatible with the normal drag system despite not being position:absolute. */
+.hud-corner-readout {
+  display: block;
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.js-keybind-category-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  pointer-events: all;
+}
+
+.js-keybind-category-tabs > .private-lobby-settings-tab {
+  flex: 1;
+}
+
+.js-force-hide-spectate-ui {
+  display: none !important;
 }
 
 #ui-map-container {
@@ -2373,6 +2568,42 @@ img {
   transform: translateX(-50%);
 }
 
+/* HUD customization wrappers (see client/src/ui/hudLayoutManager.ts): each registered
+ * HUD element is wrapped in one of these so drag-offset/opacity/visibility can be
+ * layered on via inline style without disturbing the element's own base layout/position
+ * or any gameplay-driven inline styles already targeting the element inside it. Plain
+ * `display:block` (the default) is intentional here - these must stay part of normal
+ * document flow so elements that rely on a flex/positioned parent (like the boost and
+ * health bars inside #ui-bottom-center-0) render exactly as before. */
+.hud-drag-wrapper {
+  transition: opacity 0.15s ease-out;
+  /* Positioning context for .hud-resize-handle below - doesn't affect this element's
+   * own normal-flow position (only descendants using position:absolute react to it). */
+  position: relative;
+}
+
+/* Corner resize handle (see HudLayoutManager#setupResizing) - a small circle pinned to
+ * the wrapper's bottom-right corner, invisible/inert until edit mode turns it on below
+ * so it never sits in the way of normal gameplay clicks or hover states. */
+.hud-resize-handle {
+  display: none;
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #6fcf6f;
+  border: 2px solid #1a1a1a;
+  cursor: nwse-resize;
+  z-index: 3;
+}
+
+body.hud-edit-mode .hud-resize-handle {
+  display: block;
+  pointer-events: auto !important;
+}
+
 @media (max-height: 768px), (max-width: 1200px) {
   #ui-bottom-center-0 {
     transform-origin: bottom;
@@ -2597,6 +2828,29 @@ img {
   transition-duration: 1s;
   transition-timing-function: ease-out;
   transition-delay: initial;
+}
+
+/* Default position: overlaid on the health/boost bars themselves rather than sitting
+ * below them - positioned absolutely against #ui-bottom-center-0 (their shared
+ * position:absolute ancestor, since as siblings of #hud-wrap-healthBar/boostBar they
+ * can't be positioned relative to those directly). Deliberately NOT using `transform`
+ * for centering here (unlike some other elements) - HudLayoutManager#applyElementStyles
+ * replaces this wrapper's whole inline `transform` once dragged, which would silently
+ * drop a CSS-only centering transform; a plain `top` offset has no such conflict. Boost
+ * row is ~18px tall (10px bar + 8px margin-bottom) and sits above the 44px-tall health
+ * bar (32px + 6px top/bottom padding) - see client/index.html for the DOM order. */
+#hud-wrap-hpNumeric {
+  position: absolute;
+  top: 32px;
+  left: 14px;
+  z-index: 2;
+}
+
+#hud-wrap-adrenalineNumeric {
+  position: absolute;
+  top: -20px;
+  left: 14px;
+  z-index: 2;
 }
 
 .health-bar-pulse {
@@ -3246,6 +3500,14 @@ img {
   display: inline;
   padding-bottom: 12px;
   border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.ui-stats-header-gameid {
+  font-size: 11px;
+  font-weight: normal;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 4px;
+  user-select: text;
 }
 
 .ui-stats-header-overview div:not(:first-child) {

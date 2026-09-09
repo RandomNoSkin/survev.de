@@ -343,12 +343,18 @@ export class Building implements AbstractObject {
                         scale = 1 / img.sprite.defScale;
                     }
                 }
+                const spriteRot = defEmitter.spriteRot !== undefined
+                    ? typeof defEmitter.spriteRot === "function"
+                        ? defEmitter.spriteRot(rot)
+                        : rot + defEmitter.spriteRot
+                    : rot;
                 const emitter = ctx.particleBarn.addEmitter(defEmitter.type, {
                     pos,
                     dir,
                     scale,
                     layer: defEmitter.layer,
                     parent,
+                    spriteRot,
                 });
                 this.particleEmitters.push(emitter);
             }

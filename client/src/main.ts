@@ -35,10 +35,12 @@ import { LoadoutMenu } from "./ui/loadoutMenu";
 import { Localization } from "./ui/localization";
 import { MarketUi } from "./ui/marketUi";
 import Menu from "./ui/menu";
+import { HudLayoutManager } from "./ui/hudLayoutManager";
 import { MenuModal } from "./ui/menuModal";
 import { LoadoutDisplay } from "./ui/opponentDisplay";
 import { OwnersUi } from "./ui/ownersUi";
 import { Pass } from "./ui/pass";
+import { PremiumUi } from "./ui/premiumUi";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
 import { ShopUi } from "./ui/shopUi";
@@ -72,6 +74,7 @@ export class Application {
     masterSliders = $<HTMLInputElement>(".sl-master-volume");
     soundSliders = $<HTMLInputElement>(".sl-sound-volume");
     musicSliders = $<HTMLInputElement>(".sl-music-volume");
+    gameMusicSliders = $<HTMLInputElement>(".sl-game-music-volume");
     serverWarning = $("#server-warning");
     languageSelect = $<HTMLSelectElement>(".language-select");
     startMenuWrapper = $("#start-menu-wrapper");
@@ -85,6 +88,7 @@ export class Application {
     rulesModal = new MenuModal($("#modal-rules"));
     config = new ConfigManager();
     localization = new Localization();
+    hudLayoutManager = new HudLayoutManager(this.config);
 
     account!: Account;
     loadoutMenu!: LoadoutMenu;
@@ -94,6 +98,7 @@ export class Application {
     marketUi!: MarketUi;
     ownersUi!: OwnersUi;
     auctionUi!: AuctionUi;
+    premiumUi!: PremiumUi;
     socialUi!: SocialUi;
 
     pingTest = new PingTest();
@@ -107,6 +112,9 @@ export class Application {
     spectatorMenu!: SpectatorMenu;
 
     pixi: PIXI.Application<PIXI.ICanvas> | null = null;
+    /** Whether the render loop is currently driven by the uncapped setTimeout(0) loop
+     *  (see setRenderLoopMode) rather than PIXI's default requestAnimationFrame ticker. */
+    uncappedRenderLoopActive = false;
     resourceManager: ResourceManager | null = null;
     input: InputHandler | null = null;
     inputBinds: InputBinds | null = null;
@@ -165,6 +173,9 @@ export class Application {
         // The Auction house tab (bid on / put up items).
         this.auctionUi = new AuctionUi(this.account, this.localization);
         this.shopUi.auctionUi = this.auctionUi;
+        // The Premium tab (buy/extend account Premium with Golden Fries).
+        this.premiumUi = new PremiumUi(this.account, this.localization);
+        this.shopUi.premiumUi = this.premiumUi;
         // The Social panel (gift skins / Golden Fries), opened from the top-right button.
         this.socialUi = new SocialUi(this.account, this.localization);
         this.profileUi.socialUi = this.socialUi;
@@ -325,6 +336,9 @@ export class Application {
             $(this.musicSliders).on("mousedown", (e) => {
                 e.stopPropagation();
             });
+            $(this.gameMusicSliders).on("mousedown", (e) => {
+                e.stopPropagation();
+            });
             this.masterSliders.on("input", (t) => {
                 const r = Number($(t.target).val()) / 100;
                 this.audioManager.setMasterVolume(r);
@@ -339,6 +353,11 @@ export class Application {
                 const r = Number($(t.target).val()) / 100;
                 this.audioManager.setMusicVolume(r);
                 this.config.set("musicVolume", r);
+            });
+            this.gameMusicSliders.on("input", (t) => {
+                const r = Number($(t.target).val()) / 100;
+                this.audioManager.setGameMusicVolume(r);
+                this.config.set("gameMusicVolume", r);
             });
             $(".modal-settings-item")
                 .children("input")
@@ -467,6 +486,7 @@ export class Application {
             this.pixi = pixi;
             this.pixi.renderer.events.destroy();
             this.pixi.ticker.add(this.update, this);
+            this.setRenderLoopMode(this.config.get("uncapFps") ?? false);
             this.pixi.renderer.background.color = 7378501;
             this.resourceManager = new ResourceManager(
                 this.pixi.renderer,
@@ -531,6 +551,7 @@ export class Application {
                 this.audioManager,
                 this.localization,
                 this.config,
+                this.hudLayoutManager,
                 this.input,
                 this.inputBinds,
                 this.inputBindUi,
@@ -549,7 +570,7 @@ export class Application {
             this.loadoutMenu.loadoutDisplay = this.loadoutDisplay;
             this.onResize();
             this.tryJoinTeam(false);
-            Menu.setupModals(this.inputBinds, this.inputBindUi);
+            Menu.setupModals(this.inputBinds, this.inputBindUi, this.hudLayoutManager);
             this.onConfigModified();
             this.config.addModifiedListener(this.onConfigModified.bind(this));
             loadStaticDomImages();
@@ -858,6 +879,10 @@ export class Application {
         this.musicSliders.val(musicVolume * 100);
         this.audioManager.setMusicVolume(musicVolume);
 
+        const gameMusicVolume = this.config.get("gameMusicVolume")!;
+        this.gameMusicSliders.val(gameMusicVolume * 100);
+        this.audioManager.setGameMusicVolume(gameMusicVolume);
+
         if (key == "language") {
             const language = this.config.get("language")!;
             this.localization.setLocale(language);
@@ -885,6 +910,10 @@ export class Application {
 
         if (key === "debugHUD") {
             this.game?.debugHUD?.onConfigModified();
+        }
+
+        if (key === "uncapFps") {
+            this.setRenderLoopMode(this.config.get("uncapFps") ?? false);
         }
     }
 
@@ -1178,6 +1207,7 @@ export class Application {
             }, 250);
             return;
         }
+        this.game.m_gameId = matchData.gameId;
         // Snapshot the equipped instance ids so this game's cosmetic stats land on the
         // exact owned copies the player selected (start-of-game snapshot).
         this.account.reportEquippedInstances();
@@ -1268,6 +1298,7 @@ export class Application {
             }, 250);
             return;
         }
+        this.game.m_gameId = matchData.gameId;
         const hosts = matchData.hosts || [];
         const urls: string[] = [];
         const appsid = localStorage.getItem("appsid"); // Retrieve the appsid from local storage
@@ -1371,6 +1402,42 @@ export class Application {
         if (text) {
             this.errorModal.selector.find(".modal-body-text").html(text);
             this.errorModal.show();
+        }
+    }
+
+    /**
+     * Swaps the render loop between PIXI's default `requestAnimationFrame` ticker
+     * (vsync-tied - the browser calls it at most once per display refresh) and a
+     * manual, non-vsync loop driven by recursive `setTimeout(fn, 0)`, to let the
+     * "uncap FPS" setting genuinely exceed the monitor's refresh rate rather than just
+     * adding a counter that reads a capped number. Tradeoffs, by design, not bugs:
+     * screen tearing (no vsync = frames can be presented mid-scanout), higher CPU/GPU
+     * load (rendering far more frames than the display can show), and the underlying
+     * game simulation doesn't actually run any faster - only the client-side render
+     * cadence does (network tick rate / server state updates are unaffected, and the
+     * dt clamp above already exists purely for simulation stability, so it doesn't
+     * need to change for either mode).
+     */
+    setRenderLoopMode(uncapped: boolean) {
+        if (uncapped === this.uncappedRenderLoopActive || !this.pixi) return;
+        this.uncappedRenderLoopActive = uncapped;
+
+        if (uncapped) {
+            this.pixi.ticker.stop();
+            const loop = () => {
+                if (!this.uncappedRenderLoopActive || !this.pixi) return;
+                this.pixi.ticker.update(performance.now());
+                setTimeout(loop, 0);
+            };
+            // Deferred even for the first iteration (not just subsequent ones) - this
+            // is called from tryLoad() before it's done assigning fields (resourceManager
+            // in particular, right after this call), and a synchronous first tick here
+            // would fire Application.update() early and crash on those still being null.
+            // PIXI's own ticker never has this problem since it schedules its first
+            // tick via requestAnimationFrame, not synchronously.
+            setTimeout(loop, 0);
+        } else {
+            this.pixi.ticker.start();
         }
     }
 

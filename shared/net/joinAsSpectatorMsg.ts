@@ -9,6 +9,13 @@ export class JoinAsSpectatorMsg implements AbstractMsg {
     isMobile = false;
     bot = false;
     onlyGhilliePickup = true;
+    // Not sent over the wire here (spectators don't have a followable in-game vision
+    // radius) - present only so this stays structurally assignable to JoinMsg, which
+    // the Player constructor is typed against for both join paths. Always 0, which
+    // correctly falls back to the viewing spectator's own screen dimensions (see
+    // AdvancedSpectator's vision-radius rendering).
+    screenWidth = 0;
+    screenHeight = 0;
     loadout = {
         outfit: "",
         melee: "",

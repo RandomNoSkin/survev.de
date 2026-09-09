@@ -1,0 +1,1 @@
+ALTER TABLE "match_data" ADD COLUMN "recording_player_id" integer;

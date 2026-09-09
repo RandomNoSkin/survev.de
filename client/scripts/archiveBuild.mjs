@@ -9,10 +9,10 @@
  * `/archive/<v>/?replay=...` whenever a recording's protocol differs from the
  * current one.
  *
- * Run AFTER every production build (vite wipes `dist/`, so the publish step must be
- * re-applied each deploy):
- *
- *     pnpm build && pnpm archive
+ * Runs automatically as part of `pnpm build` (chained in client/package.json), right
+ * after `vite build` - vite wipes `dist/` on every build, so the publish step must be
+ * re-applied every time. Can also be run standalone via `pnpm archive` against an
+ * existing `dist/`.
  *
  * Layout:
  *   client/dist-archive/<v>/  permanent store (gitignored, survives builds)

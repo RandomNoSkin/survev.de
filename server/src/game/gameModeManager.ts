@@ -94,12 +94,18 @@ export class GameModeManager {
 
                 // calculate each group killed index
                 // by basing it on the last player to die killed index
+                // (spectators are excluded here too - one attached to a group/team
+                // still has its default killedIndex = Infinity, same "never died"
+                // problem as in the Solo case above, and would falsely make that
+                // whole group/team look like it never lost anyone)
                 const groups = this.game.playerBarn[key].map((group) => {
                     return {
                         killedIndex:
-                            group.players.sort((a, b) => {
-                                return b.killedIndex - a.killedIndex;
-                            })[0].killedIndex ?? Infinity,
+                            group.players
+                                .filter((p) => !p.spectator)
+                                .sort((a, b) => {
+                                    return b.killedIndex - a.killedIndex;
+                                })[0]?.killedIndex ?? Infinity,
                         players: group.players,
                     };
                 });

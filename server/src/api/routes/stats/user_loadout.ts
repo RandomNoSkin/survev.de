@@ -8,6 +8,7 @@ import {
     validateParams,
 } from "../../auth/middleware";
 import { db } from "../../db";
+import { resolveRoleTag } from "../../db/roleTag";
 import { itemsTable, marketListingsTable, usersTable } from "../../db/schema";
 
 export const UserLoadoutRouter = new Hono<Context>();
@@ -35,13 +36,23 @@ UserLoadoutRouter.post(
                 loadout: true,
                 username: true,
                 loadoutPrivate: true,
+                admin: true,
+                moderator: true,
+                premiumUntil: true,
+                showAdminPrefix: true,
+                showModPrefix: true,
+                showPremiumPrefix: true,
             },
         });
         if (!user) return c.json({ found: false }, 200);
+        const roleTag = resolveRoleTag(user);
 
         // The owner chose to hide their loadout from public view.
         if (user.loadoutPrivate) {
-            return c.json({ found: true, private: true, username: user.username }, 200);
+            return c.json(
+                { found: true, private: true, username: user.username, roleTag },
+                200,
+            );
         }
 
         const owned = await db
@@ -94,6 +105,7 @@ UserLoadoutRouter.post(
             {
                 found: true,
                 username: user.username,
+                roleTag,
                 slug: user.slug,
                 loadout: user.loadout,
                 items,

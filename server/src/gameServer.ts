@@ -1,9 +1,9 @@
-import { App, SSLApp, type WebSocket } from "uWebSockets.js";
+import { Cron } from "croner";
+import { randomUUID } from "crypto";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Cron } from "croner";
-import { randomUUID } from "crypto";
+import { App, SSLApp, type WebSocket } from "uWebSockets.js";
 import { version } from "../../package.json";
 import { MapDefs } from "../../shared/defs/mapDefs";
 import { GameConfig, TeamMode } from "../../shared/gameConfig";
@@ -12,11 +12,13 @@ import { Config } from "./config";
 import { SingleThreadGameManager } from "./game/gameManager";
 import { GameProcessManager } from "./game/gameProcessManager";
 import {
+    getRecordingMeta,
     listRecordings,
     readDamageFile,
     readMapFile,
     readRecordingFile,
     readTracksFile,
+    recordingFileExists,
 } from "./game/recording/gameRecorder";
 import { errorLogger, gameLogger } from "./utils/betterLogger";
 import { GIT_VERSION } from "./utils/gitRevision";
@@ -48,8 +50,7 @@ process.on("uncaughtException", async (err) => {
     console.error(err);
     // Log the full stack (not just the Error object) so file logs actually
     // pinpoint the crash source instead of an opaque "[object Error]".
-    const details =
-        err instanceof Error ? (err.stack ?? err.message) : JSON.stringify(err);
+    const details = err instanceof Error ? (err.stack ?? err.message) : JSON.stringify(err);
 
     gameLogger.error(`Uncaught Exception: ${details}`);
     errorLogger.error(`Uncaught Exception: ${details}`);
@@ -64,10 +65,9 @@ process.on("uncaughtException", async (err) => {
 // default (Node >= 15), taking every hosted game down at once. Log the full stack and
 // keep serving instead.
 process.on("unhandledRejection", (reason) => {
-    const details =
-        reason instanceof Error
-            ? (reason.stack ?? reason.message)
-            : JSON.stringify(reason);
+    const details = reason instanceof Error
+        ? (reason.stack ?? reason.message)
+        : JSON.stringify(reason);
 
     gameLogger.error(`Unhandled Rejection: ${details}`);
     errorLogger.error(`Unhandled Rejection: ${details}`);
@@ -87,10 +87,9 @@ class GameServer {
     readonly region = Config.regions[Config.gameServer.thisRegion];
     readonly regionId = Config.gameServer.thisRegion;
 
-    readonly manager =
-        Config.processMode === "single"
-            ? new SingleThreadGameManager()
-            : new GameProcessManager();
+    readonly manager = Config.processMode === "single"
+        ? new SingleThreadGameManager()
+        : new GameProcessManager();
 
     async findGame(body: FindGamePrivateBody): Promise<FindGamePrivateRes> {
         const parsed = zFindGamePrivateBody.safeParse(body);
@@ -313,9 +312,9 @@ server.updateApiModes();
 
 const app = Config.gameServer.ssl
     ? SSLApp({
-          key_file_name: Config.gameServer.ssl.keyFile,
-          cert_file_name: Config.gameServer.ssl.certFile,
-      })
+        key_file_name: Config.gameServer.ssl.keyFile,
+        cert_file_name: Config.gameServer.ssl.certFile,
+    })
     : App();
 
 app.get("/health", (res) => {
@@ -517,6 +516,11 @@ app.post("/api/find_game_by_id", async (res, req) => {
                         token,
                         ip,
                         admin,
+                        // No account identity flows through this legacy "watch by
+                        // gameId" spectate path (no userId either), so Premium status
+                        // can't be resolved here - spectators joining this way just
+                        // won't show the [PREM] tag.
+                        premium: false,
                     },
                 ];
 
@@ -595,8 +599,7 @@ app.post("/api/game_infos", async (res, req) => {
                 const isAdmin = body?.admin === true;
                 const data = (Array.isArray(games) ? games : [])
                     .filter(
-                        (g: any) =>
-                            isAdmin || !g.isPrivate || g.publicSpectating !== false,
+                        (g: any) => isAdmin || !g.isPrivate || g.publicSpectating !== false,
                     )
                     .map((g: any) => ({
                         id: g.id,
@@ -690,15 +693,12 @@ app.post("/api/find_spectator_game", (res, req) => {
                 }
 
                 // Otherwise, pick any running game (simple heuristic)
-                const games =
-                    (server.manager as any).getGames?.() ??
-                    (server.manager as any).games ??
-                    [];
-                const pick =
-                    (Array.isArray(games) ? games : []).find(
-                        (g: any) =>
-                            !g.stopped && (g.playerCount ?? g.players?.length ?? 0) > 0,
-                    ) ?? (Array.isArray(games) ? games : [])[0];
+                const games = (server.manager as any).getGames?.()
+                    ?? (server.manager as any).games
+                    ?? [];
+                const pick = (Array.isArray(games) ? games : []).find(
+                    (g: any) => !g.stopped && (g.playerCount ?? g.players?.length ?? 0) > 0,
+                ) ?? (Array.isArray(games) ? games : [])[0];
 
                 if (!pick?.id) {
                     returnJson(res, { err: "No Spectatable game" });
@@ -858,13 +858,49 @@ app.post("/api/dashboard/replays", (res, req) => {
         return;
     }
 
-    readPostedJSON(
+    readPostedJSON<{ limit?: number }>(
         res,
-        async () => {
+        async (body) => {
             if (res.aborted) return;
-            const recordings = await listRecordings();
+            const limit = typeof body?.limit === "number" && body.limit > 0
+                ? body.limit
+                : undefined;
+            const recordings = await listRecordings(limit);
             if (res.aborted) return;
             returnJson(res, { recordings });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Reads one specific game's recording meta directly, without listRecordings()'s
+ *  recent-games cap - for callers that already know the exact gameId they want.
+ *  Named distinctly from `/api/dashboard/replay_meta` below (combined game-view
+ *  meta: damage + map) - they used to collide on the same path, which made uWS
+ *  keep only the later registration and silently 404 every replay lookup. */
+app.post("/api/dashboard/replay_recording_meta", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON<{ gameId?: string }>(
+        res,
+        async (body) => {
+            if (res.aborted) return;
+            if (typeof body?.gameId !== "string") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const recording = await getRecordingMeta(body.gameId);
+            if (res.aborted) return;
+            returnJson(res, { recording });
         },
         () => {
             if (!res.aborted) returnJson(res, { error: "body error" });
@@ -919,6 +955,39 @@ app.post("/api/dashboard/replay_file", (res, req) => {
     );
 });
 
+/** Checks whether a single per-player replay recording is still on disk, without
+ *  reading its (potentially large) bytes - unbounded, targeted lookup (see
+ *  recordingFileExists's doc comment for why this deliberately doesn't go through
+ *  listRecordings()'s recent-games cap). */
+app.post("/api/dashboard/replay_exists", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const { gameId, playerId } = body ?? {};
+            if (typeof gameId !== "string" || typeof playerId !== "number") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const exists = await recordingFileExists(gameId, playerId);
+            if (res.aborted) return;
+            returnJson(res, { exists });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
 /** Streams a game's god-view track side-file (raw gzip bytes) from disk. */
 app.post("/api/dashboard/replay_tracks", (res, req) => {
     res.onAborted(() => {
@@ -966,7 +1035,9 @@ app.post("/api/dashboard/replay_tracks", (res, req) => {
     );
 });
 
-/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON. */
+/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON.
+ *  Distinct from `/api/dashboard/replay_recording_meta` above (one recording's own meta.json) -
+ *  keep these two paths apart, they collided here once already. */
 app.post("/api/dashboard/replay_meta", (res, req) => {
     res.onAborted(() => {
         res.aborted = true;

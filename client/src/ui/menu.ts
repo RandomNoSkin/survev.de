@@ -2,6 +2,7 @@ import $ from "jquery";
 import { device } from "../device.ts";
 import { helpers } from "../helpers.ts";
 import type { InputBinds, InputBindUi } from "../inputBinds.ts";
+import type { HudLayoutManager } from "./hudLayoutManager.ts";
 import { MenuModal } from "./menuModal.ts";
 
 function createToast(
@@ -35,7 +36,7 @@ function createToast(
         },
     );
 }
-function setupModals(inputBinds: InputBinds, inputBindUi: InputBindUi) {
+function setupModals(inputBinds: InputBinds, inputBindUi: InputBindUi, hudLayoutManager: HudLayoutManager) {
     const startMenuWrapper = $("#start-menu");
     $("#btn-help").on("click", () => {
         const e = $("#start-help");
@@ -214,6 +215,9 @@ function setupModals(inputBinds: InputBinds, inputBindUi: InputBindUi) {
     modalSettings.onHide(() => {
         startBottomRight.fadeIn(200);
         startTopRight.fadeIn(200);
+        // Safety net: leaving the modal while the HUD-preview tab left the player
+        // "thrown into a game preview" shouldn't leave #ui-game stuck open behind it.
+        hudLayoutManager.setPreviewMode(false);
     });
     $(".btn-settings").on("click", () => {
         modalSettings.show();
@@ -223,6 +227,27 @@ function setupModals(inputBinds: InputBinds, inputBindUi: InputBindUi) {
         const checkbox = $(this).siblings("input:checkbox");
         checkbox.prop("checked", !checkbox.is(":checked"));
         checkbox.trigger("change");
+    });
+
+    // Settings Modal tabs (Graphics/Gameplay/Audio/HUD) - same show-one-hide-rest
+    // pattern as ui.ts#setCurrentGameTab, the only other tab switcher in the codebase.
+    $("#modal-settings-tabs .private-lobby-settings-tab").on("click", function() {
+        const tab = $(this).data("settings-tab") as string;
+        $("#modal-settings-tabs .private-lobby-settings-tab").removeClass("private-lobby-settings-tab-active");
+        $(this).addClass("private-lobby-settings-tab-active");
+        $(".modal-settings-tab-pane").css("display", "none");
+        $(`#modal-settings-tab-${tab}`).css("display", "");
+    });
+
+    // HUD tab's "Edit HUD Layout" button: hides this modal and throws the player
+    // into a live game preview (green backdrop, real HUD, real in-game ESC menu opened
+    // straight to its HUD tab) - see HudLayoutManager#setPreviewMode. modalSettings.hide()
+    // is called first and synchronously (MenuModal#hide fires onHideFn before any fade
+    // completes) so its onHide safety-net call to setPreviewMode(false) below runs
+    // first, as a no-op, before this then actually enters the preview.
+    $("#btn-hud-preview-toggle").on("click", () => {
+        modalSettings.hide();
+        hudLayoutManager.setPreviewMode(true);
     });
 
     // Hamburger Modal

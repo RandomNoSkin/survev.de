@@ -1,8 +1,8 @@
-import { table } from "node:console";
 import { sql } from "drizzle-orm";
 import {
     bigint,
     boolean,
+    date,
     index,
     integer,
     json,
@@ -16,7 +16,10 @@ import {
     uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
+import { table } from "node:console";
 import { TeamMode } from "../../../../shared/gameConfig.ts";
+import type { ImpactBreakdown } from "../../../../shared/impactScore.ts";
+import type { OAuthAppStatus, OAuthScope } from "../../../../shared/types/oauth.ts";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
 
 export const sessionTable = pgTable("session", {
@@ -47,6 +50,11 @@ export const usersTable = pgTable("users", {
     // When the account ban auto-expires. null = permanent (or no ban). Temporary
     // account bans are lifted by the ban-expiry sweep (see db/banExpiry.ts).
     banExpiresAt: timestamp("ban_expires_at", { withTimezone: true }),
+    // Premium account subscription (bought with golden fries, or admin-granted). null =
+    // never purchased/not active. A lazy `premiumUntil.getTime() > Date.now()` check
+    // (same idea as banActive above) determines whether it's currently active - a
+    // lapsed subscription just leaves this in the past rather than being cleared.
+    premiumUntil: timestamp("premium_until", { withTimezone: true }),
     username: text("username").notNull().default(""),
     usernameSet: boolean("username_set").notNull().default(false),
     userCreated: timestamp("user_created", { withTimezone: true }).notNull().defaultNow(),
@@ -64,6 +72,14 @@ export const usersTable = pgTable("users", {
     offersDisabled: boolean("offers_disabled").notNull().default(false),
     // when true, this user's loadout is hidden on the stats + advanced-game-stats pages.
     loadoutPrivate: boolean("loadout_private").notNull().default(false),
+    // Each independently gates whether this account's [ADMIN]/[MOD]/[PREM] name prefix
+    // (see resolveRoleTag in db/roleTag.ts) is shown to others - opt-out (default true),
+    // not opt-in. A role whose own toggle is off falls through to the next-highest
+    // enabled role rather than hiding the prefix outright (e.g. an admin with the ADMIN
+    // toggle off but PREM toggle on still shows [PREM]).
+    showAdminPrefix: boolean("show_admin_prefix").notNull().default(true),
+    showModPrefix: boolean("show_mod_prefix").notNull().default(true),
+    showPremiumPrefix: boolean("show_premium_prefix").notNull().default(true),
     // Instance ids the player had selected/equipped at their last game join, so match
     // stats can attach to the exact owned copy (snapshot per game; falls back to the
     // oldest instance of a type when absent). The client reports these on join.
@@ -71,6 +87,11 @@ export const usersTable = pgTable("users", {
         .$type<number[]>()
         .notNull()
         .default([]),
+    // Geographic region group (see regionGroupsTable) this account plays most of its rated
+    // (impact-scored) matches in — recomputed daily by computeRatingTiers(). Empty string
+    // until the user has at least one rated match. Scopes the Rating/Rank shown on the stats
+    // page to a same-region cohort instead of comparing across regions with different pools.
+    primaryRegion: text("primary_region").notNull().default(""),
 });
 
 export type UsersTableInsert = typeof usersTable.$inferInsert;
@@ -131,6 +152,23 @@ export const passItemGrantsTable = pgTable(
         pk: primaryKey({ columns: [table.userId, table.grantKey] }),
     }),
 );
+
+// Idempotent record of "creator credit" cosmetic grants (game object defs with a
+// `creatorDiscordId`). One row per item type - a cosmetic has exactly one creator -
+// so a server restart re-scanning every def never grants the same item twice, and a
+// creator later selling/trading the item away doesn't cause it to be re-granted.
+export const creatorItemGrantsTable = pgTable("creator_item_grants", {
+    itemType: text("item_type").notNull().primaryKey(),
+    userId: text("user_id")
+        .notNull()
+        .references(() => usersTable.id, {
+            onDelete: "cascade",
+            onUpdate: "cascade",
+        }),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type CreatorItemGrantsTableSelect = typeof creatorItemGrantsTable.$inferSelect;
 
 // One row per purchased daily shop offer, to prevent buying the same slot twice a day.
 export const shopPurchasesTable = pgTable(
@@ -312,7 +350,18 @@ export const matchDataTable = pgTable(
         gameId: uuid("game_id").notNull(),
         mapSeed: bigint("map_seed", { mode: "number" }).notNull(),
         username: text("username").notNull(),
+        // Stable per-match id used for kill/assist credit (killerId/killedIds/assistedIds
+        // all reference THIS, never the recording id below) - `Player.matchDataId`, a
+        // monotonic per-game counter that's never reused, unlike the network `__id`.
         playerId: integer("player_id").notNull(),
+        // The recording system's player id (`Player.__id`) at save time - DIFFERENT from
+        // `playerId` above and NOT safe to use for kill credit (it's a network slot id
+        // that can be recycled mid-match). This is what `players[].playerId` in a game's
+        // meta.json / the per-player `.svrep.gz` filename actually key off, so it's what
+        // the Premium self-service replay lookup (getReplayMeta/listReplays match) must
+        // use to find THIS player's own POV recording. Null for matches saved before this
+        // column existed - those can't be resolved to a POV file anymore.
+        recordingPlayerId: integer("recording_player_id"),
         // Non-default cosmetic types this player had equipped for the match (snapshot),
         // shown on the advanced game stats page (with total worth). Hidden there when the
         // owning account has loadout_private set.
@@ -336,6 +385,14 @@ export const matchDataTable = pgTable(
         killerId: integer("killer_id").notNull(),
         killedIds: integer("killed_ids").array().notNull(),
         assistedIds: integer("assisted_ids").array().notNull().default([]),
+        revives: integer("revives").notNull().default(0),
+        teammateSaves: integer("teammate_saves").notNull().default(0),
+        timesDowned: integer("times_downed").notNull().default(0),
+        timesNeededSaving: integer("times_needed_saving").notNull().default(0),
+        // Impact score (0-100, team modes only, only on maps with MapDef.gameMode.impactWeight
+        // set) plus its per-category breakdown; null when the match/map doesn't participate.
+        impactScore: integer("impact_score"),
+        impactBreakdown: json("impact_breakdown").$type<ImpactBreakdown>(),
         encodedIp: text("encoded_ip").notNull().default(""),
         // Set true when a moderator marks this player's participation in the game as
         // "botted": voided rows are excluded from EVERY XP aggregation (reconcile,
@@ -374,6 +431,70 @@ export const matchDataTable = pgTable(
 );
 
 export type MatchDataTable = typeof matchDataTable.$inferInsert;
+
+// Maps a raw match_data.region key (one per game-server instance, e.g. "eu-1") to its
+// geographic group (e.g. "eu") — mirrors Config.regions[key].group from configType.ts, which
+// isn't queryable from SQL directly since it's deployment-only config. Kept in sync by
+// syncRegionGroups() (see db/ratingTiers.ts) on every daily rating-tier recompute, so
+// region-scoped rating queries can just JOIN this instead of re-deriving the mapping. Regions
+// removed from config but still referenced by old match_data rows get a self-mapped row here
+// so they don't silently drop out of a cohort.
+export const regionGroupsTable = pgTable("region_groups", {
+    region: text("region").primaryKey(),
+    groupName: text("group_name").notNull(),
+});
+
+export type RegionGroupsTable = typeof regionGroupsTable.$inferInsert;
+
+// Cached percentile-tier cutoffs for the impact-score Rating, recomputed daily (00:00 cron,
+// see computeRatingTiers() in db/ratingTiers.ts) so /api/user_stats never has to compute
+// percentiles live. One row per (teamMode, region group, tier letter); region here is always
+// a regionGroupsTable.groupName value, not a raw match_data.region key.
+export const ratingTiersTable = pgTable(
+    "rating_tiers",
+    {
+        teamMode: integer("team_mode").$type<TeamMode>().notNull(),
+        region: text("region").notNull(),
+        tierName: text("tier_name").notNull(),
+        // The tier's lower cutoff — a rating >= this (and < the next tier's minScore) lands
+        // in this tier. Numeric because it's an AVG()-derived percentile cutoff, not an int.
+        minScore: numeric("min_score", { mode: "number" }).notNull(),
+        // Qualifying (>=50 region-scoped rated games) accounts in this cohort when computed —
+        // informational only (e.g. to flag a cohort too small to trust), not used in lookups.
+        sampleSize: integer("sample_size").notNull(),
+    },
+    (table) => [primaryKey({ columns: [table.teamMode, table.region, table.tierName] })],
+);
+
+export type RatingTiersTable = typeof ratingTiersTable.$inferInsert;
+
+// Daily rollup of per-weapon damage/kills/usage, aggregated at game-save time (see
+// attributeWeaponStats in routes/private/private.ts) instead of storing one row per
+// match+weapon. Bounded row growth (days x weapons x maps x modes) keeps this cheap to
+// query for the weapon-ranking stats page even as match volume grows.
+export const weaponStatsDailyTable = pgTable(
+    "weapon_stats_daily",
+    {
+        day: date("day").notNull(),
+        weaponType: text("weapon_type").notNull(),
+        mapId: integer("map_id").notNull(),
+        teamMode: integer("team_mode").$type<TeamMode>().notNull(),
+        damageDealt: bigint("damage_dealt", { mode: "number" }).notNull().default(0),
+        kills: integer("kills").notNull().default(0),
+        gamesUsed: integer("games_used").notNull().default(0),
+        // Highest single-game damage total dealt with this weapon seen so far (running
+        // max across every upsert), for the "most damage in a game" ranking.
+        maxDamage: integer("max_damage").notNull().default(0),
+    },
+    (table) => [
+        primaryKey({
+            columns: [table.day, table.weaponType, table.mapId, table.teamMode],
+        }),
+        index("idx_weapon_stats_daily_day").on(table.day),
+    ],
+);
+
+export type WeaponStatsDailyTable = typeof weaponStatsDailyTable.$inferInsert;
 
 //
 // LOGS
@@ -498,9 +619,13 @@ export type BanHistoryTable = typeof banHistoryTable.$inferSelect;
 /**
  * Per-(game, player) moderation flag, set from the XP-gain "Games" view.
  *
- *   status = "sus"    → watchlist label only, no effect on XP.
- *   status = "botted" → the XP this player gained in this game, plus the pass
- *                       cosmetics and Golden Fries earned from it, are revoked.
+ *   status = "sus"      → watchlist label only, no effect on XP.
+ *   status = "botted"   → the XP this player gained in this game, plus the pass
+ *                         cosmetics and Golden Fries earned from it, are revoked.
+ *   status = "resolved" → a sus report an admin has handled. Kept (rather than
+ *                         deleted like a "clear") so the reporting moderator can see
+ *                         the outcome, with `resolveNote` saying what was decided.
+ *                         `markedBy`/`note` still name the original reporter.
  *
  * Reversible: the exact per-pass XP amount removed is stored in `xpDeltas`, so
  * clearing a "botted" flag adds it back (and the idempotent grant helpers restore
@@ -511,10 +636,14 @@ export const gameModerationTable = pgTable(
     {
         gameId: uuid("game_id").notNull(),
         userId: text("user_id").notNull(),
-        status: text("status").notNull(), // "sus" | "botted" | "removed"
+        status: text("status").notNull(), // "sus" | "botted" | "removed" | "resolved"
         note: text("note").notNull().default(""),
         markedBy: text("marked_by").notNull(), // admin slug
         markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+        // Set only for status = "resolved": who closed the report and why.
+        resolvedBy: text("resolved_by"),
+        resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+        resolveNote: text("resolve_note").notNull().default(""),
         // For "botted": the exact XP removed per pass, so a later un-bott restores it
         // precisely. Empty for "sus".
         xpDeltas: json("xp_deltas")
@@ -525,6 +654,10 @@ export const gameModerationTable = pgTable(
     (table) => [
         primaryKey({ columns: [table.gameId, table.userId] }),
         index("game_moderation_user_idx").on(table.userId),
+        // The Sus tab lists by status, newest first, and a moderator's own page filters
+        // by who raised the flag on top of that.
+        index("game_moderation_status_idx").on(table.status, table.markedAt),
+        index("game_moderation_marked_by_idx").on(table.markedBy, table.markedAt),
     ],
 );
 
@@ -560,6 +693,37 @@ export const userXpTable = pgTable(
         pk: primaryKey({ columns: [table.userId, table.passType] }),
     }),
 );
+
+/**
+ * Append-only, signed ledger of every XP grant (positive) or admin revocation
+ * (negative, see revokePremiumPassXp) from Premium (see grantPremiumPassXp) - same
+ * idea as goldenFriesLedgerTable. SUM(xpGranted) per (user, pass) is how much of that
+ * pass's current XP is currently attributable to Premium, which the moderation
+ * dashboard shows separately from XP earned in matches (so a Premium XP jump doesn't
+ * get mistaken for account boosting on the XP-gain leaderboard), and which the admin
+ * "remove Premium + XP" action reads to know exactly how much to subtract back out.
+ * Doesn't gate the reconcile job, which already can't revert Premium-granted XP on
+ * its own regardless (setPassXp anchors reconcileBaseXp/reconcileFrom to the
+ * post-grant total, and reconcileAllPasses only ever raises XP, never lowers it).
+ */
+export const premiumXpGrantsTable = pgTable(
+    "premium_xp_grants",
+    {
+        id: serial().primaryKey(),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        passType: text("pass_type").notNull(),
+        xpGranted: numeric("xp_granted").notNull(),
+        grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [index("premium_xp_grants_user_idx").on(table.userId, table.grantedAt)],
+);
+
+export type PremiumXpGrantsTable = typeof premiumXpGrantsTable.$inferSelect;
 
 /**
  * Per-user daily/rotating quests. Currently unused by gameplay code (the table exists
@@ -711,3 +875,148 @@ export const blocksTable = pgTable(
 );
 
 export type BlocksTable = typeof blocksTable.$inferSelect;
+
+//
+// THIRD-PARTY OAUTH APPS
+//
+// Lightweight, custom OAuth2-style authorization server: users self-register an
+// "application" (e.g. a Discord bot), an admin must approve it before it can be used
+// (see `status`), and other users individually consent per-app to share specific
+// scopes (`oauthGrantsTable`). See the redirect-flow (`oauthAuthCodesTable`) and
+// device-flow (`oauthDeviceCodesTable`) issuance tables below.
+//
+
+// Self-registered third-party applications. `id` doubles as the OAuth client_id.
+export const oauthApplicationsTable = pgTable(
+    "oauth_applications",
+    {
+        id: text("id").notNull().primaryKey(),
+        ownerId: text("owner_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        name: text("name").notNull(),
+        description: text("description").notNull().default(""),
+        redirectUris: json("redirect_uris").$type<string[]>().notNull().default([]),
+        // sha256 hex of the client secret, same store-only-the-hash pattern as
+        // sessionTable.id — the raw secret is only ever shown once, at creation/rotation.
+        clientSecretHash: text("client_secret_hash").notNull(),
+        secretLastFour: text("secret_last_four").notNull().default(""),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        secretRotatedAt: timestamp("secret_rotated_at", { withTimezone: true }),
+        // pending | approved | rejected | suspended — new apps start unusable (both
+        // consent flows reject them) until an admin reviews them on the moderation
+        // dashboard's Apps tab.
+        status: text("status").$type<OAuthAppStatus>().notNull().default("pending"),
+        reviewedBy: text("reviewed_by"), // admin slug
+        reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+        reviewNote: text("review_note").notNull().default(""),
+    },
+    (table) => [
+        index("oauth_applications_owner_idx").on(table.ownerId),
+        index("oauth_applications_status_idx").on(table.status, table.createdAt),
+    ],
+);
+
+export type OAuthApplicationSelect = typeof oauthApplicationsTable.$inferSelect;
+export type OAuthApplicationInsert = typeof oauthApplicationsTable.$inferInsert;
+
+// One row per (user, app) consent. Holds the long-lived, revocable access token for
+// that grant. Re-authorizing an already-granted app upserts this row (rotating the
+// token), mirroring the composite-PK upsert pattern used for userXpTable.
+export const oauthGrantsTable = pgTable(
+    "oauth_grants",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        // sha256 hex of the raw access token (same pattern as sessionTable.id).
+        accessTokenHash: text("access_token_hash").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    },
+    (table) => [
+        primaryKey({ columns: [table.userId, table.applicationId] }),
+        uniqueIndex("oauth_grants_token_hash_idx").on(table.accessTokenHash),
+        index("oauth_grants_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthGrantSelect = typeof oauthGrantsTable.$inferSelect;
+
+// Short-lived, single-use codes for the redirect (classic OAuth2) consent flow.
+export const oauthAuthCodesTable = pgTable(
+    "oauth_auth_codes",
+    {
+        id: text("id").notNull().primaryKey(), // sha256 hex of the raw code
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        // Exact redirect_uri from /authorize, re-checked at /token (defense in depth).
+        redirectUri: text("redirect_uri").notNull(),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        index("oauth_auth_codes_expires_idx").on(table.expiresAt),
+        index("oauth_auth_codes_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthAuthCodeSelect = typeof oauthAuthCodesTable.$inferSelect;
+
+// Short-lived device-flow codes (RFC 8628-flavored, not spec-exact). A bot backend
+// requests one, shows `userCode` to its user, and polls /api/oauth/token with
+// `deviceCode` until the user approves/denies it on survev.de/link.
+export const oauthDeviceCodesTable = pgTable(
+    "oauth_device_codes",
+    {
+        id: text("id").notNull().primaryKey(), // sha256 hex of the raw device_code
+        userCode: text("user_code").notNull(), // short human-typed code, e.g. "ABCD-1234"
+        applicationId: text("application_id")
+            .notNull()
+            .references(() => oauthApplicationsTable.id, {
+                onDelete: "cascade",
+                onUpdate: "cascade",
+            }),
+        scopes: json("scopes").$type<OAuthScope[]>().notNull().default([]),
+        status: text("status").notNull().default("pending"), // pending | approved | denied
+        userId: text("user_id").references(() => usersTable.id, {
+            onDelete: "cascade",
+            onUpdate: "cascade",
+        }), // set once the user approves/denies via /link
+        pollIntervalSec: integer("poll_interval_sec").notNull().default(5),
+        lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+        expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [
+        uniqueIndex("oauth_device_codes_user_code_idx").on(table.userCode),
+        index("oauth_device_codes_expires_idx").on(table.expiresAt),
+        index("oauth_device_codes_application_idx").on(table.applicationId),
+    ],
+);
+
+export type OAuthDeviceCodeSelect = typeof oauthDeviceCodesTable.$inferSelect;

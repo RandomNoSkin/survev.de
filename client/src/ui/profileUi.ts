@@ -647,7 +647,7 @@ export class ProfileUi {
         $("#modal-sale-notify-name").html(helpers.htmlEscape(name));
         $("#modal-sale-notify-detail").html(
             `Sold for <b>${sale.price}</b> <span class="sale-fries-icon"></span> to ` +
-                helpers.htmlEscape(sale.buyerName),
+                helpers.formatUsername(sale.buyerName, sale.buyerRoleTag),
         );
         $("#modal-sale-notify-image-inner").css({
             "background-image": `url(${svg})`,
@@ -704,7 +704,7 @@ export class ProfileUi {
             $("#modal-gift-notify-name").html(`${gift.amount} Golden Fries`);
         }
         $("#modal-gift-notify-detail").html(
-            `from <b>${helpers.htmlEscape(gift.fromName)}</b>`,
+            `from <b>${helpers.formatUsername(gift.fromName, gift.fromRoleTag)}</b>`,
         );
         // Re-open after a tick so the fadeOut from the previous card can settle.
         setTimeout(() => this.giftNotifyModal?.show(), 200);
@@ -758,10 +758,10 @@ export class ProfileUi {
         let detail = "";
         if (a.kind === "won") {
             title = "You won an auction!";
-            detail = `Won for <b>${a.amount}</b> 🍟 from ${helpers.htmlEscape(a.otherName)}`;
+            detail = `Won for <b>${a.amount}</b> 🍟 from ${helpers.formatUsername(a.otherName, a.otherRoleTag)}`;
         } else if (a.kind === "sold") {
             title = "Your auction sold!";
-            detail = `Sold for <b>${a.amount}</b> 🍟 to ${helpers.htmlEscape(a.otherName)}`;
+            detail = `Sold for <b>${a.amount}</b> 🍟 to ${helpers.formatUsername(a.otherName, a.otherRoleTag)}`;
         } else {
             title = "Auction ended";
             detail = "No bids — the item stays in your inventory.";
