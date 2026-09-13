@@ -3864,12 +3864,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 return c.json({ error: "item_not_allowed" }, 400);
             }
 
-            const existing = await db.query.itemsTable.findFirst({
-                where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
-                columns: { id: true },
-            });
-            if (existing) return c.json({ ok: true, given: 0, message: "already owned" });
-
+            // Unlike item:"all" (which only fills in what's missing), a single explicit
+            // grant always adds a new instance - owning duplicates of a cosmetic is normal
+            // (shop/market/trades already allow it), so a prior grant (e.g. the account's
+            // own creator-credit copy) must not block an admin from also gifting one.
             await db.insert(itemsTable).values({
                 userId: user.id,
                 type: item,
