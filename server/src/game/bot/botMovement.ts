@@ -35,7 +35,10 @@ const STUCK_MOVE_THRESHOLD = 1;
 
 const COVER_SEARCH_RAD = 30;
 const COVER_BUFFER = 1.5;
-const COVER_RECOMPUTE_INTERVAL = 1;
+// Short enough that cover keeps up with an enemy actually circling around it - a full
+// second was long enough for a repositioning threat to walk around a piece of cover
+// before the bot ever noticed it had gone stale, leaving it exposed at the old spot.
+const COVER_RECOMPUTE_INTERVAL = 0.4;
 const COVER_REACHED_DIST = 1.5;
 
 /** Angles (radians) off "directly behind cover" tried when leaning out to peek - not 0,
@@ -152,15 +155,25 @@ function pickRangeMode(
  *  (see `tryOpenNearbyDoor`), not swerve around it like a wall. The game's own
  *  movement collision still physically stops the bot right at the door until it's
  *  actually opened - this probe only decides which *direction* to walk, not whether
- *  the door is currently passable. */
-function isDirClear(bot: Player, dir: Vec2, dist: number): boolean {
+ *  the door is currently passable.
+ *
+ *  `ignore` excludes one specific obstacle from the check - used for the obstacle the
+ *  bot is currently using as cover. Deliberately walking up to within a couple of units
+ *  of that obstacle (to reach `coverPos`/`peekPos`, both placed right at its edge) is
+ *  exactly what cover-seeking wants, not something to deflect away from; without this,
+ *  this generic probe second-guessed `retreatToCover`'s already-correct approach
+ *  direction the moment the bot got close enough to its own cover to matter, deflecting
+ *  it sideways and never letting it actually settle within `COVER_REACHED_DIST` - which
+ *  looked like "never really goes into cover" and "never peeks" from the outside, since
+ *  the peek cycle only starts once cover is actually reached. */
+function isDirClear(bot: Player, dir: Vec2, dist: number, ignore?: Obstacle): boolean {
     const aabb = collider.createAabbExtents(bot.pos, v2.create(dist + 1, dist + 1));
     const objs = bot.game.grid.intersectCollider(aabb);
     const obstacles: Obstacle[] = [];
     for (let i = 0; i < objs.length; i++) {
         if (objs[i].__type !== ObjectType.Obstacle) continue;
         const o = objs[i] as Obstacle;
-        if (isOpenableDoor(o)) continue;
+        if (isOpenableDoor(o) || o === ignore) continue;
         obstacles.push(o);
     }
     const hitDist = collisionHelpers.intersectSegmentDist(
@@ -551,16 +564,16 @@ export function updateMovement(
     }
     move = v2.normalizeSafe(move);
 
-    if (!isDirClear(bot, move, PROBE_DIST)) {
+    if (!isDirClear(bot, move, PROBE_DIST, state.coverObstacle)) {
         // Prefer whichever side the bot was already deflecting toward, so it commits
         // to going around an obstacle instead of re-picking a side independently every
         // tick (which, right at an obstacle's edge, can flip left/right each tick and
         // look like the bot is stuck vibrating against the wall).
         const preferred = v2.rotate(move, state.deflectSign * (Math.PI / 3));
         const other = v2.rotate(move, -state.deflectSign * (Math.PI / 3));
-        if (isDirClear(bot, preferred, PROBE_DIST)) {
+        if (isDirClear(bot, preferred, PROBE_DIST, state.coverObstacle)) {
             move = preferred;
-        } else if (isDirClear(bot, other, PROBE_DIST)) {
+        } else if (isDirClear(bot, other, PROBE_DIST, state.coverObstacle)) {
             move = other;
             state.deflectSign = (state.deflectSign * -1) as 1 | -1;
         } else {

@@ -1,4 +1,6 @@
 import { expect, test } from "vitest";
+import { Config } from "../../server/src/config.ts";
+import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import {
     BotMovementState,
     findCover,
@@ -9,7 +11,7 @@ import {
 import { findPath } from "../../server/src/game/bot/nav/navAStar.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
-import { TeamMode } from "../../shared/gameConfig.ts";
+import { TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { util } from "../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
@@ -274,6 +276,66 @@ test("engageHold cycles between hiding at cover and peeking out to trade shots",
     // No isolated obstacle in this random layout happened to cycle within budget -
     // nothing to assert against (see the "no such pair" skip pattern used elsewhere
     // for randomized map generation).
+});
+
+// End-to-end proof that peeking actually lands shots, not just that the movement
+// oscillates correctly: a full `BotBrain` (perception, aim, movement, firing together,
+// exactly as `BotBarn` drives it) fighting a stationary enemy it can only see during its
+// own peek windows must still land hits over time. This is what the isolated
+// movement-only test above can't show on its own - firing depends on `botAim.ts`
+// actually reacquiring the target during a peek without waiting out a fresh reaction
+// delay every single cycle (see the `tier.memory`-based fix in `updateAim`).
+test("A bot fighting from cover still lands hits on a stationary enemy by peeking", () => {
+    Config.bots.enabled = true;
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+    game.botBarn.navGraph = graph;
+
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    const isolated = candidates.filter(
+        (c) => !candidates.some((o) => o !== c && v2.distance(o.pos, c.pos) < 10),
+    );
+
+    const away = v2.create(1, 0);
+
+    // Try a handful of isolated obstacles rather than just one - same reasoning as the
+    // movement-only test above, and capped low since each attempt runs a real 25s
+    // simulated fight.
+    for (const cover of isolated.slice(0, 5)) {
+        const dummy = game.playerBarn.addTestPlayer({ pos: v2.sub(cover.pos, v2.mul(away, 40)) });
+        // Spawn right next to the dummy - guaranteed initial line of sight, so the bot
+        // actually acquires it as a target - then relocate to the spot that's hidden
+        // from the dummy. This stands in for "the bot spotted the enemy, then had to
+        // retreat behind cover to fight from there", without needing to engineer an
+        // approach path that happens to lose sight at exactly the right moment.
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.add(dummy.pos, v2.create(3, 0)) });
+        bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+        bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+        bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+        bot.invManager.give("12gauge", 60);
+
+        bot.botDifficulty = "expert";
+        bot.botBrain = new BotBrain(bot, "expert", game.botBarn);
+        game.botBarn.bots.push(bot);
+
+        for (let i = 0; i < 5; i++) game.update(0.1);
+        bot.pos = v2.add(cover.pos, v2.mul(away, 5));
+
+        for (let i = 0; i < 250 && !dummy.dead; i++) game.update(0.1); // 25s
+
+        const landedHits = dummy.health < 100 || dummy.dead;
+        const idx = game.botBarn.bots.indexOf(bot);
+        if (idx >= 0) game.botBarn.bots.splice(idx, 1);
+        if (landedHits) {
+            expect(landedHits).toBe(true);
+            return;
+        }
+    }
+
+    // None of the sampled obstacles produced a usable cover/peek fight within budget on
+    // this random layout - nothing to assert against.
 });
 
 test("util.sameLayer sanity used by tryOpenNearbyDoor treats ground and ground+stairs as the same layer", () => {

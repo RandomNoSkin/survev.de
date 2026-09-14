@@ -54,6 +54,72 @@ test("updateAim blocks firing until the reaction timer elapses", () => {
     expect(result.canFire).toBe(true);
 });
 
+// Regression: a bot peeking out of cover loses and regains sight of the *same* enemy
+// every cycle. Before this fix, `updateAim` treated every reappearance as a brand new
+// sighting and reset the reaction timer, so a peek window shorter than (or comparable
+// to) `tier.reaction` could end before the bot ever finished "noticing" someone it had
+// already spotted seconds earlier - it peeked, but never actually got to shoot back.
+test("updateAim does not re-arm the reaction gate for a brief reappearance of the same target", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.now = 0;
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(30, 0) });
+
+    const aim = new BotAimState();
+    aim.dir = v2.create(1, 0);
+    const tier = { ...BOT_TIERS.normal, aimErrorDeg: 0 };
+    const dt = 0.05;
+
+    // Fully clear the reaction gate on the first sighting.
+    let result = updateAim(bot, aim, tier, target, dt);
+    for (let elapsed = dt; elapsed < tier.reaction * 1.5; elapsed += dt) {
+        game.now += dt * 1000;
+        result = updateAim(bot, aim, tier, target, dt);
+    }
+    expect(result.canFire).toBe(true);
+
+    // Duck out of sight for roughly a peek-cycle's hiding duration (see
+    // PEEK_HOLD_MIN/MAX in botMovement.ts) - well under `tier.memory` (3.5s for
+    // `normal`), so the bot should still "remember" this exact target.
+    game.now += 1800;
+    updateAim(bot, aim, tier, undefined, dt);
+
+    // Reappear - must be allowed to fire on the very next tick, not wait out another
+    // full reaction delay.
+    game.now += 50;
+    result = updateAim(bot, aim, tier, target, dt);
+    expect(result.canFire).toBe(true);
+});
+
+test("updateAim does re-arm the reaction gate once a target has been gone longer than tier.memory", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.now = 0;
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(30, 0) });
+
+    const aim = new BotAimState();
+    aim.dir = v2.create(1, 0);
+    const tier = { ...BOT_TIERS.normal, aimErrorDeg: 0 };
+    const dt = 0.05;
+
+    let result = updateAim(bot, aim, tier, target, dt);
+    for (let elapsed = dt; elapsed < tier.reaction * 1.5; elapsed += dt) {
+        game.now += dt * 1000;
+        result = updateAim(bot, aim, tier, target, dt);
+    }
+    expect(result.canFire).toBe(true);
+
+    // Gone well past tier.memory (3.5s) - genuinely lost track of them.
+    game.now += tier.memory * 1000 + 500;
+    updateAim(bot, aim, tier, undefined, dt);
+
+    game.now += 50;
+    result = updateAim(bot, aim, tier, target, dt);
+    expect(result.canFire).toBe(false); // has to notice them again from scratch
+});
+
 test("updateAim leads a target moving across the line of fire", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     game.now = 0;

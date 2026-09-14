@@ -16,6 +16,9 @@ export class BotAimState {
     dir = v2.create(1, 0);
     reactionTimer = 0;
     targetId = 0;
+    /** `game.now` this bot last actually saw `targetId` - see the reacquisition note in
+     *  `updateAim`. */
+    lastSeenTimeMs = -Infinity;
     sampleTimeMs = 0;
     samplePos = v2.create(0, 0);
     /** EMA-smoothed target velocity, units/s. */
@@ -58,23 +61,29 @@ export function updateAim(
     target: Player | undefined,
     dt: number,
 ): AimResult {
-    if (!target) {
-        aim.targetId = 0;
-        return NO_FIRE;
-    }
+    if (!target) return NO_FIRE;
 
     const nowMs = bot.game.now;
 
-    // (Re)acquisition: reset the reaction gate whenever the target changes. This is
-    // what makes a bot feel like it "noticed" a target instead of already being locked
-    // on to it.
-    if (aim.targetId !== target.__id) {
+    // (Re)acquisition: a full reaction delay - "noticing" someone - only applies to a
+    // genuinely different target, or the same one after long enough that memory of
+    // them has gone stale (`tier.memory`, the same window `BotBrain`'s own threat
+    // memory uses). A brief reappearance of the *same* target doesn't reset it: the
+    // most common source of one is the bot's own peek/hide cover cycle, and treating
+    // every peek as a fresh sighting meant a reaction delay comparable to (or longer
+    // than) a single peek window could make the bot duck back into hiding before ever
+    // finishing "noticing" the enemy it had already spotted seconds earlier - it never
+    // actually got to fire.
+    const knownRecently = aim.targetId === target.__id
+        && nowMs - aim.lastSeenTimeMs <= tier.memory * 1000;
+    if (!knownRecently) {
         aim.targetId = target.__id;
         aim.reactionTimer = tier.reaction * util.random(0.8, 1.25);
         aim.sampleTimeMs = nowMs;
         aim.samplePos = v2.copy(target.pos);
         aim.vel = v2.create(0, 0);
     }
+    aim.lastSeenTimeMs = nowMs;
 
     // Target velocity estimate, resampled at ~12Hz rather than every tick so it isn't
     // dominated by per-tick integration noise.
