@@ -45,6 +45,8 @@ class GameProcess implements GameData {
     mapName = "";
     id = "";
     aliveCount = 0;
+    /** Bots excluded - see GameData.humanAliveCount. */
+    humanAliveCount = 0;
     startedTime = 0;
     stopped = true;
     created = false;
@@ -131,6 +133,7 @@ class GameProcess implements GameData {
                         this.manager.processById.set(this.id, this);
                     }
                     this.aliveCount = msg.aliveCount;
+                    this.humanAliveCount = msg.humanAliveCount;
                     this.startedTime = msg.startedTime;
                     this.stopped = msg.stopped;
                     if (this.stopped) {
@@ -385,9 +388,12 @@ export class GameProcessManager implements GameManager {
         }, 5000);
     }
 
+    /** Region population reported to clients - humans only, so bots never make a region
+     *  look busy. The heartbeat/timeout diagnostics above deliberately keep using
+     *  `aliveCount`, since there they measure actual load. */
     getPlayerCount(): number {
         return this.processes.reduce((a, b) => {
-            return a + b.aliveCount;
+            return a + b.humanAliveCount;
         }, 0);
     }
 

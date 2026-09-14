@@ -155,11 +155,17 @@ export class SingleThreadGameManager implements GameManager {
         }
     }
 
+    /** Region population reported to clients - bots excluded so they never make a region
+     *  look busier than it is. */
     getPlayerCount(): number {
         return this.games.reduce((a, b) => {
             return (
                 a +
-                (b ? b.playerBarn.livingPlayers.filter((p) => !p.disconnected).length : 0)
+                (b
+                    ? b.playerBarn.livingPlayers.filter(
+                          (p) => !p.disconnected && !p.bot,
+                      ).length
+                    : 0)
             );
         }, 0);
     }

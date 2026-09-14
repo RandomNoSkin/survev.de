@@ -41,7 +41,7 @@ import {
 import * as net from "../../../../shared/net/net";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
 import type { GroupStatus } from "../../../../shared/net/updateMsg";
-import type { RoleTag } from "../../../../shared/types/user";
+import type { DisplayRoleTag } from "../../../../shared/types/user";
 import { type Circle, coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
 import type { Loadout } from "../../../../shared/utils/loadout";
@@ -53,6 +53,8 @@ import { chatLogger } from "../../utils/betterLogger";
 import { Chat, logDownToDB, logKillToDB } from "../../utils/chat";
 import { IDAllocator } from "../../utils/IDAllocator";
 import { checkForBadWords, validateUserName } from "../../utils/serverHelpers";
+import type { BotBrain } from "../bot/botBrain.ts";
+import type { BotDifficulty } from "../bot/botDefs.ts";
 import type { Game, JoinTokenData } from "../game";
 import { Group, Team } from "../group";
 import { InventoryManager } from "../inventoryManager";
@@ -488,6 +490,83 @@ export class PlayerBarn {
         return player;
     }
 
+    /**
+     * Server-side AI player. Like `addTestPlayer` it bypasses join tokens, rate limits
+     * and sockets entirely - the socketId is a throwaway UUID that is never registered
+     * with the socket owner, so `Game.sendSocketMsg` is a no-op for it. Bots are also
+     * skipped in `sendMsgs()`, so no UpdateMsg is ever built for them.
+     */
+    addBotPlayer(params: {
+        group?: Group;
+        team?: Team;
+        pos?: Vec2;
+        name?: string;
+        difficulty?: BotDifficulty;
+    }): Player {
+        let group = params.group;
+        let team = params.team;
+
+        if (!group && this.game.isTeamMode) {
+            group = this.addGroup(false, false);
+        }
+
+        if (!team && this.game.map.factionMode) {
+            team = this.getSmallestTeam();
+        }
+
+        const player = new Player(
+            this.game,
+            params.pos ?? this.game.map.getSpawnPos(group, team),
+            0,
+            this.uniqueBotName(params.name),
+            randomUUID(),
+            new net.JoinMsg(),
+            "",
+            "",
+            null,
+            false,
+            "bot",
+            undefined,
+            undefined,
+            true,
+        );
+
+        this.activatePlayer(player, group, team);
+
+        // `activatePlayer` already promotes when exactly one arena role is left (the
+        // usual case once a human has picked - see `playerRoleSelect`). If the pool is
+        // still open the bot would otherwise sit out the whole roleMenuTicker, and
+        // `Player.update`/`handleInput` hard-return while `arenaMode && !role`.
+        if (this.game.map.arenaMode && !player.role) {
+            const roles = this.resolveArenaRoles(player);
+            if (roles.length) {
+                player.roleMenuTicker = 0;
+                player.playerRoleSelect(roles[roles.length - 1]);
+            }
+        }
+
+        return player;
+    }
+
+    /** Arena role pool for a player, in the same precedence order the client menu uses. */
+    private resolveArenaRoles(player: Player): string[] {
+        return player.group?.arenaRoles?.length
+            ? player.group.arenaRoles
+            : this.game.arenaRoles?.length
+              ? this.game.arenaRoles
+              : (this.game.map.mapDef.gameMode.arenaModeRoles ?? []);
+    }
+
+    private botNameCount = 0;
+    private uniqueBotName(preferred?: string): string {
+        const pool = Config.bots.names;
+        let name =
+            preferred ?? (pool.length ? pool[util.randomInt(0, pool.length - 1)] : "Bot");
+        const taken = (n: string) => this.players.some((p) => p.name === n);
+        while (taken(name)) name = `${name}-${++this.botNameCount}`;
+        return name;
+    }
+
     update(dt: number) {
         let sendWinEmotes = false;
         if (this.game.over && !this.sentWinEmotes) {
@@ -605,6 +684,14 @@ export class PlayerBarn {
         for (let i = 0; i < this.players.length; i++) {
             const player = this.players[i];
             if (player.disconnected) continue;
+            // Bots have no socket, so building an UpdateMsg for them is pure waste: the
+            // visibility cull, the serialization and (in multi-process mode) the IPC
+            // frame would all be thrown away. This is the single largest saving in the
+            // whole bot subsystem - 33 discarded snapshots per bot per second.
+            if (player.bot) {
+                player.msgsToSend.length = 0;
+                continue;
+            }
             player.sendMsgs();
         }
     }
@@ -1879,6 +1966,13 @@ export class Player extends BaseGameObject {
 
     bot: boolean;
 
+    /** Set on server-side AI players only; undefined for stress-test clients that merely
+     *  tag themselves as bots via JoinMsg. */
+    botDifficulty?: BotDifficulty;
+    /** The AI driving this player, when `botDifficulty` is set. Type-only import - the
+     *  brain imports Player, so a runtime import here would be a cycle. */
+    botBrain?: BotBrain;
+
     debug = {
         zoomEnabled: false,
         zoom: 1,
@@ -2022,7 +2116,7 @@ export class Player extends BaseGameObject {
     ip: string;
     isAdmin: boolean;
     /** [ADMIN]/[MOD]/[PREM] tag - drives the client-side name tag (see PlayerInfo/JoinFeedMsg). */
-    roleTag: RoleTag;
+    roleTag: DisplayRoleTag;
     // see comment on server/src/api/schema.ts
     // about logging find_game IP's
     findGameIp: string;
@@ -2038,9 +2132,12 @@ export class Player extends BaseGameObject {
         findGameIp: string,
         userId: string | null,
         admin: boolean,
-        roleTag: RoleTag,
+        roleTag: DisplayRoleTag,
         loadout?: Loadout,
         customLoadout?: CustomLoadoutConfig,
+        /** Server-side AI player. Independent of `Config.debug.allowBots`, which only
+         *  gates clients that tag *themselves* as bots (see the stress-test client). */
+        isBot = false,
     ) {
         super(game, pos);
 
@@ -2067,7 +2164,8 @@ export class Player extends BaseGameObject {
 
         this.weapons = this.weaponManager.weapons;
 
-        this.bot = Config.debug.allowBots && joinMsg.bot;
+        this.bot = isBot || (Config.debug.allowBots && joinMsg.bot);
+        if (isBot) this.game.hadBots = true;
 
         let defaultItems =
             this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems;
@@ -3289,7 +3387,12 @@ export class Player extends BaseGameObject {
     visibleObjects = new Set<GameObject>();
     visibleMapIndicators = new Set<MapIndicator>();
 
-    msgStream = new net.MsgStream(new ArrayBuffer(65536));
+    /** 64 KB per player, allocated on first use so bots (which never send) don't pay it. */
+    private _msgStream?: net.MsgStream;
+    get msgStream(): net.MsgStream {
+        return (this._msgStream ??= new net.MsgStream(new ArrayBuffer(65536)));
+    }
+
     sendMsgs(): void {
         const msgStream = this.msgStream;
         const game = this.game;
@@ -3733,6 +3836,12 @@ export class Player extends BaseGameObject {
             if (playerSource.teamId === this.teamId && !this.disconnected) {
                 return;
             }
+        }
+
+        // Threat memory for bots: this is what makes a bot turn toward someone who shot
+        // it in the back instead of continuing to stare at its old target.
+        if (this.botBrain && params.source && params.source !== this) {
+            this.botBrain.onDamaged(params.source as GameObject, playerSource);
         }
 
         // Accuracy tracking: count a bullet hit on the shooter when a gun's bullet

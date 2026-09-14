@@ -71,6 +71,16 @@ export function getConfig(isProduction: boolean, dir: string) {
             allowEditMsg: isDev,
             allowMockAccount: isDev,
         },
+        bots: {
+            enabled: isDev,
+            defaultDifficulty: "normal",
+            maxBotsPerGame: 8,
+            // Keep in sync with DEFAULT_BOT_NAMES in server/src/game/bot/botDefs.ts.
+            // Inlined so this root config file stays free of server-side imports.
+            names: [
+                "MW g0dak"
+            ],
+        },
         recording: {
             enabled: true,
             recordBots: false,

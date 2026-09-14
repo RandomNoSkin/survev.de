@@ -434,6 +434,29 @@ export interface ConfigType {
     };
 
     /**
+     * Server-side AI bots.
+     *
+     * These are real `Player` objects driven by a server-side brain instead of a
+     * socket, so they move, shoot and take damage through exactly the same code paths
+     * a human does. They are skipped in network serialization, replay recording,
+     * population counts and match-data saving.
+     *
+     * IMPORTANT (small/OOM-prone boxes): the caps below are the CPU/RAM budget for the
+     * whole subsystem. When `enabled` is false no bot code runs at all — no nav graph
+     * is built and a normal match costs exactly nothing.
+     */
+    bots: {
+        /** Master on/off switch. */
+        enabled: boolean;
+        /** Difficulty used when `/spawnbot` is called without an argument. */
+        defaultDifficulty: "easy" | "normal" | "hard" | "expert";
+        /** Hard ceiling on bots per game, regardless of what a request asks for. */
+        maxBotsPerGame: number;
+        /** Display-name pool. Bots additionally carry a `[BOT]` name tag. */
+        names: string[];
+    };
+
+    /**
      * Game recording / replay configuration.
      *
      * When enabled, the game server records the exact server -> client byte stream

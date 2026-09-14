@@ -1,5 +1,5 @@
 import { GameConfig, type Plane as PlaneType } from "../gameConfig.ts";
-import type { RoleTag } from "../types/user.ts";
+import type { DisplayRoleTag } from "../types/user.ts";
 import { v2, type Vec2 } from "./../utils/v2.ts";
 import { type AbstractMsg, BitSizes, type BitStream, Constants } from "./net.ts";
 import { decodeRoleTag, encodeRoleTag } from "./roleTagCodec.ts";
@@ -207,9 +207,10 @@ export interface PlayerInfo {
     teamId: number;
     groupId: number;
     name: string;
-    /** The [ADMIN]/[MOD]/[PREM] tag the client shows before the name - server-resolved
-     *  priority (ADMIN > MOD > PREM), see resolveRoleTag on the server. */
-    roleTag: RoleTag;
+    /** The [ADMIN]/[MOD]/[PREM]/[BOT] tag the client shows before the name -
+     *  server-resolved priority (ADMIN > MOD > PREM), see resolveRoleTag on the server.
+     *  [BOT] is not an account role and is set directly on AI players. */
+    roleTag: DisplayRoleTag;
 
     loadout: {
         heal: string;
