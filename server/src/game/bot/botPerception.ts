@@ -12,11 +12,19 @@ import type { Player } from "../objects/player.ts";
  *  per-bot perception cost regardless of how many enemies are nearby. */
 const MAX_LOS_CHECKS = 4;
 
-/** How far a bot can "see" a player, in units. A human's effective spotting range is
- *  governed by scope zoom, so this loosely follows it - bots must not notice someone
- *  from further away than a human reasonably could. */
-export function viewRangeFor(bot: Player): number {
-    return Math.min(140, Math.max(90, bot.zoom * 0.35));
+/** Half-extents of the rectangle a bot can "see" within, centered on its own position.
+ *  A real player's spotting range is bounded by their screen, not a radar circle - the
+ *  server itself renders that screen as a 16:9-aspect rectangle for exactly this reason
+ *  (`Player.updateVisibleObjects`'s visibility culling: "client zoom tries to keep a
+ *  16/9 aspect ratio, mirror it here"). This mirrors that shape but keeps the existing,
+ *  already-tuned overall size (loosely following scope zoom, clamped to a plausible
+ *  human spotting distance) as the rectangle's half-width, rather than switching to the
+ *  server's own (much smaller, no-scope-sized) culling extents - bots don't manage
+ *  scopes, so tying vision strictly to an un-scoped player's actual screen size would
+ *  leave them effectively blind past close range instead of just correctly-shaped. */
+function viewHalfExtentsFor(bot: Player): Vec2 {
+    const halfWidth = Math.min(140, Math.max(90, bot.zoom * 0.35));
+    return v2.create(halfWidth, halfWidth / (16 / 9));
 }
 
 /**
@@ -69,18 +77,27 @@ function candidateEnemies(bot: Player, range: number): Player[] {
 /** Nearest living enemy the bot can currently see, or undefined. */
 export function findVisibleTarget(bot: Player): Player | undefined {
     const game = bot.game;
-    const range = viewRangeFor(bot);
-    const rangeSqr = range * range;
+    const half = viewHalfExtentsFor(bot);
+    // Coarse pre-filter radius for the spatial query below - the rectangle's own
+    // half-diagonal, so no candidate the rectangle could actually contain gets missed.
+    const queryRadius = Math.sqrt(half.x * half.x + half.y * half.y);
 
     const ranked: { player: Player; distSqr: number }[] = [];
-    for (const other of candidateEnemies(bot, range)) {
+    for (const other of candidateEnemies(bot, queryRadius)) {
         if (other === bot || other.dead || other.spectator) continue;
         if (other.teamId === bot.teamId) continue;
         if (!util.sameLayer(bot.layer, other.layer)) continue;
 
-        const distSqr = v2.lengthSqr(v2.sub(other.pos, bot.pos));
-        if (distSqr > rangeSqr) continue;
+        // Rectangle, not radar circle - a real screen isn't round. Axis-aligned since
+        // the camera itself never rotates with aim/facing direction in this game.
+        if (
+            Math.abs(other.pos.x - bot.pos.x) > half.x
+            || Math.abs(other.pos.y - bot.pos.y) > half.y
+        ) {
+            continue;
+        }
 
+        const distSqr = v2.lengthSqr(v2.sub(other.pos, bot.pos));
         ranked.push({ player: other, distSqr });
     }
     ranked.sort((a, b) => a.distSqr - b.distSqr);

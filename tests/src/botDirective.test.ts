@@ -46,8 +46,8 @@ test("Landing several hits switches the bot from holding to pushing", () => {
 
     // The real path to landing a hit is a live gunfight (`Player.damage()` incrementing
     // `bulletHits` on the shooter); poking the field directly isolates the *directive*
-    // decision from needing one.
-    bot.bulletHits += 2;
+    // decision from needing one. PUSH_HIT_THRESHOLD is 3.
+    bot.bulletHits += 3;
     bot.botBrain!.update(0.05);
     const pushing = v2.copy(bot.touchMoveDir);
 
@@ -63,11 +63,11 @@ test("Push fades back to holding once the hit streak goes cold", () => {
     game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
-    bot.bulletHits += 2;
+    bot.bulletHits += 3;
     bot.botBrain!.update(0.05);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing
 
-    // Momentum decays at 1/3 per second and the threshold is 2 - a hit streak this old
+    // Momentum decays at 1/2 per second and the threshold is 3 - a hit streak this old
     // (10s, no further hits) must have long since gone cold.
     for (let i = 0; i < 200; i++) bot.botBrain!.update(0.05);
 

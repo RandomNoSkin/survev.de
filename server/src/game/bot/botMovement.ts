@@ -52,14 +52,23 @@ const PEEK_EXPOSE_MAX = 1.0;
 const PEEK_RETRY_DELAY = 0.3;
 const PEEK_REACHED_DIST = 1;
 
-/** `push` never closes tighter than this. Not just a style choice: a gun's aim/lead
- *  math (`botAim.ts`) works from the *muzzle* position (`pos + dir * barrelLength`,
- *  ~2.5-2.7 units for most guns), so once actual separation drops below roughly a
- *  barrel's length the muzzle point can end up past the target entirely - the aim
- *  vector inverts and the bot freezes aiming the wrong way, unable to fire, for as
- *  long as it stays wedged there. Stopping the approach with room to spare avoids ever
- *  reaching that regime instead of trying to special-case it after the fact. */
+/** `push` never closes tighter than this, full stop, regardless of weapon. Not just a
+ *  style choice: a gun's aim/lead math (`botAim.ts`) works from the *muzzle* position
+ *  (`pos + dir * barrelLength`, ~2.5-2.7 units for most guns), so once actual
+ *  separation drops below roughly a barrel's length the muzzle point can end up past
+ *  the target entirely - the aim vector inverts and the bot freezes aiming the wrong
+ *  way, unable to fire, for as long as it stays wedged there. Stopping the approach
+ *  with room to spare avoids ever reaching that regime instead of special-casing it
+ *  after the fact. */
 const PUSH_MIN_DIST = 6;
+/** How far past this floor `push` actually closes, as a fraction of the equipped
+ *  weapon's own sweet spot - pressing an advantage with a shotgun means walking it down
+ *  to melee-adjacent range, but doing the same with a sniper rifle is how a bot with a
+ *  70-unit ideal range ends up rushing someone to point-blank instead of just closing
+ *  the gap a bit. `Math.max` with `PUSH_MIN_DIST` keeps short-range weapons (where this
+ *  fraction alone would land below the aim-math floor above) from doing anything
+ *  different than before. */
+const PUSH_SWEET_SPOT_FRAC = 0.45;
 
 /** Per-bot movement state, persisted across ticks by the brain. */
 export class BotMovementState {
@@ -514,12 +523,27 @@ export function updateMovement(
         state.coverObstacle = undefined;
         state.coverPos = undefined;
         state.peeking = false;
-        if (dist > PUSH_MIN_DIST) {
+
+        const pushHoldDist = Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
+
+        state.strafeTimer -= dt;
+        if (state.strafeTimer <= 0) {
+            state.strafeTimer = util.random(0.6, 1.6);
+            state.strafeSign = (state.strafeSign * -1) as 1 | -1;
+        }
+
+        if (dist > pushHoldDist) {
+            const toThreat = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
             const pathDir = nav ? followPath(bot, state, nav, threatPos, dt) : undefined;
-            move = pathDir ?? v2.normalizeSafe(v2.sub(threatPos, bot.pos));
+            move = pathDir ?? toThreat;
+            // A dead-straight charge is easy to punish - blend in a little strafe so
+            // pushing still juke a bit instead of running face-first at the muzzle.
+            if (!state.path.length) {
+                move = v2.add(move, v2.mul(v2.perp(toThreat), state.strafeSign * 0.3));
+            }
         } else {
-            // Close enough to press the advantage without walking into melee contact -
-            // hold here and keep firing rather than closing further (see `PUSH_MIN_DIST`).
+            // Close enough to press the advantage without overcommitting - hold here
+            // and keep firing rather than closing further (see `pushHoldDist`).
             state.path = [];
         }
     } else {

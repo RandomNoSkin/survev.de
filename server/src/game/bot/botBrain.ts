@@ -21,10 +21,12 @@ export type BotState = "idle" | "engage";
 
 /** Recent landed hits (see `updateMomentum`) needed to switch to `push` - "winning the
  *  trade enough to press the advantage", not any single lucky shot. */
-const PUSH_HIT_THRESHOLD = 2;
-/** Momentum points lost per second - a burst of hits keeps `push` alive for a few
- *  seconds after the last one connects, not just the instant tick it landed. */
-const PUSH_MOMENTUM_DECAY = 1 / 3;
+const PUSH_HIT_THRESHOLD = 3;
+/** Momentum points lost per second - a burst of hits keeps `push` alive for a while
+ *  after the last one connects, not just the instant tick it landed, but fades faster
+ *  than it builds so a bot stops overcommitting shortly after the exchange actually
+ *  goes cold instead of staying locked into full-aggression for several more seconds. */
+const PUSH_MOMENTUM_DECAY = 1 / 2;
 /** Taking a hit this recently while mid-heal means the enemy clearly still has a shot -
  *  finishing the bandage anyway is how a bot dies at full heal-bar-in-progress. This is
  *  deliberately the *only* abort trigger - see the doc comment on the abort check

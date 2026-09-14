@@ -95,3 +95,39 @@ test("A long-range weapon's sweet spot never pulls the bot into retreating past 
 
     expect(bot.touchMoveDir.x).not.toBeLessThan(-0.5); // must not be retreating
 });
+
+// Regression for real feedback that `push` was "too aggressive": it used to close all
+// the way down to `PUSH_MIN_DIST` (6 units) regardless of what was equipped, which for
+// a long-range weapon meant a bot that was already winning at a sane distance would
+// instead rush the enemy down to near-melee range. It should scale with the weapon's
+// own sweet spot instead.
+test("push holds at a longer range for a long-range weapon instead of rushing to melee", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threat = v2.create(20, 0);
+    bot.weaponManager.weapons[0].type = "mosin"; // sweet spot 70 -> push-hold ~31.5
+    bot.weaponManager.weapons[0].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(0);
+
+    const state = new BotMovementState();
+    // 20 units is already well inside the mosin's push-hold distance - closing further
+    // here, all the way to a shotgun-appropriate range, is the bug.
+    updateMovement(bot, state, "push", threat, 20, 0.05);
+
+    expect(bot.touchMoveActive).toBe(false);
+});
+
+test("push still closes to near-melee range for a short-range weapon", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threat = v2.create(20, 0);
+    bot.weaponManager.weapons[0].type = "m870"; // shotgun, sweet spot ~10 -> push-hold 6
+    bot.weaponManager.weapons[0].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(0);
+
+    const state = new BotMovementState();
+    updateMovement(bot, state, "push", threat, 20, 0.05);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // still closing in toward the threat
+});
