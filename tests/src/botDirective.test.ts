@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
@@ -85,6 +86,55 @@ test("Critically low with no heal item flees instead of holding or pushing", () 
     expect(bot.actionType).toBe(GameConfig.Action.None); // never starts a heal it can't back up
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance, not holding or pushing
+});
+
+// Regression: `shouldHeal` (and therefore the `heal` directive) flips true the instant
+// health crosses the threshold, before the retreat `updateMovement` kicks off has
+// actually gone anywhere - immediately consuming the heal item regardless was visible
+// in manual play as bots that started a bandage and cancelled it again right away,
+// still standing exactly where the fight was.
+test("A bot does not start healing until it has actually created distance from a close threat", () => {
+    Config.bots.enabled = true;
+    const game = createGame(TeamMode.Solo, "test_normal");
+
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.botBarn.bots.push(bot);
+    game.playerBarn.addTestPlayer({ pos: v2.create(55, 50) }); // 5 units - too close to heal
+    bot.health = 20;
+    bot.invManager.give("bandage", 5);
+
+    // Immediately after deciding to heal, distance is still small - must not have
+    // started consuming the item yet.
+    for (let i = 0; i < 5; i++) game.update(0.1);
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+
+    // Give it room to actually retreat (bare map, no cover - a straight-line run) to a
+    // safe distance and start healing there.
+    let startedHealing = false;
+    for (let i = 0; i < 100 && !startedHealing; i++) {
+        game.update(0.1);
+        if (bot.actionType === GameConfig.Action.UseItem) startedHealing = true;
+    }
+    expect(startedHealing).toBe(true);
+});
+
+test("Healing is not aborted just because the enemy gets close, only when actually hit", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) }); // far - safe to start
+    bot.health = 20;
+    bot.invManager.give("bandage", 5);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+
+    // The enemy closes the distance without landing a hit - a position change, not an
+    // action against the bot.
+    target.pos = v2.create(55, 50);
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem); // must still be healing
 });
 
 test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", () => {

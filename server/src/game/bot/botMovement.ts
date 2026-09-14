@@ -372,6 +372,24 @@ function retreatToCover(
     return holdAndPeek ? v2.mul(v2.perp(away), state.strafeSign) : away;
 }
 
+/** Minimum plain distance from the threat before it's safe to start healing when no
+ *  cover was found to hide behind instead - "create distance, then heal", not "start
+ *  healing wherever the `heal` directive happened to be chosen". */
+const SAFE_HEAL_DIST = 15;
+
+/** Whether the bot has actually put enough separation between itself and `threatPos` to
+ *  safely start a heal action - reached cover (if `retreatToCover` found any) or opened
+ *  up `SAFE_HEAL_DIST` of plain distance otherwise. Gates *starting* a heal, not
+ *  continuing one already in progress (`BotBrain.pickDirective` handles that by reading
+ *  `actionType` directly) - deciding "I should heal" and immediately consuming the item
+ *  regardless of whether the retreat has actually gone anywhere yet is what made bots
+ *  visibly start a bandage and cancel it again on the very next tick, still standing
+ *  right where the fight was. */
+export function isSafeToHeal(bot: Player, state: BotMovementState, engageDist: number): boolean {
+    if (state.coverPos) return v2.distance(bot.pos, state.coverPos) <= COVER_REACHED_DIST;
+    return engageDist >= SAFE_HEAL_DIST;
+}
+
 /** Direction to steer toward `goal`, routing through the nav graph when a direct line
  *  is blocked. Returns `undefined` when the direct line is already clear (the caller
  *  steers straight at `goal` itself) or when no usable path exists at all (nav isn't

@@ -14,7 +14,7 @@ import {
     updateWeaponSelection,
 } from "./botCombat.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
-import { BotMovementState, type CombatDirective, updateMovement } from "./botMovement.ts";
+import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
 import { findVisibleTarget } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
@@ -26,11 +26,10 @@ const PUSH_HIT_THRESHOLD = 2;
  *  seconds after the last one connects, not just the instant tick it landed. */
 const PUSH_MOMENTUM_DECAY = 1 / 3;
 /** Taking a hit this recently while mid-heal means the enemy clearly still has a shot -
- *  finishing the bandage anyway is how a bot dies at full heal-bar-in-progress. */
+ *  finishing the bandage anyway is how a bot dies at full heal-bar-in-progress. This is
+ *  deliberately the *only* abort trigger - see the doc comment on the abort check
+ *  itself for why a proximity-based one was removed. */
 const ABORT_HEAL_REACT_MS = 350;
-/** The enemy closing to this range while the bot is mid-heal is bad regardless of
- *  whether they've actually landed a hit yet. */
-const ABORT_HEAL_DIST = 12;
 /** After an abort, don't immediately re-start the same heal - open some distance
  *  first, which is exactly what `flee` (see `pickDirective`) is for. */
 const HEAL_ABORT_COOLDOWN_S = 1.2;
@@ -113,18 +112,25 @@ export class BotBrain {
         const threatPos = this.threatPos();
         const engageDist = threatPos ? v2.distance(bot.pos, threatPos) : Infinity;
 
-        // Abort an in-progress heal the instant the situation turns bad enough that
-        // finishing the bandage is the wrong call: taking another hit mid-heal means
-        // the enemy clearly still has a shot, and the enemy closing to point-blank is
-        // bad regardless of whether they've landed one yet. `cancelAction` is exactly
-        // what a weapon switch already does to an in-progress heal (see
-        // `updateWeaponSelection`'s doc comment) - this just triggers it from a combat
-        // read instead of an incidental gun swap, so the bot can shoot back or run
-        // instead of finishing a bandage into a losing fight.
+        // Abort an in-progress heal the instant an actual enemy action makes finishing
+        // the bandage the wrong call - concretely, taking a hit mid-heal, which means
+        // the enemy clearly still has a shot. `cancelAction` is exactly what a weapon
+        // switch already does to an in-progress heal (see `updateWeaponSelection`'s doc
+        // comment) - this just triggers it from a combat read instead of an incidental
+        // gun swap, so the bot can shoot back or run instead of finishing a bandage
+        // into a losing fight.
+        //
+        // Deliberately *not* also a proximity check ("enemy within N units"): a heal
+        // only ever starts once `isSafeToHeal` has already confirmed real separation
+        // (or cover) exists, so plain distance alone right after that shouldn't flip
+        // back to "unsafe" on its own - and while it could still drift closer between
+        // recomputes, that's `pickRangeMode`'s job to correct once the heal ends, not a
+        // reason to cancel a heal nothing has actually threatened yet. A bot bailing out
+        // of every heal it starts, without ever having been shot at, is worse than
+        // occasionally finishing one a beat later than a human would.
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
-            const tooClose = engageDist < ABORT_HEAL_DIST;
-            if (justHit || tooClose) {
+            if (justHit) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -149,7 +155,17 @@ export class BotBrain {
         updateReload(bot);
         updateFiring(bot, this.tier, this.fire, this.target, dist, aimResult.canFire, dt);
 
-        if (directive === "heal") updateHeal(bot, this.tier, !!this.target);
+        // Not just `directive === "heal"`: that flips true the instant `shouldHeal`
+        // does, before the retreat it kicks off in `updateMovement` above has actually
+        // gone anywhere. Consuming the item immediately regardless was the other half
+        // of the "starts a heal and cancels it right away" bug - `isSafeToHeal` gates
+        // the actual item-use on having reached cover or opened real distance first.
+        // Once healing is under way this is a no-op every tick anyway (`shouldHeal`
+        // itself returns false while `actionType !== None`), so it only matters for the
+        // very first tick.
+        if (directive === "heal" && isSafeToHeal(bot, this.movement, engageDist)) {
+            updateHeal(bot, this.tier, !!this.target);
+        }
     }
 
     /** Tracks recently landed hits for the `push` directive. `bulletHits` is a
@@ -179,7 +195,9 @@ export class BotBrain {
      *    moment health ticks back over the threshold).
      * 3. Critically hurt with no way to heal right now (no item, or just interrupted
      *    and still cooling down) - disengage instead of trading.
-     * 4. Hurt enough, and safe enough, to start healing.
+     * 4. Hurt enough to want to heal - retreats toward cover/distance immediately, but
+     *    doesn't actually consume the item until `isSafeToHeal` (in `update()`) says
+     *    the retreat has actually gone somewhere.
      * 5. Recently landed enough hits to be winning the exchange - press it.
      * 6. Default: hold a sane range, using cover once there instead of standing still.
      */
