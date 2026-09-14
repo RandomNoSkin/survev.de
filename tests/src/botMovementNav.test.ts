@@ -184,6 +184,32 @@ test("findCover picks a point that breaks the threat's line of sight to a live o
     expect(found!.obstacle.dead).toBe(false);
 });
 
+// Regression: a cover spot whose *center point* is hidden isn't necessarily real cover
+// - real LOS/bullet checks test a player's actual collision circle, not a single point,
+// so a spot placed right at the edge of an obstacle's shadow can still have the near
+// side of the bot's own hitbox poking out into view. That reads as "stands in cover and
+// gets shot anyway" - much weaker than actually being hidden.
+test("findCover hides the bot's whole body, not just its center point", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const cover = game.map.obstacles.find(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    if (!cover) return;
+
+    const away = v2.create(1, 0);
+    const threatPos = v2.sub(cover.pos, v2.mul(away, 40));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+
+    const found = findCover(bot, graph.navObstacles, threatPos);
+    if (!found) return;
+
+    const towardThreat = v2.normalizeSafe(v2.sub(threatPos, found.pos));
+    const nearEdge = v2.add(found.pos, v2.mul(towardThreat, bot.rad));
+    expect(isWalkClear(graph.navObstacles, threatPos, nearEdge, 0)).toBe(false);
+});
+
 test("Cover is dropped and re-picked the instant its obstacle dies, not on the next recompute", () => {
     const game = createGame(TeamMode.Solo, "local");
     const graph = buildNavGraph(game);

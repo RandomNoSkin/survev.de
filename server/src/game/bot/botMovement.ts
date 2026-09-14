@@ -34,7 +34,11 @@ const STUCK_CHECK_INTERVAL = 1;
 const STUCK_MOVE_THRESHOLD = 1;
 
 const COVER_SEARCH_RAD = 30;
-const COVER_BUFFER = 1.5;
+// Distance a cover spot sits past the obstacle's own edge, from the obstacle's center.
+// Comfortably more than a player's collision radius (1) so the bot's whole body - not
+// just the point `findCover`/`findPeekSpot` reason about - ends up in the obstacle's
+// shadow; see `isBodyHidden` for why the point alone isn't a strong enough guarantee.
+const COVER_BUFFER = 2.2;
 // Short enough that cover keeps up with an enemy actually circling around it - a full
 // second was long enough for a repositioning threat to walk around a piece of cover
 // before the bot ever noticed it had gone stale, leaving it exposed at the old spot.
@@ -235,6 +239,25 @@ function obstacleRadius(o: Obstacle): number {
     return v2.distance(c.min, c.max) / 2;
 }
 
+/** Whether `candidate` stays hidden from `threatPos` as more than just a single point -
+ *  real bullets and LOS (`hasLineOfSight`) test against a player's actual collision
+ *  circle, not its center. A cover spot whose center is blocked but whose near edge
+ *  (the side of the bot's own hitbox closest to the threat) still peeks past the
+ *  obstacle's silhouette isn't real cover: the bot can't see out (aim/fire needs a
+ *  visible target) but can still be seen and hit, which reads as "stands in cover and
+ *  gets shot anyway" - much weaker than actually being hidden, not just as strong. */
+function isBodyHidden(
+    bot: Player,
+    navObstacles: Obstacle[],
+    threatPos: Vec2,
+    candidate: Vec2,
+    layer: number,
+): boolean {
+    const towardThreat = v2.normalizeSafe(v2.sub(threatPos, candidate), v2.create(0, 0));
+    const nearEdge = v2.add(candidate, v2.mul(towardThreat, bot.rad));
+    return !isWalkClear(navObstacles, threatPos, nearEdge, layer);
+}
+
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
  *  as seen from `threatPos` - real cover, not just "away from the enemy". Every
  *  candidate is checked against the *current* state of the obstacle it hides behind
@@ -262,8 +285,8 @@ export function findCover(
         if (v2.length(away) < 0.01) continue; // bot's obstacle sits exactly on the threat - degenerate
         const candidate = v2.add(o.pos, v2.mul(away, obstacleRadius(o) + COVER_BUFFER));
 
-        if (!pointClear(bot.game, navObstacles, candidate, layer)) continue;
-        if (isWalkClear(navObstacles, threatPos, candidate, layer)) continue; // still exposed
+        if (!pointClear(bot.game, navObstacles, candidate, layer, bot.rad)) continue;
+        if (!isBodyHidden(bot, navObstacles, threatPos, candidate, layer)) continue; // still exposed
 
         const distSqr = v2.lengthSqr(v2.sub(bot.pos, candidate));
         if (!best || distSqr < best.distSqr) best = { obstacle: o, pos: candidate, distSqr };
@@ -291,7 +314,7 @@ function findPeekSpot(
     for (const angle of PEEK_ANGLES) {
         const dir = v2.rotate(away, angle);
         const candidate = v2.add(coverObstacle.pos, v2.mul(dir, rad));
-        if (!pointClear(bot.game, navObstacles, candidate, layer)) continue;
+        if (!pointClear(bot.game, navObstacles, candidate, layer, bot.rad)) continue;
         if (!isWalkClear(navObstacles, threatPos, candidate, layer)) continue;
         return candidate;
     }
