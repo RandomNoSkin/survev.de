@@ -6,6 +6,7 @@ import { BotAimState, updateAim } from "./botAim.ts";
 import type { BotBarn } from "./botBarn.ts";
 import {
     BotFireState,
+    pickHealItem,
     shouldHeal,
     updateFiring,
     updateHeal,
@@ -13,10 +14,29 @@ import {
     updateWeaponSelection,
 } from "./botCombat.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
-import { BotMovementState, updateMovement } from "./botMovement.ts";
+import { BotMovementState, type CombatDirective, updateMovement } from "./botMovement.ts";
 import { findVisibleTarget } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
+
+/** Recent landed hits (see `updateMomentum`) needed to switch to `push` - "winning the
+ *  trade enough to press the advantage", not any single lucky shot. */
+const PUSH_HIT_THRESHOLD = 2;
+/** Momentum points lost per second - a burst of hits keeps `push` alive for a few
+ *  seconds after the last one connects, not just the instant tick it landed. */
+const PUSH_MOMENTUM_DECAY = 1 / 3;
+/** Taking a hit this recently while mid-heal means the enemy clearly still has a shot -
+ *  finishing the bandage anyway is how a bot dies at full heal-bar-in-progress. */
+const ABORT_HEAL_REACT_MS = 350;
+/** The enemy closing to this range while the bot is mid-heal is bad regardless of
+ *  whether they've actually landed a hit yet. */
+const ABORT_HEAL_DIST = 12;
+/** After an abort, don't immediately re-start the same heal - open some distance
+ *  first, which is exactly what `flee` (see `pickDirective`) is for. */
+const HEAL_ABORT_COOLDOWN_S = 1.2;
+/** Fraction of `tier.healThreshold` counted as "critical" - too hurt to just hold and
+ *  trade; only worth fighting on from here if there's truly no way to disengage. */
+const PANIC_HEALTH_FRAC_MULT = 0.5;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -30,17 +50,25 @@ export class BotBrain {
     state: BotState = "idle";
     target?: Player;
 
-    /** Where an enemy was last actually seen, and when - the closest thing to a memory
-     *  this bot has until Phase 2's threat tracking. Used only to give healing a
-     *  direction to retreat toward when the enemy isn't currently visible. */
+    /** Where an enemy was last actually seen, and when - lets combat decisions (cover,
+     *  push, flee, heal) keep reacting to a threat for a short while after it ducks out
+     *  of sight, instead of collapsing back to idle the instant LOS breaks (which would
+     *  make hiding behind cover pointless - see `updateMovement`'s `engageHold`). */
     private lastKnownEnemyPos?: Vec2;
     private lastKnownEnemyTimeMs = 0;
 
-    /** Committed "I'm backing off to heal" state - see the hysteresis note in
-     *  `update()`. Without it, health hovering right at `tier.healThreshold` during an
-     *  ongoing trade flips the retreat decision every tick, which looks like the bot
-     *  vibrating between advancing and backing away instead of doing either. */
-    private retreating = false;
+    /** Decaying count of recently landed hits - see `updateMomentum`. Drives the
+     *  `push` directive: land enough shots and the bot presses the advantage instead
+     *  of holding its current range. */
+    private pushMomentum = 0;
+    private lastBulletHits: number;
+
+    /** Wall-clock ms (`game.now`) this bot last took damage - see `onDamaged` and the
+     *  heal-abort check in `update()`. */
+    private lastHitTakenTime = -Infinity;
+    /** Set for a short window after an aborted heal, so the bot doesn't immediately
+     *  re-start the exact bandage that just got interrupted - see `pickDirective`. */
+    private healAbortCooldown = 0;
 
     private thinkTimer: number;
     private readonly aim = new BotAimState();
@@ -54,14 +82,15 @@ export class BotBrain {
     ) {
         this.tier = BOT_TIERS[difficulty];
         this.aim.dir = v2.copy(player.dir);
+        this.lastBulletHits = player.bulletHits;
         // Stagger: bots must not all think on the same tick.
         this.thinkTimer = Math.random() / this.tier.thinkHz;
     }
 
-    /** Hooked from `Player.damage()`. Currently informational - Phase 2 (`botSquad`)
-     *  is where a threat direction feeds squad-wide alerting; for a 1v1 duel the next
-     *  `think()` already re-scans and finds whoever just shot the bot. */
-    onDamaged(_source: GameObject, _attacker?: Player): void {}
+    /** Hooked from `Player.damage()` for any damage this bot takes, from any source. */
+    onDamaged(_source: GameObject, _attacker?: Player): void {
+        this.lastHitTakenTime = this.player.game.now;
+    }
 
     update(dt: number): void {
         const bot = this.player;
@@ -73,24 +102,37 @@ export class BotBrain {
             this.think();
         }
 
+        this.updateMomentum(dt);
+        this.healAbortCooldown = Math.max(0, this.healAbortCooldown - dt);
+
+        // `dist`/`this.target` below stay tied to the *currently visible* target only -
+        // aim and fire must never act on a remembered position. `threatPos`/`engageDist`
+        // are the broader "am I in a fight" read movement and heal/push/flee decisions
+        // use instead, which tolerates a target that's ducked behind cover a moment ago.
         const dist = this.target ? v2.distance(bot.pos, this.target.pos) : Infinity;
+        const threatPos = this.threatPos();
+        const engageDist = threatPos ? v2.distance(bot.pos, threatPos) : Infinity;
 
-        // Decided before movement, not after: a bot that's about to bandage itself
-        // must not spend that same tick closing distance into the fight it's trying to
-        // sit out. Real cover-seeking (ducking behind a specific obstacle) needs the
-        // nav graph and is M3's job; retreating from the last-known threat is the
-        // cheap approximation available without one.
-        //
-        // Committed with hysteresis (start on `shouldHeal`, stop only once meaningfully
-        // healthier than the threshold, not the instant it's crossed) - see `retreating`.
-        if (shouldHeal(bot, this.tier, !!this.target)) {
-            this.retreating = true;
-        } else if (bot.health / GameConfig.player.health >= this.tier.healThreshold + 0.15) {
-            this.retreating = false;
+        // Abort an in-progress heal the instant the situation turns bad enough that
+        // finishing the bandage is the wrong call: taking another hit mid-heal means
+        // the enemy clearly still has a shot, and the enemy closing to point-blank is
+        // bad regardless of whether they've landed one yet. `cancelAction` is exactly
+        // what a weapon switch already does to an in-progress heal (see
+        // `updateWeaponSelection`'s doc comment) - this just triggers it from a combat
+        // read instead of an incidental gun swap, so the bot can shoot back or run
+        // instead of finishing a bandage into a losing fight.
+        if (bot.actionType === GameConfig.Action.UseItem) {
+            const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
+            const tooClose = engageDist < ABORT_HEAL_DIST;
+            if (justHit || tooClose) {
+                bot.cancelAction();
+                this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
+            }
         }
-        const retreatFrom = this.retreating ? this.threatPos() : undefined;
 
-        updateMovement(bot, this.movement, this.target, dist, dt, retreatFrom, this.barn.navGraph);
+        const directive = this.pickDirective(bot, threatPos);
+
+        updateMovement(bot, this.movement, directive, threatPos, engageDist, dt, this.barn.navGraph);
 
         const aimResult = updateAim(bot, this.aim, this.tier, this.target, dt);
 
@@ -107,12 +149,58 @@ export class BotBrain {
         updateReload(bot);
         updateFiring(bot, this.tier, this.fire, this.target, dist, aimResult.canFire, dt);
 
-        updateHeal(bot, this.tier, !!this.target);
+        if (directive === "heal") updateHeal(bot, this.tier, !!this.target);
     }
 
-    /** Enemy position to retreat from while healing: the target itself if still
-     *  visible (only reachable when critically low, see `shouldHeal`), else wherever
-     *  it was last seen, as long as that memory hasn't gone stale. */
+    /** Tracks recently landed hits for the `push` directive. `bulletHits` is a
+     *  monotonically increasing per-match counter (`Player.damage()`), so a rising edge
+     *  here means a shot connected since last tick - decayed continuously rather than
+     *  reset per-window so a burst of hits keeps `push` alive for a few seconds after
+     *  the last one lands instead of cutting off at an arbitrary window boundary. */
+    private updateMomentum(dt: number): void {
+        // Decay before adding, not after: a fresh hit must count at its full value the
+        // tick it lands (`pushMomentum += 1` reaching exactly `PUSH_HIT_THRESHOLD`
+        // should already qualify as "pushing" that same tick), not the same tick's
+        // decay already having nibbled it just under the threshold.
+        this.pushMomentum = Math.max(0, this.pushMomentum - dt * PUSH_MOMENTUM_DECAY);
+        const hits = this.player.bulletHits;
+        if (hits > this.lastBulletHits) this.pushMomentum += hits - this.lastBulletHits;
+        this.lastBulletHits = hits;
+    }
+
+    /**
+     * The single combat decision every other system (movement, healing) reacts to this
+     * tick. Priority, high to low:
+     * 1. No target and no recent memory of one - nothing to react to.
+     * 2. Already mid-heal - see through the bandage (interrupting it is `update()`'s
+     *    `cancelAction` job above, not a directive switch on its own; without this,
+     *    `shouldHeal` degenerately returns false the instant `actionType` becomes
+     *    `UseItem`, which would otherwise make the bot abandon cover mid-bandage the
+     *    moment health ticks back over the threshold).
+     * 3. Critically hurt with no way to heal right now (no item, or just interrupted
+     *    and still cooling down) - disengage instead of trading.
+     * 4. Hurt enough, and safe enough, to start healing.
+     * 5. Recently landed enough hits to be winning the exchange - press it.
+     * 6. Default: hold a sane range, using cover once there instead of standing still.
+     */
+    private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
+        if (!threatPos) return "idle";
+        if (bot.actionType === GameConfig.Action.UseItem) return "heal";
+
+        const healthFrac = bot.health / GameConfig.player.health;
+        const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
+        const noHealItem = pickHealItem(bot, healthFrac) === undefined;
+        if (critical && (noHealItem || this.healAbortCooldown > 0)) return "flee";
+
+        if (shouldHeal(bot, this.tier, !!this.target)) return "heal";
+        if (this.pushMomentum >= PUSH_HIT_THRESHOLD) return "push";
+
+        return "engageHold";
+    }
+
+    /** Engagement position for everything downstream of perception: the target itself
+     *  if still visible, else wherever it was last seen, as long as that memory hasn't
+     *  gone stale. */
     private threatPos(): Vec2 | undefined {
         if (this.target) return this.target.pos;
         if (!this.lastKnownEnemyPos) return undefined;

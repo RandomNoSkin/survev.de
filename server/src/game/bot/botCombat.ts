@@ -291,7 +291,10 @@ export function updateFiring(
     }
 }
 
-function pickHealItem(bot: Player, healthFrac: number): InventoryItem | undefined {
+/** The best available heal item for `healthFrac`, or undefined if the bot has nothing
+ *  usable - exported so the brain can also ask "do I even have a way to heal right
+ *  now" when deciding whether being critically low means fleeing instead. */
+export function pickHealItem(bot: Player, healthFrac: number): InventoryItem | undefined {
     const missing = (1 - healthFrac) * GameConfig.player.health;
     const wantsFull = healthFrac <= 0.25 || missing > 60;
     const order: InventoryItem[] = wantsFull
