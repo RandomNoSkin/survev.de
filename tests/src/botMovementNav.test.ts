@@ -210,6 +210,34 @@ test("findCover hides the bot's whole body, not just its center point", () => {
     expect(isWalkClear(graph.navObstacles, threatPos, nearEdge, 0)).toBe(false);
 });
 
+// The "retreat more, and cover while doing it" ask for healing: a spot 3 units from an
+// active fight can be technically hidden without being remotely safe to stop and
+// bandage behind. `retreatToCover` passes a minimum distance for heal/flee specifically
+// (not `engageHold`, which is holding an already-acceptable range, not fleeing it).
+test("findCover with a minimum distance never returns a spot closer to the threat than that", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const cover = game.map.obstacles.find(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    if (!cover) return;
+
+    const away = v2.create(1, 0);
+    // Close enough that this obstacle's own cover point is well under 20 units from the
+    // threat - hidden, but not "safe to retreat to and heal behind".
+    const threatPos = v2.sub(cover.pos, v2.mul(away, 10));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+
+    const withoutMin = findCover(bot, graph.navObstacles, threatPos);
+    expect(withoutMin).toBeDefined();
+
+    const withMin = findCover(bot, graph.navObstacles, threatPos, 20);
+    if (withMin) {
+        expect(v2.distance(withMin.pos, threatPos)).toBeGreaterThanOrEqual(20);
+    }
+});
+
 test("Cover is dropped and re-picked the instant its obstacle dies, not on the next recompute", () => {
     const game = createGame(TeamMode.Solo, "local");
     const graph = buildNavGraph(game);
@@ -302,6 +330,128 @@ test("engageHold cycles between hiding at cover and peeking out to trade shots",
     // No isolated obstacle in this random layout happened to cycle within budget -
     // nothing to assert against (see the "no such pair" skip pattern used elsewhere
     // for randomized map generation).
+});
+
+// Regression: `retreatToCover`'s "have I reached cover" check used to compare distance
+// to `coverPos` on every tick, even while a peek was actively walking the bot toward
+// `peekPos` - which, being on the far side of the obstacle from `coverPos`, is
+// necessarily further away than the (now tight, see `COVER_BUFFER`'s comment)
+// `COVER_REACHED_DIST`. That immediately looked like "not at cover" and snapped the bot
+// straight back, so a peek never actually got anywhere - `state.peeking` flipped true
+// for a tick, then right back to false, without the bot's position ever moving.
+// Fixed with `settledAtCover`: once cover is first reached, the peek cycle owns all
+// navigation between `coverPos` and `peekPos` on its own.
+test("A peek actually walks the bot to the exposed spot instead of snapping back to cover", { timeout: 15000 }, () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    // Capped at 10: trying every isolated obstacle on a map that happens to have many
+    // (e.g. a field of scattered trees) can otherwise run long enough to trip the
+    // default test timeout - the mechanism only needs proving for one of them.
+    const isolated = candidates
+        .filter((c) => !candidates.some((o) => o !== c && v2.distance(o.pos, c.pos) < 10))
+        .slice(0, 10);
+
+    const away = v2.create(1, 0);
+    const speed = 8;
+    const dt = 0.1;
+
+    // Best case across every isolated obstacle, not the first one tried: obstacle
+    // shape varies (a thin fence vs. a wide wall), so a single candidate occasionally
+    // converges more slowly than the geometry generally allows - the mechanism only
+    // needs proving for one real obstacle, not for all of them equally well.
+    let bestClosest = Infinity;
+    for (const cover of isolated) {
+        const threatPos = v2.sub(cover.pos, v2.mul(away, 40));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+        const state = new BotMovementState();
+
+        let pos = v2.copy(bot.pos);
+        let closestToPeek = Infinity;
+
+        for (let i = 0; i < 300; i++) {
+            bot.pos = pos;
+            updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph);
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+
+            if (state.peeking && state.peekPos) {
+                closestToPeek = Math.min(closestToPeek, v2.distance(pos, state.peekPos));
+            }
+            if (closestToPeek < 2.5) break;
+        }
+
+        bestClosest = Math.min(bestClosest, closestToPeek);
+        if (bestClosest < 2.5) break;
+    }
+
+    if (bestClosest < Infinity) {
+        // Actually got close to the exposed spot (well under a typical cover
+        // obstacle's own radius - the old snap-back bug left the bot several units
+        // short, still basically at `coverPos`) - not just flagged `peeking` for one
+        // tick while immediately reversing course.
+        expect(bestClosest).toBeLessThan(3);
+    }
+});
+
+// The other half of "predict/react to enemy peeks better": once the bot has actually
+// seen the enemy, it shouldn't wait out a full "haven't seen them in a while" hiding
+// window before checking again - they almost certainly just ducked back behind their
+// own nearby cover.
+test("engageHold re-peeks sooner after just having seen the enemy than after a while", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    const isolated = candidates.filter(
+        (c) => !candidates.some((o) => o !== c && v2.distance(o.pos, c.pos) < 10),
+    );
+
+    const away = v2.create(1, 0);
+    const speed = 8;
+    const dt = 0.1;
+
+    for (const cover of isolated) {
+        const threatPos = v2.sub(cover.pos, v2.mul(away, 40));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+        const state = new BotMovementState();
+
+        // Get the bot settled into cover and mid-peek, same setup as above.
+        let pos = v2.copy(bot.pos);
+        let reachedPeeking = false;
+        for (let i = 0; i < 200; i++) {
+            bot.pos = pos;
+            updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph);
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+            if (state.peeking) {
+                reachedPeeking = true;
+                break;
+            }
+        }
+        if (!reachedPeeking) continue;
+
+        // End the peek window this tick, once having just seen the enemy and once not,
+        // and compare the hiding duration each picks.
+        state.peekTimer = 0.001;
+        bot.pos = pos;
+        updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph, true);
+        const eagerTimer = state.peekTimer;
+        expect(state.peeking).toBe(false);
+
+        state.peeking = true;
+        state.peekTimer = 0.001;
+        updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph, false);
+        const normalTimer = state.peekTimer;
+
+        expect(eagerTimer).toBeLessThan(normalTimer);
+        expect(eagerTimer).toBeLessThanOrEqual(0.6); // EAGER_PEEK_HOLD_MAX
+        expect(normalTimer).toBeGreaterThanOrEqual(1.0); // PEEK_HOLD_MIN
+        return;
+    }
 });
 
 // End-to-end proof that peeking actually lands shots, not just that the movement

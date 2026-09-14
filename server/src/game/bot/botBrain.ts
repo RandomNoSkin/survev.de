@@ -38,6 +38,12 @@ const HEAL_ABORT_COOLDOWN_S = 1.2;
 /** Fraction of `tier.healThreshold` counted as "critical" - too hurt to just hold and
  *  trade; only worth fighting on from here if there's truly no way to disengage. */
 const PANIC_HEALTH_FRAC_MULT = 0.5;
+/** How recently the target has to have actually been visible to count as "just ducked
+ *  out of sight" rather than "genuinely lost track of them" - see `updateMovement`'s
+ *  `recentlyVisible` and the eager re-peek it triggers. Comfortably past a peek's own
+ *  exposure window (0.5-1s) so this stays true through the entire gap a bot's own
+ *  peek/hide cycle produces. */
+const RECENTLY_VISIBLE_MS = 1200;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -140,7 +146,23 @@ export class BotBrain {
 
         const directive = this.pickDirective(bot, threatPos);
 
-        updateMovement(bot, this.movement, directive, threatPos, engageDist, dt, this.barn.navGraph);
+        // Not visible *right now*, but was a moment ago - almost always means the enemy
+        // just ducked back behind their own cover, not that the bot genuinely lost
+        // track of them. Feeds `engageHold`'s peek cycle so it checks again sooner
+        // instead of waiting out a full "haven't seen them in a while" hiding window.
+        const recentlyVisible = !this.target
+            && bot.game.now - this.lastKnownEnemyTimeMs < RECENTLY_VISIBLE_MS;
+
+        updateMovement(
+            bot,
+            this.movement,
+            directive,
+            threatPos,
+            engageDist,
+            dt,
+            this.barn.navGraph,
+            recentlyVisible,
+        );
 
         const aimResult = updateAim(bot, this.aim, this.tier, this.target, dt);
 

@@ -35,15 +35,23 @@ const STUCK_MOVE_THRESHOLD = 1;
 
 const COVER_SEARCH_RAD = 30;
 // Distance a cover spot sits past the obstacle's own edge, from the obstacle's center.
-// Comfortably more than a player's collision radius (1) so the bot's whole body - not
-// just the point `findCover`/`findPeekSpot` reason about - ends up in the obstacle's
-// shadow; see `isBodyHidden` for why the point alone isn't a strong enough guarantee.
-const COVER_BUFFER = 2.2;
+// Needs to clear not just a player's collision radius (1) but also the slop
+// `COVER_REACHED_DIST` allows when "arriving" - the bot's actual resting position can
+// land anywhere within that radius of the ideal spot, and the worst case is landing
+// that much closer to the threat. `isBodyHidden` folds both into the point it actually
+// checks; this just has to be large enough that some genuinely-hidden margin survives
+// past that combined worst case (bot.rad + COVER_REACHED_DIST = 1.75 here), not merely
+// clear the obstacle's own edge.
+const COVER_BUFFER = 2.75;
 // Short enough that cover keeps up with an enemy actually circling around it - a full
 // second was long enough for a repositioning threat to walk around a piece of cover
 // before the bot ever noticed it had gone stale, leaving it exposed at the old spot.
 const COVER_RECOMPUTE_INTERVAL = 0.4;
-const COVER_REACHED_DIST = 1.5;
+// Tight on purpose - see the `COVER_BUFFER` comment above. A looser tolerance here
+// directly eats into the margin that's supposed to keep the bot's whole body hidden,
+// not just the exact ideal point: settling for "close enough" at 1.5 units used to be
+// enough slop, by itself, to walk the bot's exposed edge right back into view.
+const COVER_REACHED_DIST = 0.75;
 
 /** Angles (radians) off "directly behind cover" tried when leaning out to peek - not 0,
  *  which is fully hidden, and not near π, which is fully in the open; these sample the
@@ -51,6 +59,13 @@ const COVER_REACHED_DIST = 1.5;
 const PEEK_ANGLES = [1.05, -1.05, 1.4, -1.4, 1.75, -1.75];
 const PEEK_HOLD_MIN = 1.0;
 const PEEK_HOLD_MAX = 2.2;
+/** Hiding duration used instead of `PEEK_HOLD_MIN/MAX` right after the enemy was
+ *  actually visible a moment ago (see `updateMovement`'s `recentlyVisible`) - they
+ *  almost certainly just ducked back behind their own cover close by, so there's no
+ *  reason to wait out a full, "haven't seen them in a while" hiding window before
+ *  leaning back out to check. */
+const EAGER_PEEK_HOLD_MIN = 0.3;
+const EAGER_PEEK_HOLD_MAX = 0.6;
 const PEEK_EXPOSE_MIN = 0.5;
 const PEEK_EXPOSE_MAX = 1.0;
 const PEEK_RETRY_DELAY = 0.3;
@@ -111,6 +126,11 @@ export class BotMovementState {
     coverObstacle?: Obstacle;
     coverPos?: Vec2;
     coverRecheck = 0;
+    /** Whether the bot has actually reached `coverPos` since it was last (re)picked -
+     *  see the doc comment on `retreatToCover` for why this matters: once true, control
+     *  hands off entirely to the peek cycle instead of re-checking distance to the base
+     *  cover point every tick. */
+    settledAtCover = false;
 
     /** Peek cycle while holding cover mid-fight - see `updatePeekCycle`. `peeking`
      *  false means hiding at `coverPos`; true means leaning out to `peekPos`. */
@@ -245,7 +265,13 @@ function obstacleRadius(o: Obstacle): number {
  *  (the side of the bot's own hitbox closest to the threat) still peeks past the
  *  obstacle's silhouette isn't real cover: the bot can't see out (aim/fire needs a
  *  visible target) but can still be seen and hit, which reads as "stands in cover and
- *  gets shot anyway" - much weaker than actually being hidden, not just as strong. */
+ *  gets shot anyway" - much weaker than actually being hidden, not just as strong.
+ *
+ *  Checks a point shifted `bot.rad + COVER_REACHED_DIST` toward the threat, not just
+ *  `bot.rad`: `retreatToCover` calls this spot "reached" once within `COVER_REACHED_DIST`
+ *  of it, so the bot's actual resting position can land that much closer to the threat
+ *  than the ideal point - the hidden guarantee has to hold for that worst case too, not
+ *  only for standing exactly on the computed spot. */
 function isBodyHidden(
     bot: Player,
     navObstacles: Obstacle[],
@@ -254,8 +280,8 @@ function isBodyHidden(
     layer: number,
 ): boolean {
     const towardThreat = v2.normalizeSafe(v2.sub(threatPos, candidate), v2.create(0, 0));
-    const nearEdge = v2.add(candidate, v2.mul(towardThreat, bot.rad));
-    return !isWalkClear(navObstacles, threatPos, nearEdge, layer);
+    const worstCase = v2.add(candidate, v2.mul(towardThreat, bot.rad + COVER_REACHED_DIST));
+    return !isWalkClear(navObstacles, threatPos, worstCase, layer);
 }
 
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
@@ -269,10 +295,12 @@ export function findCover(
     bot: Player,
     navObstacles: Obstacle[],
     threatPos: Vec2,
+    minDistFromThreat = 0,
 ): { obstacle: Obstacle; pos: Vec2 } | undefined {
     const layer = util.toGroundLayer(bot.layer);
     const aabb = collider.createAabbExtents(bot.pos, v2.create(COVER_SEARCH_RAD, COVER_SEARCH_RAD));
     const objs = bot.game.grid.intersectCollider(aabb);
+    const minDistSqr = minDistFromThreat * minDistFromThreat;
 
     let best: { obstacle: Obstacle; pos: Vec2; distSqr: number } | undefined;
     for (let i = 0; i < objs.length; i++) {
@@ -285,6 +313,10 @@ export function findCover(
         if (v2.length(away) < 0.01) continue; // bot's obstacle sits exactly on the threat - degenerate
         const candidate = v2.add(o.pos, v2.mul(away, obstacleRadius(o) + COVER_BUFFER));
 
+        // Not just hidden - genuinely far from the threat too, when the caller asks for
+        // it (healing: a piece of cover 3 units from an active fight is technically
+        // "hidden" but still much too close to safely stop and bandage behind).
+        if (v2.lengthSqr(v2.sub(candidate, threatPos)) < minDistSqr) continue;
         if (!pointClear(bot.game, navObstacles, candidate, layer, bot.rad)) continue;
         if (!isBodyHidden(bot, navObstacles, threatPos, candidate, layer)) continue; // still exposed
 
@@ -333,13 +365,16 @@ function updatePeekCycle(
     nav: NavGraph,
     threatPos: Vec2,
     dt: number,
+    recentlyVisible: boolean,
 ): Vec2 {
     state.peekTimer -= dt;
     if (state.peekTimer <= 0) {
         if (state.peeking) {
             state.peeking = false;
             state.peekPos = undefined;
-            state.peekTimer = util.random(PEEK_HOLD_MIN, PEEK_HOLD_MAX);
+            state.peekTimer = recentlyVisible
+                ? util.random(EAGER_PEEK_HOLD_MIN, EAGER_PEEK_HOLD_MAX)
+                : util.random(PEEK_HOLD_MIN, PEEK_HOLD_MAX);
         } else {
             const spot = findPeekSpot(bot, nav.navObstacles, state.coverObstacle!, threatPos);
             if (spot) {
@@ -357,13 +392,24 @@ function updatePeekCycle(
     return v2.normalizeSafe(v2.sub(dest, bot.pos));
 }
 
+/** Minimum plain distance from the threat before it's safe to start healing when no
+ *  cover was found to hide behind instead - "create distance, then heal", not "start
+ *  healing wherever the `heal` directive happened to be chosen". Also the minimum
+ *  distance a piece of cover itself must have from the threat to count while
+ *  healing/fleeing (see `retreatToCover`'s `minCoverDist`) - a spot 3 units from an
+ *  active fight can be technically hidden without being remotely safe to stop and
+ *  bandage behind. `engageHold`'s cover-seeking (`holdAndPeek`) doesn't use this: it's
+ *  holding an already-acceptable range, not trying to put real distance between itself
+ *  and the threat. */
+const SAFE_HEAL_DIST = 20;
+
 /** Moves toward, then holds at, cover from `threatPos` - shared by healing, fleeing,
  *  and (with `holdAndPeek`) holding a mid-fight position instead of standing in the
  *  open. `holdAndPeek` cycles peeking out once cover is reached (see
- *  `updatePeekCycle`); without it the bot just hunkers down (healing), or if no cover
- *  exists nearby, keeps opening distance (fleeing) - `holdAndPeek` falls back to plain
- *  lateral strafing in that case instead, since standing still exposed with nothing to
- *  hide behind is strictly worse. */
+ *  `updatePeekCycle`, `recentlyVisible`); without it the bot just hunkers down
+ *  (healing), or if no cover exists nearby, keeps opening distance (fleeing) -
+ *  `holdAndPeek` falls back to plain lateral strafing in that case instead, since
+ *  standing still exposed with nothing to hide behind is strictly worse. */
 function retreatToCover(
     bot: Player,
     state: BotMovementState,
@@ -371,43 +417,60 @@ function retreatToCover(
     threatPos: Vec2,
     dt: number,
     holdAndPeek: boolean,
+    recentlyVisible: boolean,
 ): Vec2 {
     if (state.coverObstacle?.dead || state.coverObstacle?.collidable === false) {
         state.coverObstacle = undefined;
         state.coverPos = undefined;
+        state.settledAtCover = false;
         state.coverRecheck = 0;
         state.peeking = false;
     }
     state.coverRecheck -= dt;
     if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
         state.coverRecheck = COVER_RECOMPUTE_INTERVAL;
-        const found = findCover(bot, nav.navObstacles, threatPos);
+        const minCoverDist = holdAndPeek ? 0 : SAFE_HEAL_DIST;
+        const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist);
+        // Only treat this as a genuinely new spot - not just the periodic recompute
+        // landing back on essentially the same point - as "un-arrive": resetting
+        // `settledAtCover` on every recompute would interrupt an in-progress peek every
+        // `COVER_RECOMPUTE_INTERVAL` (0.4s), well inside a single peek's own exposure
+        // window, forcing the bot back to `coverPos` before it ever really leaned out.
+        if (!found || !state.coverPos || v2.distance(state.coverPos, found.pos) > 0.5) {
+            state.settledAtCover = false;
+        }
         state.coverObstacle = found?.obstacle;
         state.coverPos = found?.pos;
     }
 
-    if (state.coverPos && v2.distance(bot.pos, state.coverPos) > COVER_REACHED_DIST) {
-        state.peeking = false;
-        const pathDir = nav ? followPath(bot, state, nav, state.coverPos, dt) : undefined;
-        return pathDir ?? v2.normalizeSafe(v2.sub(state.coverPos, bot.pos));
+    if (!state.coverPos) {
+        const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
+        return holdAndPeek ? v2.mul(v2.perp(away), state.strafeSign) : away;
+    }
+
+    // Approach `coverPos` itself only until first reached - once `settledAtCover`,
+    // control hands off entirely to the peek cycle below, which does its own
+    // navigation between `coverPos` and `peekPos`. Re-checking distance to `coverPos`
+    // on every tick instead (as if the peek cycle didn't exist) is a real bug: a peek
+    // walks the bot away from `coverPos` toward `peekPos` on purpose, and this check
+    // would immediately see that as "not at cover" and snap it straight back - the
+    // peek would never actually get anywhere before reversing, which reads as "barely
+    // peeks at all" and leaves the bot lingering right at the cover/peek boundary
+    // instead of either fully hidden or meaningfully exposed.
+    if (!state.settledAtCover) {
+        if (v2.distance(bot.pos, state.coverPos) > COVER_REACHED_DIST) {
+            state.peeking = false;
+            const pathDir = nav ? followPath(bot, state, nav, state.coverPos, dt) : undefined;
+            return pathDir ?? v2.normalizeSafe(v2.sub(state.coverPos, bot.pos));
+        }
+        state.settledAtCover = true;
     }
 
     state.path = [];
-
-    if (state.coverPos) {
-        return holdAndPeek && nav
-            ? updatePeekCycle(bot, state, nav, threatPos, dt)
-            : v2.create(0, 0);
-    }
-
-    const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
-    return holdAndPeek ? v2.mul(v2.perp(away), state.strafeSign) : away;
+    return holdAndPeek && nav
+        ? updatePeekCycle(bot, state, nav, threatPos, dt, recentlyVisible)
+        : v2.create(0, 0);
 }
-
-/** Minimum plain distance from the threat before it's safe to start healing when no
- *  cover was found to hide behind instead - "create distance, then heal", not "start
- *  healing wherever the `heal` directive happened to be chosen". */
-const SAFE_HEAL_DIST = 15;
 
 /** Whether the bot has actually put enough separation between itself and `threatPos` to
  *  safely start a heal action - reached cover (if `retreatToCover` found any) or opened
@@ -517,6 +580,12 @@ export function followPath(
  * `nav` is optional: undefined until `BotBarn` finishes building the graph (or if bots
  * are running before it exists at all), in which case this behaves like plain direct
  * steering - worse around buildings and without cover-seeking, but never broken.
+ *
+ * `recentlyVisible` - the target was actually seen within the last moment, even though
+ * it isn't right now - shortens the next hiding window in `engageHold`'s peek cycle
+ * (see `EAGER_PEEK_HOLD_MIN/MAX`): almost always means the bot's own peek just ended
+ * with the enemy peeking too, not genuinely losing track of them, so there's no reason
+ * to wait out a full "haven't seen them in a while" hold before checking again.
  */
 export function updateMovement(
     bot: Player,
@@ -526,6 +595,7 @@ export function updateMovement(
     dist: number,
     dt: number,
     nav?: NavGraph,
+    recentlyVisible = false,
 ): void {
     let move = v2.create(0, 0);
 
@@ -541,7 +611,7 @@ export function updateMovement(
         }
         move = state.wanderDir;
     } else if (directive === "heal" || directive === "flee") {
-        move = retreatToCover(bot, state, nav, threatPos, dt, false);
+        move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible);
     } else if (directive === "push") {
         state.coverObstacle = undefined;
         state.coverPos = undefined;
@@ -596,7 +666,7 @@ export function updateMovement(
             state.path = [];
             move = v2.neg(toThreat);
         } else {
-            move = retreatToCover(bot, state, nav, threatPos, dt, true);
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible);
         }
         // Blend in strafe even while closing/opening distance, so approach/retreat
         // isn't a dead-straight line - the second biggest "feels human" lever after
