@@ -90,7 +90,7 @@ export class BotBrain {
         }
         const retreatFrom = this.retreating ? this.threatPos() : undefined;
 
-        updateMovement(bot, this.movement, this.target, dist, dt, retreatFrom);
+        updateMovement(bot, this.movement, this.target, dist, dt, retreatFrom, this.barn.navGraph);
 
         const aimResult = updateAim(bot, this.aim, this.tier, this.target, dt);
 

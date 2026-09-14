@@ -3,6 +3,8 @@ import type { Game } from "../game.ts";
 import type { Player } from "../objects/player.ts";
 import { BotBrain } from "./botBrain.ts";
 import type { BotDifficulty } from "./botDefs.ts";
+import { buildNavGraph } from "./nav/navBuilder.ts";
+import type { NavGraph } from "./nav/navGraph.ts";
 
 /**
  * Owns every server-side bot in one game: spawning, the per-tick brain pass and the
@@ -21,6 +23,13 @@ export class BotBarn {
     private disabled = false;
     private warnedSlow = false;
 
+    /** Built lazily on the first spawn, once, for the whole match - see
+     *  `ensureNavGraph`. Undefined until then, and left undefined forever if the build
+     *  itself throws (bots keep running on the M1 steering-only fallback rather than
+     *  taking the game down over a nav bug). */
+    navGraph?: NavGraph;
+    private navBuildFailed = false;
+
     constructor(readonly game: Game) {}
 
     get enabled(): boolean {
@@ -37,6 +46,8 @@ export class BotBarn {
      */
     spawn(count: number, difficulty: BotDifficulty): Player[] {
         if (!this.enabled) return [];
+
+        this.ensureNavGraph();
 
         const room = Config.bots.maxBotsPerGame - this.bots.length;
         const toSpawn = Math.min(count, Math.max(room, 0));
@@ -57,6 +68,26 @@ export class BotBarn {
         }
 
         return spawned;
+    }
+
+    /** Builds the nav graph once per match, the moment it's first actually needed
+     *  (i.e. the first bot spawn) - a game nobody ever puts a bot in never pays for
+     *  one. One-shot, not incremental: fine at arena-map scale (this milestone's
+     *  target); an incremental BR-scale builder is M5's job. */
+    private ensureNavGraph(): void {
+        if (this.navGraph || this.navBuildFailed) return;
+        try {
+            const started = performance.now();
+            this.navGraph = buildNavGraph(this.game);
+            const stats = this.navGraph.stats();
+            this.game.logger.info(
+                `Bot nav graph built in ${(performance.now() - started).toFixed(0)}ms `
+                    + `(${stats.nodeCount} nodes, ${stats.edgeCount} edges)`,
+            );
+        } catch (err) {
+            this.navBuildFailed = true;
+            this.game.logger.error("Failed to build bot nav graph", err);
+        }
     }
 
     update(dt: number): void {
