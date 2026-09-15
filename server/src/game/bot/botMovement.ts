@@ -1,3 +1,5 @@
+import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
+import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns.ts";
 import { collider } from "../../../../shared/utils/collider.ts";
 import { collisionHelpers } from "../../../../shared/utils/collisionHelpers.ts";
@@ -175,6 +177,10 @@ const PROBE_DIST = 3;
 /** A bot never insists on backing away further than this, regardless of how far a
  *  long-range weapon's own sweet spot is - see the note on `pickRangeMode`. */
 const MAX_RETREAT_DIST = 20;
+/** `engageHold`'s held distance against a healthy target never sits closer than this,
+ *  regardless of how close the equipped weapon's own sweet spot wants to stand - see
+ *  the note in `updateMovement`'s `engageHold` branch. */
+const SAFE_ENGAGE_DIST = 15;
 
 /**
  * Schmitt-trigger range gate: a bot must clear `[retreatEdge, closeEdge]` to START
@@ -290,6 +296,16 @@ function obstacleRadius(o: Obstacle): number {
     return v2.distance(c.min, c.max) / 2;
 }
 
+/** Whether shooting this obstacle enough (by anyone, not just the bot) makes it explode
+ *  - a barrel, a gas stove, ... `findCover` refuses to ever pick one: the whole point of
+ *  cover is to stop taking damage, and crouching next to something that can suddenly
+ *  deal an AoE hit of its own the moment the enemy puts a few rounds into it is the
+ *  opposite of that, even though it genuinely blocks line of sight right up until then. */
+function isExplosiveObstacle(o: Obstacle): boolean {
+    const def = MapObjectDefs.typeToDef(o.type) as ObstacleDef;
+    return !!def.explosion;
+}
+
 /** Whether `candidate` stays hidden from `threatPos` as more than just a single point -
  *  real bullets and LOS (`hasLineOfSight`) test against a player's actual collision
  *  circle, not its center. A cover spot whose center is blocked but whose near edge
@@ -339,6 +355,7 @@ export function findCover(
         const o = objs[i] as Obstacle;
         if (o.dead || !o.collidable || isOpenableDoor(o)) continue;
         if (!util.sameLayer(o.layer, bot.layer)) continue;
+        if (isExplosiveObstacle(o)) continue;
 
         const away = v2.normalizeSafe(v2.sub(o.pos, threatPos), v2.create(0, 0));
         if (v2.length(away) < 0.01) continue; // bot's obstacle sits exactly on the threat - degenerate
@@ -732,8 +749,15 @@ export function updateMovement(
     } else {
         // engageHold: close distance if too far, back off if too close, otherwise hold
         // from cover (with peeking) instead of standing in the open at a stable range.
+        // Reaching this directive already means the target isn't low enough to finish
+        // (see `BotBrain.pickDirective` - `push` handles that case instead), so this is
+        // always "hold against a healthy enemy", never "close in for the kill". A
+        // shotgun's own sweet spot is close enough that holding there verbatim pins the
+        // bot at near-melee range with no room to open distance if it suddenly goes low
+        // itself - floor the held distance at `SAFE_ENGAGE_DIST` so backing off is
+        // always still a real option, regardless of what's equipped.
         const toThreat = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
-        const sweet = currentSweetSpot(bot);
+        const sweet = Math.max(currentSweetSpot(bot), SAFE_ENGAGE_DIST);
         const band = Math.max(2, sweet * 0.18);
 
         state.strafeTimer -= dt;

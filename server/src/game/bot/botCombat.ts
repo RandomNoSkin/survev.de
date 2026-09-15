@@ -135,6 +135,13 @@ export function updateWeaponSelection(
     if (bot.actionType !== GameConfig.Action.None) return;
 
     const wm = bot.weaponManager;
+    // An in-progress bot-initiated grenade throw (see `updateThrowable`) owns this slot
+    // until the weapon manager actually releases it - without this, the very first
+    // check below (not holding a gun) would immediately switch straight back to a gun
+    // before `cookThrowable`/`throwThrowable` ever got a chance to run, since a
+    // throwable slot obviously never counts as "holding a gun" either.
+    if (wm.curWeapIdx === WeaponSlot.Throwable) return;
+
     const slots = [WeaponSlot.Primary, WeaponSlot.Secondary].filter(
         (i) => wm.weapons[i].type,
     );
@@ -346,4 +353,91 @@ export function updateHeal(bot: Player, tier: BotTierDef, hasVisibleEnemy: boole
     const healthFrac = bot.health / GameConfig.player.health;
     const item = pickHealItem(bot, healthFrac);
     if (item) bot.useHealingItem(item);
+}
+
+/** Standard damage-dealing throwables, in priority order - deliberately excludes
+ *  `smoke`/`strobe`/utility throwables, which don't hurt anyone at the target and would
+ *  just waste the "throw something" action on nothing. */
+const OFFENSIVE_THROWABLES: InventoryItem[] = ["frag", "mirv"];
+
+/** Never lob one closer than this - `explosion_frag`'s own blast radius (`rad.max`,
+ *  `explosionsDefs.ts`) is 12 units, so anything nearer risks the bot catching its own
+ *  splash. Never bother past this either - beyond it a thrown arc becomes an unreliable,
+ *  hard-to-land tool compared to just shooting, even before the game's own throw-power
+ *  clamp (`throwableMaxMouseDist`) starts capping the distance further. */
+const THROW_MIN_DIST = 14;
+const THROW_MAX_DIST = 30;
+
+/** Per-bot grenade-throw state, persisted across ticks by the brain. */
+export class BotThrowState {
+    /** Seconds until the next throw is even considered - staggered per bot so they
+     *  don't all open an engagement by lobbing a grenade on the very first tick. */
+    cooldown = util.random(2, 5);
+    /** Mid-throw: the bot has switched to the throwable slot and is waiting for
+     *  `weaponManager` to actually release it (`cookThrowable`/`throwThrowable`,
+     *  `GameConfig.player.cookTime` = 0.1s later) before switching back to `returnSlot`. */
+    active = false;
+    returnSlot: number = WeaponSlot.Primary;
+}
+
+/** The best owned offensive throwable, or undefined if the bot has none left. */
+function pickOffensiveThrowable(bot: Player): InventoryItem | undefined {
+    for (const type of OFFENSIVE_THROWABLES) {
+        if (bot.invManager.has(type)) return type;
+    }
+    return undefined;
+}
+
+/**
+ * Tactical grenade use: lob one at a visible, well-aimed-at target every so often,
+ * instead of never touching the frags sitting unused in inventory. Shares the aim
+ * system's own reaction/fire-cone gate (`canFire`) rather than throwing the instant a
+ * target is merely visible - a bot flinging a grenade before it's even finished
+ * "noticing" someone looks as wrong as it would for a gunshot.
+ *
+ * Only owns the `Throwable` weapon slot while `active` - `updateWeaponSelection` leaves
+ * that slot alone for the same reason (see its own guard), and this hands it straight
+ * back to `returnSlot` the instant `weaponManager` reports the throw resolved, so a
+ * grenade never costs more than the ~0.1s `cookTime` of not being able to shoot back.
+ */
+export function updateThrowable(
+    bot: Player,
+    throwState: BotThrowState,
+    target: Player | undefined,
+    dist: number,
+    canFire: boolean,
+    dt: number,
+): void {
+    const wm = bot.weaponManager;
+
+    if (throwState.active) {
+        if (!wm.cookingThrowable) {
+            throwState.active = false;
+            if (wm.weapons[throwState.returnSlot].type) {
+                wm.setCurWeapIndex(throwState.returnSlot);
+            }
+        }
+        return;
+    }
+
+    throwState.cooldown -= dt;
+    if (throwState.cooldown > 0) return;
+    if (bot.actionType !== GameConfig.Action.None) return;
+    if (!target || !canFire) return;
+    if (dist < THROW_MIN_DIST || dist > THROW_MAX_DIST) return;
+    if (friendlyFireInLine(bot, target)) return;
+
+    const grenadeType = pickOffensiveThrowable(bot);
+    if (!grenadeType) return;
+
+    const cur = wm.curWeapIdx;
+    throwState.returnSlot = cur === WeaponSlot.Primary || cur === WeaponSlot.Secondary
+        ? cur
+        : WeaponSlot.Primary;
+    throwState.active = true;
+    throwState.cooldown = util.random(5, 9);
+
+    wm.setWeapon(WeaponSlot.Throwable, grenadeType, 0);
+    wm.setCurWeapIndex(WeaponSlot.Throwable);
+    bot.shootStart = true;
 }

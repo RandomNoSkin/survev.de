@@ -33,28 +33,29 @@ function primeGameClock(game: ReturnType<typeof createGame>): void {
     game.update(0.001);
 }
 
-test("Landing several hits on an already-hurt target switches the bot from holding to pushing", () => {
+// Regression: `push` used to also require a recent hit streak (`pushMomentum` reaching
+// `PUSH_HIT_THRESHOLD`) on top of the target being low - real feedback was that this
+// held the bot back from finishing an already-hurt target it just hadn't personally
+// tagged yet. By the time `pickDirective` reaches the push check, every actual
+// disadvantage (own low health, needing to reload) has already returned its own
+// directive above - so a visible, badly-hurt target alone is enough, immediately.
+test("A visible target dropping below the low-health threshold triggers an immediate push", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     // 25 units: inside the no-gun fallback sweet spot's hold band (see
     // `currentSweetSpot`/`pickRangeMode`), so absent a push this should just hold.
-    // Health well under ENEMY_LOW_HEALTH_FRAC (0.4) - push only charges into the open
-    // for a target that's actually worth finishing, not just any hit streak.
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
-    target.health = 30;
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     const holding = v2.copy(bot.touchMoveDir);
 
-    // The real path to landing a hit is a live gunfight (`Player.damage()` incrementing
-    // `bulletHits` on the shooter); poking the field directly isolates the *directive*
-    // decision from needing one. PUSH_HIT_THRESHOLD is 3.
-    bot.bulletHits += 3;
+    // Health alone drives `push` now, not a hit streak - no `bulletHits` involved.
+    target.health = 30;
     bot.botBrain!.update(0.05);
     const pushing = v2.copy(bot.touchMoveDir);
 
-    expect(Math.abs(holding.x)).toBeLessThan(0.3); // holding at range: no consistent pull
+    expect(Math.abs(holding.x)).toBeLessThan(0.3); // holding at range while healthy
     expect(bot.touchMoveActive).toBe(true);
     expect(pushing.x).toBeGreaterThan(0.5); // pushing straight at the threat (+x here)
 });
@@ -76,7 +77,10 @@ test("Landing several hits on a healthy target does not trigger a push", () => {
     expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // still holding, not pushing
 });
 
-test("Push fades back to holding once the hit streak goes cold", () => {
+// With no more momentum/decay involved, `push` is purely reactive to the target's
+// current health - it should drop right back to holding the instant the target
+// recovers, not linger from whatever used to keep momentum alive for a while.
+test("Push reverts to holding once the target's health recovers above the threshold", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -84,22 +88,19 @@ test("Push fades back to holding once the hit streak goes cold", () => {
     target.health = 30;
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
-    bot.bulletHits += 3;
-    bot.botBrain!.update(0.05);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing
 
-    // Momentum decays at 1/2 per second and the threshold is 3 - a hit streak this old
-    // (10s, no further hits) must have long since gone cold.
-    for (let i = 0; i < 200; i++) bot.botBrain!.update(0.05);
+    target.health = 100; // no longer worth finishing
+    bot.botBrain!.update(0.05);
 
-    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3);
+    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // back to holding
 });
 
 test("Critically low with no heal item flees instead of holding or pushing", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) });
+    game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
     bot.health = 10; // well under the panic threshold; no heal items given
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
@@ -257,7 +258,7 @@ test("Healing is not aborted just because the enemy gets close, only when actual
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) }); // far - safe to start
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) }); // far - safe to start
     bot.health = 20;
     bot.invManager.give("bandage", 5);
 
@@ -276,7 +277,7 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
     bot.health = 20; // low enough to heal even with the enemy visible (see `shouldHeal`)
     bot.invManager.give("bandage", 5);
 
@@ -296,23 +297,79 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
 });
 
-test("A bot mid-heal keeps retreating even after landing hits, instead of pushing blind", () => {
+test("A bot mid-heal keeps retreating even with a low target, instead of pushing blind", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    // Low enough to also clear ENEMY_LOW_HEALTH_FRAC, so this specifically isolates
-    // heal-priority beating push - not just push never triggering for a healthy target.
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) });
+    // Target low enough to clear ENEMY_LOW_HEALTH_FRAC (which alone would otherwise be
+    // enough to push, see `pickDirective`) - this specifically isolates heal-priority
+    // beating push via the bot's own low health, not push never triggering at all.
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
     target.health = 30;
+    bot.health = 20;
+    bot.invManager.give("bandage", 5);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem); // still healing
+    expect(bot.touchMoveDir.x).not.toBeGreaterThan(0.3); // not charging the target either
+});
+
+// The "granaten besser checken" ask: a live grenade landing nearby overrides whatever
+// the fight itself would otherwise have the bot doing, including standing and trading
+// shots with a healthy, closer-than-the-grenade target - matching a real player's
+// instinct to dive away from a live nade over almost anything else.
+test("A nearby live grenade overrides combat movement entirely, even mid-fight", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(65, 50) }); // engaging normally, +x
+    // The grenade sits on the opposite side (-x) - dodging it means moving toward +x,
+    // the exact opposite of what fleeing the gunfight itself would ever produce, so the
+    // sign alone proves the override actually happened rather than coincidentally
+    // matching some other retreat.
+    game.projectileBarn.addProjectile(
+        0,
+        "frag",
+        v2.create(40, 50),
+        0,
+        0,
+        v2.create(0, 0),
+        3,
+        GameConfig.DamageType.Player,
+    );
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // away from the grenade, toward +x
+});
+
+// A grenade landing mid-heal must cancel the bandage the same way actually getting shot
+// does (see `ABORT_HEAL_REACT_MS`) - finishing a heal in place next to a live grenade
+// makes the heal itself pointless.
+test("A nearby live grenade cancels an in-progress heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(90, 50) }); // far enough to heal safely
     bot.health = 20;
     bot.invManager.give("bandage", 5);
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 
-    bot.bulletHits += 5; // way past the push threshold
+    game.projectileBarn.addProjectile(
+        0,
+        "frag",
+        v2.create(55, 50),
+        0,
+        0,
+        v2.create(0, 0),
+        3,
+        GameConfig.DamageType.Player,
+    );
     bot.botBrain!.update(0.05);
 
-    expect(bot.actionType).toBe(GameConfig.Action.UseItem); // still healing
-    expect(bot.touchMoveDir.x).not.toBeGreaterThan(0.3); // not charging the target either
+    expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
 });

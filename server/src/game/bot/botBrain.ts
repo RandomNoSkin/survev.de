@@ -6,31 +6,26 @@ import { BotAimState, updateAim } from "./botAim.ts";
 import type { BotBarn } from "./botBarn.ts";
 import {
     BotFireState,
+    BotThrowState,
     pickHealItem,
     shouldHeal,
     updateFiring,
     updateHeal,
     updateReload,
+    updateThrowable,
     updateWeaponSelection,
 } from "./botCombat.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
 import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
-import { findVisibleTarget } from "./botPerception.ts";
+import { findGrenadeThreat, findVisibleTarget } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
 
-/** Recent landed hits (see `updateMomentum`) needed to switch to `push` - "winning the
- *  trade enough to press the advantage", not any single lucky shot. */
-const PUSH_HIT_THRESHOLD = 3;
-/** Momentum points lost per second - a burst of hits keeps `push` alive for a while
- *  after the last one connects, not just the instant tick it landed, but fades faster
- *  than it builds so a bot stops overcommitting shortly after the exchange actually
- *  goes cold instead of staying locked into full-aggression for several more seconds. */
-const PUSH_MOMENTUM_DECAY = 1 / 2;
 /** Taking a hit this recently while mid-heal means the enemy clearly still has a shot -
  *  finishing the bandage anyway is how a bot dies at full heal-bar-in-progress. This is
- *  deliberately the *only* abort trigger - see the doc comment on the abort check
- *  itself for why a proximity-based one was removed. */
+ *  deliberately the only *hit-based* abort trigger (a live grenade nearby also aborts,
+ *  see the abort check itself) - see that same comment for why an enemy-proximity one
+ *  was removed. */
 const ABORT_HEAL_REACT_MS = 350;
 /** After an abort, don't immediately re-start the same heal - open some distance
  *  first, which is exactly what `flee` (see `pickDirective`) is for. */
@@ -87,12 +82,6 @@ export class BotBrain {
     private lastKnownEnemyPos?: Vec2;
     private lastKnownEnemyTimeMs = 0;
 
-    /** Decaying count of recently landed hits - see `updateMomentum`. Drives the
-     *  `push` directive: land enough shots and the bot presses the advantage instead
-     *  of holding its current range. */
-    private pushMomentum = 0;
-    private lastBulletHits: number;
-
     /** Wall-clock ms (`game.now`) this bot last took damage - see `onDamaged` and the
      *  heal-abort check in `update()`. */
     private lastHitTakenTime = -Infinity;
@@ -103,6 +92,7 @@ export class BotBrain {
     private thinkTimer: number;
     private readonly aim = new BotAimState();
     private readonly fire = new BotFireState();
+    private readonly throwState = new BotThrowState();
     private readonly movement = new BotMovementState();
 
     constructor(
@@ -112,7 +102,6 @@ export class BotBrain {
     ) {
         this.tier = BOT_TIERS[difficulty];
         this.aim.dir = v2.copy(player.dir);
-        this.lastBulletHits = player.bulletHits;
         // Stagger: bots must not all think on the same tick.
         this.thinkTimer = Math.random() / this.tier.thinkHz;
     }
@@ -132,7 +121,6 @@ export class BotBrain {
             this.think();
         }
 
-        this.updateMomentum(dt);
         this.healAbortCooldown = Math.max(0, this.healAbortCooldown - dt);
 
         // `dist`/`this.target` below stay tied to the *currently visible* target only -
@@ -143,13 +131,24 @@ export class BotBrain {
         const threatPos = this.threatPos();
         const engageDist = threatPos ? v2.distance(bot.pos, threatPos) : Infinity;
 
+        // A live grenade nearby is worth reacting to at every step this tick, computed
+        // once up front: it aborts an in-progress heal below exactly like taking a hit
+        // does, and separately overrides whatever movement the directive ends up
+        // picking, further down past `updateMovement`.
+        const grenadeThreat = findGrenadeThreat(bot);
+
         // Abort an in-progress heal the instant an actual enemy action makes finishing
-        // the bandage the wrong call - concretely, taking a hit mid-heal, which means
-        // the enemy clearly still has a shot. `cancelAction` is exactly what a weapon
-        // switch already does to an in-progress heal (see `updateWeaponSelection`'s doc
-        // comment) - this just triggers it from a combat read instead of an incidental
-        // gun swap, so the bot can shoot back or run instead of finishing a bandage
-        // into a losing fight.
+        // the bandage the wrong call - concretely, taking a hit mid-heal (which means
+        // the enemy clearly still has a shot) or a live grenade landing nearby.
+        // `cancelAction` is exactly what a weapon switch already does to an in-progress
+        // heal (see `updateWeaponSelection`'s doc comment) - this just triggers it from
+        // a combat read instead of an incidental gun swap, so the bot can shoot back or
+        // run instead of finishing a bandage into a losing fight. This has to run
+        // *before* `pickDirective`, not just after `updateMovement` alongside the
+        // movement override below: `pickDirective`'s result is what the final
+        // heal-retrigger check (`directive === "heal"` below) still acts on, so
+        // cancelling only after it's already been computed as "heal" would just have
+        // that check immediately restart the exact bandage this cancels.
         //
         // Deliberately *not* also a proximity check ("enemy within N units"): a heal
         // only ever starts once `isSafeToHeal` has already confirmed real separation
@@ -161,7 +160,7 @@ export class BotBrain {
         // occasionally finishing one a beat later than a human would.
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
-            if (justHit) {
+            if (justHit || grenadeThreat) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -187,7 +186,26 @@ export class BotBrain {
             recentlyVisible,
         );
 
+        // A live grenade landing nearby overrides whatever movement the directive above
+        // just picked, combat or not. Deliberately a flat override rather than folding
+        // it into `pickDirective`/`updateMovement`'s own state: it's a one-or-two-tick
+        // "get away from this exact spot" reaction, not a sustained retreat that needs
+        // cover-seeking or a cached nav goal - simple and immediate beats routed and
+        // correct for something that's already exploding in a second or two either way.
+        if (grenadeThreat) {
+            bot.touchMoveDir = v2.normalizeSafe(
+                v2.sub(bot.pos, grenadeThreat),
+                bot.touchMoveDir,
+            );
+            bot.touchMoveActive = true;
+        }
+
         const aimResult = updateAim(bot, this.aim, this.tier, this.target, dt);
+
+        // Before weapon selection: an in-progress or freshly-triggered throw claims the
+        // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
+        // needs to see before it otherwise "fixes" the bot back onto a gun.
+        updateThrowable(bot, this.throwState, this.target, dist, aimResult.canFire, dt);
 
         // Weapon selection before reload, not after: switching resets `scheduledReload`
         // (see `setCurWeapIndex`), so requesting a reload first would just get wiped
@@ -215,22 +233,6 @@ export class BotBrain {
         }
     }
 
-    /** Tracks recently landed hits for the `push` directive. `bulletHits` is a
-     *  monotonically increasing per-match counter (`Player.damage()`), so a rising edge
-     *  here means a shot connected since last tick - decayed continuously rather than
-     *  reset per-window so a burst of hits keeps `push` alive for a few seconds after
-     *  the last one lands instead of cutting off at an arbitrary window boundary. */
-    private updateMomentum(dt: number): void {
-        // Decay before adding, not after: a fresh hit must count at its full value the
-        // tick it lands (`pushMomentum += 1` reaching exactly `PUSH_HIT_THRESHOLD`
-        // should already qualify as "pushing" that same tick), not the same tick's
-        // decay already having nibbled it just under the threshold.
-        this.pushMomentum = Math.max(0, this.pushMomentum - dt * PUSH_MOMENTUM_DECAY);
-        const hits = this.player.bulletHits;
-        if (hits > this.lastBulletHits) this.pushMomentum += hits - this.lastBulletHits;
-        this.lastBulletHits = hits;
-    }
-
     /**
      * The single combat decision every other system (movement, healing) reacts to this
      * tick. Priority, high to low:
@@ -256,10 +258,13 @@ export class BotBrain {
      *    retreat toward relative safety while the reload (already requested
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
-     * 8. Recently landed enough hits to be winning the exchange, itself not hurt
-     *    enough to be cautious about, *and* the target is actually hurt enough to be
-     *    worth finishing (`ENEMY_LOW_HEALTH_FRAC`) - press it across open ground.
-     *    Short of that last part, `engageHold` closes distance using cover instead.
+     * 8. The target is visible and hurt enough to be worth finishing
+     *    (`ENEMY_LOW_HEALTH_FRAC`), and this bot itself isn't hurt enough to be
+     *    cautious about - press it across open ground rather than waiting for a hit
+     *    streak to build first. By this point every actual disadvantage (own low
+     *    health, needing to reload) has already returned its own directive above, so
+     *    "target is low" alone is already "no disadvantage in pushing". Short of a low
+     *    target, `engageHold` closes distance using cover instead.
      * 9. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
@@ -284,16 +289,18 @@ export class BotBrain {
 
         if (shouldHeal(bot, this.tier, !!this.target)) return "heal";
         if (this.needsReload(bot)) return "reload";
-        // Winning the exchange is still only worth pressing in the open while not
-        // itself hurt enough to be cautious about, *and* only once the target is
-        // actually hurt enough to be worth finishing - see `ENEMY_LOW_HEALTH_FRAC`.
-        // Landing hits alone was the "dumb push" bug: it doesn't mean the enemy can't
-        // still fight back, so charging across open ground for it regardless is a bad
-        // trade even while winning the exchange so far. Short of that, `engageHold`
-        // already knows how to close distance using cover - just not as recklessly.
+        // A visible target actually hurt enough to be worth finishing is reason enough
+        // to press it, on its own - no need to already be on a hit streak first. Every
+        // real disadvantage (own low health, needing to reload) has already returned
+        // its own directive above, so reaching here already means pushing costs this
+        // bot nothing. Requiring a hit streak *in addition* was the old "dumb push"
+        // fix's original mechanism; gating on the target's actual health directly (see
+        // `ENEMY_LOW_HEALTH_FRAC`) is the more direct fix, so the streak requirement
+        // was just needless hesitation once a target is genuinely low. Short of that,
+        // `engageHold` still knows how to close distance using cover instead.
         const enemyLow = !!this.target
             && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
-        if (!low && enemyLow && this.pushMomentum >= PUSH_HIT_THRESHOLD) return "push";
+        if (!low && enemyLow) return "push";
 
         return "engageHold";
     }

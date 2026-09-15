@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
 import {
     BotFireState,
+    BotThrowState,
     currentSweetSpot,
     shouldHeal,
     updateFiring,
     updateHeal,
     updateReload,
+    updateThrowable,
     updateWeaponSelection,
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
@@ -329,4 +331,92 @@ test("A bot does not stop to heal a graze while an enemy is in sight", () => {
     updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ true);
 
     expect(bot.actionType).toBe(GameConfig.Action.None);
+});
+
+test("updateThrowable lobs a grenade at a well-aimed, in-range target", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) }); // inside [14,30]
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0; // otherwise randomized, see BotThrowState
+
+    updateThrowable(bot, throwState, target, 20, /* canFire */ true, 0.05);
+
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Throwable);
+    expect(bot.weaponManager.weapons[WeaponSlot.Throwable].type).toBe("frag");
+    expect(bot.shootStart).toBe(true);
+    expect(throwState.active).toBe(true);
+    expect(throwState.returnSlot).toBe(WeaponSlot.Primary);
+});
+
+test("updateThrowable hands the weapon slot back to the gun once the throw resolves", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) });
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+    updateThrowable(bot, throwState, target, 20, true, 0.05);
+    expect(throwState.active).toBe(true);
+
+    // Advance real game ticks so `weaponManager.update` actually cooks and releases the
+    // throw (`GameConfig.player.cookTime` = 0.1s) - `updateThrowable` itself only sets
+    // the input fields, exactly like a human's InputMsg would.
+    for (let i = 0; i < 10 && throwState.active; i++) {
+        game.update(0.05);
+        updateThrowable(bot, throwState, target, 20, true, 0.05);
+    }
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+test("updateThrowable does not throw at point-blank range (self-splash risk)", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(6, 0) }); // inside blast radius
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+    updateThrowable(bot, throwState, target, 6, true, 0.05);
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+test("updateThrowable does not throw without a grenade in inventory", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) });
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+    updateThrowable(bot, throwState, target, 20, true, 0.05);
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+test("updateThrowable waits out its own cooldown between throws", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) });
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 3; // hasn't elapsed yet
+
+    updateThrowable(bot, throwState, target, 20, true, 0.05);
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });

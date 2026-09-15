@@ -269,6 +269,42 @@ test("findCover with a minimum distance never returns a spot closer to the threa
     }
 });
 
+// The "der bot muss barrels/explosive obstacles verstehen" ask: hiding behind something
+// that explodes the moment it takes enough damage is worse than standing in the open in
+// the specific way that matters most - the enemy doesn't even need to hit the bot
+// directly, just the "cover". Uses `test_normal` (no obstacles of its own) with a single
+// placed barrel instead of `local`'s random layout, so this doesn't depend on one
+// happening to spawn nearby.
+test("findCover never picks an explosive obstacle, even when it's the only option nearby", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const barrelPos = v2.create(100, 100);
+    game.map.genObstacle("barrel_01", barrelPos);
+    const graph = buildNavGraph(game);
+
+    const away = v2.create(1, 0);
+    const threatPos = v2.sub(barrelPos, v2.mul(away, 40));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(barrelPos, v2.mul(away, 5)) });
+
+    expect(findCover(bot, graph.navObstacles, threatPos)).toBeUndefined();
+});
+
+test("findCover picks an ordinary crate over a nearby explosive barrel", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const barrelPos = v2.create(100, 100);
+    const cratePos = v2.create(100, 108);
+    game.map.genObstacle("barrel_01", barrelPos);
+    const crate = game.map.genObstacle("crate_01", cratePos);
+    const graph = buildNavGraph(game);
+
+    const away = v2.create(1, 0);
+    const threatPos = v2.sub(barrelPos, v2.mul(away, 40));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(barrelPos, v2.mul(away, 5)) });
+
+    const found = findCover(bot, graph.navObstacles, threatPos);
+    expect(found).toBeDefined();
+    expect(found!.obstacle).toBe(crate);
+});
+
 test("Cover is dropped and re-picked the instant its obstacle dies, not on the next recompute", () => {
     const game = createGame(TeamMode.Solo, "local");
     const graph = buildNavGraph(game);
