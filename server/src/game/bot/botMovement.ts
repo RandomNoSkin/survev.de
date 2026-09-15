@@ -116,6 +116,10 @@ const PUSH_SWEET_SPOT_FRAC = 0.45;
 export class BotMovementState {
     strafeSign: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
     strafeTimer = util.random(0.6, 1.6);
+    /** How strongly the current strafe cycle blends in, as a fraction of full speed -
+     *  see `rollStrafeCycle`. Rerolled alongside `strafeSign`/`strafeTimer` so the
+     *  side-to-side movement varies in punch, not just direction and timing. */
+    strafeIntensity = 0.35;
     wanderDir: Vec2 = v2.randomUnit();
     wanderTimer = 0;
     /** Which of close/retreat/hold the bot is committed to - see `pickRangeMode`. */
@@ -639,6 +643,23 @@ function retreatDirection(
     return pathDir ?? away;
 }
 
+/** Rerolls the lateral strafe cycle - sign, hold duration, *and* how hard it blends in
+ *  - all together, instead of just flipping direction on a fixed timer. A flat interval
+ *  reads as a metronome (real players don't juke on a schedule); mixing in occasional
+ *  short, punchier feints among the more common longer holds breaks that regularity up
+ *  without changing the average strength much. Shared by `push` and `engageHold` so
+ *  both move with the same organic cadence instead of two independently-tuned ones. */
+function rollStrafeCycle(state: BotMovementState): void {
+    state.strafeSign = (state.strafeSign * -1) as 1 | -1;
+    if (Math.random() < 0.25) {
+        state.strafeTimer = util.random(0.25, 0.55);
+        state.strafeIntensity = util.random(0.35, 0.55);
+    } else {
+        state.strafeTimer = util.random(0.7, 1.9);
+        state.strafeIntensity = util.random(0.2, 0.38);
+    }
+}
+
 /**
  * Drives movement from the brain's `CombatDirective` plus a threat position - see the
  * type doc for what each directive means. `threatPos` need not be the *currently
@@ -692,10 +713,7 @@ export function updateMovement(
         const pushHoldDist = Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
 
         state.strafeTimer -= dt;
-        if (state.strafeTimer <= 0) {
-            state.strafeTimer = util.random(0.6, 1.6);
-            state.strafeSign = (state.strafeSign * -1) as 1 | -1;
-        }
+        if (state.strafeTimer <= 0) rollStrafeCycle(state);
 
         if (dist > pushHoldDist) {
             const toThreat = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
@@ -704,7 +722,7 @@ export function updateMovement(
             // A dead-straight charge is easy to punish - blend in a little strafe so
             // pushing still juke a bit instead of running face-first at the muzzle.
             if (!state.path.length) {
-                move = v2.add(move, v2.mul(v2.perp(toThreat), state.strafeSign * 0.3));
+                move = v2.add(move, v2.mul(v2.perp(toThreat), state.strafeSign * state.strafeIntensity));
             }
         } else {
             // Close enough to press the advantage without overcommitting - hold here
@@ -719,10 +737,7 @@ export function updateMovement(
         const band = Math.max(2, sweet * 0.18);
 
         state.strafeTimer -= dt;
-        if (state.strafeTimer <= 0) {
-            state.strafeTimer = util.random(0.6, 1.6);
-            state.strafeSign = (state.strafeSign * -1) as 1 | -1;
-        }
+        if (state.strafeTimer <= 0) rollStrafeCycle(state);
 
         const mode = pickRangeMode(state, dist, sweet, band);
         if (mode === "close") {
@@ -745,7 +760,7 @@ export function updateMovement(
         // its own deliberate micro-movement, and blending lateral strafe on top of a
         // peek step just walks the bot back into its own cover.
         if ((mode === "close" || mode === "retreat") && !state.path.length) {
-            move = v2.add(move, v2.mul(v2.perp(toThreat), state.strafeSign * 0.35));
+            move = v2.add(move, v2.mul(v2.perp(toThreat), state.strafeSign * state.strafeIntensity));
         }
     }
 

@@ -158,6 +158,37 @@ test("updateMovement wired with a nav graph still produces a valid move for a bl
     expect(v2.length(bot.touchMoveDir)).toBeGreaterThan(0.9);
 });
 
+// Regression: the strafe cycle used to reroll on a flat `util.random(0.6, 1.6)` timer
+// with a hardcoded blend strength (0.3/0.35 depending on directive) - a fixed interval
+// and fixed punch, which reads as a metronome rather than a real player juking. Both are
+// now rerolled together each cycle (`rollStrafeCycle`) from a bimodal distribution mixing
+// occasional short, punchier feints into the normal longer holds. Driving `engageHold` in
+// its "close" range mode (far outside the sweet spot the whole time, so it never settles
+// into holding/peeking) for a long stretch should surface both: more than one distinct
+// blend strength, and at least one reroll shorter than the old fixed minimum.
+test("engageHold's strafe cycle varies in both timing and strength instead of a fixed cadence", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const threatPos = v2.create(250, 50); // far past any sweet spot - stays in "close" mode
+    const state = new BotMovementState();
+    const dt = 0.1;
+
+    const intensities = new Set<number>();
+    let sawShortFeint = false;
+
+    for (let i = 0; i < 400; i++) {
+        const timerBefore = state.strafeTimer;
+        updateMovement(bot, state, "engageHold", threatPos, 200, dt);
+        if (timerBefore - dt <= 0) {
+            intensities.add(state.strafeIntensity);
+            if (state.strafeTimer < 0.6) sawShortFeint = true;
+        }
+    }
+
+    expect(intensities.size).toBeGreaterThan(1);
+    expect(sawShortFeint).toBe(true);
+});
+
 // The "Deckungs-Logik mit obstacle.dead-Prüfung" M3 deliverable: cover-seeking behind a
 // real obstacle, verified geometrically rather than by hoping the random map happens to
 // produce a usable case. A fixed obstacle is picked and a threat placed 40 units to one

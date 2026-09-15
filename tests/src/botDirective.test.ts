@@ -130,6 +130,28 @@ test("Low (but not critical) health with no heal item flees instead of pushing",
     expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance, not pushing or holding
 });
 
+// Regression: low health *with* a bandage on hand used to fall straight through to
+// `engageHold` here, because the only low-health check was `low && noHealItem`. On the
+// open `test_normal` map there's no cover to duck behind, so `this.target` never goes
+// undefined and `shouldHeal`'s visibility gate (enemy visible, health > 25%) never lets
+// up either - the bot would fight on hurt indefinitely with an unused bandage, exactly
+// the "wrong combat decision" this map is built to isolate. It should disengage instead,
+// the same as having no item at all, so that breaking line of sight can actually happen.
+test("Low health with a bandage on hand still flees when it can't safely use it yet", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 50; // low (< 56.25% for expert) but above shouldHeal's 25% override
+    bot.invManager.give("bandage", 5);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None); // can't safely heal yet - hasn't started
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // disengaging, not fighting on hurt
+});
+
 // The other explicit ask: *consider* retreating to reload - not retreat unconditionally
 // every single time a magazine empties. Out of ammo but nobody's actually shooting is
 // exactly the case where reloading in place (which happens regardless, see

@@ -244,18 +244,23 @@ export class BotBrain {
      *    and still cooling down) - disengage instead of trading.
      * 4. Merely low (not yet critical) with no way to heal - still disengage rather
      *    than keep fighting or pushing at real risk just because it isn't dire yet.
-     * 5. Hurt enough to want to heal - retreats toward cover/distance immediately, but
+     * 5. Merely low, *has* an item, but `shouldHeal` still refuses (in practice: the
+     *    enemy is currently visible and health isn't critical enough to override
+     *    that) - disengage anyway instead of fighting on hurt with a bandage it can't
+     *    safely use. Breaking line of sight is what lets `shouldHeal` say yes next
+     *    tick; standing and trading while "waiting" for an opening never creates one.
+     * 6. Hurt enough to want to heal - retreats toward cover/distance immediately, but
      *    doesn't actually consume the item until `isSafeToHeal` (in `update()`) says
      *    the retreat has actually gone somewhere.
-     * 6. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
+     * 7. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
      *    retreat toward relative safety while the reload (already requested
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
-     * 7. Recently landed enough hits to be winning the exchange, itself not hurt
+     * 8. Recently landed enough hits to be winning the exchange, itself not hurt
      *    enough to be cautious about, *and* the target is actually hurt enough to be
      *    worth finishing (`ENEMY_LOW_HEALTH_FRAC`) - press it across open ground.
      *    Short of that last part, `engageHold` closes distance using cover instead.
-     * 8. Default: hold a sane range, using cover once there instead of standing still.
+     * 9. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
         if (!threatPos) return "idle";
@@ -270,6 +275,12 @@ export class BotBrain {
         // Low but not yet critical, and nothing to fix it with - disengage rather than
         // keep fighting (or even push) at real risk just because it isn't dire yet.
         if (low && noHealItem) return "flee";
+        // Has a bandage but can't safely use it yet (almost always: the enemy can
+        // still see it) - disengage to break line of sight rather than fight on hurt
+        // and hope. Once concealed, `shouldHeal` flips to true on its own.
+        if (low && !noHealItem && !shouldHeal(bot, this.tier, !!this.target)) {
+            return "flee";
+        }
 
         if (shouldHeal(bot, this.tier, !!this.target)) return "heal";
         if (this.needsReload(bot)) return "reload";
