@@ -21,8 +21,13 @@ type RangeMode = "close" | "retreat" | "hold";
  *    threat instead of holding position.
  *  - `heal`: retreat to cover and hunker down to use a heal item.
  *  - `flee`: too hurt to fight and either out of heal items or just got interrupted -
- *    put distance (and cover, if any is nearby) between the bot and the threat. */
-export type CombatDirective = "idle" | "engageHold" | "push" | "heal" | "flee";
+ *    put distance (and cover, if any is nearby) between the bot and the threat.
+ *  - `reload`: every gun is dry *and* the bot is actually under fire right now (see
+ *    `BotBrain.needsReload`) - put some distance between the bot and the threat while
+ *    the reload (already requested regardless, see `updateReload`) finishes, same idea
+ *    as `heal` but a shorter, less urgent retreat. Being out of ammo with nobody
+ *    shooting just reloads in place under whatever directive otherwise applies. */
+export type CombatDirective = "idle" | "engageHold" | "push" | "heal" | "flee" | "reload";
 
 const REPATH_INTERVAL = 0.6;
 const REPATH_GOAL_DELTA = 8;
@@ -395,21 +400,28 @@ function updatePeekCycle(
 /** Minimum plain distance from the threat before it's safe to start healing when no
  *  cover was found to hide behind instead - "create distance, then heal", not "start
  *  healing wherever the `heal` directive happened to be chosen". Also the minimum
- *  distance a piece of cover itself must have from the threat to count while
- *  healing/fleeing (see `retreatToCover`'s `minCoverDist`) - a spot 3 units from an
- *  active fight can be technically hidden without being remotely safe to stop and
- *  bandage behind. `engageHold`'s cover-seeking (`holdAndPeek`) doesn't use this: it's
- *  holding an already-acceptable range, not trying to put real distance between itself
- *  and the threat. */
+ *  distance a piece of cover itself must have from the threat to count while healing
+ *  (see `retreatToCover`'s `minCoverDist`) - a spot 3 units from an active fight can be
+ *  technically hidden without being remotely safe to stop and bandage behind. */
 const SAFE_HEAL_DIST = 20;
 
+/** Same idea as `SAFE_HEAL_DIST`, but for retreating to reload instead of to heal - a
+ *  shorter distance, since being out of ammo is more urgent to resolve (there's nothing
+ *  to fight back with in the meantime) and reloading is generally quicker than healing
+ *  up from a real deficit. */
+const SAFE_RELOAD_DIST = 12;
+
 /** Moves toward, then holds at, cover from `threatPos` - shared by healing, fleeing,
- *  and (with `holdAndPeek`) holding a mid-fight position instead of standing in the
- *  open. `holdAndPeek` cycles peeking out once cover is reached (see
+ *  reloading, and (with `holdAndPeek`) holding a mid-fight position instead of standing
+ *  in the open. `holdAndPeek` cycles peeking out once cover is reached (see
  *  `updatePeekCycle`, `recentlyVisible`); without it the bot just hunkers down
- *  (healing), or if no cover exists nearby, keeps opening distance (fleeing) -
+ *  (healing/reloading), or if no cover exists nearby, keeps opening distance (fleeing) -
  *  `holdAndPeek` falls back to plain lateral strafing in that case instead, since
- *  standing still exposed with nothing to hide behind is strictly worse. */
+ *  standing still exposed with nothing to hide behind is strictly worse.
+ *
+ *  `minCoverDist` is how far from the threat a candidate cover spot must itself be to
+ *  count (0 for `holdAndPeek`, which is holding an already-acceptable range rather than
+ *  trying to put real distance between itself and the threat). */
 function retreatToCover(
     bot: Player,
     state: BotMovementState,
@@ -418,6 +430,7 @@ function retreatToCover(
     dt: number,
     holdAndPeek: boolean,
     recentlyVisible: boolean,
+    minCoverDist: number,
 ): Vec2 {
     if (state.coverObstacle?.dead || state.coverObstacle?.collidable === false) {
         state.coverObstacle = undefined;
@@ -429,7 +442,6 @@ function retreatToCover(
     state.coverRecheck -= dt;
     if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
         state.coverRecheck = COVER_RECOMPUTE_INTERVAL;
-        const minCoverDist = holdAndPeek ? 0 : SAFE_HEAL_DIST;
         const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist);
         // Only treat this as a genuinely new spot - not just the periodic recompute
         // landing back on essentially the same point - as "un-arrive": resetting
@@ -611,7 +623,9 @@ export function updateMovement(
         }
         move = state.wanderDir;
     } else if (directive === "heal" || directive === "flee") {
-        move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible);
+        move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible, SAFE_HEAL_DIST);
+    } else if (directive === "reload") {
+        move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible, SAFE_RELOAD_DIST);
     } else if (directive === "push") {
         state.coverObstacle = undefined;
         state.coverPos = undefined;
@@ -666,7 +680,7 @@ export function updateMovement(
             state.path = [];
             move = v2.neg(toThreat);
         } else {
-            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible);
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0);
         }
         // Blend in strafe even while closing/opening distance, so approach/retreat
         // isn't a dead-straight line - the second biggest "feels human" lever after

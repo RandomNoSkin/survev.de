@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
-import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
+import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 
@@ -86,6 +86,98 @@ test("Critically low with no heal item flees instead of holding or pushing", () 
     expect(bot.actionType).toBe(GameConfig.Action.None); // never starts a heal it can't back up
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance, not holding or pushing
+});
+
+// The explicit ask: a bot should choose to retreat over attacking once it's low, not
+// only once it's nearly dead. `LOW_HEALTH_FRAC_MULT` sits between the panic threshold
+// and `shouldHeal`'s own - for `expert` (healThreshold 0.75) that's critical at 37.5%
+// and low at 56.25%, so 50% health lands squarely in "low but not critical". With no
+// heal item, that alone should be enough to flee - and, since landing hits would
+// otherwise trigger `push`, this also proves low health suppresses pushing.
+test("Low (but not critical) health with no heal item flees instead of pushing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 50;
+    bot.bulletHits += 5; // would otherwise clear PUSH_HIT_THRESHOLD easily
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None); // never starts a heal it can't back up
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance, not pushing or holding
+});
+
+// The other explicit ask: *consider* retreating to reload - not retreat unconditionally
+// every single time a magazine empties. Out of ammo but nobody's actually shooting is
+// exactly the case where reloading in place (which happens regardless, see
+// `updateReload`) is the right call - retreating every time a weapon runs dry,
+// "makes sense" or not, would mean bots detour away from an easy, safe kill just
+// because their gun happened to empty a beat before the enemy went down.
+test("An empty gun with nobody shooting at the bot just reloads in place", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 0;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.weaponManager.scheduledReload).toBe(true); // the reload itself still runs
+    // Not fleeing - whatever `engageHold` decides otherwise (closing to the empty
+    // shotgun's own short ideal range counts as "not fleeing" just as much as holding
+    // at it would; either is the opposite of retreating away).
+    expect(bot.touchMoveDir.x).toBeGreaterThan(-0.3);
+});
+
+// ...but it *does* make sense once the enemy has actually landed a hit recently -
+// finishing a reload while genuinely under fire is bad, same reasoning as the
+// heal-abort check just above.
+test("An empty gun while actually under fire sends the bot retreating to reload", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 0;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+
+    // The real path is `Player.damage()`, which also calls `botBrain.onDamaged()`.
+    bot.damage({
+        amount: 5,
+        damageType: GameConfig.DamageType.Player,
+        dir: v2.create(-1, 0),
+        source: target,
+    });
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance while it reloads
+    expect(bot.weaponManager.scheduledReload).toBe(true);
+});
+
+// A loaded backup gun is a solved problem for `updateWeaponSelection` on its own (see
+// botCombat.test.ts) - `needsReload` must not also fire a retreat in that case, since
+// there's something to fight with.
+test("A dry gun with a loaded backup does not trigger a reload retreat", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 0;
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary); // switched to it
+    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // holding at range, not fleeing
 });
 
 // Regression: `shouldHeal` (and therefore the `heal` directive) flips true the instant

@@ -1,4 +1,4 @@
-import { GameConfig } from "../../../../shared/gameConfig.ts";
+import { GameConfig, WeaponSlot } from "../../../../shared/gameConfig.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { GameObject } from "../objects/gameObject.ts";
 import type { Player } from "../objects/player.ts";
@@ -35,9 +35,24 @@ const ABORT_HEAL_REACT_MS = 350;
 /** After an abort, don't immediately re-start the same heal - open some distance
  *  first, which is exactly what `flee` (see `pickDirective`) is for. */
 const HEAL_ABORT_COOLDOWN_S = 1.2;
+/** Being out of ammo is only worth retreating over if actually under fire this
+ *  recently - see `needsReload`. Reloading in place is fine when nothing is shooting
+ *  at you (or the fight isn't even live, e.g. the enemy is out of sight); retreating
+ *  unconditionally every time a magazine empties, "makes sense" or not, is a bigger
+ *  tempo loss over a whole match than the risk it's meant to avoid. */
+const RELOAD_RETREAT_DANGER_MS = 2000;
 /** Fraction of `tier.healThreshold` counted as "critical" - too hurt to just hold and
  *  trade; only worth fighting on from here if there's truly no way to disengage. */
 const PANIC_HEALTH_FRAC_MULT = 0.5;
+/** Fraction of `tier.healThreshold` counted as "low" - worth being cautious about even
+ *  before it's "critical". Sits between `PANIC_HEALTH_FRAC_MULT` and 1.0 (the point
+ *  `shouldHeal` itself wants to start healing): with a heal item this band is normally
+ *  invisible, since `shouldHeal` already fires first and starts a retreat-to-heal - it
+ *  only matters when there's *no* item to fix the problem with, where the bot would
+ *  otherwise just keep fighting (or even push) at real risk because it technically
+ *  isn't "critical" yet. That's the "attacks when it should retreat" bug: being low
+ *  without a bandage is still a reason to disengage, not just being nearly dead. */
+const LOW_HEALTH_FRAC_MULT = 0.75;
 /** How recently the target has to have actually been visible to count as "just ducked
  *  out of sight" rather than "genuinely lost track of them" - see `updateMovement`'s
  *  `recentlyVisible` and the eager re-peek it triggers. Comfortably past a peek's own
@@ -219,11 +234,18 @@ export class BotBrain {
      *    moment health ticks back over the threshold).
      * 3. Critically hurt with no way to heal right now (no item, or just interrupted
      *    and still cooling down) - disengage instead of trading.
-     * 4. Hurt enough to want to heal - retreats toward cover/distance immediately, but
+     * 4. Merely low (not yet critical) with no way to heal - still disengage rather
+     *    than keep fighting or pushing at real risk just because it isn't dire yet.
+     * 5. Hurt enough to want to heal - retreats toward cover/distance immediately, but
      *    doesn't actually consume the item until `isSafeToHeal` (in `update()`) says
      *    the retreat has actually gone somewhere.
-     * 5. Recently landed enough hits to be winning the exchange - press it.
-     * 6. Default: hold a sane range, using cover once there instead of standing still.
+     * 6. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
+     *    retreat toward relative safety while the reload (already requested
+     *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
+     *    reloads in place under whichever directive comes next instead.
+     * 7. Recently landed enough hits to be winning the exchange, and not itself hurt
+     *    enough to be cautious about - press it.
+     * 8. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
         if (!threatPos) return "idle";
@@ -231,13 +253,36 @@ export class BotBrain {
 
         const healthFrac = bot.health / GameConfig.player.health;
         const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
+        const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT;
         const noHealItem = pickHealItem(bot, healthFrac) === undefined;
+
         if (critical && (noHealItem || this.healAbortCooldown > 0)) return "flee";
+        // Low but not yet critical, and nothing to fix it with - disengage rather than
+        // keep fighting (or even push) at real risk just because it isn't dire yet.
+        if (low && noHealItem) return "flee";
 
         if (shouldHeal(bot, this.tier, !!this.target)) return "heal";
-        if (this.pushMomentum >= PUSH_HIT_THRESHOLD) return "push";
+        if (this.needsReload(bot)) return "reload";
+        // Winning the exchange is still only worth pressing while not itself hurt
+        // enough to be cautious about - charging in low on health is how a bot that's
+        // ahead on points trades itself away for nothing.
+        if (!low && this.pushMomentum >= PUSH_HIT_THRESHOLD) return "push";
 
         return "engageHold";
+    }
+
+    /** Every gun (that's actually equipped) is dry, and worth retreating over right
+     *  now - see the `reload` directive and `RELOAD_RETREAT_DANGER_MS`. Reloading in
+     *  place (which happens regardless, via `updateReload`) is the right call whenever
+     *  nothing is actually shooting at the bot; retreating is only "considering whether
+     *  it makes sense" if it's actually under fire while it does it. */
+    private needsReload(bot: Player): boolean {
+        const wm = bot.weaponManager;
+        const slots = [WeaponSlot.Primary, WeaponSlot.Secondary].filter(
+            (i) => wm.weapons[i].type,
+        );
+        if (!slots.length || !slots.every((i) => wm.weapons[i].ammo <= 0)) return false;
+        return bot.game.now - this.lastHitTakenTime < RELOAD_RETREAT_DANGER_MS;
     }
 
     /** Engagement position for everything downstream of perception: the target itself

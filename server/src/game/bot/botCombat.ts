@@ -154,6 +154,22 @@ export function updateWeaponSelection(
         return;
     }
 
+    // Current gun just ran dry - a loaded gun at the wrong range is still strictly
+    // better than an empty one at the right range, so this jumps the range-preference
+    // logic below entirely rather than waiting for it to happen to agree. Whichever
+    // weapon this leaves equipped, `updateReload` (called after this every tick) picks
+    // up requesting a reload for it.
+    if (!hasAmmo(bot, cur)) {
+        const loaded = slots.find((i) => i !== cur && hasAmmo(bot, i));
+        if (loaded !== undefined) {
+            switchTo(bot, fire, loaded);
+            return;
+        }
+        // No loaded alternative either - fall through to the quickswitch-to-melee
+        // logic below (still worth shedding `shotSlowdownTimer` even with nothing to
+        // shoot) rather than getting stuck holding a gun that can't fire.
+    }
+
     if (tier.quickswitch && fire.firedSinceSwitch && bot.shotSlowdownTimer > 0) {
         const curDef = gunDefOf(wm.weapons[cur].type);
         const burstInFlight = curDef?.fireMode === "auto" || curDef?.fireMode === "burst";

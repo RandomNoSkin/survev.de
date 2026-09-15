@@ -76,6 +76,22 @@ test("currentSweetSpot never sends a bot chasing a sniper's full falloff range",
     expect(currentSweetSpot(bot)).toBeLessThanOrEqual(70);
 });
 
+// Regression: a loaded gun at the wrong range is still strictly better than an empty
+// one at the right range. Before this, `bestRangeSlot` picked purely by range fit, so a
+// dry shotgun at close range would win over a loaded sniper even though the shotgun
+// can't actually fire - the bot would just stand there useless until its next reload.
+test("Weapon selection switches to whatever has ammo over a dry gun at the ideal range", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 0); // dry, and the ideal range fit
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "mosin"; // loaded, poor range fit
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 5;
+    bot.weaponManager.weapons[WeaponSlot.Secondary].cooldown = 0;
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6); // shotgun range
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary);
+});
+
 // The core mechanic, per real-world testing feedback: `recalculateSpeed` applies a
 // flat 50% movement penalty for the whole `shotSlowdownTimer` window after ANY shot
 // from ANY gun (see the doc comment on `updateWeaponSelection`) - a bolt-action rifle
