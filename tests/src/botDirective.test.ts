@@ -335,7 +335,7 @@ test("A nearby live grenade overrides combat movement entirely, even mid-fight",
         0,
         0,
         v2.create(0, 0),
-        3,
+        1.0, // under GRENADE_REACT_TIME - genuinely about to go off
         GameConfig.DamageType.Player,
     );
 
@@ -366,7 +366,7 @@ test("A nearby live grenade cancels an in-progress heal", () => {
         0,
         0,
         v2.create(0, 0),
-        3,
+        1.0, // under GRENADE_REACT_TIME - genuinely about to go off
         GameConfig.DamageType.Player,
     );
     bot.botBrain!.update(0.05);

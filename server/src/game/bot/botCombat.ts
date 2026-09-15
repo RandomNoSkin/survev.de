@@ -4,7 +4,7 @@ import type { GunDef } from "../../../../shared/defs/gameObjects/gunDefs.ts";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GameConfig, type InventoryItem, WeaponSlot } from "../../../../shared/gameConfig.ts";
 import { util } from "../../../../shared/utils/util.ts";
-import { v2 } from "../../../../shared/utils/v2.ts";
+import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { Player } from "../objects/player.ts";
 import type { BotTierDef } from "./botDefs.ts";
 
@@ -215,14 +215,16 @@ export function updateReload(bot: Player): void {
     wm.scheduledReload = true;
 }
 
-/** True if a living teammate sits between the bot and the target - the single most
- *  annoying thing a bot can do in a squad. */
-function friendlyFireInLine(bot: Player, target: Player): boolean {
+/** True if a living teammate sits between the bot and `targetPos` - the single most
+ *  annoying thing a bot can do in a squad. Takes a position rather than a `Player` so
+ *  it also covers a blind throw at a merely-remembered spot (see `updateThrowable`'s
+ *  bait case), not just a directly visible target. */
+function friendlyFireInLine(bot: Player, targetPos: Vec2): boolean {
     const mates = bot.group?.livingPlayers;
     if (!mates || mates.length <= 1) return false;
 
     const from = bot.pos;
-    const dir = v2.sub(target.pos, from);
+    const dir = v2.sub(targetPos, from);
     const len = v2.length(dir);
     if (len < 0.01) return false;
     const nDir = v2.mul(dir, 1 / len);
@@ -279,7 +281,7 @@ export function updateFiring(
         bot.shootHold = false;
         return;
     }
-    if (friendlyFireInLine(bot, target)) {
+    if (friendlyFireInLine(bot, target.pos)) {
         bot.shootHold = false;
         return;
     }
@@ -389,11 +391,16 @@ function pickOffensiveThrowable(bot: Player): InventoryItem | undefined {
 }
 
 /**
- * Tactical grenade use: lob one at a visible, well-aimed-at target every so often,
- * instead of never touching the frags sitting unused in inventory. Shares the aim
- * system's own reaction/fire-cone gate (`canFire`) rather than throwing the instant a
- * target is merely visible - a bot flinging a grenade before it's even finished
- * "noticing" someone looks as wrong as it would for a gunshot.
+ * Tactical grenade use, two cases:
+ * - A visible, well-aimed-at target: lob one to pressure/finish them, sharing the aim
+ *   system's own reaction/fire-cone gate (`canFire`) rather than throwing the instant a
+ *   target is merely visible - a bot flinging a grenade before it's even finished
+ *   "noticing" someone looks as wrong as it would for a gunshot.
+ * - The enemy just ducked out of sight nearby (`justLostSight`, see `BotBrain`'s
+ *   `recentlyVisible`) - lobbing one at `threatPos`, their last-known spot, is exactly
+ *   the "bait them out of cover" tactic a real player uses a grenade for. `bot.dirNew`
+ *   is aimed there explicitly, since `updateAim` only ever tracks a currently-visible
+ *   target and leaves `dir` untouched once one isn't.
  *
  * Only owns the `Throwable` weapon slot while `active` - `updateWeaponSelection` leaves
  * that slot alone for the same reason (see its own guard), and this hands it straight
@@ -406,6 +413,9 @@ export function updateThrowable(
     target: Player | undefined,
     dist: number,
     canFire: boolean,
+    threatPos: Vec2 | undefined,
+    engageDist: number,
+    justLostSight: boolean,
     dt: number,
 ): void {
     const wm = bot.weaponManager;
@@ -423,12 +433,25 @@ export function updateThrowable(
     throwState.cooldown -= dt;
     if (throwState.cooldown > 0) return;
     if (bot.actionType !== GameConfig.Action.None) return;
-    if (!target || !canFire) return;
-    if (dist < THROW_MIN_DIST || dist > THROW_MAX_DIST) return;
-    if (friendlyFireInLine(bot, target)) return;
+
+    let aimAt: Vec2 | undefined;
+    let throwDist: number;
+    if (target && canFire) {
+        throwDist = dist;
+        if (friendlyFireInLine(bot, target.pos)) return;
+    } else if (!target && justLostSight && threatPos) {
+        aimAt = threatPos;
+        throwDist = engageDist;
+        if (friendlyFireInLine(bot, threatPos)) return;
+    } else {
+        return;
+    }
+    if (throwDist < THROW_MIN_DIST || throwDist > THROW_MAX_DIST) return;
 
     const grenadeType = pickOffensiveThrowable(bot);
     if (!grenadeType) return;
+
+    if (aimAt) bot.dirNew = v2.normalizeSafe(v2.sub(aimAt, bot.pos), bot.dirNew);
 
     const cur = wm.curWeapIdx;
     throwState.returnSlot = cur === WeaponSlot.Primary || cur === WeaponSlot.Secondary

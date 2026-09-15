@@ -343,7 +343,17 @@ test("updateThrowable lobs a grenade at a well-aimed, in-range target", () => {
     const throwState = new BotThrowState();
     throwState.cooldown = 0; // otherwise randomized, see BotThrowState
 
-    updateThrowable(bot, throwState, target, 20, /* canFire */ true, 0.05);
+    updateThrowable(
+        bot,
+        throwState,
+        target,
+        20,
+        /* canFire */ true,
+        target.pos,
+        20,
+        false,
+        0.05,
+    );
 
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Throwable);
     expect(bot.weaponManager.weapons[WeaponSlot.Throwable].type).toBe("frag");
@@ -361,7 +371,7 @@ test("updateThrowable hands the weapon slot back to the gun once the throw resol
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, target, 20, true, 0.05);
+    updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
     expect(throwState.active).toBe(true);
 
     // Advance real game ticks so `weaponManager.update` actually cooks and releases the
@@ -369,7 +379,7 @@ test("updateThrowable hands the weapon slot back to the gun once the throw resol
     // the input fields, exactly like a human's InputMsg would.
     for (let i = 0; i < 10 && throwState.active; i++) {
         game.update(0.05);
-        updateThrowable(bot, throwState, target, 20, true, 0.05);
+        updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
     }
 
     expect(throwState.active).toBe(false);
@@ -385,7 +395,7 @@ test("updateThrowable does not throw at point-blank range (self-splash risk)", (
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, target, 6, true, 0.05);
+    updateThrowable(bot, throwState, target, 6, true, target.pos, 6, false, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -399,7 +409,7 @@ test("updateThrowable does not throw without a grenade in inventory", () => {
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, target, 20, true, 0.05);
+    updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -415,7 +425,66 @@ test("updateThrowable waits out its own cooldown between throws", () => {
     const throwState = new BotThrowState();
     throwState.cooldown = 3; // hasn't elapsed yet
 
-    updateThrowable(bot, throwState, target, 20, true, 0.05);
+    updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+// The "nades sind useful wenn der Gegner in cover ist um ihn da raus zu baiten" ask: a
+// target that just ducked out of sight nearby (justLostSight, mirroring BotBrain's
+// recentlyVisible) is exactly when a real player lobs one blind to flush them back out,
+// not only ever at someone already fully in the open.
+test("updateThrowable bait-throws at a target's last-known spot right after losing sight of them", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const lastKnownPos = v2.create(20, 0);
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+
+    updateThrowable(
+        bot,
+        throwState,
+        /* target (not visible) */ undefined,
+        Infinity,
+        false,
+        lastKnownPos,
+        20,
+        /* justLostSight */ true,
+        0.05,
+    );
+
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Throwable);
+    expect(throwState.active).toBe(true);
+    // Aimed explicitly at the remembered spot, not whatever it was previously facing -
+    // updateAim never touches `dir` once there's no live target to track.
+    expect(bot.dirNew.x).toBeCloseTo(1, 5);
+    expect(bot.dirNew.y).toBeCloseTo(0, 5);
+});
+
+test("updateThrowable does not bait-throw at a stale memory (not recently lost)", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+
+    updateThrowable(
+        bot,
+        throwState,
+        undefined,
+        Infinity,
+        false,
+        v2.create(20, 0),
+        20,
+        /* justLostSight */ false,
+        0.05,
+    );
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);

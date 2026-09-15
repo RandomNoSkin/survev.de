@@ -204,8 +204,20 @@ export class BotBrain {
 
         // Before weapon selection: an in-progress or freshly-triggered throw claims the
         // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
-        // needs to see before it otherwise "fixes" the bot back onto a gun.
-        updateThrowable(bot, this.throwState, this.target, dist, aimResult.canFire, dt);
+        // needs to see before it otherwise "fixes" the bot back onto a gun. `threatPos`/
+        // `engageDist`/`recentlyVisible` (already computed above for movement) are what
+        // let it bait a target that just ducked into cover, not just finish a visible one.
+        updateThrowable(
+            bot,
+            this.throwState,
+            this.target,
+            dist,
+            aimResult.canFire,
+            threatPos,
+            engageDist,
+            recentlyVisible,
+            dt,
+        );
 
         // Weapon selection before reload, not after: switching resets `scheduledReload`
         // (see `setCurWeapIndex`), so requesting a reload first would just get wiped

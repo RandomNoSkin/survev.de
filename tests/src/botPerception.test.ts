@@ -44,7 +44,7 @@ test("A bot can't see a target well past the old, overly generous spotting floor
     expect(findVisibleTarget(bot)).toBeUndefined();
 });
 
-test("findGrenadeThreat finds a live, explosive-armed throwable nearby", () => {
+test("findGrenadeThreat finds a live, explosive-armed throwable about to explode", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
     const nadePos = v2.create(55, 50); // 5 units - well inside the danger radius
@@ -55,11 +55,32 @@ test("findGrenadeThreat finds a live, explosive-armed throwable nearby", () => {
         0,
         0,
         v2.create(0, 0),
-        3,
+        1.0, // under GRENADE_REACT_TIME (1.3) - genuinely about to go off
         GameConfig.DamageType.Player,
     );
 
     expect(findGrenadeThreat(bot)).toEqual(nadePos);
+});
+
+// The explicit ask: a bot shouldn't instantly bolt the moment a grenade is merely
+// thrown somewhere nearby, several seconds before it could possibly explode - only once
+// it's genuinely about to go off (`GRENADE_REACT_TIME`), matching how a real player
+// keeps fighting right up until a live nade is actually a threat.
+test("findGrenadeThreat ignores a freshly-thrown grenade with plenty of fuse left", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    game.projectileBarn.addProjectile(
+        0,
+        "frag",
+        v2.create(55, 50), // well inside the danger radius
+        0,
+        0,
+        v2.create(0, 0),
+        4, // frag's full fuse time - just thrown, nothing to react to yet
+        GameConfig.DamageType.Player,
+    );
+
+    expect(findGrenadeThreat(bot)).toBeUndefined();
 });
 
 test("findGrenadeThreat ignores one too far away to matter", () => {
@@ -72,7 +93,7 @@ test("findGrenadeThreat ignores one too far away to matter", () => {
         0,
         0,
         v2.create(0, 0),
-        3,
+        1.0,
         GameConfig.DamageType.Player,
     );
 
@@ -91,7 +112,7 @@ test("findGrenadeThreat ignores a non-explosive throwable like smoke", () => {
         0,
         0,
         v2.create(0, 0),
-        3,
+        1.0,
         GameConfig.DamageType.Player,
     );
 

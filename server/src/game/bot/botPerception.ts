@@ -20,13 +20,21 @@ const MAX_LOS_CHECKS = 4;
  *  a tight "only dodge if it would definitely hit" cutoff. */
 const GRENADE_DANGER_RADIUS = 16;
 
-/** Position of the nearest live, explosive-armed throwable within `GRENADE_DANGER_RADIUS`,
- *  or undefined if there's nothing worth reacting to. Deliberately not fuse-timer aware -
- *  a bot second-guessing "do I have another second before this goes off" is exactly the
- *  kind of precise math a real player doesn't do either; anyone can see a grenade land
- *  near them and back off without knowing its exact fuse time. Not thrower-aware either:
- *  a grenade doesn't care who threw it, and a bot standing in its own toss's blast
- *  radius is just as dead as standing in an enemy's. */
+/** Only react once this little fuse time is left, not the instant a grenade is thrown -
+ *  a real player keeps fighting/aiming right up until a live nade is genuinely about to
+ *  go off, not the moment one is merely visible several seconds out. This also happens
+ *  to settle *where* the bot reacts to: a thrown frag's own physics (`projectile.ts`)
+ *  bleed off its velocity fast, so by the last second or so of a 4s fuse it has already
+ *  landed and stopped sliding - reacting any earlier means chasing its still-arcing,
+ *  every-tick-different in-flight position instead of a single settled spot, which is
+ *  what actually read as the bot bolting to a "weird", constantly-shifting position. */
+const GRENADE_REACT_TIME = 1.3;
+
+/** Position of the nearest live, explosive-armed throwable within `GRENADE_DANGER_RADIUS`
+ *  that's genuinely about to explode (see `GRENADE_REACT_TIME`), or undefined if there's
+ *  nothing worth reacting to yet. Not thrower-aware: a grenade doesn't care who threw it,
+ *  and a bot standing in its own toss's blast radius is just as dead as standing in an
+ *  enemy's. */
 export function findGrenadeThreat(bot: Player): Vec2 | undefined {
     const game = bot.game;
     let closest: Vec2 | undefined;
@@ -34,6 +42,7 @@ export function findGrenadeThreat(bot: Player): Vec2 | undefined {
 
     for (const proj of game.projectileBarn.projectiles) {
         if (proj.dead || !util.sameLayer(proj.layer, bot.layer)) continue;
+        if (proj.fuseTime > GRENADE_REACT_TIME) continue;
         const def = GameObjectDefs.typeToDefSafe(proj.type) as ThrowableDef | undefined;
         if (!def || def.type !== "throwable" || !def.explosionType) continue;
         // Smoke's `explosionType` ("explosion_smoke") is truthy but deals 0 damage - a

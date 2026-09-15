@@ -131,3 +131,60 @@ test("push still closes to near-melee range for a short-range weapon", () => {
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // still closing in toward the threat
 });
+
+// The "der bot moved zu einer weird position" ask: `engageHold`'s "hold, no cover
+// nearby" fallback used to be pure lateral strafing with nothing at all pulling it back
+// toward an acceptable range - left alone across many ticks it just drifts wherever
+// strafing happens to carry it (observed live as the bot ending up at an arbitrary,
+// unpurposeful distance instead of holding position). No gun equipped -> `currentSweetSpot`
+// fallback 25, band 4.5, so the hold band is [20, 29.5].
+test("engageHold's no-cover hold pulls back inward once drifted past the outer edge", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threat = v2.create(35, 0); // past the 29.5 outer edge
+
+    const state = new BotMovementState();
+    state.rangeMode = "hold"; // simulates the one-tick lag right past the edge
+    updateMovement(bot, state, "engageHold", threat, 35, 0.05);
+
+    // Pure tangential strafe is perpendicular to the threat direction (dot 0) - any
+    // positive dot product here is exactly the inward radial correction.
+    const towardThreat = v2.normalizeSafe(v2.sub(threat, bot.pos));
+    expect(v2.dot(bot.touchMoveDir, towardThreat)).toBeGreaterThan(0.05);
+});
+
+test("engageHold's no-cover hold pulls back outward once drifted past the inner edge", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threat = v2.create(15, 0); // inside the 20-unit inner edge
+
+    const state = new BotMovementState();
+    state.rangeMode = "hold";
+    updateMovement(bot, state, "engageHold", threat, 15, 0.05);
+
+    const towardThreat = v2.normalizeSafe(v2.sub(threat, bot.pos));
+    expect(v2.dot(bot.touchMoveDir, towardThreat)).toBeLessThan(-0.05);
+});
+
+// Regression: the inward/outward correction above must reference the *same*,
+// `MAX_RETREAT_DIST`-capped edges `pickRangeMode` itself uses to decide "hold" in the
+// first place, not the equipped weapon's raw sweet spot +/- band - a bolt-action's own
+// sweet spot (70) sits far past where `MAX_RETREAT_DIST` (20) already capped real
+// backing-off, so 25 units is squarely "acceptable, stop repositioning" even though it's
+// nowhere near 70. Using the raw sweet spot here would fight to drag the bot back out to
+// a range the rest of the system already gave up on reaching.
+test("engageHold's no-cover hold applies no pull for a long-range weapon within its capped band", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threat = v2.create(25, 0); // within the capped [20, 82.6] band, far from sweet (70)
+    bot.weaponManager.weapons[0].type = "mosin";
+    bot.weaponManager.weapons[0].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(0);
+
+    const state = new BotMovementState();
+    state.rangeMode = "hold";
+    updateMovement(bot, state, "engageHold", threat, 25, 0.05);
+
+    const towardThreat = v2.normalizeSafe(v2.sub(threat, bot.pos));
+    expect(Math.abs(v2.dot(bot.touchMoveDir, towardThreat))).toBeLessThan(0.05);
+});

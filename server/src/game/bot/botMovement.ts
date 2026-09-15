@@ -777,6 +777,28 @@ export function updateMovement(
             move = retreatDirection(bot, state, nav, threatPos, dt);
         } else {
             move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0);
+            // No cover anywhere nearby: `retreatToCover` falls back to pure lateral
+            // strafing with no radial component at all, which has nothing keeping it
+            // near an acceptable range - left alone, it drifts wherever strafing happens
+            // to carry it until it wanders far enough to re-trigger a mode flip, which
+            // reads as the bot ending up at an arbitrary, unpurposeful spot rather than
+            // holding a stable position. Blend in a gentle correction back inward once
+            // it's drifted past the *same effective edges* `pickRangeMode` itself uses
+            // to decide "hold" in the first place - not `sweet +/- band` directly, which
+            // for a long-range weapon can sit well past `MAX_RETREAT_DIST` and would
+            // otherwise fight to drag the bot back out to a range `pickRangeMode`
+            // deliberately gave up on reaching.
+            if (!state.coverPos) {
+                const holdCloseEdge = sweet + band;
+                const holdRetreatEdge = Math.min(sweet - band, MAX_RETREAT_DIST);
+                let radial = 0;
+                if (dist > holdCloseEdge) {
+                    radial = Math.min(1, (dist - holdCloseEdge) / sweet) * 0.5;
+                } else if (dist < holdRetreatEdge) {
+                    radial = -Math.min(1, (holdRetreatEdge - dist) / sweet) * 0.5;
+                }
+                if (radial !== 0) move = v2.add(move, v2.mul(toThreat, radial));
+            }
         }
         // Blend in strafe even while closing/opening distance, so approach/retreat
         // isn't a dead-straight line - the second biggest "feels human" lever after
