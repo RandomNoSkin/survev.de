@@ -17,8 +17,11 @@ type RangeMode = "close" | "retreat" | "hold";
  *  - `idle`: nothing to engage, wander.
  *  - `engageHold`: fight at a sane range - close in if too far, back off if too close,
  *    otherwise use cover and peek instead of standing in the open.
- *  - `push`: winning the exchange (landing lots of hits) - charge straight at the
- *    threat instead of holding position.
+ *  - `push`: winning the exchange *and* the target is hurt enough to be worth
+ *    finishing (see `BotBrain.pickDirective`'s `ENEMY_LOW_HEALTH_FRAC`) - charge
+ *    straight at the threat instead of holding position. `engageHold` handles closing
+ *    distance more cautiously (via cover) for a plain hit streak against a healthy
+ *    target - `push` is specifically for finishing a fight already mostly won.
  *  - `heal`: retreat to cover and hunker down to use a heal item.
  *  - `flee`: too hurt to fight and either out of heal items or just got interrupted -
  *    put distance (and cover, if any is nearby) between the bot and the threat.
@@ -75,6 +78,21 @@ const PEEK_EXPOSE_MIN = 0.5;
 const PEEK_EXPOSE_MAX = 1.0;
 const PEEK_RETRY_DELAY = 0.3;
 const PEEK_REACHED_DIST = 1;
+
+/** How far ahead a plain retreat (mode `retreat`, or `heal`/`flee`/`reload` with no
+ *  cover found) picks a concrete destination to path toward, instead of just steering
+ *  in the raw "away from the threat" direction. A straight line can walk directly into
+ *  a building or a shipping container with no route around it, since it's never
+ *  pathfound - routing to a real point via `followPath` fixes that the same way
+ *  `close`/`push`/cover-seeking already benefit from nav-graph routing. */
+const RETREAT_LOOKAHEAD = 20;
+/** Not recomputed every tick - re-deriving "20 units directly away" from the bot's own
+ *  constantly-changing position would make the goal drift by roughly as much as the bot
+ *  moves each tick, which `followPath`'s own staleness check (`REPATH_GOAL_DELTA`)
+ *  would read as "goal changed, repath" almost every tick. A fixed point, refreshed
+ *  only occasionally, gives `followPath` something stable to actually path toward. */
+const RETREAT_RECOMPUTE_INTERVAL = 1.5;
+const RETREAT_GOAL_REACHED_DIST = 4;
 
 /** `push` never closes tighter than this, full stop, regardless of weapon. Not just a
  *  style choice: a gun's aim/lead math (`botAim.ts`) works from the *muzzle* position
@@ -142,6 +160,10 @@ export class BotMovementState {
     peeking = false;
     peekPos?: Vec2;
     peekTimer = 0;
+
+    /** Fixed destination a plain retreat paths toward - see `retreatDirection`. */
+    retreatGoal?: Vec2;
+    retreatRecheck = 0;
 }
 
 const PROBE_DIST = 3;
@@ -456,8 +478,17 @@ function retreatToCover(
     }
 
     if (!state.coverPos) {
-        const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
-        return holdAndPeek ? v2.mul(v2.perp(away), state.strafeSign) : away;
+        // Holding a mid-fight range with nothing to hide behind: stay put laterally
+        // rather than committing to a long pathfound retreat away from an already
+        // acceptable distance. A genuine retreat (healing/fleeing/reloading) routes
+        // through the nav graph instead of a raw straight line, same reasoning as
+        // `close`/`push` - walking directly into a building or a shipping container
+        // with no route around it is exactly the "stuck on cover" bug this avoids.
+        if (holdAndPeek) {
+            const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
+            return v2.mul(v2.perp(away), state.strafeSign);
+        }
+        return retreatDirection(bot, state, nav, threatPos, dt);
     }
 
     // Approach `coverPos` itself only until first reached - once `settledAtCover`,
@@ -581,6 +612,33 @@ export function followPath(
     return v2.normalizeSafe(v2.sub(graph.pos(state.pullTarget!), bot.pos));
 }
 
+/** Direction to retreat in, routed through the nav graph instead of a raw straight
+ *  line - see `RETREAT_LOOKAHEAD`. Without `nav`, falls back to the plain "away from
+ *  the threat" direction, same as before (worse around buildings, never broken). */
+function retreatDirection(
+    bot: Player,
+    state: BotMovementState,
+    nav: NavGraph | undefined,
+    threatPos: Vec2,
+    dt: number,
+): Vec2 {
+    const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
+    if (!nav) return away;
+
+    state.retreatRecheck -= dt;
+    if (
+        !state.retreatGoal
+        || state.retreatRecheck <= 0
+        || v2.distance(bot.pos, state.retreatGoal) < RETREAT_GOAL_REACHED_DIST
+    ) {
+        state.retreatRecheck = RETREAT_RECOMPUTE_INTERVAL;
+        state.retreatGoal = v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD));
+    }
+
+    const pathDir = followPath(bot, state, nav, state.retreatGoal, dt);
+    return pathDir ?? away;
+}
+
 /**
  * Drives movement from the brain's `CombatDirective` plus a threat position - see the
  * type doc for what each directive means. `threatPos` need not be the *currently
@@ -677,8 +735,7 @@ export function updateMovement(
             state.coverObstacle = undefined;
             state.coverPos = undefined;
             state.peeking = false;
-            state.path = [];
-            move = v2.neg(toThreat);
+            move = retreatDirection(bot, state, nav, threatPos, dt);
         } else {
             move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0);
         }
@@ -694,14 +751,21 @@ export function updateMovement(
 
     tryOpenNearbyDoor(bot);
 
-    // Anti-stuck: barely moving while a path is active means that path is bad (a door
-    // it didn't open in time, a stale waypoint) - drop it so the next tick requests a
-    // fresh one instead of pushing against the same wall forever.
+    // Anti-stuck: barely moving for a full second means whatever movement decided this
+    // tick isn't actually working - a bad path (a door it didn't open in time, a stale
+    // waypoint), or a spot near a building/container cluster where local deflection
+    // alone (below) can't find a way through. Not just path-following: plain direct
+    // steering (a raw retreat direction, lateral strafing near cover with nothing to
+    // route through) can get stuck against complex geometry exactly the same way, and
+    // had no recovery at all before this - forcing a fresh path/retreat goal next tick
+    // and trying the *other* deflection side are cheap enough to always do together.
     state.stuckTimer += dt;
     if (state.stuckTimer >= STUCK_CHECK_INTERVAL) {
-        if (state.path.length && v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD) {
+        if (v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD) {
             state.path = [];
             state.repathCooldown = 0;
+            state.retreatRecheck = 0;
+            state.deflectSign = (state.deflectSign * -1) as 1 | -1;
         }
         state.stuckTimer = 0;
         state.stuckAnchor = v2.copy(bot.pos);
@@ -717,17 +781,29 @@ export function updateMovement(
         // Prefer whichever side the bot was already deflecting toward, so it commits
         // to going around an obstacle instead of re-picking a side independently every
         // tick (which, right at an obstacle's edge, can flip left/right each tick and
-        // look like the bot is stuck vibrating against the wall).
-        const preferred = v2.rotate(move, state.deflectSign * (Math.PI / 3));
-        const other = v2.rotate(move, -state.deflectSign * (Math.PI / 3));
-        if (isDirClear(bot, preferred, PROBE_DIST, state.coverObstacle)) {
-            move = preferred;
-        } else if (isDirClear(bot, other, PROBE_DIST, state.coverObstacle)) {
-            move = other;
-            state.deflectSign = (state.deflectSign * -1) as 1 | -1;
-        } else {
-            move = v2.neg(move); // fully boxed in - back off rather than push into it
+        // look like the bot is stuck vibrating against the wall). Tried at increasingly
+        // wide angles before giving up: a single obstacle rarely needs more than a
+        // 60-degree nudge, but a tight cluster (several containers, a building corner
+        // right next to a fence) can box in anything narrower - see the "stuck on
+        // buildings/containers" bug this is for.
+        const angles = [Math.PI / 3, (2 * Math.PI) / 3];
+        let deflected = false;
+        for (const angle of angles) {
+            const preferred = v2.rotate(move, state.deflectSign * angle);
+            const other = v2.rotate(move, -state.deflectSign * angle);
+            if (isDirClear(bot, preferred, PROBE_DIST, state.coverObstacle)) {
+                move = preferred;
+                deflected = true;
+                break;
+            }
+            if (isDirClear(bot, other, PROBE_DIST, state.coverObstacle)) {
+                move = other;
+                state.deflectSign = (state.deflectSign * -1) as 1 | -1;
+                deflected = true;
+                break;
+            }
         }
+        if (!deflected) move = v2.neg(move); // fully boxed in - back off rather than push into it
     }
 
     bot.touchMoveActive = true;

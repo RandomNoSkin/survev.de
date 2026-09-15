@@ -53,6 +53,14 @@ const PANIC_HEALTH_FRAC_MULT = 0.5;
  *  isn't "critical" yet. That's the "attacks when it should retreat" bug: being low
  *  without a bandage is still a reason to disengage, not just being nearly dead. */
 const LOW_HEALTH_FRAC_MULT = 0.75;
+/** How hurt the *target* has to be, as a fraction of max health, before `push` is
+ *  willing to charge across open ground for it - see `pickDirective`. Pushing into a
+ *  still-healthy enemy in the open is exactly the "dumb push" complaint: landing a
+ *  handful of hits doesn't mean the fight is actually won yet, and charging a target
+ *  that can still fight back just because *this bot* is on a hit streak is how a bot
+ *  that's ahead trades itself away. Without a currently visible target to read health
+ *  from, `push` never has enough information to justify it either. */
+const ENEMY_LOW_HEALTH_FRAC = 0.4;
 /** How recently the target has to have actually been visible to count as "just ducked
  *  out of sight" rather than "genuinely lost track of them" - see `updateMovement`'s
  *  `recentlyVisible` and the eager re-peek it triggers. Comfortably past a peek's own
@@ -243,8 +251,10 @@ export class BotBrain {
      *    retreat toward relative safety while the reload (already requested
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
-     * 7. Recently landed enough hits to be winning the exchange, and not itself hurt
-     *    enough to be cautious about - press it.
+     * 7. Recently landed enough hits to be winning the exchange, itself not hurt
+     *    enough to be cautious about, *and* the target is actually hurt enough to be
+     *    worth finishing (`ENEMY_LOW_HEALTH_FRAC`) - press it across open ground.
+     *    Short of that last part, `engageHold` closes distance using cover instead.
      * 8. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
@@ -263,10 +273,16 @@ export class BotBrain {
 
         if (shouldHeal(bot, this.tier, !!this.target)) return "heal";
         if (this.needsReload(bot)) return "reload";
-        // Winning the exchange is still only worth pressing while not itself hurt
-        // enough to be cautious about - charging in low on health is how a bot that's
-        // ahead on points trades itself away for nothing.
-        if (!low && this.pushMomentum >= PUSH_HIT_THRESHOLD) return "push";
+        // Winning the exchange is still only worth pressing in the open while not
+        // itself hurt enough to be cautious about, *and* only once the target is
+        // actually hurt enough to be worth finishing - see `ENEMY_LOW_HEALTH_FRAC`.
+        // Landing hits alone was the "dumb push" bug: it doesn't mean the enemy can't
+        // still fight back, so charging across open ground for it regardless is a bad
+        // trade even while winning the exchange so far. Short of that, `engageHold`
+        // already knows how to close distance using cover - just not as recklessly.
+        const enemyLow = !!this.target
+            && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
+        if (!low && enemyLow && this.pushMomentum >= PUSH_HIT_THRESHOLD) return "push";
 
         return "engageHold";
     }

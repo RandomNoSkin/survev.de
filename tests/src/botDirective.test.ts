@@ -33,13 +33,16 @@ function primeGameClock(game: ReturnType<typeof createGame>): void {
     game.update(0.001);
 }
 
-test("Landing several hits switches the bot from holding to pushing", () => {
+test("Landing several hits on an already-hurt target switches the bot from holding to pushing", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     // 25 units: inside the no-gun fallback sweet spot's hold band (see
     // `currentSweetSpot`/`pickRangeMode`), so absent a push this should just hold.
-    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    // Health well under ENEMY_LOW_HEALTH_FRAC (0.4) - push only charges into the open
+    // for a target that's actually worth finishing, not just any hit streak.
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 30;
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     const holding = v2.copy(bot.touchMoveDir);
@@ -56,11 +59,29 @@ test("Landing several hits switches the bot from holding to pushing", () => {
     expect(pushing.x).toBeGreaterThan(0.5); // pushing straight at the threat (+x here)
 });
 
+// Regression: landing hits used to be the only condition for `push`, so a bot could
+// charge a still-healthy enemy across open ground just because it happened to connect
+// a few shots - the "dumb push" complaint. A healthy target keeps the bot on
+// `engageHold` (cover-aware) instead, regardless of hit streak.
+test("Landing several hits on a healthy target does not trigger a push", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // full health
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+    bot.bulletHits += 3;
+    bot.botBrain!.update(0.05);
+
+    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // still holding, not pushing
+});
+
 test("Push fades back to holding once the hit streak goes cold", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 30;
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     bot.bulletHits += 3;
@@ -257,7 +278,10 @@ test("A bot mid-heal keeps retreating even after landing hits, instead of pushin
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) });
+    // Low enough to also clear ENEMY_LOW_HEALTH_FRAC, so this specifically isolates
+    // heal-priority beating push - not just push never triggering for a healthy target.
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(100, 50) });
+    target.health = 30;
     bot.health = 20;
     bot.invManager.give("bandage", 5);
 

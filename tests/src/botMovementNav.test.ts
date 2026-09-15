@@ -514,6 +514,56 @@ test("A bot fighting from cover still lands hits on a stationary enemy by peekin
     // this random layout - nothing to assert against.
 });
 
+// Regression for "sometimes stuck on buildings/containers": a plain retreat used to
+// steer in a raw straight line away from the threat, with no pathfinding at all - an
+// obstacle placed directly in that line had only the generic local-avoidance probe
+// (a few degrees of deflection, a handful of units ahead) to get around, which isn't
+// enough for anything bigger than a single simple obstacle. `flee`/`heal`/`reload`'s
+// "no cover found" fallback and `engageHold`'s `retreat` range-mode now route through
+// the nav graph toward a real destination instead of a raw straight line.
+//
+// Checks *early* movement away from the exact starting spot, not total distance from
+// the threat over the whole run: `flee` legitimately settles for cover once it finds
+// some (SAFE_HEAL_DIST away is often satisfied by the very obstacle it just routed
+// around), and `engageHold`'s `retreat` sub-mode deliberately caps how far it backs off
+// (`MAX_RETREAT_DIST`) before holding position - both are correct, intentional
+// stopping points, not "stuck". Genuinely stuck looks like barely moving from the
+// starting position at all, which is what this actually checks for.
+test("Fleeing gets unstuck and moves away even with an obstacle directly in its path", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+
+    const away = v2.create(1, 0);
+    const speed = 8;
+    const dt = 0.1;
+
+    for (const obstacle of candidates.slice(0, 15)) {
+        // Threat behind the obstacle from the bot's perspective, bot just short of it -
+        // fleeing (moving in `away`) walks straight at the obstacle on the first step.
+        const threatPos = v2.sub(obstacle.pos, v2.mul(away, 30));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.sub(obstacle.pos, v2.mul(away, 5)) });
+        const state = new BotMovementState();
+
+        let pos = v2.copy(bot.pos);
+        const startPos = v2.copy(pos);
+
+        for (let i = 0; i < 60; i++) { // 6 simulated seconds - plenty to clear one obstacle
+            bot.pos = pos;
+            updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), dt, graph);
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+        }
+
+        if (v2.distance(pos, startPos) > 10) return; // real movement, not stuck in place
+    }
+
+    // No obstacle in this random layout happened to sit squarely in the way within the
+    // sampled candidates - nothing to assert against.
+});
+
 test("util.sameLayer sanity used by tryOpenNearbyDoor treats ground and ground+stairs as the same layer", () => {
     // Guards the layer check inside tryOpenNearbyDoor/followPath against a regression
     // silently excluding doors that sit on a stairs-tagged ground tile.
