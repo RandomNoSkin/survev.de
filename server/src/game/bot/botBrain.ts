@@ -194,6 +194,7 @@ export class BotBrain {
             dt,
             this.barn.navGraph,
             recentlyVisible,
+            this.tier,
         );
 
         // A live grenade landing nearby overrides whatever movement the directive above

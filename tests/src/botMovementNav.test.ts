@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
+import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
 import {
     BotMovementState,
     findCover,
@@ -22,6 +23,11 @@ import { createGame } from "./gameTestHelpers.ts";
  * `navGraph.test.ts`/`navPath.test.ts`, which only prove the graph/A* layer underneath
  * is correct in isolation.
  */
+
+function median(values: number[]): number {
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+}
 
 /** Searches a handful of far-apart point pairs on the map for one where a straight
  *  line is blocked but the nav graph still connects them - i.e. an actual "must detour
@@ -187,6 +193,35 @@ test("engageHold's strafe cycle varies in both timing and strength instead of a 
 
     expect(intensities.size).toBeGreaterThan(1);
     expect(sawShortFeint).toBe(true);
+});
+
+// Same "expert must move more" ask as the peek-pacing test above, for strafing: a more
+// decisive tier should roll the short, punchy feint noticeably more often than a
+// hesitant one, not just at some fixed rate for every difficulty - see `feintChanceFor`.
+test("engageHold's strafe cycle feints more often for a more aggressive tier", () => {
+    function countFeints(tier: typeof BOT_TIERS.expert): number {
+        const game = createGame(TeamMode.Solo, "test_normal");
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+        const threatPos = v2.create(250, 50); // far past any sweet spot - stays in "close" mode
+        const state = new BotMovementState();
+        const dt = 0.1;
+        let feints = 0;
+
+        for (let i = 0; i < 1000; i++) {
+            const timerBefore = state.strafeTimer;
+            updateMovement(bot, state, "engageHold", threatPos, 200, dt, undefined, false, tier);
+            if (timerBefore - dt <= 0 && state.strafeTimer < 0.6) feints++;
+        }
+        return feints;
+    }
+
+    // A single run of either tier alone is noisy (it's still a coin flip per cycle) -
+    // median over several trials each is what actually isolates the *chance* difference.
+    const trials = 7;
+    const expertFeints = median(Array.from({ length: trials }, () => countFeints(BOT_TIERS.expert)));
+    const easyFeints = median(Array.from({ length: trials }, () => countFeints(BOT_TIERS.easy)));
+
+    expect(expertFeints).toBeGreaterThan(easyFeints);
 });
 
 // The "Deckungs-Logik mit obstacle.dead-Prüfung" M3 deliverable: cover-seeking behind a
@@ -555,6 +590,91 @@ test("engageHold re-peeks sooner after just having seen the enemy than after a w
         expect(normalTimer).toBeGreaterThanOrEqual(1.0); // PEEK_HOLD_MIN
         return;
     }
+});
+
+// The "der expert bot muss mehr moven" ask: movement/positioning used to be completely
+// identical across every difficulty tier - only aim (reaction, error, ...) actually
+// scaled with skill. An `expert` bot should hide behind cover for noticeably less time
+// between peeks than an `easy` one, not just aim better once it leans out - see
+// `BotTierDef.aggression`/`peekPaceMult`.
+test("engageHold's peek-hide duration scales with tier - expert re-engages sooner than easy", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    const isolated = candidates.filter(
+        (c) => !candidates.some((o) => o !== c && v2.distance(o.pos, c.pos) < 10),
+    );
+
+    const away = v2.create(1, 0);
+    const speed = 8;
+    const dt = 0.1;
+
+    for (const cover of isolated) {
+        const threatPos = v2.sub(cover.pos, v2.mul(away, 40));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+        const state = new BotMovementState();
+
+        let pos = v2.copy(bot.pos);
+        let reachedPeeking = false;
+        for (let i = 0; i < 200; i++) {
+            bot.pos = pos;
+            updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph);
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+            if (state.peeking) {
+                reachedPeeking = true;
+                break;
+            }
+        }
+        if (!reachedPeeking) continue;
+
+        state.peekTimer = 0.001;
+        bot.pos = pos;
+        updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph, false, BOT_TIERS.expert);
+        const expertTimer = state.peekTimer;
+        expect(state.peeking).toBe(false);
+
+        state.peeking = true;
+        state.peekTimer = 0.001;
+        updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph, false, BOT_TIERS.easy);
+        const easyTimer = state.peekTimer;
+
+        expect(expertTimer).toBeLessThan(easyTimer);
+        return;
+    }
+});
+
+// The "dynamisch auf die gegner bewegungen eingehen" ask: `retreatToCover` only ever
+// re-evaluates cover against the enemy's *current* position on a fixed clock
+// (`COVER_RECOMPUTE_INTERVAL`) - a flanking enemy is only noticed on the next recompute,
+// so how often that happens is directly "how quickly does this bot react to the enemy
+// repositioning". That should scale with skill too, not sit on the same fixed clock
+// for every tier - see `coverRecomputeMult`.
+test("engageHold re-checks cover against a moving enemy more often for a more aggressive tier", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const cover = game.map.obstacles.find(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    if (!cover) return;
+
+    const away = v2.create(1, 0);
+    const threatPos = v2.sub(cover.pos, v2.mul(away, 40));
+
+    const expertBot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+    const expertState = new BotMovementState();
+    updateMovement(expertBot, expertState, "engageHold", threatPos, 25, 0.1, graph, false, BOT_TIERS.expert);
+
+    const easyBot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+    const easyState = new BotMovementState();
+    updateMovement(easyBot, easyState, "engageHold", threatPos, 25, 0.1, graph, false, BOT_TIERS.easy);
+
+    // Both just did their first-ever recompute (fresh state) - the countdown to the
+    // *next* one is exactly `COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression)`.
+    expect(expertState.coverRecheck).toBeLessThan(easyState.coverRecheck);
 });
 
 // End-to-end proof that peeking actually lands shots, not just that the movement

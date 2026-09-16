@@ -3,11 +3,13 @@ import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns.ts";
 import { collider } from "../../../../shared/utils/collider.ts";
 import { collisionHelpers } from "../../../../shared/utils/collisionHelpers.ts";
+import { math } from "../../../../shared/utils/math.ts";
 import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 import { currentSweetSpot } from "./botCombat.ts";
+import type { BotTierDef } from "./botDefs.ts";
 import { findPath } from "./nav/navAStar.ts";
 import { isOpenableDoor, isWalkClear, pointClear } from "./nav/navGeom.ts";
 import type { NavGraph } from "./nav/navGraph.ts";
@@ -80,6 +82,35 @@ const PEEK_EXPOSE_MIN = 0.5;
 const PEEK_EXPOSE_MAX = 1.0;
 const PEEK_RETRY_DELAY = 0.3;
 const PEEK_REACHED_DIST = 1;
+
+/** Multiplier on `PEEK_HOLD_MIN/MAX`/`EAGER_PEEK_HOLD_MIN/MAX` from `BotTierDef.aggression`
+ *  (see there) - `undefined` (no tier passed at all) is neutral, exactly the originally
+ *  tuned pace; a real tier scales from there, 1.6x longer hides at `aggression = 0` down
+ *  to 0.7x shorter at `aggression = 1` - a hesitant bot should linger behind cover
+ *  noticeably longer between peeks, and a decisive one lean back out sooner, not just aim
+ *  differently once it does. */
+function peekPaceMult(aggression: number | undefined): number {
+    if (aggression === undefined) return 1;
+    return math.lerp(aggression, 1.6, 0.7);
+}
+
+/** Multiplier on `COVER_RECOMPUTE_INTERVAL` from `aggression` - same neutral-when-absent
+ *  shape as `peekPaceMult`. A more decisive bot re-checks cover against a moving/flanking
+ *  enemy well more often than a hesitant one, instead of every tier reacting to
+ *  repositioning on the same fixed clock regardless of skill. */
+function coverRecomputeMult(aggression: number | undefined): number {
+    if (aggression === undefined) return 1;
+    return math.lerp(aggression, 1.5, 0.6);
+}
+
+/** Chance `rollStrafeCycle` rolls a short, punchy feint instead of a normal-length hold -
+ *  0.25 (the original tuned value) when no tier is passed, scaling from 0.1 at
+ *  `aggression = 0` up to 0.4 at `aggression = 1`: a decisive bot juke unpredictably more
+ *  often, a hesitant one settles into a steadier, more readable strafe. */
+function feintChanceFor(aggression: number | undefined): number {
+    if (aggression === undefined) return 0.25;
+    return math.lerp(aggression, 0.1, 0.4);
+}
 
 /** How far ahead a plain retreat (mode `retreat`, or `heal`/`flee`/`reload` with no
  *  cover found) picks a concrete destination to path toward, instead of just steering
@@ -414,15 +445,17 @@ function updatePeekCycle(
     threatPos: Vec2,
     dt: number,
     recentlyVisible: boolean,
+    aggression: number | undefined,
 ): Vec2 {
     state.peekTimer -= dt;
     if (state.peekTimer <= 0) {
         if (state.peeking) {
             state.peeking = false;
             state.peekPos = undefined;
+            const pace = peekPaceMult(aggression);
             state.peekTimer = recentlyVisible
-                ? util.random(EAGER_PEEK_HOLD_MIN, EAGER_PEEK_HOLD_MAX)
-                : util.random(PEEK_HOLD_MIN, PEEK_HOLD_MAX);
+                ? util.random(EAGER_PEEK_HOLD_MIN, EAGER_PEEK_HOLD_MAX) * pace
+                : util.random(PEEK_HOLD_MIN, PEEK_HOLD_MAX) * pace;
         } else {
             const spot = findPeekSpot(bot, nav.navObstacles, state.coverObstacle!, threatPos);
             if (spot) {
@@ -474,6 +507,7 @@ function retreatToCover(
     holdAndPeek: boolean,
     recentlyVisible: boolean,
     minCoverDist: number,
+    aggression: number | undefined,
 ): Vec2 {
     if (state.coverObstacle?.dead || state.coverObstacle?.collidable === false) {
         state.coverObstacle = undefined;
@@ -484,7 +518,7 @@ function retreatToCover(
     }
     state.coverRecheck -= dt;
     if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
-        state.coverRecheck = COVER_RECOMPUTE_INTERVAL;
+        state.coverRecheck = COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression);
         const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist);
         // Only treat this as a genuinely new spot - not just the periodic recompute
         // landing back on essentially the same point - as "un-arrive": resetting
@@ -532,7 +566,7 @@ function retreatToCover(
 
     state.path = [];
     return holdAndPeek && nav
-        ? updatePeekCycle(bot, state, nav, threatPos, dt, recentlyVisible)
+        ? updatePeekCycle(bot, state, nav, threatPos, dt, recentlyVisible, aggression)
         : v2.create(0, 0);
 }
 
@@ -674,10 +708,12 @@ function retreatDirection(
  *  reads as a metronome (real players don't juke on a schedule); mixing in occasional
  *  short, punchier feints among the more common longer holds breaks that regularity up
  *  without changing the average strength much. Shared by `push` and `engageHold` so
- *  both move with the same organic cadence instead of two independently-tuned ones. */
-function rollStrafeCycle(state: BotMovementState): void {
+ *  both move with the same organic cadence instead of two independently-tuned ones.
+ *  `aggression` (see `BotTierDef`) scales how often the short feint comes up at all -
+ *  see `feintChanceFor`. */
+function rollStrafeCycle(state: BotMovementState, aggression: number | undefined): void {
     state.strafeSign = (state.strafeSign * -1) as 1 | -1;
-    if (Math.random() < 0.25) {
+    if (Math.random() < feintChanceFor(aggression)) {
         state.strafeTimer = util.random(0.25, 0.55);
         state.strafeIntensity = util.random(0.35, 0.55);
     } else {
@@ -703,6 +739,11 @@ function rollStrafeCycle(state: BotMovementState): void {
  * (see `EAGER_PEEK_HOLD_MIN/MAX`): almost always means the bot's own peek just ended
  * with the enemy peeking too, not genuinely losing track of them, so there's no reason
  * to wait out a full "haven't seen them in a while" hold before checking again.
+ *
+ * `tier` - optional so every existing direct call (all the movement-layer unit tests)
+ * keeps exercising the originally tuned pace exactly; `BotBrain` always passes the real
+ * tier, which scales peek/re-cover/strafe pacing by `tier.aggression` - see
+ * `peekPaceMult`/`coverRecomputeMult`/`feintChanceFor`.
  */
 export function updateMovement(
     bot: Player,
@@ -713,8 +754,10 @@ export function updateMovement(
     dt: number,
     nav?: NavGraph,
     recentlyVisible = false,
+    tier?: BotTierDef,
 ): void {
     let move = v2.create(0, 0);
+    const aggression = tier?.aggression;
 
     if (directive === "idle" || !threatPos) {
         state.path = [];
@@ -728,14 +771,34 @@ export function updateMovement(
         }
         move = state.wanderDir;
     } else if (directive === "heal" || directive === "flee") {
-        move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible, SAFE_HEAL_DIST);
+        move = retreatToCover(
+            bot,
+            state,
+            nav,
+            threatPos,
+            dt,
+            false,
+            recentlyVisible,
+            SAFE_HEAL_DIST,
+            aggression,
+        );
     } else if (directive === "reload") {
-        move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible, SAFE_RELOAD_DIST);
+        move = retreatToCover(
+            bot,
+            state,
+            nav,
+            threatPos,
+            dt,
+            false,
+            recentlyVisible,
+            SAFE_RELOAD_DIST,
+            aggression,
+        );
     } else if (directive === "push") {
         const pushHoldDist = Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
 
         state.strafeTimer -= dt;
-        if (state.strafeTimer <= 0) rollStrafeCycle(state);
+        if (state.strafeTimer <= 0) rollStrafeCycle(state, aggression);
 
         if (dist > pushHoldDist) {
             // Still closing - any cover state left over from a previous directive
@@ -760,7 +823,7 @@ export function updateMovement(
             // goes wrong was the "plays too open even while pushing" complaint - a
             // pushing bot is still close to a live gunfight, not somewhere standing
             // still in plain view is ever actually safe.
-            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0);
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0, aggression);
         }
     } else {
         // engageHold: close distance if too far, back off if too close, otherwise hold
@@ -777,7 +840,7 @@ export function updateMovement(
         const band = Math.max(2, sweet * 0.18);
 
         state.strafeTimer -= dt;
-        if (state.strafeTimer <= 0) rollStrafeCycle(state);
+        if (state.strafeTimer <= 0) rollStrafeCycle(state, aggression);
 
         const mode = pickRangeMode(state, dist, sweet, band);
         if (mode === "close") {
@@ -792,7 +855,7 @@ export function updateMovement(
             state.peeking = false;
             move = retreatDirection(bot, state, nav, threatPos, dt);
         } else {
-            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0);
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0, aggression);
             // No cover anywhere nearby: `retreatToCover` falls back to pure lateral
             // strafing with no radial component at all, which has nothing keeping it
             // near an acceptable range - left alone, it drifts wherever strafing happens

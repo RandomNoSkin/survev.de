@@ -42,6 +42,15 @@ export interface BotTierDef {
     /** Seconds of sustained fire before pausing, for automatic weapons. */
     burstMin: number;
     burstMax: number;
+    /** 0-1: how decisively the bot moves and repositions - everything aim already scales
+     *  by tier (`reaction`/`aimErrorDeg`/...), but movement itself didn't scale at all
+     *  before this, so an "expert" bot held cover, peeked and juked exactly like an
+     *  "easy" one and only out-aimed it. Higher scales peeking faster/more often (see
+     *  `PEEK_HOLD_MIN/MAX`), re-checking cover against a moving enemy more often (see
+     *  `COVER_RECOMPUTE_INTERVAL`), and strafing with sharper, more frequent feints (see
+     *  `rollStrafeCycle`) - a more skilled bot should look more alive, not just hit
+     *  harder. */
+    aggression: number;
 }
 
 /**
@@ -61,6 +70,7 @@ export const BOT_TIERS: Record<BotDifficulty, BotTierDef> = {
         quickswitch: false,
         burstMin: 0.2,
         burstMax: 0.5,
+        aggression: 0.2,
     },
     normal: {
         reaction: 0.45,
@@ -74,6 +84,7 @@ export const BOT_TIERS: Record<BotDifficulty, BotTierDef> = {
         quickswitch: false,
         burstMin: 0.3,
         burstMax: 0.7,
+        aggression: 0.45,
     },
     hard: {
         reaction: 0.28,
@@ -87,6 +98,7 @@ export const BOT_TIERS: Record<BotDifficulty, BotTierDef> = {
         quickswitch: true,
         burstMin: 0.35,
         burstMax: 0.9,
+        aggression: 0.7,
     },
     expert: {
         reaction: 0.18,
@@ -100,6 +112,7 @@ export const BOT_TIERS: Record<BotDifficulty, BotTierDef> = {
         quickswitch: true,
         burstMin: 0.45,
         burstMax: 1,
+        aggression: 1,
     },
 };
 
