@@ -245,12 +245,18 @@ function friendlyFireInLine(bot: Player, targetPos: Vec2): boolean {
  * time and the aim cone; this layer adds ammo, effective range and friendly fire, then
  * drives `shootStart`/`shootHold` per the weapon's own fire mode so single/dual guns
  * pulse once per shot instead of firing every tick.
+ *
+ * `targetPos` is just the position being aimed at - a real bullet's collision is
+ * resolved by physics along `bot.dir` regardless of what's actually there, so this never
+ * needed a live `Player` for anything beyond that one position (friendly-fire, range).
+ * That's what lets `BotBrain` also fire this during a brief, predicted offscreen shot
+ * (see `updateAim`'s `AimTarget`) with no special-casing here at all.
  */
 export function updateFiring(
     bot: Player,
     tier: BotTierDef,
     fire: BotFireState,
-    target: Player | undefined,
+    targetPos: Vec2 | undefined,
     dist: number,
     canFire: boolean,
     dt: number,
@@ -259,7 +265,7 @@ export function updateFiring(
     const cur = wm.curWeapIdx;
     const gunDef = gunDefOf(wm.activeWeapon);
 
-    if (!target || !gunDef || !canFire || bot.actionType !== GameConfig.Action.None) {
+    if (!targetPos || !gunDef || !canFire || bot.actionType !== GameConfig.Action.None) {
         bot.shootHold = false;
         fire.firing = true;
         fire.burstTimer = -1; // next engagement starts by firing, see BotFireState
@@ -281,7 +287,7 @@ export function updateFiring(
         bot.shootHold = false;
         return;
     }
-    if (friendlyFireInLine(bot, target.pos)) {
+    if (friendlyFireInLine(bot, targetPos)) {
         bot.shootHold = false;
         return;
     }

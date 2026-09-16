@@ -2,7 +2,7 @@ import { GameConfig, WeaponSlot } from "../../../../shared/gameConfig.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { GameObject } from "../objects/gameObject.ts";
 import type { Player } from "../objects/player.ts";
-import { BotAimState, updateAim } from "./botAim.ts";
+import { type AimTarget, BotAimState, updateAim } from "./botAim.ts";
 import type { BotBarn } from "./botBarn.ts";
 import {
     BotFireState,
@@ -17,7 +17,7 @@ import {
 } from "./botCombat.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
 import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
-import { findGrenadeThreat, findVisibleTarget } from "./botPerception.ts";
+import { findGrenadeThreat, findVisibleTarget, hasLineOfSight } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
 
@@ -72,6 +72,17 @@ const RECENTLY_VISIBLE_MS = 1200;
  *  (tuned for a completely different job, re-peeking sooner): this needs real confidence
  *  the fight has actually paused, not just the ordinary gap a peek/hide cycle produces. */
 const SUSTAINED_LOST_MS = 2500;
+/** How long after losing sight of a moving target it's still worth trying an offscreen
+ *  shot at its predicted position - see `offscreenAimTarget`. Deliberately short: this
+ *  is "catch them stepping past a gap/window they just crossed", not sustained tracking
+ *  through a wall - `aim.vel` is a real velocity estimate, not psychic, and the error
+ *  compounds fast the longer it's extrapolated blind. */
+const OFFSCREEN_PREDICT_MS = 450;
+/** Below this speed (units/s), predicting is pointless - a target that was essentially
+ *  stationary when last seen is already exactly where `lastKnownEnemyPos` says, nothing
+ *  to extrapolate toward. Also what keeps this from degenerating into "just keep shooting
+ *  the last spot they stood" for a target that merely ducked behind close cover. */
+const OFFSCREEN_MIN_SPEED = 1.5;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -133,11 +144,15 @@ export class BotBrain {
 
         this.healAbortCooldown = Math.max(0, this.healAbortCooldown - dt);
 
-        // `dist`/`this.target` below stay tied to the *currently visible* target only -
-        // aim and fire must never act on a remembered position. `threatPos`/`engageDist`
-        // are the broader "am I in a fight" read movement and heal/push/flee decisions
-        // use instead, which tolerates a target that's ducked behind cover a moment ago.
-        const dist = this.target ? v2.distance(bot.pos, this.target.pos) : Infinity;
+        // `aimTarget`/`dist` below stay tied to the *currently visible* target, or a
+        // brief predicted stand-in while it's just gone offscreen (see
+        // `offscreenAimTarget`) - genuinely aiming/firing at a bare remembered position
+        // with no such check is a very different, much less justified thing (see
+        // `threatPos`/`engageDist` just below, the broader "am I in a fight" read
+        // movement and heal/push/flee decisions use instead, which tolerates a target
+        // that's ducked behind cover a moment ago with no distance/LOS guarantee at all).
+        const aimTarget: AimTarget | undefined = this.target ?? this.offscreenAimTarget(bot);
+        const dist = aimTarget ? v2.distance(bot.pos, aimTarget.pos) : Infinity;
         const threatPos = this.threatPos();
         const engageDist = threatPos ? v2.distance(bot.pos, threatPos) : Infinity;
 
@@ -211,7 +226,7 @@ export class BotBrain {
             bot.touchMoveActive = true;
         }
 
-        const aimResult = updateAim(bot, this.aim, this.tier, this.target, dt);
+        const aimResult = updateAim(bot, this.aim, this.tier, aimTarget, dt);
 
         // Before weapon selection: an in-progress or freshly-triggered throw claims the
         // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
@@ -241,7 +256,7 @@ export class BotBrain {
         // reviving, ...), since switching would otherwise cancel that action.
         updateWeaponSelection(bot, this.tier, this.fire, dist);
         updateReload(bot);
-        updateFiring(bot, this.tier, this.fire, this.target, dist, aimResult.canFire, dt);
+        updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
 
         // Not just `directive === "heal"`: that flips true the instant `shouldHeal`
         // does, before the retreat it kicks off in `updateMovement` above has actually
@@ -360,6 +375,33 @@ export class BotBrain {
      *  exact tick's momentary LOS break - see `SUSTAINED_LOST_MS`. */
     private sustainedlyLost(bot: Player): boolean {
         return !this.target && bot.game.now - this.lastKnownEnemyTimeMs > SUSTAINED_LOST_MS;
+    }
+
+    /** A brief, predicted stand-in for the target the instant it's gone offscreen but
+     *  was recently moving fast enough to be worth tracking through the gap - "ein wenig
+     *  predicten wo der Gegner sich hinbewegt, um offscreens zu treffen/versuchen".
+     *  Extrapolates from `lastKnownEnemyPos` using `aim.vel` - already a live velocity
+     *  estimate `updateAim` keeps while the target is visible, simply frozen the instant
+     *  it isn't, not re-derived here - then requires an actual, geometrically clear line
+     *  to that predicted point using the exact same raycast a real bullet would use, so
+     *  this only ever "sees through" a genuine gap the target is passing (a window, a
+     *  fence, the edge of cover) and never a solid wall. Reuses `aim.targetId` for the
+     *  synthetic `AimTarget`'s id so `updateAim`'s reacquisition gate treats this as a
+     *  continuation of already having noticed them, not a fresh sighting that needs its
+     *  own reaction delay - it's still the same engagement, just briefly out of sight. */
+    private offscreenAimTarget(bot: Player): AimTarget | undefined {
+        if (this.target || !this.lastKnownEnemyPos) return undefined;
+        const elapsedMs = bot.game.now - this.lastKnownEnemyTimeMs;
+        if (elapsedMs > OFFSCREEN_PREDICT_MS) return undefined;
+        if (v2.length(this.aim.vel) < OFFSCREEN_MIN_SPEED) return undefined;
+
+        const predictedPos = v2.add(
+            this.lastKnownEnemyPos,
+            v2.mul(this.aim.vel, elapsedMs / 1000),
+        );
+        if (!hasLineOfSight(bot.game, bot.pos, predictedPos, bot.layer)) return undefined;
+
+        return { __id: this.aim.targetId, pos: predictedPos };
     }
 
     /** Whether the current spot can absorb a medkit's longer, harder-to-abort

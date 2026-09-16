@@ -273,12 +273,12 @@ test("updateFiring never fires when a teammate stands on the line of fire", () =
     bot.dirNew = v2.create(1, 0);
 
     const fire = new BotFireState();
-    updateFiring(bot, BOT_TIERS.expert, fire, enemy, 40, /* canFire */ true, 0.05);
+    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 40, /* canFire */ true, 0.05);
     expect(bot.shootHold).toBe(false);
 
     // Sanity: without the teammate in the way, the same shot is allowed.
     game.playerBarn.removePlayer(mate);
-    updateFiring(bot, BOT_TIERS.expert, fire, enemy, 40, true, 0.05);
+    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 40, true, 0.05);
     expect(bot.shootHold).toBe(true);
 });
 
@@ -292,11 +292,11 @@ test("Auto-fire weapons pulse shootHold in bursts, not one continuous hold", () 
     const fire = new BotFireState();
 
     // Fresh engagement must start by firing, not by immediately toggling into a pause.
-    updateFiring(bot, tier, fire, enemy, 10, true, 0.05);
+    updateFiring(bot, tier, fire, enemy.pos, 10, true, 0.05);
     expect(bot.shootHold).toBe(true);
 
     // Advance past the (fixed, 0.1s) burst window - it must let go of the trigger.
-    updateFiring(bot, tier, fire, enemy, 10, true, 0.2);
+    updateFiring(bot, tier, fire, enemy.pos, 10, true, 0.2);
     expect(bot.shootHold).toBe(false);
 });
 
@@ -307,7 +307,7 @@ test("Single-fire weapons pulse shootStart once per shot, not every tick", () =>
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
 
     const fire = new BotFireState();
-    updateFiring(bot, BOT_TIERS.expert, fire, enemy, 10, true, 0.05);
+    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 10, true, 0.05);
     expect(bot.shootStart).toBe(true);
     expect(bot.shootHold).toBe(false);
 });

@@ -4,9 +4,17 @@ import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GameConfig } from "../../../../shared/gameConfig.ts";
 import { math } from "../../../../shared/utils/math.ts";
 import { util } from "../../../../shared/utils/util.ts";
-import { v2 } from "../../../../shared/utils/v2.ts";
+import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { Player } from "../objects/player.ts";
 import type { BotTierDef } from "./botDefs.ts";
+
+/** Everything `updateAim` actually needs from a target - a real `Player` (visible) or a
+ *  brief, predicted stand-in (`BotBrain`'s offscreen tracking, see its doc comment)
+ *  satisfy this the same way, so aim/lead/turn/reaction all work unchanged either way. */
+export interface AimTarget {
+    __id: number;
+    pos: Vec2;
+}
 
 /** Per-bot aim state, persisted across ticks by the brain. */
 export class BotAimState {
@@ -53,12 +61,17 @@ function gaussianRandom(): number {
  * Runs every tick regardless of the brain's think rate, so turning and tracking stay
  * smooth between perception updates. Writes `dirNew`/`toMouseLen` - the exact fields a
  * human's InputMsg would set (see `Player.handleInput`).
+ *
+ * `target` is an `AimTarget`, not necessarily a live `Player` - `BotBrain` passes a
+ * brief predicted position (with the same `__id` as the real target had) while it's
+ * offscreen but still moving predictably, so the same turn/lead/error/reaction model
+ * applies unchanged whether it's tracking someone visible or trying an offscreen shot.
  */
 export function updateAim(
     bot: Player,
     aim: BotAimState,
     tier: BotTierDef,
-    target: Player | undefined,
+    target: AimTarget | undefined,
     dt: number,
 ): AimResult {
     if (!target) return NO_FIRE;

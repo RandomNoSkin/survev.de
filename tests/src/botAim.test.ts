@@ -170,3 +170,31 @@ test("updateAim does not lead when the target is stationary", () => {
 
     expect(v2.distance(aim.dir, v2.create(1, 0))).toBeLessThan(0.001);
 });
+
+// `target` only ever needs `__id`/`pos` (see the `AimTarget` interface) - a plain object
+// shaped that way, not a real `Player`, has to work identically. This is what lets
+// `BotBrain` pass a predicted offscreen position (see `botOffscreen.test.ts`) through
+// the exact same turn/lead/reaction model with no special-casing in `updateAim` itself.
+test("updateAim accepts a plain AimTarget, not just a real Player", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.now = 0;
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const aim = new BotAimState();
+    aim.dir = v2.create(1, 0);
+    const tier = { ...BOT_TIERS.normal, aimErrorDeg: 0 };
+    const dt = 0.05;
+
+    const syntheticTarget = { __id: 12345, pos: v2.create(0, 30) };
+    let result = updateAim(bot, aim, tier, syntheticTarget, dt);
+    expect(result.canFire).toBe(false); // reaction gate still applies
+
+    for (let elapsed = dt; elapsed < tier.reaction * 1.5; elapsed += dt) {
+        game.now += dt * 1000;
+        result = updateAim(bot, aim, tier, syntheticTarget, dt);
+    }
+    expect(result.canFire).toBe(true);
+
+    const aimAngle = Math.atan2(aim.dir.y, aim.dir.x);
+    expect(Math.abs(math.angleDiff(aimAngle, Math.PI / 2))).toBeLessThan(0.01);
+});
