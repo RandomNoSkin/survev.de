@@ -62,6 +62,16 @@ const ENEMY_LOW_HEALTH_FRAC = 0.4;
  *  exposure window (0.5-1s) so this stays true through the entire gap a bot's own
  *  peek/hide cycle produces. */
 const RECENTLY_VISIBLE_MS = 1200;
+/** How long the enemy has to have been genuinely out of sight - not just this exact
+ *  tick's momentary LOS break, a real sustained gap - before that alone counts as safe
+ *  enough to start healing, regardless of raw distance (see `isSafeToHeal`). Without
+ *  this, an equally-fast pursuer that never lets `engageDist` reach `SAFE_HEAL_DIST`
+ *  (a straight chase never widens the gap on its own) permanently denies healing even
+ *  after the bot has legitimately broken line of sight - which reads as "just keeps
+ *  retreating and never actually heals". Deliberately longer than `RECENTLY_VISIBLE_MS`
+ *  (tuned for a completely different job, re-peeking sooner): this needs real confidence
+ *  the fight has actually paused, not just the ordinary gap a peek/hide cycle produces. */
+const SUSTAINED_LOST_MS = 2500;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -240,8 +250,11 @@ export class BotBrain {
         // Once healing is under way this is a no-op every tick anyway (`shouldHeal`
         // itself returns false while `actionType !== None`), so it only matters for the
         // very first tick.
-        if (directive === "heal" && isSafeToHeal(bot, this.movement, engageDist)) {
-            updateHeal(bot, this.tier, !!this.target);
+        if (
+            directive === "heal"
+            && isSafeToHeal(bot, this.movement, engageDist, this.sustainedlyLost(bot))
+        ) {
+            updateHeal(bot, this.tier, !!this.target, this.positionSafeForHeal(bot));
         }
     }
 
@@ -271,12 +284,14 @@ export class BotBrain {
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
      * 8. The target is visible and hurt enough to be worth finishing
-     *    (`ENEMY_LOW_HEALTH_FRAC`), and this bot itself isn't hurt enough to be
-     *    cautious about - press it across open ground rather than waiting for a hit
-     *    streak to build first. By this point every actual disadvantage (own low
-     *    health, needing to reload) has already returned its own directive above, so
-     *    "target is low" alone is already "no disadvantage in pushing". Short of a low
-     *    target, `engageHold` closes distance using cover instead.
+     *    (`ENEMY_LOW_HEALTH_FRAC`), and this bot's own health has actually recovered
+     *    back up to `tier.healThreshold` - not merely cleared the laxer `low` bar -
+     *    press it across open ground rather than waiting for a hit streak to build
+     *    first. Charging into the open is the single most exposed thing this bot can
+     *    do, so it needs a real cushion, not just "not low anymore": a bot that would
+     *    still rather heal than fight (`shouldHeal` requires the same threshold)
+     *    shouldn't push the instant a bandage happens to end mid-fight. Short of that,
+     *    `engageHold` closes distance using cover instead.
      * 9. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
@@ -286,7 +301,8 @@ export class BotBrain {
         const healthFrac = bot.health / GameConfig.player.health;
         const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
         const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT;
-        const noHealItem = pickHealItem(bot, healthFrac) === undefined;
+        const positionSafe = this.positionSafeForHeal(bot);
+        const noHealItem = pickHealItem(bot, healthFrac, positionSafe) === undefined;
 
         if (critical && (noHealItem || this.healAbortCooldown > 0)) return "flee";
         // Low but not yet critical, and nothing to fix it with - disengage rather than
@@ -295,11 +311,11 @@ export class BotBrain {
         // Has a bandage but can't safely use it yet (almost always: the enemy can
         // still see it) - disengage to break line of sight rather than fight on hurt
         // and hope. Once concealed, `shouldHeal` flips to true on its own.
-        if (low && !noHealItem && !shouldHeal(bot, this.tier, !!this.target)) {
+        if (low && !noHealItem && !shouldHeal(bot, this.tier, !!this.target, positionSafe)) {
             return "flee";
         }
 
-        if (shouldHeal(bot, this.tier, !!this.target)) return "heal";
+        if (shouldHeal(bot, this.tier, !!this.target, positionSafe)) return "heal";
         if (this.needsReload(bot)) return "reload";
         // A visible target actually hurt enough to be worth finishing is reason enough
         // to press it, on its own - no need to already be on a hit streak first. Every
@@ -312,7 +328,15 @@ export class BotBrain {
         // `engageHold` still knows how to close distance using cover instead.
         const enemyLow = !!this.target
             && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
-        if (!low && enemyLow) return "push";
+        // Pushing is the single most exposed thing this bot can do - charging into open
+        // ground on purpose - so it needs a real health cushion, not merely having
+        // cleared the much laxer `low` bar (which only demands 75% of the point
+        // `shouldHeal` itself would still want to top off from). Reusing
+        // `tier.healThreshold` directly ties "healthy enough to push" to the exact same
+        // bar that decides "healthy enough to no longer even want to heal" - a bot that
+        // just finished a bandage and would still rather heal than fight shouldn't be
+        // charging the instant that bandage happens to end mid-fight.
+        if (healthFrac >= this.tier.healThreshold && enemyLow) return "push";
 
         return "engageHold";
     }
@@ -329,6 +353,19 @@ export class BotBrain {
         );
         if (!slots.length || !slots.every((i) => wm.weapons[i].ammo <= 0)) return false;
         return bot.game.now - this.lastHitTakenTime < RELOAD_RETREAT_DANGER_MS;
+    }
+
+    /** True once the target has been genuinely out of sight for a while - not just this
+     *  exact tick's momentary LOS break - see `SUSTAINED_LOST_MS`. */
+    private sustainedlyLost(bot: Player): boolean {
+        return !this.target && bot.game.now - this.lastKnownEnemyTimeMs > SUSTAINED_LOST_MS;
+    }
+
+    /** Whether the current spot can absorb a medkit's longer, harder-to-abort
+     *  commitment - real cover, or a sustained/confident break in contact - as opposed
+     *  to `shouldHeal`'s own laxer "wants to heal at all" gate. See `pickHealItem`. */
+    private positionSafeForHeal(bot: Player): boolean {
+        return !!this.movement.coverPos || this.sustainedlyLost(bot);
     }
 
     /** Engagement position for everything downstream of perception: the target itself

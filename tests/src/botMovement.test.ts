@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { BotMovementState, updateMovement } from "../../server/src/game/bot/botMovement.ts";
+import { BotMovementState, isSafeToHeal, updateMovement } from "../../server/src/game/bot/botMovement.ts";
 import { TeamMode } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
@@ -111,10 +111,12 @@ test("push holds at a longer range for a long-range weapon instead of rushing to
 
     const state = new BotMovementState();
     // 20 units is already well inside the mosin's push-hold distance - closing further
-    // here, all the way to a shotgun-appropriate range, is the bug.
+    // here, all the way to a shotgun-appropriate range, is the bug. It's still free to
+    // move laterally once holding (see the no-cover push-hold test below) - the bug this
+    // guards against is specifically closing distance further, not moving at all.
     updateMovement(bot, state, "push", threat, 20, 0.05);
 
-    expect(bot.touchMoveActive).toBe(false);
+    expect(bot.touchMoveDir.x).not.toBeGreaterThan(0.3); // not still closing in, +x here
 });
 
 test("push still closes to near-melee range for a short-range weapon", () => {
@@ -187,4 +189,26 @@ test("engageHold's no-cover hold applies no pull for a long-range weapon within 
 
     const towardThreat = v2.normalizeSafe(v2.sub(threat, bot.pos));
     expect(Math.abs(v2.dot(bot.touchMoveDir, towardThreat))).toBeLessThan(0.05);
+});
+
+// The "retreated without ever actually healing" complaint: an equally fast pursuer
+// never lets plain distance grow past `SAFE_HEAL_DIST` on its own (a straight chase
+// keeps the gap constant), so without this fallback the raw-distance/cover checks alone
+// could deny healing forever even after real separation has already happened.
+// `sustainedLost` (a real, sustained break in contact - see `BotBrain`'s
+// `SUSTAINED_LOST_MS`) overrides both.
+test("isSafeToHeal treats a sustained break in contact as safe regardless of distance or cover", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    const state = new BotMovementState();
+
+    expect(isSafeToHeal(bot, state, 3, /* sustainedLost */ true)).toBe(true); // well under SAFE_HEAL_DIST
+});
+
+test("isSafeToHeal still requires distance or cover without a sustained break in contact", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    const state = new BotMovementState();
+
+    expect(isSafeToHeal(bot, state, 3, /* sustainedLost */ false)).toBe(false);
 });

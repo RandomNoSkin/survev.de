@@ -3,6 +3,7 @@ import {
     BotFireState,
     BotThrowState,
     currentSweetSpot,
+    pickHealItem,
     shouldHeal,
     updateFiring,
     updateHeal,
@@ -247,8 +248,8 @@ test("Weapon selection does not cancel an in-progress heal", () => {
     bot.invManager.give("bandage", 5);
     bot.health = 40;
 
-    expect(shouldHeal(bot, BOT_TIERS.normal, false)).toBe(true);
-    updateHeal(bot, BOT_TIERS.normal, false);
+    expect(shouldHeal(bot, BOT_TIERS.normal, false, false)).toBe(true);
+    updateHeal(bot, BOT_TIERS.normal, false, false);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 
     // Even with every reason to want to switch (cooldown high, quickswitch tier, a
@@ -317,7 +318,7 @@ test("A hurt, unthreatened bot heals itself", () => {
     bot.invManager.give("bandage", 5);
     bot.health = 40; // below BOT_TIERS.normal.healThreshold (0.5)
 
-    updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ false);
+    updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ false, /* positionSafe */ false);
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
@@ -328,9 +329,58 @@ test("A bot does not stop to heal a graze while an enemy is in sight", () => {
     bot.invManager.give("bandage", 5);
     bot.health = 90; // well above the danger zone that overrides caution
 
-    updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ true);
+    updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ true, /* positionSafe */ false);
 
     expect(bot.actionType).toBe(GameConfig.Action.None);
+});
+
+// The explicit ask: a medkit only makes sense when it's actually faster than fully
+// healing with bandages *and* the position can absorb that longer, harder-to-abort
+// commitment. Missing 60 HP (health 40%, above the critical override below) needs 4
+// bandage uses (12s total, `heal: 15`/`useTime: 3`) against the medkit's flat 6s -
+// clearly faster, so this isolates the position half of the decision on its own.
+test("pickHealItem reaches for the medkit when it's faster and the position is safe", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 10);
+    bot.invManager.give("healthkit", 2);
+    bot.health = 40; // missing 60, above the critical (<=25%) override
+
+    expect(pickHealItem(bot, 0.4, /* positionSafe */ true)).toBe("healthkit");
+});
+
+test("pickHealItem sticks with the bandage even when the medkit would be faster, if exposed", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 10);
+    bot.invManager.give("healthkit", 2);
+    bot.health = 40; // same 60-missing case as above - only positionSafe differs
+
+    expect(pickHealItem(bot, 0.4, /* positionSafe */ false)).toBe("bandage");
+});
+
+// Missing only 15 HP is a single bandage use (3s) against the medkit's 6s - bandage is
+// already faster on its own, so position shouldn't matter here either way.
+test("pickHealItem prefers the bandage outright when it isn't actually slower", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 10);
+    bot.invManager.give("healthkit", 2);
+    bot.health = 85; // missing 15
+
+    expect(pickHealItem(bot, 0.85, /* positionSafe */ true)).toBe("bandage");
+});
+
+// Critically hurt always grabs the fastest option regardless of position - delaying
+// matters more than the exposure window at that point.
+test("pickHealItem grabs the medkit at critical health even when exposed", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 10);
+    bot.invManager.give("healthkit", 2);
+    bot.health = 20; // <= 25%, critical override
+
+    expect(pickHealItem(bot, 0.2, /* positionSafe */ false)).toBe("healthkit");
 });
 
 test("updateThrowable lobs a grenade at a well-aimed, in-range target", () => {

@@ -537,14 +537,23 @@ function retreatToCover(
 }
 
 /** Whether the bot has actually put enough separation between itself and `threatPos` to
- *  safely start a heal action - reached cover (if `retreatToCover` found any) or opened
- *  up `SAFE_HEAL_DIST` of plain distance otherwise. Gates *starting* a heal, not
- *  continuing one already in progress (`BotBrain.pickDirective` handles that by reading
- *  `actionType` directly) - deciding "I should heal" and immediately consuming the item
- *  regardless of whether the retreat has actually gone anywhere yet is what made bots
- *  visibly start a bandage and cancel it again on the very next tick, still standing
- *  right where the fight was. */
-export function isSafeToHeal(bot: Player, state: BotMovementState, engageDist: number): boolean {
+ *  safely start a heal action - reached cover (if `retreatToCover` found any), opened up
+ *  `SAFE_HEAL_DIST` of plain distance, or gone genuinely unseen for a while
+ *  (`sustainedLost`, see `BotBrain`'s `SUSTAINED_LOST_MS`) - an equally fast pursuer never
+ *  lets plain distance grow on its own, so without that last check a straight chase could
+ *  deny healing forever even after real separation (a corner, a building) has already
+ *  been won. Gates *starting* a heal, not continuing one already in progress
+ *  (`BotBrain.pickDirective` handles that by reading `actionType` directly) - deciding "I
+ *  should heal" and immediately consuming the item regardless of whether the retreat has
+ *  actually gone anywhere yet is what made bots visibly start a bandage and cancel it
+ *  again on the very next tick, still standing right where the fight was. */
+export function isSafeToHeal(
+    bot: Player,
+    state: BotMovementState,
+    engageDist: number,
+    sustainedLost: boolean,
+): boolean {
+    if (sustainedLost) return true;
     if (state.coverPos) return v2.distance(bot.pos, state.coverPos) <= COVER_REACHED_DIST;
     return engageDist >= SAFE_HEAL_DIST;
 }
@@ -723,16 +732,18 @@ export function updateMovement(
     } else if (directive === "reload") {
         move = retreatToCover(bot, state, nav, threatPos, dt, false, recentlyVisible, SAFE_RELOAD_DIST);
     } else if (directive === "push") {
-        state.coverObstacle = undefined;
-        state.coverPos = undefined;
-        state.peeking = false;
-
         const pushHoldDist = Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
 
         state.strafeTimer -= dt;
         if (state.strafeTimer <= 0) rollStrafeCycle(state);
 
         if (dist > pushHoldDist) {
+            // Still closing - any cover state left over from a previous directive
+            // doesn't apply mid-charge, so drop it rather than let a stale `coverPos`
+            // from before the push leak into the hold below once it arrives.
+            state.coverObstacle = undefined;
+            state.coverPos = undefined;
+            state.peeking = false;
             const toThreat = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
             const pathDir = nav ? followPath(bot, state, nav, threatPos, dt) : undefined;
             move = pathDir ?? toThreat;
@@ -743,8 +754,13 @@ export function updateMovement(
             }
         } else {
             // Close enough to press the advantage without overcommitting - hold here
-            // and keep firing rather than closing further (see `pushHoldDist`).
-            state.path = [];
+            // and keep firing rather than closing further (see `pushHoldDist`), but
+            // from cover when there's any nearby, exactly like `engageHold`'s own hold
+            // does. Pressing an advantage in the open with nothing to duck behind if it
+            // goes wrong was the "plays too open even while pushing" complaint - a
+            // pushing bot is still close to a live gunfight, not somewhere standing
+            // still in plain view is ever actually safe.
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0);
         }
     } else {
         // engageHold: close distance if too far, back off if too close, otherwise hold

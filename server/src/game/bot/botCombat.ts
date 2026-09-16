@@ -318,10 +318,30 @@ export function updateFiring(
 
 /** The best available heal item for `healthFrac`, or undefined if the bot has nothing
  *  usable - exported so the brain can also ask "do I even have a way to heal right
- *  now" when deciding whether being critically low means fleeing instead. */
-export function pickHealItem(bot: Player, healthFrac: number): InventoryItem | undefined {
+ *  now" when deciding whether being critically low means fleeing instead.
+ *
+ * Bandage vs. medkit is a real time/risk trade-off, not just "how much is missing":
+ * a medkit is one `useTime`-long commitment to a full heal, a bandage is several
+ * `heal`-sized chunks that can be interrupted between uses but adds up to more total
+ * time once more than a couple are needed. `positionSafe` (real cover, or a sustained,
+ * confident break in contact - see `BotBrain`'s `SUSTAINED_LOST_MS`) is what makes that
+ * longer medkit commitment worth it: reaching for the slower-but-bigger heal on a
+ * position that can't actually absorb 6 uninterrupted seconds just trades a shorter
+ * bandage tick (which can bail between uses) for a longer, harder-to-abort one. */
+export function pickHealItem(
+    bot: Player,
+    healthFrac: number,
+    positionSafe: boolean,
+): InventoryItem | undefined {
     const missing = (1 - healthFrac) * GameConfig.player.health;
-    const wantsFull = healthFrac <= 0.25 || missing > 60;
+    const bandageDef = GameObjectDefs.typeToDefSafe("bandage") as HealDef;
+    const healthkitDef = GameObjectDefs.typeToDefSafe("healthkit") as HealDef;
+    const bandageTime = Math.ceil(missing / bandageDef.heal) * bandageDef.useTime;
+    const medkitFaster = healthkitDef.useTime < bandageTime;
+
+    // Critically hurt: grab whichever heals at all regardless of position - at this
+    // point delaying is the bigger risk, not the exposure window a medkit costs.
+    const wantsFull = healthFrac <= 0.25 || (medkitFaster && positionSafe);
     const order: InventoryItem[] = wantsFull
         ? ["healthkit", "bandage"]
         : ["bandage", "healthkit"];
@@ -338,7 +358,12 @@ export function pickHealItem(bot: Player, healthFrac: number): InventoryItem | u
  *  visible enemy or critically low regardless. Split from `updateHeal` so the brain
  *  can also use it to decide *movement* (retreat instead of engaging) on the same
  *  tick it decides to heal, before actually spending the item. */
-export function shouldHeal(bot: Player, tier: BotTierDef, hasVisibleEnemy: boolean): boolean {
+export function shouldHeal(
+    bot: Player,
+    tier: BotTierDef,
+    hasVisibleEnemy: boolean,
+    positionSafe: boolean,
+): boolean {
     if (bot.actionType !== GameConfig.Action.None) return false;
     if (bot.weaponManager.cookingThrowable) return false;
 
@@ -346,14 +371,19 @@ export function shouldHeal(bot: Player, tier: BotTierDef, hasVisibleEnemy: boole
     if (healthFrac >= tier.healThreshold) return false;
     if (hasVisibleEnemy && healthFrac > 0.25) return false;
 
-    return pickHealItem(bot, healthFrac) !== undefined;
+    return pickHealItem(bot, healthFrac, positionSafe) !== undefined;
 }
 
 /** Heals when hurt and it's safe to. See `shouldHeal` for the decision. */
-export function updateHeal(bot: Player, tier: BotTierDef, hasVisibleEnemy: boolean): void {
-    if (!shouldHeal(bot, tier, hasVisibleEnemy)) return;
+export function updateHeal(
+    bot: Player,
+    tier: BotTierDef,
+    hasVisibleEnemy: boolean,
+    positionSafe: boolean,
+): void {
+    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe)) return;
     const healthFrac = bot.health / GameConfig.player.health;
-    const item = pickHealItem(bot, healthFrac);
+    const item = pickHealItem(bot, healthFrac, positionSafe);
     if (item) bot.useHealingItem(item);
 }
 

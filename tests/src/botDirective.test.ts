@@ -96,6 +96,38 @@ test("Push reverts to holding once the target's health recovers above the thresh
     expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // back to holding
 });
 
+// Regression: a bot that just finished healing (or never got low enough to need
+// `flee`/`heal` at all) used to only need to clear the much laxer `low` bar - 75% of
+// `tier.healThreshold` - to be allowed to push. For `expert` (healThreshold 0.75) that's
+// 56.25%, well below the 75% `shouldHeal` itself would still want to top off from -
+// "just healed and immediately started pushing again while still low" in practice. Push
+// now requires the same full `healThreshold` bar `shouldHeal` uses.
+test("A bot that's cleared 'low' but not fully healed still holds instead of pushing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 30; // low enough to otherwise justify a push
+    bot.health = 60; // expert: low bar is 56.25%, healThreshold is 75% - clears one, not the other
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // holding, not pushing while still hurt
+});
+
+test("A bot back up to tier.healThreshold pushes a low target normally", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 30;
+    bot.health = 80; // expert healThreshold is 75% - comfortably cleared
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing
+});
+
 test("Critically low with no heal item flees instead of holding or pushing", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);

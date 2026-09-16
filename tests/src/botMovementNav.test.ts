@@ -305,6 +305,42 @@ test("findCover picks an ordinary crate over a nearby explosive barrel", () => {
     expect(found!.obstacle).toBe(crate);
 });
 
+// The "auch wenn er pusht muss er sich so positionieren dass er in cover gehen kann"
+// ask: pushing used to stand dead still once it reached its hold distance, in the open,
+// with nothing to duck behind if the push doesn't immediately finish the fight. Once
+// holding, it now uses cover exactly like `engageHold` does, just at push's own closer
+// range - a crate placed right at the push-hold distance should get picked up as cover.
+test("push settles into nearby cover once it reaches its hold distance, instead of standing in the open", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    // Well inside the map interior, not near a corner/edge - `test_normal` is only
+    // 128x128, and a candidate cover point sitting just past map bounds reads as
+    // "blocked" the same as a real obstacle would.
+    const threatPos = v2.create(60, 60);
+    const crate = game.map.genObstacle("crate_01", v2.create(67, 60)); // near the ~6-unit push-hold distance
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(90, 60) });
+    bot.weaponManager.weapons[0].type = "m870"; // shotgun -> push-hold distance 6 (PUSH_MIN_DIST)
+    bot.weaponManager.weapons[0].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(0);
+
+    const state = new BotMovementState();
+    let pos = v2.copy(bot.pos);
+    let reachedCover = false;
+    for (let i = 0; i < 400; i++) {
+        bot.pos = pos;
+        const dist = v2.distance(pos, threatPos);
+        updateMovement(bot, state, "push", threatPos, dist, 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+        if (state.coverObstacle === crate) {
+            reachedCover = true;
+            break;
+        }
+    }
+
+    expect(reachedCover).toBe(true);
+});
+
 test("Cover is dropped and re-picked the instant its obstacle dies, not on the next recompute", () => {
     const game = createGame(TeamMode.Solo, "local");
     const graph = buildNavGraph(game);
