@@ -83,6 +83,16 @@ const OFFSCREEN_PREDICT_MS = 450;
  *  to extrapolate toward. Also what keeps this from degenerating into "just keep shooting
  *  the last spot they stood" for a target that merely ducked behind close cover. */
 const OFFSCREEN_MIN_SPEED = 1.5;
+/** How long after a bandage/medkit actually finishes (not an abort - that already has
+ *  its own, longer `HEAL_ABORT_COOLDOWN_S`) before `push` is willing to trigger again -
+ *  see `pickDirective`. Without this, clearing the `low` bar the instant a heal
+ *  completes was the literal "healed and immediately started pushing again" complaint;
+ *  requiring a much higher health bar *permanently* instead (an earlier fix for the same
+ *  complaint) overcorrected the other way, making the bot rarely press an advantage at
+ *  all and feel far less dangerous in a fight generally. A short grace window right
+ *  after healing targets the actual moment that looked wrong without blunting ordinary
+ *  aggression the rest of the time. */
+const POST_HEAL_PUSH_COOLDOWN_S = 1.5;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -109,6 +119,14 @@ export class BotBrain {
     /** Set for a short window after an aborted heal, so the bot doesn't immediately
      *  re-start the exact bandage that just got interrupted - see `pickDirective`. */
     private healAbortCooldown = 0;
+    /** Set for a short window the instant a heal action ends, completed or aborted
+     *  alike - see `POST_HEAL_PUSH_COOLDOWN_S`/`pickDirective`. Firing on an abort too is
+     *  harmless (an aborted heal already means still hurt, so `low`/`healAbortCooldown`
+     *  route to `flee` first regardless) rather than a reason to track the distinction. */
+    private postHealPushCooldown = 0;
+    /** Tracks the *previous* tick's `actionType` purely to detect the UseItem -> None
+     *  transition that means a heal just ended, for `postHealPushCooldown` above. */
+    private wasHealing = false;
 
     private thinkTimer: number;
     private readonly aim = new BotAimState();
@@ -143,6 +161,11 @@ export class BotBrain {
         }
 
         this.healAbortCooldown = Math.max(0, this.healAbortCooldown - dt);
+        this.postHealPushCooldown = Math.max(0, this.postHealPushCooldown - dt);
+        if (this.wasHealing && bot.actionType !== GameConfig.Action.UseItem) {
+            this.postHealPushCooldown = POST_HEAL_PUSH_COOLDOWN_S;
+        }
+        this.wasHealing = bot.actionType === GameConfig.Action.UseItem;
 
         // `aimTarget`/`dist` below stay tied to the *currently visible* target, or a
         // brief predicted stand-in while it's just gone offscreen (see
@@ -300,13 +323,14 @@ export class BotBrain {
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
      * 8. The target is visible and hurt enough to be worth finishing
-     *    (`ENEMY_LOW_HEALTH_FRAC`), and this bot's own health has actually recovered
-     *    back up to `tier.healThreshold` - not merely cleared the laxer `low` bar -
-     *    press it across open ground rather than waiting for a hit streak to build
-     *    first. Charging into the open is the single most exposed thing this bot can
-     *    do, so it needs a real cushion, not just "not low anymore": a bot that would
-     *    still rather heal than fight (`shouldHeal` requires the same threshold)
-     *    shouldn't push the instant a bandage happens to end mid-fight. Short of that,
+     *    (`ENEMY_LOW_HEALTH_FRAC`), this bot itself isn't `low`, and it hasn't *just*
+     *    finished healing (`POST_HEAL_PUSH_COOLDOWN_S`) - press it across open ground
+     *    rather than waiting for a hit streak to build first. That last part is
+     *    deliberately a short grace window, not a permanently higher health bar: an
+     *    earlier version required being all the way back up to `tier.healThreshold` to
+     *    push at all, which stopped the exact "healed and immediately pushed while still
+     *    low" complaint but overcorrected into a bot that rarely pressed an advantage
+     *    at all and felt far less dangerous in an ordinary fight. Short of pushing,
      *    `engageHold` closes distance using cover instead.
      * 9. Default: hold a sane range, using cover once there instead of standing still.
      */
@@ -344,15 +368,11 @@ export class BotBrain {
         // `engageHold` still knows how to close distance using cover instead.
         const enemyLow = !!this.target
             && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
-        // Pushing is the single most exposed thing this bot can do - charging into open
-        // ground on purpose - so it needs a real health cushion, not merely having
-        // cleared the much laxer `low` bar (which only demands 75% of the point
-        // `shouldHeal` itself would still want to top off from). Reusing
-        // `tier.healThreshold` directly ties "healthy enough to push" to the exact same
-        // bar that decides "healthy enough to no longer even want to heal" - a bot that
-        // just finished a bandage and would still rather heal than fight shouldn't be
-        // charging the instant that bandage happens to end mid-fight.
-        if (healthFrac >= this.tier.healThreshold && enemyLow) return "push";
+        // `!low` (not a full `tier.healThreshold` bar - see the doc comment above) plus
+        // a short cooldown right after healing actually ends is what stops "healed and
+        // immediately pushed while still low" without also making the bot generally
+        // reluctant to press an advantage.
+        if (!low && enemyLow && this.postHealPushCooldown <= 0) return "push";
 
         return "engageHold";
     }

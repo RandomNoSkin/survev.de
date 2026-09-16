@@ -823,7 +823,18 @@ export function updateMovement(
             // goes wrong was the "plays too open even while pushing" complaint - a
             // pushing bot is still close to a live gunfight, not somewhere standing
             // still in plain view is ever actually safe.
-            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0, aggression);
+            //
+            // Forced `true`/`1`, not the tick's real `recentlyVisible`/`aggression`:
+            // reaching `push` at all already means the target is genuinely low and worth
+            // finishing (see `BotBrain.pickDirective`'s `ENEMY_LOW_HEALTH_FRAC`) - that's
+            // a reason to keep leaning back out and firing at every opportunity, the same
+            // eager cadence `recentlyVisible` already grants a peek that *just* ended
+            // (`EAGER_PEEK_HOLD_MIN/MAX`), regardless of tier or whether this exact peek
+            // happens to qualify. Using the normal, cautious hold pacing here was giving
+            // a nearly-finished target real breathing room to heal or turn the fight
+            // back around between peeks - it read as the bot's own offense going soft
+            // right when it should be pressing hardest.
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, true, 0, 1);
         }
     } else {
         // engageHold: close distance if too far, back off if too close, otherwise hold

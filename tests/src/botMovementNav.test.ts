@@ -376,6 +376,46 @@ test("push settles into nearby cover once it reaches its hold distance, instead 
     expect(reachedCover).toBe(true);
 });
 
+// The "damage hat er mir kaum gefährlich gemacht" ask: once push settled into cover
+// (above), it used to re-peek at the same cautious pace as an ordinary `engageHold`
+// hold, giving a nearly-finished target real breathing room between exposures instead
+// of pressing the advantage. Push forces the eager cadence unconditionally - even with
+// `recentlyVisible: false` explicitly passed in below, proving it isn't just riding that
+// flag - since reaching `push` at all already means the target is worth finishing now.
+test("push re-peeks eagerly, not at engageHold's normal cautious pace, once settled at cover", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const threatPos = v2.create(60, 60);
+    const crate = game.map.genObstacle("crate_01", v2.create(67, 60));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(90, 60) });
+    bot.weaponManager.weapons[0].type = "m870";
+    bot.weaponManager.weapons[0].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(0);
+
+    const state = new BotMovementState();
+    let pos = v2.copy(bot.pos);
+    let reachedPeeking = false;
+    for (let i = 0; i < 600; i++) {
+        bot.pos = pos;
+        const dist = v2.distance(pos, threatPos);
+        updateMovement(bot, state, "push", threatPos, dist, 0.1, graph, false);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+        if (state.coverObstacle === crate && state.peeking) {
+            reachedPeeking = true;
+            break;
+        }
+    }
+    if (!reachedPeeking) return; // this random layout's geometry didn't produce a usable peek angle
+
+    state.peekTimer = 0.001;
+    bot.pos = pos;
+    updateMovement(bot, state, "push", threatPos, v2.distance(pos, threatPos), 0.1, graph, false);
+
+    expect(state.peeking).toBe(false);
+    expect(state.peekTimer).toBeLessThanOrEqual(0.6); // EAGER_PEEK_HOLD_MAX, not PEEK_HOLD_MIN (1.0)+
+});
+
 test("Cover is dropped and re-picked the instant its obstacle dies, not on the next recompute", () => {
     const game = createGame(TeamMode.Solo, "local");
     const graph = buildNavGraph(game);

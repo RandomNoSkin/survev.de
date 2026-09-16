@@ -96,23 +96,46 @@ test("Push reverts to holding once the target's health recovers above the thresh
     expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // back to holding
 });
 
-// Regression: a bot that just finished healing (or never got low enough to need
-// `flee`/`heal` at all) used to only need to clear the much laxer `low` bar - 75% of
-// `tier.healThreshold` - to be allowed to push. For `expert` (healThreshold 0.75) that's
-// 56.25%, well below the 75% `shouldHeal` itself would still want to top off from -
-// "just healed and immediately started pushing again while still low" in practice. Push
-// now requires the same full `healThreshold` bar `shouldHeal` uses.
-test("A bot that's cleared 'low' but not fully healed still holds instead of pushing", () => {
+// Regression: a bot only needs to clear the `low` bar (75% of `tier.healThreshold`, not
+// the full threshold itself) to push a genuinely low target - an earlier fix for "healed
+// and immediately started pushing again while still low" instead required being all the
+// way back up to `tier.healThreshold`, which stopped that complaint but overcorrected
+// into a bot that rarely pressed an advantage and felt far less dangerous generally (see
+// the grace-window test below for the actual, narrower fix).
+test("A bot pushes once it's cleared 'low', without needing to be fully healed", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
-    target.health = 30; // low enough to otherwise justify a push
-    bot.health = 60; // expert: low bar is 56.25%, healThreshold is 75% - clears one, not the other
+    target.health = 30; // low enough to justify a push
+    bot.health = 60; // expert: low bar is 56.25% - cleared, even though healThreshold is 75%
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
 
-    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // holding, not pushing while still hurt
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing
+});
+
+// The actual, narrower fix for "healed and immediately pushed while still low": a short
+// grace window right after a heal action ends (completed or aborted), not a permanently
+// higher health bar. Faking the actionType transition directly (rather than simulating a
+// real multi-second bandage) isolates the cooldown mechanism itself from the unrelated
+// question of how long a heal actually takes.
+test("A bot does not immediately push right after a heal ends, but does once the grace window passes", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 30;
+    bot.health = 80; // comfortably clear of "low"
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.botBrain!.update(0.05);
+    bot.actionType = GameConfig.Action.None; // the heal ends on this next tick
+    bot.botBrain!.update(0.05);
+    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // holding, not pushing yet
+
+    for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // past POST_HEAL_PUSH_COOLDOWN_S (1.5s)
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing now that the grace window passed
 });
 
 test("A bot back up to tier.healThreshold pushes a low target normally", () => {
