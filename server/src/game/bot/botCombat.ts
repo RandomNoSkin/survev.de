@@ -427,19 +427,22 @@ function pickOffensiveThrowable(bot: Player): InventoryItem | undefined {
 }
 
 /**
- * Tactical grenade use, two cases:
- * - A visible target it has actually noticed (`reactionReady` - the aim system's
- *   reaction gate has cleared, same "don't act before noticing" idea as a gunshot):
- *   lob one to pressure/finish them. Deliberately *not* also gated on the tight
- *   bullet-precision fire cone (`canFire`'s other half) - a grenade's blast radius
- *   forgives imprecise aim in a way a bullet doesn't, and requiring the same precision
- *   a gun needs meant this rarely lined up with everything else (cooldown, range, no
- *   friendly fire) at once, in practice barely ever throwing.
+ * Tactical grenade use - deliberately *not* a general "target visible, worth hurting"
+ * tool: a gun is always the better choice whenever it's actually usable, so this never
+ * throws just because a target happens to be there and in range. Only two cases earn
+ * the slot instead of a bullet, both cases where shooting genuinely isn't the better
+ * option right now:
  * - The enemy just ducked out of sight nearby (`justLostSight`, see `BotBrain`'s
- *   `recentlyVisible`) - lobbing one at `threatPos`, their last-known spot, is exactly
- *   the "bait them out of cover" tactic a real player uses a grenade for. `bot.dirNew`
- *   is aimed there explicitly, since `updateAim` only ever tracks a currently-visible
- *   target and leaves `dir` untouched once one isn't.
+ *   `recentlyVisible`) - can't shoot what it can't see, so lobbing one at `threatPos`,
+ *   their last-known spot, is exactly the "bait them out of cover" tactic a real player
+ *   uses a grenade for.
+ * - The bot itself is hurt enough to be retreating (`isFleeing` - the brain's `flee`/
+ *   `heal` directive) - trying to out-shoot a healthy pursuer while low is a losing
+ *   trade; tossing one back at the threat to cover the retreat is worth the slot even
+ *   though winning the fight outright isn't the goal here.
+ *
+ * `bot.dirNew` is aimed at `threatPos` explicitly in both cases, since `updateAim` only
+ * ever tracks a currently-visible target and leaves `dir` untouched once one isn't.
  *
  * Only owns the `Throwable` weapon slot while `active` - `updateWeaponSelection` leaves
  * that slot alone for the same reason (see its own guard), and this hands it straight
@@ -449,12 +452,10 @@ function pickOffensiveThrowable(bot: Player): InventoryItem | undefined {
 export function updateThrowable(
     bot: Player,
     throwState: BotThrowState,
-    target: Player | undefined,
-    dist: number,
-    reactionReady: boolean,
     threatPos: Vec2 | undefined,
     engageDist: number,
     justLostSight: boolean,
+    isFleeing: boolean,
     dt: number,
 ): void {
     const wm = bot.weaponManager;
@@ -472,32 +473,17 @@ export function updateThrowable(
     throwState.cooldown -= dt;
     if (throwState.cooldown > 0) return;
     if (bot.actionType !== GameConfig.Action.None) return;
-
-    let aimAt: Vec2;
-    let throwDist: number;
-    if (target && reactionReady) {
-        aimAt = target.pos;
-        throwDist = dist;
-        if (friendlyFireInLine(bot, target.pos)) return;
-    } else if (!target && justLostSight && threatPos) {
-        aimAt = threatPos;
-        throwDist = engageDist;
-        if (friendlyFireInLine(bot, threatPos)) return;
-    } else {
-        return;
-    }
-    if (throwDist < THROW_MIN_DIST || throwDist > THROW_MAX_DIST) return;
+    if (!threatPos || !(justLostSight || isFleeing)) return;
+    if (friendlyFireInLine(bot, threatPos)) return;
+    if (engageDist < THROW_MIN_DIST || engageDist > THROW_MAX_DIST) return;
 
     const grenadeType = pickOffensiveThrowable(bot);
     if (!grenadeType) return;
 
-    // Aimed explicitly at the intended spot regardless of case, not left to whatever
-    // `bot.dir` currently is: `reactionReady` deliberately doesn't wait for the gun's
-    // own precise fire-cone alignment (see the doc comment above), so the turn toward
-    // the target may still be in progress the instant a throw triggers - a blast-radius
-    // weapon can afford to actually aim at the target directly instead of inheriting
-    // whatever aim lag a bullet's tighter cone would otherwise force it to wait out.
-    bot.dirNew = v2.normalizeSafe(v2.sub(aimAt, bot.pos), bot.dirNew);
+    // Aimed explicitly at the intended spot, not left to whatever `bot.dir` currently
+    // is - a blast-radius weapon can afford to just aim straight at it rather than
+    // waiting out however much turn is still in progress.
+    bot.dirNew = v2.normalizeSafe(v2.sub(threatPos, bot.pos), bot.dirNew);
 
     const cur = wm.curWeapIdx;
     throwState.returnSlot = cur === WeaponSlot.Primary || cur === WeaponSlot.Secondary

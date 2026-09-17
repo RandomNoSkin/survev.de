@@ -300,22 +300,21 @@ export class BotBrain {
 
         // Before weapon selection: an in-progress or freshly-triggered throw claims the
         // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
-        // needs to see before it otherwise "fixes" the bot back onto a gun. `threatPos`/
-        // `engageDist`/`recentlyVisible` (already computed above for movement) are what
-        // let it bait a target that just ducked into cover, not just finish a visible
-        // one. `this.aim.reactionTimer` (not `aimResult.canFire`) on purpose - a
-        // grenade's blast radius forgives imprecise aim in a way a bullet doesn't, so it
-        // only waits on "has it actually noticed them", not the gun's own tight
-        // fire-cone precision too - see `updateThrowable`'s own doc comment.
+        // needs to see before it otherwise "fixes" the bot back onto a gun.
+        // `threatPos`/`engageDist`/`recentlyVisible` (already computed above for
+        // movement) are what let it bait a target that just ducked into cover.
+        // `isFleeing` is the *other* legitimate reason to throw - a bot that's healthy
+        // and can see its target should always just shoot instead (see
+        // `updateThrowable`'s own doc comment for why finishing a visible target with a
+        // grenade used to be a case here, and isn't anymore).
+        const isFleeing = directive === "flee" || directive === "heal";
         updateThrowable(
             bot,
             this.throwState,
-            this.target,
-            dist,
-            this.aim.reactionTimer <= 0,
             threatPos,
             engageDist,
             recentlyVisible,
+            isFleeing,
             dt,
         );
 

@@ -383,7 +383,12 @@ test("pickHealItem grabs the medkit at critical health even when exposed", () =>
     expect(pickHealItem(bot, 0.2, /* positionSafe */ false)).toBe("healthkit");
 });
 
-test("updateThrowable lobs a grenade at a well-aimed, in-range target", () => {
+// "der bot soll nades nicht benutzen wenn schießen besser ist" - a healthy bot that can
+// see its target should always just shoot, never spend the slot on a grenade instead.
+// This is the case that used to throw here (a visible, in-range, well-aimed target) and
+// deliberately no longer does - see `updateThrowable`'s doc comment for the two cases
+// that still legitimately earn the slot.
+test("updateThrowable does not throw at a visible target it could just shoot instead", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) }); // inside [14,30]
@@ -396,14 +401,31 @@ test("updateThrowable lobs a grenade at a well-aimed, in-range target", () => {
     updateThrowable(
         bot,
         throwState,
-        target,
-        20,
-        /* canFire */ true,
         target.pos,
         20,
-        false,
+        /* justLostSight */ false,
+        /* isFleeing */ false,
         0.05,
     );
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+// "er soll die nades quasi nur benutzen wenn er selbst low ist und rennen muss" - a
+// grenade tossed back at the threat while retreating is worth the slot even though the
+// bot isn't trying to win the fight outright here.
+test("updateThrowable throws to cover a retreat when the bot is fleeing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threatPos = v2.create(20, 0); // inside [14,30]
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+
+    updateThrowable(bot, throwState, threatPos, 20, false, /* isFleeing */ true, 0.05);
 
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Throwable);
     expect(bot.weaponManager.weapons[WeaponSlot.Throwable].type).toBe("frag");
@@ -415,13 +437,13 @@ test("updateThrowable lobs a grenade at a well-aimed, in-range target", () => {
 test("updateThrowable hands the weapon slot back to the gun once the throw resolves", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) });
+    const threatPos = v2.create(20, 0);
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
     bot.invManager.give("frag", 4);
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
+    updateThrowable(bot, throwState, threatPos, 20, false, true, 0.05);
     expect(throwState.active).toBe(true);
 
     // Advance real game ticks so `weaponManager.update` actually cooks and releases the
@@ -429,7 +451,7 @@ test("updateThrowable hands the weapon slot back to the gun once the throw resol
     // the input fields, exactly like a human's InputMsg would.
     for (let i = 0; i < 10 && throwState.active; i++) {
         game.update(0.05);
-        updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
+        updateThrowable(bot, throwState, threatPos, 20, false, true, 0.05);
     }
 
     expect(throwState.active).toBe(false);
@@ -439,13 +461,13 @@ test("updateThrowable hands the weapon slot back to the gun once the throw resol
 test("updateThrowable does not throw at point-blank range (self-splash risk)", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(6, 0) }); // inside blast radius
+    const threatPos = v2.create(6, 0); // inside blast radius
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
     bot.invManager.give("frag", 4);
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, target, 6, true, target.pos, 6, false, 0.05);
+    updateThrowable(bot, throwState, threatPos, 6, false, true, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -454,12 +476,12 @@ test("updateThrowable does not throw at point-blank range (self-splash risk)", (
 test("updateThrowable does not throw without a grenade in inventory", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) });
+    const threatPos = v2.create(20, 0);
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
+    updateThrowable(bot, throwState, threatPos, 20, false, true, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -468,14 +490,14 @@ test("updateThrowable does not throw without a grenade in inventory", () => {
 test("updateThrowable waits out its own cooldown between throws", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) });
+    const threatPos = v2.create(20, 0);
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
     bot.invManager.give("frag", 4);
 
     const throwState = new BotThrowState();
     throwState.cooldown = 3; // hasn't elapsed yet
 
-    updateThrowable(bot, throwState, target, 20, true, target.pos, 20, false, 0.05);
+    updateThrowable(bot, throwState, threatPos, 20, false, true, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -483,8 +505,8 @@ test("updateThrowable waits out its own cooldown between throws", () => {
 
 // The "nades sind useful wenn der Gegner in cover ist um ihn da raus zu baiten" ask: a
 // target that just ducked out of sight nearby (justLostSight, mirroring BotBrain's
-// recentlyVisible) is exactly when a real player lobs one blind to flush them back out,
-// not only ever at someone already fully in the open.
+// recentlyVisible) is exactly when a real player lobs one blind to flush them back out -
+// can't shoot what it can't see, so a grenade earns the slot even while healthy.
 test("updateThrowable bait-throws at a target's last-known spot right after losing sight of them", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
@@ -498,12 +520,10 @@ test("updateThrowable bait-throws at a target's last-known spot right after losi
     updateThrowable(
         bot,
         throwState,
-        /* target (not visible) */ undefined,
-        Infinity,
-        false,
         lastKnownPos,
         20,
         /* justLostSight */ true,
+        /* isFleeing */ false,
         0.05,
     );
 
@@ -527,12 +547,10 @@ test("updateThrowable does not bait-throw at a stale memory (not recently lost)"
     updateThrowable(
         bot,
         throwState,
-        undefined,
-        Infinity,
-        false,
         v2.create(20, 0),
         20,
         /* justLostSight */ false,
+        /* isFleeing */ false,
         0.05,
     );
 
