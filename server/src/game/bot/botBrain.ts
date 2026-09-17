@@ -27,6 +27,18 @@ export type BotState = "idle" | "engage";
  *  see the abort check itself) - see that same comment for why an enemy-proximity one
  *  was removed. */
 const ABORT_HEAL_REACT_MS = 350;
+/** Health fraction at/below which a single unlucky hit (a shotgun blast up close, a
+ *  sniper headshot) can plausibly still kill outright - worth bailing out of even an
+ *  almost-finished heal for. Above it, a heal that's genuinely almost done (see
+ *  `HEAL_NEARLY_DONE_REMAINING_S`) is worth just finishing instead of throwing the whole
+ *  bandage away for one more hit taken - "wenn der heal fast durch ist und er nicht 1
+ *  shot low ist, kann er auch einfach voll durchziehen statt abzubrechen". */
+const ONE_SHOT_RISK_HEALTH_FRAC = 0.35;
+/** How little of a heal action has to be left for "just finish it" (see
+ *  `ONE_SHOT_RISK_HEALTH_FRAC`) to apply at all - short enough that this never overrides
+ *  the ordinary hit-abort reaction for a heal that's still mostly ahead of it, only the
+ *  last moment where aborting and re-starting later would cost more than it saves. */
+const HEAL_NEARLY_DONE_REMAINING_S = 0.5;
 /** After an abort, don't immediately re-start the same heal - open some distance
  *  first, which is exactly what `flee` (see `pickDirective`) is for. */
 const HEAL_ABORT_COOLDOWN_S = 1.2;
@@ -84,15 +96,18 @@ const OFFSCREEN_PREDICT_MS = 450;
  *  the last spot they stood" for a target that merely ducked behind close cover. */
 const OFFSCREEN_MIN_SPEED = 1.5;
 /** How long after a bandage/medkit actually finishes (not an abort - that already has
- *  its own, longer `HEAL_ABORT_COOLDOWN_S`) before `push` is willing to trigger again -
- *  see `pickDirective`. Without this, clearing the `low` bar the instant a heal
- *  completes was the literal "healed and immediately started pushing again" complaint;
- *  requiring a much higher health bar *permanently* instead (an earlier fix for the same
- *  complaint) overcorrected the other way, making the bot rarely press an advantage at
- *  all and feel far less dangerous in a fight generally. A short grace window right
- *  after healing targets the actual moment that looked wrong without blunting ordinary
- *  aggression the rest of the time. */
-const POST_HEAL_PUSH_COOLDOWN_S = 1.5;
+ *  its own, longer `HEAL_ABORT_COOLDOWN_S`) before `pickDirective` is willing to resume
+ *  normal engagement - see there. Without this, clearing the `low` bar the instant a
+ *  heal completes was the literal "healed and immediately started pushing again"
+ *  complaint; requiring a much higher health bar *permanently* instead (an earlier fix
+ *  for the same complaint) overcorrected the other way, making the bot rarely press an
+ *  advantage at all and feel far less dangerous in a fight generally. Keeping the bot
+ *  actively retreating for this short grace window - not just refusing to `push`, which
+ *  still let it plant and hold right where the heal finished - is the "retreaten, dann
+ *  healen, und weiter retreaten" ask: opening a little extra distance right when a heal
+ *  just ended is worth more than snapping straight back into the fight, without
+ *  blunting ordinary aggression the rest of the time. */
+const POST_HEAL_RETREAT_COOLDOWN_S = 1.5;
 /** How long a heard-but-unseen gunshot stays worth reacting to - see
  *  `lastHeardShotPos`/`findGunshotHint`. Long enough to actually reposition toward it,
  *  short enough that the bot doesn't spend the next 10s convinced someone's still right
@@ -135,12 +150,12 @@ export class BotBrain {
      *  re-start the exact bandage that just got interrupted - see `pickDirective`. */
     private healAbortCooldown = 0;
     /** Set for a short window the instant a heal action ends, completed or aborted
-     *  alike - see `POST_HEAL_PUSH_COOLDOWN_S`/`pickDirective`. Firing on an abort too is
-     *  harmless (an aborted heal already means still hurt, so `low`/`healAbortCooldown`
+     *  alike - see `POST_HEAL_RETREAT_COOLDOWN_S`/`pickDirective`. Firing on an abort too
+     *  is harmless (an aborted heal already means still hurt, so `low`/`healAbortCooldown`
      *  route to `flee` first regardless) rather than a reason to track the distinction. */
-    private postHealPushCooldown = 0;
+    private postHealRetreatCooldown = 0;
     /** Tracks the *previous* tick's `actionType` purely to detect the UseItem -> None
-     *  transition that means a heal just ended, for `postHealPushCooldown` above. */
+     *  transition that means a heal just ended, for `postHealRetreatCooldown` above. */
     private wasHealing = false;
 
     private thinkTimer: number;
@@ -185,9 +200,9 @@ export class BotBrain {
         }
 
         this.healAbortCooldown = Math.max(0, this.healAbortCooldown - dt);
-        this.postHealPushCooldown = Math.max(0, this.postHealPushCooldown - dt);
+        this.postHealRetreatCooldown = Math.max(0, this.postHealRetreatCooldown - dt);
         if (this.wasHealing && bot.actionType !== GameConfig.Action.UseItem) {
-            this.postHealPushCooldown = POST_HEAL_PUSH_COOLDOWN_S;
+            this.postHealRetreatCooldown = POST_HEAL_RETREAT_COOLDOWN_S;
         }
         this.wasHealing = bot.actionType === GameConfig.Action.UseItem;
 
@@ -232,7 +247,15 @@ export class BotBrain {
         // occasionally finishing one a beat later than a human would.
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
-            if (justHit || grenadeThreat) {
+            // A heal that's genuinely almost done, taken by a bot that isn't in
+            // one-shot danger, is worth just finishing instead of throwing away for one
+            // more hit - re-starting the same heal later (see `HEAL_ABORT_COOLDOWN_S`)
+            // costs more than the last half-second of this one ever risks.
+            const remaining = bot.action.duration - bot.action.time;
+            const healthFrac = bot.health / GameConfig.player.health;
+            const pushThroughHit = remaining <= HEAL_NEARLY_DONE_REMAINING_S
+                && healthFrac > ONE_SHOT_RISK_HEALTH_FRAC;
+            if ((justHit && !pushThroughHit) || grenadeThreat) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -346,21 +369,23 @@ export class BotBrain {
      * 6. Hurt enough to want to heal - retreats toward cover/distance immediately, but
      *    doesn't actually consume the item until `isSafeToHeal` (in `update()`) says
      *    the retreat has actually gone somewhere.
-     * 7. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
+     * 7. A heal action just ended, completed or aborted (`POST_HEAL_RETREAT_COOLDOWN_S`)
+     *    - keep opening distance for this short grace window instead of snapping
+     *    straight back into holding or pushing at the exact spot the heal finished.
+     *    "retreaten, dann healen, und weiter retreaten": creating a little extra
+     *    separation right after a heal is worth more than immediately resuming the
+     *    fight from wherever standing still to heal happened to leave the bot.
+     * 8. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
      *    retreat toward relative safety while the reload (already requested
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
-     * 8. The target is visible and hurt enough to be worth finishing
-     *    (`ENEMY_LOW_HEALTH_FRAC`), this bot itself isn't `low`, and it hasn't *just*
-     *    finished healing (`POST_HEAL_PUSH_COOLDOWN_S`) - press it across open ground
-     *    rather than waiting for a hit streak to build first. That last part is
-     *    deliberately a short grace window, not a permanently higher health bar: an
-     *    earlier version required being all the way back up to `tier.healThreshold` to
-     *    push at all, which stopped the exact "healed and immediately pushed while still
-     *    low" complaint but overcorrected into a bot that rarely pressed an advantage
-     *    at all and felt far less dangerous in an ordinary fight. Short of pushing,
-     *    `engageHold` closes distance using cover instead.
-     * 9. Default: hold a sane range, using cover once there instead of standing still.
+     * 9. The target is visible and hurt enough to be worth finishing
+     *    (`ENEMY_LOW_HEALTH_FRAC`) and this bot itself isn't `low` - press it across
+     *    open ground rather than waiting for a hit streak to build first. Every real
+     *    disadvantage, including having just healed (point 7), has already returned
+     *    its own directive above, so reaching here already means pushing costs this
+     *    bot nothing. Short of pushing, `engageHold` closes distance using cover instead.
+     * 10. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
         if (!threatPos) return "idle";
@@ -384,6 +409,10 @@ export class BotBrain {
         }
 
         if (shouldHeal(bot, this.tier, !!this.target, positionSafe)) return "heal";
+        // Just finished healing (or an abort just ended) - keep retreating for a short
+        // grace window rather than immediately resuming the fight from right here. See
+        // `POST_HEAL_RETREAT_COOLDOWN_S`.
+        if (this.postHealRetreatCooldown > 0) return "flee";
         if (this.needsReload(bot)) return "reload";
         // A visible target actually hurt enough to be worth finishing is reason enough
         // to press it, on its own - no need to already be on a hit streak first. Every
@@ -396,11 +425,12 @@ export class BotBrain {
         // `engageHold` still knows how to close distance using cover instead.
         const enemyLow = !!this.target
             && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
-        // `!low` (not a full `tier.healThreshold` bar - see the doc comment above) plus
-        // a short cooldown right after healing actually ends is what stops "healed and
-        // immediately pushed while still low" without also making the bot generally
-        // reluctant to press an advantage.
-        if (!low && enemyLow && this.postHealPushCooldown <= 0) return "push";
+        // `!low` (not a full `tier.healThreshold` bar - see the doc comment above) is
+        // what stops "healed and immediately pushed while still low" without also
+        // making the bot generally reluctant to press an advantage - the
+        // `postHealRetreatCooldown` check above already handles "just finished healing
+        // entirely" before this is ever reached.
+        if (!low && enemyLow) return "push";
 
         return "engageHold";
     }

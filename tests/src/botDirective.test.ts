@@ -117,10 +117,12 @@ test("A bot pushes once it's cleared 'low', without needing to be fully healed",
 
 // The actual, narrower fix for "healed and immediately pushed while still low": a short
 // grace window right after a heal action ends (completed or aborted), not a permanently
-// higher health bar. Faking the actionType transition directly (rather than simulating a
-// real multi-second bandage) isolates the cooldown mechanism itself from the unrelated
-// question of how long a heal actually takes.
-test("A bot does not immediately push right after a heal ends, but does once the grace window passes", () => {
+// higher health bar. This grace window now keeps the bot actively retreating, not just
+// blocking `push` - "retreaten, dann healen, und weiter retreaten". Faking the
+// actionType transition directly (rather than simulating a real multi-second bandage)
+// isolates the cooldown mechanism itself from the unrelated question of how long a heal
+// actually takes.
+test("A bot keeps retreating for a grace window right after a heal ends, then pushes once it passes", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -132,9 +134,9 @@ test("A bot does not immediately push right after a heal ends, but does once the
     bot.botBrain!.update(0.05);
     bot.actionType = GameConfig.Action.None; // the heal ends on this next tick
     bot.botBrain!.update(0.05);
-    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // holding, not pushing yet
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // still retreating, not pushing yet
 
-    for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // past POST_HEAL_PUSH_COOLDOWN_S (1.5s)
+    for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // past POST_HEAL_RETREAT_COOLDOWN_S (1.5s)
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing now that the grace window passed
 });
 
@@ -350,6 +352,62 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     bot.botBrain!.update(0.05);
 
     expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
+});
+
+// "wenn der heal fast durch ist und er nicht 1 shot low ist kann er auch einfach voll
+// durchziehen statt abzubrechen" - a heal that's essentially finished, taken by a bot
+// that still isn't in real one-shot danger afterward, is worth just completing instead
+// of throwing the whole bandage away for one more hit. Faking the actionType/action.time
+// directly (same reasoning as the post-heal grace-window test above) isolates the
+// push-through math itself from actually simulating a real multi-second bandage.
+test("A nearly-finished heal survives a hit, as long as the bot isn't in one-shot danger", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    bot.health = 60; // well above ONE_SHOT_RISK_HEALTH_FRAC (35%) even after this hit
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 2.5; // a bandage's real useTime
+    bot.action.time = bot.action.duration - 0.1; // almost done
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+
+    bot.damage({
+        amount: 5,
+        damageType: GameConfig.DamageType.Player,
+        dir: v2.create(-1, 0),
+        source: target,
+    });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem); // pushed through, not aborted
+});
+
+// Same near-finished heal, but genuinely one-shot-able afterward - still worth
+// abandoning even this close to done, since a single follow-up hit could kill outright.
+test("A nearly-finished heal still aborts when the bot is in real one-shot danger", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    bot.health = 20; // well under ONE_SHOT_RISK_HEALTH_FRAC (35%) after this hit
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 2.5;
+    bot.action.time = bot.action.duration - 0.1; // almost done
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+
+    bot.damage({
+        amount: 5,
+        damageType: GameConfig.DamageType.Player,
+        dir: v2.create(-1, 0),
+        source: target,
+    });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None); // still aborts - real risk
 });
 
 test("A bot mid-heal keeps retreating even with a low target, instead of pushing blind", () => {

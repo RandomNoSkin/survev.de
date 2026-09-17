@@ -150,8 +150,16 @@ export function updateAim(
     }
     aim.noiseBias = math.lerp(0.15, aim.noiseBias, aim.noiseGoal);
 
-    const trueAngle = Math.atan2(target.pos.y - bot.pos.y, target.pos.x - bot.pos.x);
-    const goalAngle = Math.atan2(aimPoint.y - bot.pos.y, aimPoint.x - bot.pos.x) + aim.noiseBias;
+    // The angle a *perfect* shot needs right now - the led point, not the target's raw
+    // current position. Checking the fire cone against the raw position instead (an
+    // earlier version of this) fights the whole point of leading: a fast strafing
+    // target needs `aim.dir` sitting *ahead* of its current position to actually land a
+    // hit, so gating fire on alignment with the un-led position only let a bot shoot
+    // once its correctly-led aim coincidentally drifted back near the raw position -
+    // worse leading (more lead) made this strictly worse, which is exactly backwards
+    // for `expert`, the tier with the highest `leadFactor`.
+    const leadAngle = Math.atan2(aimPoint.y - bot.pos.y, aimPoint.x - bot.pos.x);
+    const goalAngle = leadAngle + aim.noiseBias;
 
     // Turn-rate slew: `Player.dir` has no turn limit of its own, so without this bots
     // snap-aim instantly, which reads as an aimbot. This is the single strongest
@@ -166,7 +174,11 @@ export function updateAim(
     bot.toMouseLen = math.clamp(v2.distance(bot.pos, target.pos), 0, 64);
 
     aim.reactionTimer -= dt;
-    const angleErrDeg = Math.abs(math.angleDiff(curAngle, trueAngle)) * (180 / Math.PI);
+    // `newAngle` (this tick's actual, post-slew `aim.dir`, also what `bot.dirNew` was
+    // just set to) against `leadAngle` (see above) - not `curAngle` (the stale,
+    // pre-turn angle) against the raw target position, which independently understated
+    // how far a still-turning bot had actually gotten this exact tick.
+    const angleErrDeg = Math.abs(math.angleDiff(newAngle, leadAngle)) * (180 / Math.PI);
 
     return {
         canFire: aim.reactionTimer <= 0 && angleErrDeg <= tier.fireConeDeg,

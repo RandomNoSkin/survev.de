@@ -127,6 +127,11 @@ const RETREAT_LOOKAHEAD = 20;
  *  only occasionally, gives `followPath` something stable to actually path toward. */
 const RETREAT_RECOMPUTE_INTERVAL = 1.5;
 const RETREAT_GOAL_REACHED_DIST = 4;
+/** How far around a raw straight-line retreat goal to look for a non-`interior` node to
+ *  redirect to instead - see `safeRetreatGoal`. Wide enough to actually find a nearby
+ *  hull/open node from just inside a building, not so wide the goal drags somewhere
+ *  unrelated to "away from the threat". */
+const RETREAT_GOAL_SEARCH_RADIUS = 15;
 
 /** `push` never closes tighter than this, full stop, regardless of weapon. Not just a
  *  style choice: a gun's aim/lead math (`botAim.ts`) works from the *muzzle* position
@@ -700,6 +705,27 @@ export function followPath(
     return v2.normalizeSafe(v2.sub(graph.pos(state.pullTarget!), bot.pos));
 }
 
+/** Nudges a raw straight-line retreat goal off a building's `interior` lattice onto the
+ *  nearest `open`/`hull`/`door`/`stair` node instead, when the graph has one nearby - "so
+ *  eine Sackgasse nicht als Fluchtziel" (a dead end isn't a flee destination). A pure
+ *  "away from the threat" projection has no idea it happens to land inside a room, and
+ *  `followPath`'s A* will happily walk the bot in through a door to reach it even when
+ *  that building offers nothing past it relative to the escape direction - ending a
+ *  retreat trapped inside a dead-end pocket is worse than never having moved.
+ *  Deliberately only steers the *destination*, not routing in general: fleeing *through*
+ *  a building that actually leads somewhere is still fine and unaffected, since its
+ *  interior nodes only ever get preferred here when the raw goal itself would land on one. */
+export function safeRetreatGoal(nav: NavGraph, rawGoal: Vec2, layer: number): Vec2 {
+    const nearest = nav.nearest(rawGoal, layer);
+    if (nearest < 0 || nav.kind[nearest] !== "interior") return rawGoal;
+
+    const candidates = nav.nearby(rawGoal, layer, RETREAT_GOAL_SEARCH_RADIUS, 8);
+    for (const id of candidates) {
+        if (nav.kind[id] !== "interior") return nav.pos(id);
+    }
+    return rawGoal;
+}
+
 /** Direction to retreat in, routed through the nav graph instead of a raw straight
  *  line - see `RETREAT_LOOKAHEAD`. Without `nav`, falls back to the plain "away from
  *  the threat" direction, same as before (worse around buildings, never broken). */
@@ -720,7 +746,8 @@ function retreatDirection(
         || v2.distance(bot.pos, state.retreatGoal) < RETREAT_GOAL_REACHED_DIST
     ) {
         state.retreatRecheck = RETREAT_RECOMPUTE_INTERVAL;
-        state.retreatGoal = v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD));
+        const rawGoal = v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD));
+        state.retreatGoal = safeRetreatGoal(nav, rawGoal, util.toGroundLayer(bot.layer));
     }
 
     const pathDir = followPath(bot, state, nav, state.retreatGoal, dt);

@@ -6,12 +6,14 @@ import {
     BotMovementState,
     findCover,
     followPath,
+    safeRetreatGoal,
     tryOpenNearbyDoor,
     updateMovement,
 } from "../../server/src/game/bot/botMovement.ts";
 import { findPath } from "../../server/src/game/bot/nav/navAStar.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
+import { NavGraph } from "../../server/src/game/bot/nav/navGraph.ts";
 import { TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { util } from "../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
@@ -845,6 +847,69 @@ test("Fleeing gets unstuck and moves away even with an obstacle directly in its 
 
     // No obstacle in this random layout happened to sit squarely in the way within the
     // sampled candidates - nothing to assert against.
+});
+
+// "sich nicht innen trappen zu lassen": a raw straight-line retreat goal has no idea it
+// happens to land inside a building's interior lattice - `safeRetreatGoal` nudges it
+// onto the nearest non-`interior` node instead when the graph has one nearby, so
+// `followPath`'s A* never gets pointed at a dead-end room as the actual destination.
+// Uses a small synthetic `NavGraph` (not a real map's random layout) so the exact node
+// kinds/positions involved are known, not just hoped-for.
+test("safeRetreatGoal steers a retreat goal off an interior node onto a nearby hull node", () => {
+    const graph = new NavGraph([]);
+    const rawGoal = v2.create(100, 100);
+    graph.addNode(v2.create(100, 100), 0, "interior"); // sits right on the raw goal
+    const hullId = graph.addNode(v2.create(105, 100), 0, "hull"); // within the search radius
+
+    const goal = safeRetreatGoal(graph, rawGoal, 0);
+
+    expect(goal).toEqual(graph.pos(hullId));
+});
+
+test("safeRetreatGoal leaves an already-open retreat goal alone", () => {
+    const graph = new NavGraph([]);
+    const rawGoal = v2.create(100, 100);
+    graph.addNode(v2.create(100, 100), 0, "open");
+
+    const goal = safeRetreatGoal(graph, rawGoal, 0);
+
+    expect(goal).toEqual(rawGoal);
+});
+
+// A genuine dead-end room (nothing but interior nodes anywhere nearby) has no safer
+// alternative to redirect to - falling back to the raw goal here is still strictly no
+// worse than before this fix existed, never something new to get stuck on.
+test("safeRetreatGoal falls back to the raw goal when only interior nodes are nearby", () => {
+    const graph = new NavGraph([]);
+    const rawGoal = v2.create(100, 100);
+    graph.addNode(v2.create(100, 100), 0, "interior");
+    graph.addNode(v2.create(105, 100), 0, "interior");
+
+    const goal = safeRetreatGoal(graph, rawGoal, 0);
+
+    expect(goal).toEqual(rawGoal);
+});
+
+// End-to-end through the actual code path `flee`/`heal` movement uses: with no real
+// cover obstacle available (`findCover` finds nothing on this bare synthetic setup),
+// `retreatToCover` falls back to `retreatDirection`, which must itself apply
+// `safeRetreatGoal` before committing to `state.retreatGoal`.
+test("Fleeing with no cover available picks a retreat goal off an interior node", () => {
+    const graph = new NavGraph([]);
+    const threatPos = v2.create(0, 100);
+    // Away from the threat (+x) lands exactly on this interior node 20 units out
+    // (RETREAT_LOOKAHEAD) - a real building interior sitting in the escape direction.
+    graph.addNode(v2.create(70, 100), 0, "interior");
+    const hullId = graph.addNode(v2.create(75, 100), 0, "hull");
+
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 100) });
+    const state = new BotMovementState();
+
+    updateMovement(bot, state, "flee", threatPos, 50, 0.1, graph);
+
+    expect(state.retreatGoal).toBeDefined();
+    expect(state.retreatGoal).toEqual(graph.pos(hullId));
 });
 
 test("util.sameLayer sanity used by tryOpenNearbyDoor treats ground and ground+stairs as the same layer", () => {
