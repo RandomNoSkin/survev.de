@@ -28,19 +28,14 @@ export type BotState = "idle" | "engage";
  *  was removed. */
 const ABORT_HEAL_REACT_MS = 350;
 /** Health fraction at/below which a single unlucky hit (a shotgun blast up close, a
- *  sniper headshot) can plausibly still kill outright - worth bailing out of even an
- *  almost-finished heal for. Above it, a heal that's genuinely almost done (see
- *  `HEAL_NEARLY_DONE_REMAINING_S`) is worth just finishing instead of throwing the whole
- *  bandage away for one more hit taken - "wenn der heal fast durch ist und er nicht 1
- *  shot low ist, kann er auch einfach voll durchziehen statt abzubrechen". */
+ *  sniper headshot) can plausibly still kill outright - worth bailing out of a heal
+ *  for. Above it, tanking the hit and finishing the item is worth more than throwing
+ *  the whole thing away and re-exposing itself all over again re-starting one later -
+ *  "er cancelt immer noch relativ oft mid heal anstatt kurz voll durchzuziehen".
+ *  Deliberately not also gated on how much of the heal is left: re-starting from
+ *  scratch after an abort costs strictly more total exposure than just tanking one hit
+ *  and continuing, regardless of whether the abort happens early or late. */
 const ONE_SHOT_RISK_HEALTH_FRAC = 0.35;
-/** How little of a heal action has to be left, as a fraction of its *own* total
- *  duration, for "just finish it" (see `ONE_SHOT_RISK_HEALTH_FRAC`) to apply at all - a
- *  fraction rather than a fixed cutoff so a medkit's much longer `useTime` (6s vs a
- *  bandage's 3s) gets a proportionally later "worth finishing" point too, not the same
- *  fixed second regardless of the item. A real player's read on "it's basically done"
- *  scales with how far into the animation they already are, not an absolute clock. */
-const HEAL_NEARLY_DONE_REMAINING_FRAC = 0.4;
 /** After an abort, don't immediately re-start the same heal - open some distance
  *  first, which is exactly what `flee` (see `pickDirective`) is for. */
 const HEAL_ABORT_COOLDOWN_S = 1.2;
@@ -263,15 +258,10 @@ export class BotBrain {
         // occasionally finishing one a beat later than a human would.
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
-            // A heal that's genuinely almost done, taken by a bot that isn't in
-            // one-shot danger, is worth just finishing instead of throwing away for one
-            // more hit - re-starting the same heal later (see `HEAL_ABORT_COOLDOWN_S`)
-            // costs more than the last stretch of this one ever risks.
-            const remaining = bot.action.duration - bot.action.time;
+            // Not in real danger of dying to a follow-up hit - tank this one and keep
+            // going instead of throwing the whole heal away. See `ONE_SHOT_RISK_HEALTH_FRAC`.
             const healthFrac = bot.health / GameConfig.player.health;
-            const pushThroughHit = bot.action.duration > 0
-                && remaining <= bot.action.duration * HEAL_NEARLY_DONE_REMAINING_FRAC
-                && healthFrac > ONE_SHOT_RISK_HEALTH_FRAC;
+            const pushThroughHit = healthFrac > ONE_SHOT_RISK_HEALTH_FRAC;
             if ((justHit && !pushThroughHit) || grenadeThreat) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
@@ -386,7 +376,8 @@ export class BotBrain {
      *    still has somewhere purposeful to go from there (see `idleGoal`), just
      *    nothing combat-related to react to.
      * 3. Critically hurt with no way to heal right now (no item, or just interrupted
-     *    and still cooling down) - disengage instead of trading.
+     *    and still cooling down) - disengage instead of trading (see `fleeOrFight`: a
+     *    retreat that's demonstrably not going anywhere gets one exception).
      * 4. Merely low (not yet critical) with no way to heal - still disengage rather
      *    than keep fighting or pushing at real risk just because it isn't dire yet.
      * 5. Merely low, *has* an item, but `shouldHeal` still refuses (in practice: the
@@ -430,15 +421,15 @@ export class BotBrain {
         const positionSafe = this.positionSafeForHeal(bot);
         const noHealItem = pickHealItem(bot, healthFrac, positionSafe) === undefined;
 
-        if (critical && (noHealItem || this.healAbortCooldown > 0)) return "flee";
+        if (critical && (noHealItem || this.healAbortCooldown > 0)) return this.fleeOrFight();
         // Low but not yet critical, and nothing to fix it with - disengage rather than
         // keep fighting (or even push) at real risk just because it isn't dire yet.
-        if (low && noHealItem) return "flee";
+        if (low && noHealItem) return this.fleeOrFight();
         // Has a bandage but can't safely use it yet (almost always: the enemy can
         // still see it) - disengage to break line of sight rather than fight on hurt
         // and hope. Once concealed, `shouldHeal` flips to true on its own.
         if (low && !noHealItem && !shouldHeal(bot, this.tier, !!this.target, positionSafe)) {
-            return "flee";
+            return this.fleeOrFight();
         }
 
         if (shouldHeal(bot, this.tier, !!this.target, positionSafe)) return "heal";
@@ -486,6 +477,18 @@ export class BotBrain {
      *  exact tick's momentary LOS break - see `SUSTAINED_LOST_MS`. */
     private sustainedlyLost(bot: Player): boolean {
         return !this.target && bot.game.now - this.lastKnownEnemyTimeMs > SUSTAINED_LOST_MS;
+    }
+
+    /** `flee`, unless last tick's retreat demonstrably wasn't going anywhere
+     *  (`this.movement.stuck` - see its own doc comment on `BotMovementState`), in which
+     *  case fight back instead - "wenn retreat nicht geht, muss er halt wenigstens
+     *  schießen". Running from a cornered/boxed-in spot is worse than useless: it wastes
+     *  the reaction time an actual fight would have used, for a retreat that was never
+     *  going to create separation anyway. `engageHold`, not `push` - still hurt, so
+     *  holding range from cover and shooting back is the right compromise, not charging
+     *  in on top of it. */
+    private fleeOrFight(): CombatDirective {
+        return this.movement.stuck ? "engageHold" : "flee";
     }
 
     /** Where a bot with nothing combat-related to react to should actually head, instead

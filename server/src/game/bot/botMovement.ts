@@ -183,6 +183,19 @@ export class BotMovementState {
      *  and let the next tick request a fresh one. */
     stuckTimer = 0;
     stuckAnchor: Vec2 = v2.create(0, 0);
+    /** Whether movement genuinely *tried* to go somewhere (a non-trivial `move` vector)
+     *  at any point since the last stuck check - see `stuck`. Distinguishes "tried to
+     *  move but the position barely changed" (a real obstruction) from "chose to stand
+     *  still on purpose" (holding cover, mid-peek-cycle wait, already at a reached
+     *  waypoint) - both look identical as *raw position delta* alone, but only the
+     *  first one is actually "stuck". */
+    triedToMoveSinceCheck = false;
+    /** True once the anti-stuck check above has confirmed real movement was attempted
+     *  but genuinely failed to make progress - see `BotBrain.fleeOrFight`, which reads
+     *  this to give up on an ineffective retreat and fight back instead. Recomputed
+     *  fresh every `STUCK_CHECK_INTERVAL`, so a bot that frees back up (the deflection
+     *  worked, a path opened up) clears this again on its own. */
+    stuck = false;
 
     /** The path node currently being string-pulled toward - see `followPath`. Node id,
      *  not an index into `path`, so it survives waypoints being shifted off the front. */
@@ -1014,17 +1027,23 @@ export function updateMovement(
 
     tryOpenNearbyDoor(bot);
 
-    // Anti-stuck: barely moving for a full second means whatever movement decided this
-    // tick isn't actually working - a bad path (a door it didn't open in time, a stale
-    // waypoint), or a spot near a building/container cluster where local deflection
-    // alone (below) can't find a way through. Not just path-following: plain direct
-    // steering (a raw retreat direction, lateral strafing near cover with nothing to
-    // route through) can get stuck against complex geometry exactly the same way, and
-    // had no recovery at all before this - forcing a fresh path/retreat goal next tick
-    // and trying the *other* deflection side are cheap enough to always do together.
+    // Anti-stuck: barely moving for a full second *while genuinely trying to* means
+    // whatever movement decided this tick isn't actually working - a bad path (a door
+    // it didn't open in time, a stale waypoint), or a spot near a building/container
+    // cluster where local deflection alone (below) can't find a way through. Not just
+    // path-following: plain direct steering (a raw retreat direction, lateral strafing
+    // near cover with nothing to route through) can get stuck against complex geometry
+    // exactly the same way, and had no recovery at all before this - forcing a fresh
+    // path/retreat goal next tick and trying the *other* deflection side are cheap
+    // enough to always do together. `triedToMoveSinceCheck` is what keeps this from
+    // misreading a deliberate, chosen stand-still (holding cover, mid-peek-cycle wait)
+    // as the same thing - see `stuck`'s own doc comment.
+    state.triedToMoveSinceCheck ||= v2.length(move) >= 0.01;
     state.stuckTimer += dt;
     if (state.stuckTimer >= STUCK_CHECK_INTERVAL) {
-        if (v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD) {
+        state.stuck = state.triedToMoveSinceCheck
+            && v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD;
+        if (state.stuck) {
             state.path = [];
             state.repathCooldown = 0;
             state.retreatRecheck = 0;
@@ -1032,6 +1051,7 @@ export function updateMovement(
         }
         state.stuckTimer = 0;
         state.stuckAnchor = v2.copy(bot.pos);
+        state.triedToMoveSinceCheck = false;
     }
 
     if (v2.length(move) < 0.01) {

@@ -21,6 +21,46 @@ test("updateMovement opens distance instead of chasing on the `flee` directive",
     expect(bot.touchMoveDir.x).toBeLessThan(-0.9);
 });
 
+// "wenn retreat nicht geht muss er halt wenigstens schießen" - BotBrain.fleeOrFight
+// reads `state.stuck` to give up on a retreat that's demonstrably not working. This
+// tests the flag's own detection logic in isolation: `bot.pos` is deliberately never
+// updated between calls (simulating a real collision blocking every attempted step,
+// without needing to engineer actual blocking geometry) while `flee` keeps producing a
+// genuine, non-trivial "move away" vector every tick - past a full second of that with
+// zero net progress is exactly what "stuck" means. Two calls with `dt` already past
+// STUCK_CHECK_INTERVAL (1s): the first always measures against the state's default,
+// not-yet-real `stuckAnchor` and never counts as stuck on its own; only the second
+// (anchored to where the bot actually was) is the real test.
+test("updateMovement marks the bot stuck after a full second of trying to move with no progress", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const threat = v2.create(60, 50);
+    const state = new BotMovementState();
+
+    updateMovement(bot, state, "flee", threat, 10, 1.1);
+    updateMovement(bot, state, "flee", threat, 10, 1.1);
+
+    expect(state.stuck).toBe(true);
+});
+
+// The other half: a bot that's making real progress must never read as stuck, no
+// matter how little distance any single tick covers.
+test("updateMovement does not mark the bot stuck while actually making progress", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const threat = v2.create(60, 50);
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 3; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threat, v2.distance(pos, threat), 1.1);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 1.1)) : pos;
+    }
+
+    expect(state.stuck).toBe(false);
+});
+
 // "der Bot ist bisschen hohl sobald er den Fight verlässt" - idle with an `idleGoal`
 // (a last-known enemy spot, or the map's center - see `BotBrain.idleGoal`) heads there
 // instead of wandering aimlessly. No `nav` here, so this exercises the direct-line

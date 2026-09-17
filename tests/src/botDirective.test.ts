@@ -354,13 +354,13 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
 });
 
-// "wenn der heal fast durch ist und er nicht 1 shot low ist kann er auch einfach voll
-// durchziehen statt abzubrechen" - a heal that's essentially finished, taken by a bot
-// that still isn't in real one-shot danger afterward, is worth just completing instead
-// of throwing the whole bandage away for one more hit. Faking the actionType/action.time
-// directly (same reasoning as the post-heal grace-window test above) isolates the
-// push-through math itself from actually simulating a real multi-second bandage.
-test("A nearly-finished heal survives a hit, as long as the bot isn't in one-shot danger", () => {
+// "wenn er nicht 1 shot low ist kann er auch einfach voll durchziehen statt
+// abzubrechen" - a heal is worth just completing through a hit taken mid-way, rather
+// than throwing the whole thing away and having to re-expose itself all over again
+// starting a new one. Faking the actionType directly (same reasoning as the post-heal
+// grace-window test above) isolates the push-through decision itself from actually
+// simulating a real multi-second bandage.
+test("A heal survives a hit partway through, as long as the bot isn't in one-shot danger", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -384,13 +384,14 @@ test("A nearly-finished heal survives a hit, as long as the bot isn't in one-sho
     expect(bot.actionType).toBe(GameConfig.Action.UseItem); // pushed through, not aborted
 });
 
-// Regression: an earlier version gated "nearly done" on a fixed, short absolute cutoff
-// (0.5s) - a bandage taken while genuinely most of the way through (well past the
-// halfway point, but with more than that fixed cutoff left) still aborted, which is
-// exactly the "hat die Bandage fast durch aber bricht dann ab" complaint. Fraction-based
-// now: 1s left out of a 3s bandage (67% complete) counts as "nearly done" even though
-// the old fixed cutoff would have rejected it.
-test("A heal well past the halfway point survives a hit under the fraction-based threshold", () => {
+// Regression: an earlier version only allowed pushing through a hit once the heal was
+// already almost done (a fixed cutoff, then a fraction of the action's own duration) -
+// "cancelt immer noch relativ oft mid heal anstatt kurz voll durchzuziehen" was exactly
+// this: an early hit, well before any "nearly done" bar, still aborted even at
+// comfortable health. Whether to push through is purely about danger now (see
+// `ONE_SHOT_RISK_HEALTH_FRAC`), not when in the heal it happens - re-starting from
+// scratch after an abort costs strictly more total exposure either way.
+test("A heal survives a hit taken right at the very start, not just near the end", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -399,7 +400,7 @@ test("A heal well past the halfway point survives a hit under the fraction-based
 
     bot.actionType = GameConfig.Action.UseItem;
     bot.action.duration = 3;
-    bot.action.time = 2; // 1s (33%) remaining - past the old fixed 0.5s cutoff
+    bot.action.time = 0.1; // barely started
     bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 
@@ -414,9 +415,9 @@ test("A heal well past the halfway point survives a hit under the fraction-based
     expect(bot.actionType).toBe(GameConfig.Action.UseItem); // pushed through, not aborted
 });
 
-// Same near-finished heal, but genuinely one-shot-able afterward - still worth
-// abandoning even this close to done, since a single follow-up hit could kill outright.
-test("A nearly-finished heal still aborts when the bot is in real one-shot danger", () => {
+// Genuinely one-shot-able afterward - still worth abandoning regardless of timing,
+// since a single follow-up hit could kill outright.
+test("A heal still aborts when the bot is in real one-shot danger", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -425,7 +426,7 @@ test("A nearly-finished heal still aborts when the bot is in real one-shot dange
 
     bot.actionType = GameConfig.Action.UseItem;
     bot.action.duration = 2.5;
-    bot.action.time = bot.action.duration - 0.1; // almost done
+    bot.action.time = bot.action.duration - 0.1; // almost done - still aborts anyway
     bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 

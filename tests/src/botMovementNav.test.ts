@@ -524,6 +524,15 @@ test("Fleeing to cover that's already well past the settle distance stops there"
     bot.pos = pos;
     updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
     expect(bot.touchMoveActive).toBe(false);
+
+    // A deliberate, chosen stand-still (genuinely safe now, nothing left to do) must
+    // never misread as "stuck" - see BotMovementState.stuck's own doc comment. Holding
+    // for a full STUCK_CHECK_INTERVAL (1s) here would incorrectly flip `fleeOrFight`
+    // over to fighting if this weren't distinguished from a real obstruction. `dt`
+    // already past the interval on its own so this reliably forces a fresh evaluation
+    // during the stationary phase, not just inheriting a stale value from earlier.
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 1.1, graph);
+    expect(state.stuck).toBe(false);
 });
 
 // The "peek from cover, shoot peeking enemies" ask: once `engageHold` reaches cover, it
