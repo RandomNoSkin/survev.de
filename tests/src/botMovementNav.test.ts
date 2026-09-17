@@ -6,7 +6,7 @@ import {
     BotMovementState,
     findCover,
     followPath,
-    safeRetreatGoal,
+    preferNonInteriorGoal,
     tryOpenNearbyDoor,
     updateMovement,
 } from "../../server/src/game/bot/botMovement.ts";
@@ -850,28 +850,28 @@ test("Fleeing gets unstuck and moves away even with an obstacle directly in its 
 });
 
 // "sich nicht innen trappen zu lassen": a raw straight-line retreat goal has no idea it
-// happens to land inside a building's interior lattice - `safeRetreatGoal` nudges it
-// onto the nearest non-`interior` node instead when the graph has one nearby, so
+// happens to land inside a building's interior lattice - `preferNonInteriorGoal` nudges
+// it onto the nearest non-`interior` node instead when the graph has one nearby, so
 // `followPath`'s A* never gets pointed at a dead-end room as the actual destination.
 // Uses a small synthetic `NavGraph` (not a real map's random layout) so the exact node
 // kinds/positions involved are known, not just hoped-for.
-test("safeRetreatGoal steers a retreat goal off an interior node onto a nearby hull node", () => {
+test("preferNonInteriorGoal steers a goal off an interior node onto a nearby hull node", () => {
     const graph = new NavGraph([]);
     const rawGoal = v2.create(100, 100);
     graph.addNode(v2.create(100, 100), 0, "interior"); // sits right on the raw goal
     const hullId = graph.addNode(v2.create(105, 100), 0, "hull"); // within the search radius
 
-    const goal = safeRetreatGoal(graph, rawGoal, 0);
+    const goal = preferNonInteriorGoal(graph, rawGoal, 0);
 
     expect(goal).toEqual(graph.pos(hullId));
 });
 
-test("safeRetreatGoal leaves an already-open retreat goal alone", () => {
+test("preferNonInteriorGoal leaves an already-open goal alone", () => {
     const graph = new NavGraph([]);
     const rawGoal = v2.create(100, 100);
     graph.addNode(v2.create(100, 100), 0, "open");
 
-    const goal = safeRetreatGoal(graph, rawGoal, 0);
+    const goal = preferNonInteriorGoal(graph, rawGoal, 0);
 
     expect(goal).toEqual(rawGoal);
 });
@@ -879,13 +879,13 @@ test("safeRetreatGoal leaves an already-open retreat goal alone", () => {
 // A genuine dead-end room (nothing but interior nodes anywhere nearby) has no safer
 // alternative to redirect to - falling back to the raw goal here is still strictly no
 // worse than before this fix existed, never something new to get stuck on.
-test("safeRetreatGoal falls back to the raw goal when only interior nodes are nearby", () => {
+test("preferNonInteriorGoal falls back to the raw goal when only interior nodes are nearby", () => {
     const graph = new NavGraph([]);
     const rawGoal = v2.create(100, 100);
     graph.addNode(v2.create(100, 100), 0, "interior");
     graph.addNode(v2.create(105, 100), 0, "interior");
 
-    const goal = safeRetreatGoal(graph, rawGoal, 0);
+    const goal = preferNonInteriorGoal(graph, rawGoal, 0);
 
     expect(goal).toEqual(rawGoal);
 });
@@ -893,7 +893,7 @@ test("safeRetreatGoal falls back to the raw goal when only interior nodes are ne
 // End-to-end through the actual code path `flee`/`heal` movement uses: with no real
 // cover obstacle available (`findCover` finds nothing on this bare synthetic setup),
 // `retreatToCover` falls back to `retreatDirection`, which must itself apply
-// `safeRetreatGoal` before committing to `state.retreatGoal`.
+// `preferNonInteriorGoal` before committing to `state.retreatGoal`.
 test("Fleeing with no cover available picks a retreat goal off an interior node", () => {
     const graph = new NavGraph([]);
     const threatPos = v2.create(0, 100);
@@ -910,6 +910,36 @@ test("Fleeing with no cover available picks a retreat goal off an interior node"
 
     expect(state.retreatGoal).toBeDefined();
     expect(state.retreatGoal).toEqual(graph.pos(hullId));
+});
+
+// "checkt nicht dass er nicht in Buildings sein sollte" - closing distance on an
+// *actually visible* target standing inside a building is correct (chase them where
+// they really are); closing on a merely-remembered position is the case that used to
+// blindly path deep into a building's interior lattice regardless. `state.pathGoal` (set
+// by `followPath` the instant it actually computes a path, before A* even runs) proves
+// exactly what destination each case commits to, independent of whether a full route
+// happens to exist in this minimal synthetic graph.
+test("engageHold's close mode avoids a building interior while chasing a memory, but not an actually-visible target", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    // A real obstacle directly on the line so `followPath` actually computes a path
+    // instead of taking the "direct line is already clear" shortcut.
+    const wall = game.map.genObstacle("crate_01", v2.create(75, 100));
+    const graph = new NavGraph([wall]);
+    const threatPos = v2.create(100, 100);
+    graph.addNode(v2.create(100, 100), 0, "interior"); // sits right on the remembered spot
+    const hullId = graph.addNode(v2.create(105, 100), 0, "hull");
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 100) });
+    // dist (50) is well past the no-gun fallback sweet spot's close edge (~29.5),
+    // putting `engageHold` in its "close" range mode for both calls below.
+
+    const memoryState = new BotMovementState();
+    updateMovement(bot, memoryState, "engageHold", threatPos, 50, 0.1, graph, false, undefined, false);
+    expect(memoryState.pathGoal).toEqual(graph.pos(hullId));
+
+    const visibleState = new BotMovementState();
+    updateMovement(bot, visibleState, "engageHold", threatPos, 50, 0.1, graph, false, undefined, true);
+    expect(visibleState.pathGoal).toEqual(threatPos);
 });
 
 test("util.sameLayer sanity used by tryOpenNearbyDoor treats ground and ground+stairs as the same layer", () => {

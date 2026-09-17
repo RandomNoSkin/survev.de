@@ -34,11 +34,13 @@ const ABORT_HEAL_REACT_MS = 350;
  *  bandage away for one more hit taken - "wenn der heal fast durch ist und er nicht 1
  *  shot low ist, kann er auch einfach voll durchziehen statt abzubrechen". */
 const ONE_SHOT_RISK_HEALTH_FRAC = 0.35;
-/** How little of a heal action has to be left for "just finish it" (see
- *  `ONE_SHOT_RISK_HEALTH_FRAC`) to apply at all - short enough that this never overrides
- *  the ordinary hit-abort reaction for a heal that's still mostly ahead of it, only the
- *  last moment where aborting and re-starting later would cost more than it saves. */
-const HEAL_NEARLY_DONE_REMAINING_S = 0.5;
+/** How little of a heal action has to be left, as a fraction of its *own* total
+ *  duration, for "just finish it" (see `ONE_SHOT_RISK_HEALTH_FRAC`) to apply at all - a
+ *  fraction rather than a fixed cutoff so a medkit's much longer `useTime` (6s vs a
+ *  bandage's 3s) gets a proportionally later "worth finishing" point too, not the same
+ *  fixed second regardless of the item. A real player's read on "it's basically done"
+ *  scales with how far into the animation they already are, not an absolute clock. */
+const HEAL_NEARLY_DONE_REMAINING_FRAC = 0.4;
 /** After an abort, don't immediately re-start the same heal - open some distance
  *  first, which is exactly what `flee` (see `pickDirective`) is for. */
 const HEAL_ABORT_COOLDOWN_S = 1.2;
@@ -250,10 +252,11 @@ export class BotBrain {
             // A heal that's genuinely almost done, taken by a bot that isn't in
             // one-shot danger, is worth just finishing instead of throwing away for one
             // more hit - re-starting the same heal later (see `HEAL_ABORT_COOLDOWN_S`)
-            // costs more than the last half-second of this one ever risks.
+            // costs more than the last stretch of this one ever risks.
             const remaining = bot.action.duration - bot.action.time;
             const healthFrac = bot.health / GameConfig.player.health;
-            const pushThroughHit = remaining <= HEAL_NEARLY_DONE_REMAINING_S
+            const pushThroughHit = bot.action.duration > 0
+                && remaining <= bot.action.duration * HEAL_NEARLY_DONE_REMAINING_FRAC
                 && healthFrac > ONE_SHOT_RISK_HEALTH_FRAC;
             if ((justHit && !pushThroughHit) || grenadeThreat) {
                 bot.cancelAction();
@@ -280,6 +283,7 @@ export class BotBrain {
             this.barn.navGraph,
             recentlyVisible,
             this.tier,
+            !!this.target,
         );
 
         // A live grenade landing nearby overrides whatever movement the directive above
@@ -327,7 +331,7 @@ export class BotBrain {
         // happens to spot an enemy - see the melee-stuck case in
         // `updateWeaponSelection`. It also no-ops entirely while mid-action (healing,
         // reviving, ...), since switching would otherwise cancel that action.
-        updateWeaponSelection(bot, this.tier, this.fire, dist);
+        updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing);
         updateReload(bot);
         updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
 

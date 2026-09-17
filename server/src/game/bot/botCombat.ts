@@ -125,12 +125,23 @@ function switchTo(bot: Player, fire: BotFireState, slot: number): boolean {
  * Lower tiers never quickswitch: they only ever move to the range-preferred slot, and
  * only once it's actually ready - they wait out a cooldown (and the slowdown with it)
  * rather than juggle weapons to dodge it.
+ *
+ * `isFleeing` (the brain's `flee`/`heal` directive) is a separate, tier-independent
+ * reason to hold melee: `Player.recalculateSpeed` adds `weaponDef.speed.equip` every
+ * tick, which is +1 for fists but 0 for every gun in the game - a permanent, "free"
+ * speed edge over a pursuer that has nothing to do with `shotSlowdownTimer` and applies
+ * even to a bot that never fired a shot. Worth more than staying combat-ready while the
+ * actual goal right now is putting distance, not winning a stand-up fight - see the
+ * `cur !== Primary/Secondary` branch below for the other half (staying on melee instead
+ * of immediately snapping back to a gun) and the un-flagged case for switching back the
+ * moment fleeing ends.
  */
 export function updateWeaponSelection(
     bot: Player,
     tier: BotTierDef,
     fire: BotFireState,
     dist: number,
+    isFleeing = false,
 ): void {
     if (bot.actionType !== GameConfig.Action.None) return;
 
@@ -148,16 +159,29 @@ export function updateWeaponSelection(
     if (!slots.length) return;
 
     const cur = wm.curWeapIdx;
+    const meleeType = wm.weapons[WeaponSlot.Melee].type;
 
     // Not holding a gun at all - fresh spawn, right after a role assigns weapons into
     // slots but leaves `curWeapIdx` on melee (see `Player.promoteToRole`/`setWeapon`),
     // or a first-ever pickup in BR. A human client auto-sends
     // Input.EquipPrimary/Secondary here; bots have to do the equivalent themselves or
     // they'll stand there holding fists forever. Unconditional - being unarmed is
-    // strictly worse than holding an empty gun (which `updateReload` then handles).
+    // strictly worse than holding an empty gun (which `updateReload` then handles) -
+    // *except* while genuinely fleeing on melee already, where staying unarmed for the
+    // speed bonus is the whole point (see the doc comment above).
     if (cur !== WeaponSlot.Primary && cur !== WeaponSlot.Secondary) {
+        if (isFleeing && cur === WeaponSlot.Melee && meleeType) return;
         wm.setCurWeapIndex(bestRangeSlot(bot, slots, dist));
         fire.firedSinceSwitch = true; // wasn't holding a gun to have fired anyway
+        return;
+    }
+
+    // Hurt and running: trade the gun for melee's speed bonus - see the doc comment
+    // above. Reconsidered every tick, so the moment fleeing ends this falls through
+    // to the "not holding a gun" branch above instead and re-equips a real gun.
+    if (isFleeing && meleeType) {
+        wm.setCurWeapIndex(WeaponSlot.Melee);
+        fire.firedSinceSwitch = true;
         return;
     }
 

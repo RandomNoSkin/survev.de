@@ -368,8 +368,38 @@ test("A nearly-finished heal survives a hit, as long as the bot isn't in one-sho
     bot.health = 60; // well above ONE_SHOT_RISK_HEALTH_FRAC (35%) even after this hit
 
     bot.actionType = GameConfig.Action.UseItem;
-    bot.action.duration = 2.5; // a bandage's real useTime
+    bot.action.duration = 3; // a bandage's real useTime
     bot.action.time = bot.action.duration - 0.1; // almost done
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+
+    bot.damage({
+        amount: 5,
+        damageType: GameConfig.DamageType.Player,
+        dir: v2.create(-1, 0),
+        source: target,
+    });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem); // pushed through, not aborted
+});
+
+// Regression: an earlier version gated "nearly done" on a fixed, short absolute cutoff
+// (0.5s) - a bandage taken while genuinely most of the way through (well past the
+// halfway point, but with more than that fixed cutoff left) still aborted, which is
+// exactly the "hat die Bandage fast durch aber bricht dann ab" complaint. Fraction-based
+// now: 1s left out of a 3s bandage (67% complete) counts as "nearly done" even though
+// the old fixed cutoff would have rejected it.
+test("A heal well past the halfway point survives a hit under the fraction-based threshold", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    bot.health = 60;
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 3;
+    bot.action.time = 2; // 1s (33%) remaining - past the old fixed 0.5s cutoff
     bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 

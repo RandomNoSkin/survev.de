@@ -127,11 +127,11 @@ const RETREAT_LOOKAHEAD = 20;
  *  only occasionally, gives `followPath` something stable to actually path toward. */
 const RETREAT_RECOMPUTE_INTERVAL = 1.5;
 const RETREAT_GOAL_REACHED_DIST = 4;
-/** How far around a raw straight-line retreat goal to look for a non-`interior` node to
- *  redirect to instead - see `safeRetreatGoal`. Wide enough to actually find a nearby
- *  hull/open node from just inside a building, not so wide the goal drags somewhere
- *  unrelated to "away from the threat". */
-const RETREAT_GOAL_SEARCH_RADIUS = 15;
+/** How far around a raw straight-line movement goal to look for a non-`interior` node to
+ *  redirect to instead - see `preferNonInteriorGoal`. Wide enough to actually find a
+ *  nearby hull/open node from just inside a building, not so wide the goal drags
+ *  somewhere unrelated to the original destination. */
+const NON_INTERIOR_GOAL_SEARCH_RADIUS = 15;
 
 /** `push` never closes tighter than this, full stop, regardless of weapon. Not just a
  *  style choice: a gun's aim/lead math (`botAim.ts`) works from the *muzzle* position
@@ -705,21 +705,24 @@ export function followPath(
     return v2.normalizeSafe(v2.sub(graph.pos(state.pullTarget!), bot.pos));
 }
 
-/** Nudges a raw straight-line retreat goal off a building's `interior` lattice onto the
+/** Nudges a raw straight-line movement goal off a building's `interior` lattice onto the
  *  nearest `open`/`hull`/`door`/`stair` node instead, when the graph has one nearby - "so
- *  eine Sackgasse nicht als Fluchtziel" (a dead end isn't a flee destination). A pure
- *  "away from the threat" projection has no idea it happens to land inside a room, and
- *  `followPath`'s A* will happily walk the bot in through a door to reach it even when
- *  that building offers nothing past it relative to the escape direction - ending a
- *  retreat trapped inside a dead-end pocket is worse than never having moved.
- *  Deliberately only steers the *destination*, not routing in general: fleeing *through*
- *  a building that actually leads somewhere is still fine and unaffected, since its
- *  interior nodes only ever get preferred here when the raw goal itself would land on one. */
-export function safeRetreatGoal(nav: NavGraph, rawGoal: Vec2, layer: number): Vec2 {
+ *  eine Sackgasse nicht als Ziel" (a dead end isn't a destination). A pure straight-line
+ *  projection has no idea it happens to land inside a room, and `followPath`'s A* will
+ *  happily walk the bot in through a door to reach it even when that building offers
+ *  nothing past it - ending a retreat trapped inside a dead-end pocket (or blindly
+ *  charging into one chasing a stale memory) is worse than never having moved. Used by
+ *  `retreatDirection` (always) and `engageHold`'s "close" mode (only while chasing a
+ *  memory, not an actually-visible target - see `updateMovement`'s `targetVisible`).
+ *  Deliberately only steers the *destination*, not routing in general: closing in on or
+ *  fleeing *through* a building that actually leads somewhere is still fine and
+ *  unaffected, since its interior nodes only ever get preferred here when the raw goal
+ *  itself would land on one. */
+export function preferNonInteriorGoal(nav: NavGraph, rawGoal: Vec2, layer: number): Vec2 {
     const nearest = nav.nearest(rawGoal, layer);
     if (nearest < 0 || nav.kind[nearest] !== "interior") return rawGoal;
 
-    const candidates = nav.nearby(rawGoal, layer, RETREAT_GOAL_SEARCH_RADIUS, 8);
+    const candidates = nav.nearby(rawGoal, layer, NON_INTERIOR_GOAL_SEARCH_RADIUS, 8);
     for (const id of candidates) {
         if (nav.kind[id] !== "interior") return nav.pos(id);
     }
@@ -747,7 +750,7 @@ function retreatDirection(
     ) {
         state.retreatRecheck = RETREAT_RECOMPUTE_INTERVAL;
         const rawGoal = v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD));
-        state.retreatGoal = safeRetreatGoal(nav, rawGoal, util.toGroundLayer(bot.layer));
+        state.retreatGoal = preferNonInteriorGoal(nav, rawGoal, util.toGroundLayer(bot.layer));
     }
 
     const pathDir = followPath(bot, state, nav, state.retreatGoal, dt);
@@ -795,6 +798,14 @@ function rollStrafeCycle(state: BotMovementState, aggression: number | undefined
  * keeps exercising the originally tuned pace exactly; `BotBrain` always passes the real
  * tier, which scales peek/re-cover/strafe pacing by `tier.aggression` - see
  * `peekPaceMult`/`coverRecomputeMult`/`feintChanceFor`.
+ *
+ * `targetVisible` - whether `threatPos` is the *currently* visible target, not a
+ * remembered/heard-shot fallback. Defaults `true` so every existing direct call (which
+ * always passes a real, "trustworthy" position) keeps closing distance exactly as
+ * before; `BotBrain` passes `!!this.target`. `engageHold`'s "close" mode uses this to
+ * avoid pathing deep into a building's interior while chasing a stale memory - see
+ * `preferNonInteriorGoal`. Chasing an *actually* visible target into a building it's
+ * really standing in is unaffected either way.
  */
 export function updateMovement(
     bot: Player,
@@ -806,6 +817,7 @@ export function updateMovement(
     nav?: NavGraph,
     recentlyVisible = false,
     tier?: BotTierDef,
+    targetVisible = true,
 ): void {
     let move = v2.create(0, 0);
     const aggression = tier?.aggression;
@@ -909,7 +921,16 @@ export function updateMovement(
             state.coverObstacle = undefined;
             state.coverPos = undefined;
             state.peeking = false;
-            const pathDir = nav ? followPath(bot, state, nav, threatPos, dt) : undefined;
+            // Chasing an actually-visible target into whatever building it's really
+            // standing in is correct - chasing a merely-remembered position (they may
+            // well have moved on already) headfirst into a building's cluttered
+            // interior lattice is the "checkt nicht dass er nicht in Buildings sein
+            // sollte" complaint: worth avoiding unless the target is genuinely there
+            // right now. See `preferNonInteriorGoal`.
+            const chaseGoal = nav && !targetVisible
+                ? preferNonInteriorGoal(nav, threatPos, util.toGroundLayer(bot.layer))
+                : threatPos;
+            const pathDir = nav ? followPath(bot, state, nav, chaseGoal, dt) : undefined;
             move = pathDir ?? toThreat;
         } else if (mode === "retreat") {
             state.coverObstacle = undefined;

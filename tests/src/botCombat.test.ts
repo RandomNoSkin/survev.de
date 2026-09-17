@@ -95,6 +95,64 @@ test("Weapon selection switches to whatever has ammo over a dry gun at the ideal
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary);
 });
 
+// "muss er auch checken dass er mit melee waffe schneller rennt (im normalfall)" -
+// `Player.recalculateSpeed` adds `weaponDef.speed.equip` every tick, which is +1 for
+// fists but 0 for every gun - a real, permanent speed edge over a pursuer, independent
+// of `shotSlowdownTimer`/quickswitch entirely. Worth trading the gun for while the goal
+// is putting distance, not winning a fight.
+test("A fleeing bot switches to melee for the speed bonus instead of holding its gun", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6, /* isFleeing */ true);
+
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+});
+
+test("A bot that is not fleeing keeps its gun equipped instead of switching to melee", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6, /* isFleeing */ false);
+
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+// Regression guard: without a special case, the "not holding a gun" branch (which
+// exists to fix a fresh spawn stuck on melee) would immediately switch a fleeing bot
+// right back to its gun the very next tick, undoing the switch above before it ever got
+// to enjoy the speed bonus for more than a single frame.
+test("A fleeing bot stays on melee across repeated ticks instead of flip-flopping back to its gun", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    const fire = new BotFireState();
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+});
+
+// Once fleeing ends, the bot needs its gun back - the same "not holding a gun" branch
+// that would otherwise fight this feature is exactly what re-equips it once `isFleeing`
+// stops being true.
+test("A bot re-equips its gun the moment fleeing ends", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    const fire = new BotFireState();
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
 // The core mechanic, per real-world testing feedback: `recalculateSpeed` applies a
 // flat 50% movement penalty for the whole `shotSlowdownTimer` window after ANY shot
 // from ANY gun (see the doc comment on `updateWeaponSelection`) - a bolt-action rifle
