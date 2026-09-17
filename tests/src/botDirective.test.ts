@@ -547,3 +547,72 @@ test("A bot reacts to a nearby gunshot from an enemy it has never seen", () => {
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.y).toBeGreaterThan(0.5); // engaging toward the sound, +y here
 });
+
+// "wenn er keinen Plan hat wo der Gegner ist soll er healen falls nötig" - having
+// nothing combat-related to react to must not suppress healing entirely.
+test("A bot with no known enemy at all still heals when hurt, instead of staying idle", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.health = 30; // well under expert's healThreshold (0.75)
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// A healthy bot with no known enemy has nothing to heal for either - still idle, not
+// accidentally forced into some other directive.
+test("A bot with no known enemy and full health stays idle rather than healing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+});
+
+// "soll er sich Richtung center map ... navigieren" - the other half of "der Bot ist
+// bisschen hohl sobald er den Fight verlässt": with nothing to react to and nowhere
+// remembered to check, head for the map's center instead of wandering aimlessly.
+test("A bot with no known enemy navigates toward the map center instead of wandering aimlessly", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(10, 10), game);
+
+    bot.botBrain!.update(0.05);
+
+    const center = v2.create(game.map.width / 2, game.map.height / 2);
+    const toCenter = v2.normalizeSafe(v2.sub(center, bot.pos));
+    expect(bot.touchMoveActive).toBe(true);
+    expect(v2.dot(bot.touchMoveDir, toCenter)).toBeGreaterThan(0.9);
+});
+
+// "vorsichtig last enemy position navigieren" - a recent-ish last-known sighting is a
+// better bet than the map's center: the enemy is probably still somewhere near there.
+test("A bot with a recent last-known enemy position heads back there instead of the map center", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(10, 10), game);
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(30, 10) });
+
+    bot.botBrain!.update(0.05); // spots the enemy, records lastKnownEnemyPos
+
+    // Past tier.memory (6s for expert), so `threatPos()` itself no longer resolves to
+    // it - this is genuinely the "idle, nothing left to react to" case, not a live
+    // combat-memory chase - but still well under IDLE_LAST_KNOWN_MEMORY_MS (15s).
+    game.now += 8000;
+    enemy.dead = true; // remove it as a live target entirely
+
+    bot.botBrain!.update(0.05);
+
+    // Heading toward the last-known spot (30, 10), not the map center (64, 64) - a
+    // positive x with near-zero y is the distinguishing signature (the center pull
+    // would have a positive y component too, from this starting position).
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.9);
+    expect(Math.abs(bot.touchMoveDir.y)).toBeLessThan(0.3);
+});

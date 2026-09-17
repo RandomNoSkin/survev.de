@@ -115,6 +115,14 @@ const POST_HEAL_RETREAT_COOLDOWN_S = 1.5;
  *  short enough that the bot doesn't spend the next 10s convinced someone's still right
  *  there off one shot that's long since gone quiet. */
 const GUNSHOT_MEMORY_MS = 3000;
+/** How long a last-known enemy position stays worth actually walking back to once
+ *  totally out of combat memory (past `tier.memory`/`GUNSHOT_MEMORY_MS` both) - "der Bot
+ *  ist bisschen hohl sobald er den Fight verlässt": with nothing left to react to,
+ *  aimlessly wandering reads as empty, but a stale sighting from minutes ago isn't worth
+ *  a special trip either. Long enough that checking back on a small arena's worth of
+ *  ground is still a reasonable bet, short enough that the bot gives up on a genuinely
+ *  cold trail and just heads for the map's center instead - see `idleGoal`. */
+const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -284,6 +292,7 @@ export class BotBrain {
             recentlyVisible,
             this.tier,
             !!this.target,
+            this.idleGoal(bot),
         );
 
         // A live grenade landing nearby overrides whatever movement the directive above
@@ -354,12 +363,22 @@ export class BotBrain {
     /**
      * The single combat decision every other system (movement, healing) reacts to this
      * tick. Priority, high to low:
-     * 1. No target and no recent memory of one - nothing to react to.
-     * 2. Already mid-heal - see through the bandage (interrupting it is `update()`'s
+     * 1. Already mid-heal - see through the bandage regardless of anything else,
+     *    including having lost `threatPos` entirely (interrupting it is `update()`'s
      *    `cancelAction` job above, not a directive switch on its own; without this,
      *    `shouldHeal` degenerately returns false the instant `actionType` becomes
      *    `UseItem`, which would otherwise make the bot abandon cover mid-bandage the
-     *    moment health ticks back over the threshold).
+     *    moment health ticks back over the threshold). Checked before the "no target"
+     *    case below on purpose - a heal already in progress must never get orphaned
+     *    just because `threatPos`'s own, shorter memory window happens to run out
+     *    first.
+     * 2. No target and no recent memory of one, but still hurt enough to want to heal
+     *    ("wenn er keinen Plan hat wo der Gegner ist, soll er healen falls nötig") -
+     *    nothing to react to combat-wise doesn't mean nothing to do; `positionSafe:
+     *    true` here since there's no known threat to have made it unsafe in the first
+     *    place, unlike a heal that's mid-fight. Otherwise: `idle` - `updateMovement`
+     *    still has somewhere purposeful to go from there (see `idleGoal`), just
+     *    nothing combat-related to react to.
      * 3. Critically hurt with no way to heal right now (no item, or just interrupted
      *    and still cooling down) - disengage instead of trading.
      * 4. Merely low (not yet critical) with no way to heal - still disengage rather
@@ -391,8 +410,13 @@ export class BotBrain {
      * 10. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
-        if (!threatPos) return "idle";
         if (bot.actionType === GameConfig.Action.UseItem) return "heal";
+        if (!threatPos) {
+            const healthFrac = bot.health / GameConfig.player.health;
+            const canHeal = healthFrac < this.tier.healThreshold
+                && pickHealItem(bot, healthFrac, /* positionSafe */ true) !== undefined;
+            return canHeal ? "heal" : "idle";
+        }
 
         const healthFrac = bot.health / GameConfig.player.health;
         const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
@@ -456,6 +480,21 @@ export class BotBrain {
      *  exact tick's momentary LOS break - see `SUSTAINED_LOST_MS`. */
     private sustainedlyLost(bot: Player): boolean {
         return !this.target && bot.game.now - this.lastKnownEnemyTimeMs > SUSTAINED_LOST_MS;
+    }
+
+    /** Where a bot with nothing combat-related to react to should actually head, instead
+     *  of wandering aimlessly - "der Bot ist bisschen hohl sobald er den Fight verlässt".
+     *  Prefers a still-recent-ish last-known enemy position (see
+     *  `IDLE_LAST_KNOWN_MEMORY_MS`) - "vorsichtig zur letzten bekannten Position
+     *  navigieren", they're probably still somewhere nearby - falling back to the map's
+     *  center as a generic "go find the fight" heuristic once that's gone cold or never
+     *  existed at all (a fresh spawn, or a target never once spotted). */
+    private idleGoal(bot: Player): Vec2 {
+        if (this.lastKnownEnemyPos) {
+            const ageMs = bot.game.now - this.lastKnownEnemyTimeMs;
+            if (ageMs <= IDLE_LAST_KNOWN_MEMORY_MS) return this.lastKnownEnemyPos;
+        }
+        return v2.create(bot.game.map.width / 2, bot.game.map.height / 2);
     }
 
     /** A brief, predicted stand-in for the target the instant it's gone offscreen but

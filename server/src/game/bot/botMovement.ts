@@ -127,6 +127,10 @@ const RETREAT_LOOKAHEAD = 20;
  *  only occasionally, gives `followPath` something stable to actually path toward. */
 const RETREAT_RECOMPUTE_INTERVAL = 1.5;
 const RETREAT_GOAL_REACHED_DIST = 4;
+/** How close counts as "arrived" at `idleGoal` (a last-known enemy spot, or the map's
+ *  center) before falling back to plain wandering in the area - generous, since this is
+ *  "get to roughly the right neighborhood", not a precise cover/waypoint arrival. */
+const IDLE_GOAL_REACHED_DIST = 10;
 /** How far around a raw straight-line movement goal to look for a non-`interior` node to
  *  redirect to instead - see `preferNonInteriorGoal`. Wide enough to actually find a
  *  nearby hull/open node from just inside a building, not so wide the goal drags
@@ -806,6 +810,11 @@ function rollStrafeCycle(state: BotMovementState, aggression: number | undefined
  * avoid pathing deep into a building's interior while chasing a stale memory - see
  * `preferNonInteriorGoal`. Chasing an *actually* visible target into a building it's
  * really standing in is unaffected either way.
+ *
+ * `idleGoal` - where to actually head while idle (no known threat at all), instead of
+ * just wandering aimlessly - see `BotBrain.idleGoal` (a recent last-known enemy spot, or
+ * the map's center). Optional so every existing direct call keeps the original pure
+ * wander behavior unchanged; `BotBrain` always passes one.
  */
 export function updateMovement(
     bot: Player,
@@ -818,21 +827,29 @@ export function updateMovement(
     recentlyVisible = false,
     tier?: BotTierDef,
     targetVisible = true,
+    idleGoal?: Vec2,
 ): void {
     let move = v2.create(0, 0);
     const aggression = tier?.aggression;
 
     if (directive === "idle" || !threatPos) {
-        state.path = [];
         state.coverObstacle = undefined;
         state.coverPos = undefined;
         state.peeking = false;
-        state.wanderTimer -= dt;
-        if (state.wanderTimer <= 0) {
-            state.wanderTimer = util.random(1, 2.5);
-            state.wanderDir = v2.randomUnit();
+
+        const headingToGoal = idleGoal && v2.distance(bot.pos, idleGoal) > IDLE_GOAL_REACHED_DIST;
+        if (headingToGoal) {
+            const pathDir = nav ? followPath(bot, state, nav, idleGoal, dt) : undefined;
+            move = pathDir ?? v2.normalizeSafe(v2.sub(idleGoal, bot.pos));
+        } else {
+            state.path = [];
+            state.wanderTimer -= dt;
+            if (state.wanderTimer <= 0) {
+                state.wanderTimer = util.random(1, 2.5);
+                state.wanderDir = v2.randomUnit();
+            }
+            move = state.wanderDir;
         }
-        move = state.wanderDir;
     } else if (directive === "heal" || directive === "flee") {
         move = retreatToCover(
             bot,

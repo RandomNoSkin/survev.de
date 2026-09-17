@@ -21,6 +21,55 @@ test("updateMovement opens distance instead of chasing on the `flee` directive",
     expect(bot.touchMoveDir.x).toBeLessThan(-0.9);
 });
 
+// "der Bot ist bisschen hohl sobald er den Fight verlässt" - idle with an `idleGoal`
+// (a last-known enemy spot, or the map's center - see `BotBrain.idleGoal`) heads there
+// instead of wandering aimlessly. No `nav` here, so this exercises the direct-line
+// fallback specifically.
+test("updateMovement heads toward idleGoal instead of wandering when idle", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const idleGoal = v2.create(100, 50);
+
+    const state = new BotMovementState();
+    updateMovement(bot, state, "idle", undefined, Infinity, 0.05, undefined, false, undefined, true, idleGoal);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.9); // toward idleGoal, +x
+});
+
+// Once close enough, there's nothing left to head toward - falls back to the original
+// plain wander instead of jittering right on top of `idleGoal` forever. Checked against
+// `state.wanderDir` itself (read after the call, since a fresh state's wander timer
+// starts at 0 and rerolls on the very first tick) rather than a specific direction,
+// which is randomized and not the point of this test.
+test("updateMovement falls back to wandering once idleGoal is reached", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const idleGoal = v2.create(52, 50); // within IDLE_GOAL_REACHED_DIST
+
+    const state = new BotMovementState();
+    updateMovement(bot, state, "idle", undefined, Infinity, 0.05, undefined, false, undefined, true, idleGoal);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeCloseTo(state.wanderDir.x, 5);
+    expect(bot.touchMoveDir.y).toBeCloseTo(state.wanderDir.y, 5);
+});
+
+// Without an `idleGoal` at all (every pre-existing direct call), behavior must stay the
+// original pure wander - this is the backward-compatibility guarantee the optional
+// parameter is supposed to provide.
+test("updateMovement wanders as before when no idleGoal is given", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+
+    const state = new BotMovementState();
+    updateMovement(bot, state, "idle", undefined, Infinity, 0.05);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeCloseTo(state.wanderDir.x, 5);
+    expect(bot.touchMoveDir.y).toBeCloseTo(state.wanderDir.y, 5);
+});
+
 test("updateMovement chases the threat on `engageHold` when too far", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
