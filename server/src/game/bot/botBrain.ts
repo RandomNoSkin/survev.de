@@ -55,7 +55,14 @@ const PANIC_HEALTH_FRAC_MULT = 0.5;
  *  only matters when there's *no* item to fix the problem with, where the bot would
  *  otherwise just keep fighting (or even push) at real risk because it technically
  *  isn't "critical" yet. That's the "attacks when it should retreat" bug: being low
- *  without a bandage is still a reason to disengage, not just being nearly dead. */
+ *  without a bandage is still a reason to disengage, not just being nearly dead.
+ *  Deliberately left alone even after finding that a single burst can carry health
+ *  straight from "fine" into "critical" in one hit: `shouldHeal` already starts the
+ *  retreat-to-heal at the higher `tier.healThreshold` (0.75) the instant an item is
+ *  available, regardless of this constant - this one only governs the narrower
+ *  no-item/can't-safely-heal-yet disengage case, and raising it collides with the
+ *  deliberately-tuned "push once cleared low, without needing full healThreshold"
+ *  behavior for no real gain on the actual reaction-time problem. */
 const LOW_HEALTH_FRAC_MULT = 0.75;
 /** How hurt the *target* has to be, as a fraction of max health, before `push` is
  *  willing to charge across open ground for it - see `pickDirective`. Pushing into a

@@ -465,7 +465,7 @@ test("Cover is dropped and re-picked the instant its obstacle dies, not on the n
 });
 
 // "der Bot bleibt einfach hinter Deckung stehen, wo er leicht pushbar ist" - reaching
-// cover that only barely cleared SAFE_HEAL_DIST (20) used to be a permanent stop; now
+// cover that only barely cleared SAFE_HEAL_DIST (16) used to be a permanent stop; now
 // heal/flee keeps opening distance past that first merely-safe-enough spot (see
 // RETREAT_SETTLE_MULT) instead of planting there as an easy target. Fixed geometry
 // (not the random "local" map) so the resulting cover's exact distance from the threat
@@ -474,13 +474,13 @@ test("Fleeing to cover that's only just barely safe keeps retreating afterward i
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
     const threatPos = v2.create(60, 60);
-    // Sits right at SAFE_HEAL_DIST (20) from the threat - the resulting cover point
-    // (past the crate's own edge) ends up a little further, comfortably still under
-    // RETREAT_SETTLE_MULT's bar (35).
-    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 20)));
+    // A few units past SAFE_HEAL_DIST (16) from the threat - the resulting cover point
+    // (past the crate's own edge) ends up a little further still, comfortably under
+    // RETREAT_SETTLE_MULT's bar (28).
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 18)));
     const graph = buildNavGraph(game);
 
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 13)) });
     const state = new BotMovementState();
 
     let pos = v2.copy(bot.pos);
@@ -505,7 +505,7 @@ test("Fleeing to cover that's already well past the settle distance stops there"
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
     const threatPos = v2.create(60, 60);
-    // Well past RETREAT_SETTLE_MULT's bar (35) on its own, before even adding the
+    // Well past RETREAT_SETTLE_MULT's bar (28) on its own, before even adding the
     // crate's own edge/buffer.
     game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 40)));
     const graph = buildNavGraph(game);

@@ -247,8 +247,17 @@ const PROBE_DIST = 3;
 const MAX_RETREAT_DIST = 20;
 /** `engageHold`'s held distance against a healthy target never sits closer than this,
  *  regardless of how close the equipped weapon's own sweet spot wants to stand - see
- *  the note in `updateMovement`'s `engageHold` branch. */
-const SAFE_ENGAGE_DIST = 15;
+ *  the note in `updateMovement`'s `engageHold` branch.
+ *
+ *  Raised from 15: real match data showed the bot repeatedly eating a full-pellet
+ *  shotgun volley (60-100+ damage in one hit, over half its max health) while holding
+ *  at its old floor. The math behind why 15 wasn't actually safe: `bullet_flechette`'s
+ *  `shotSpread` is a tight 4 degrees, so the spread radius at 15 units is well under a
+ *  unit - a well-aimed volley lands almost entirely regardless of exact distance
+ *  anywhere near that range. Standing further out doesn't make the *cone* meaningfully
+ *  wider, but it does buy more bullet travel time and a harder angular-tracking problem
+ *  for the shooter, which is the only real lever standing distance alone has here. */
+const SAFE_ENGAGE_DIST = 22;
 
 /**
  * Schmitt-trigger range gate: a bot must clear `[retreatEdge, closeEdge]` to START
@@ -538,8 +547,16 @@ function updatePeekCycle(
  *  healing wherever the `heal` directive happened to be chosen". Also the minimum
  *  distance a piece of cover itself must have from the threat to count while healing
  *  (see `retreatToCover`'s `minCoverDist`) - a spot 3 units from an active fight can be
- *  technically hidden without being remotely safe to stop and bandage behind. */
-const SAFE_HEAL_DIST = 20;
+ *  technically hidden without being remotely safe to stop and bandage behind.
+ *
+ *  Lowered from 20: real match analysis (god-view track data) against a persistent
+ *  opponent on the compact arena map showed distance rarely holding past ~25-30 units
+ *  for more than a moment before the chase closes back in - a 20-unit bar was cleared
+ *  so rarely in practice that the bot ended up never actually healing at all, just
+ *  slowly losing a war of attrition on passive regen alone between bursts. 16 is still
+ *  a real gap (past most weapons' effective spray range), just one this specific
+ *  matchup can actually reach and hold for the brief window a bandage needs. */
+const SAFE_HEAL_DIST = 16;
 
 /** Same idea as `SAFE_HEAL_DIST`, but for retreating to reload instead of to heal - a
  *  shorter distance, since being out of ammo is more urgent to resolve (there's nothing
