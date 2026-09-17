@@ -593,7 +593,9 @@ test("A bot with no known enemy navigates toward the map center instead of wande
 
 // "vorsichtig last enemy position navigieren" - a recent-ish last-known sighting is a
 // better bet than the map's center: the enemy is probably still somewhere near there.
-test("A bot with a recent last-known enemy position heads back there instead of the map center", () => {
+// This bot is at (the default) full health, which alone is reason enough to check - see
+// the two tests below for the "only if full health or the enemy was known low" gate.
+test("A bot at full health with a recent last-known enemy position heads back there instead of the map center", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(10, 10), game);
@@ -612,6 +614,51 @@ test("A bot with a recent last-known enemy position heads back there instead of 
     // Heading toward the last-known spot (30, 10), not the map center (64, 64) - a
     // positive x with near-zero y is the distinguishing signature (the center pull
     // would have a positive y component too, from this starting position).
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.9);
+    expect(Math.abs(bot.touchMoveDir.y)).toBeLessThan(0.3);
+});
+
+// "natürlich nur wenn er full [health] oder der Gegner low ist" - walking back to a
+// remembered enemy position while this bot itself is hurt AND the enemy wasn't known to
+// be low is a bad trade (an even fight, but the bot walks in blind after already having
+// lost health) - default to the map center instead, same as never having seen anyone.
+test("A hurt bot does not walk back to a last-known enemy that wasn't known to be low", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(10, 10), game);
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(30, 10) }); // full health
+
+    bot.botBrain!.update(0.05); // spots the enemy at full health, records the snapshot
+    bot.health = 60; // hurt, but not low enough to trigger heal/flee on its own
+    game.now += 8000;
+    enemy.dead = true;
+
+    bot.botBrain!.update(0.05);
+
+    // Heading toward the map center (64, 64), not the last-known spot (30, 10) - from
+    // (10, 10) that means a real +y pull the last-known spot alone wouldn't produce.
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.y).toBeGreaterThan(0.3);
+});
+
+// Same hurt bot, but the last-known sighting was of an enemy already low - worth the
+// trip regardless, since finishing an already-hurt enemy is a good trade even while
+// banged up.
+test("A hurt bot still walks back to a last-known enemy that was known to be low", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(10, 10), game);
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(30, 10) });
+    enemy.health = 30; // low enough to clear ENEMY_LOW_HEALTH_FRAC (0.4)
+
+    bot.botBrain!.update(0.05); // spots the enemy while it's already low
+    bot.health = 60;
+    game.now += 8000;
+    enemy.dead = true;
+
+    bot.botBrain!.update(0.05);
+
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.9);
     expect(Math.abs(bot.touchMoveDir.y)).toBeLessThan(0.3);

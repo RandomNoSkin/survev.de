@@ -142,6 +142,12 @@ export class BotBrain {
      *  make hiding behind cover pointless - see `updateMovement`'s `engageHold`). */
     private lastKnownEnemyPos?: Vec2;
     private lastKnownEnemyTimeMs = 0;
+    /** The enemy's health fraction at that same last sighting - see `idleGoal`, which
+     *  only walks back to `lastKnownEnemyPos` when this bot is itself at full health or
+     *  the enemy was already known to be hurt. Health can't be "seen" once out of sight
+     *  any more than position can, so this is just as much a *last known* snapshot, not
+     *  a live read. */
+    private lastKnownEnemyHealthFrac = 1;
 
     /** Where a nearby hostile gunshot was last heard, and when - "checken in welche
      *  Richtung der Gegner sein könnte anhand von Schüssen": gives `threatPos` something
@@ -486,13 +492,20 @@ export class BotBrain {
      *  of wandering aimlessly - "der Bot ist bisschen hohl sobald er den Fight verlässt".
      *  Prefers a still-recent-ish last-known enemy position (see
      *  `IDLE_LAST_KNOWN_MEMORY_MS`) - "vorsichtig zur letzten bekannten Position
-     *  navigieren", they're probably still somewhere nearby - falling back to the map's
-     *  center as a generic "go find the fight" heuristic once that's gone cold or never
-     *  existed at all (a fresh spawn, or a target never once spotted). */
+     *  navigieren", they're probably still somewhere nearby - but only when walking back
+     *  there is actually a good idea: at full health (nothing to lose by checking) or the
+     *  enemy was already known to be hurt (`lastKnownEnemyHealthFrac`,
+     *  `ENEMY_LOW_HEALTH_FRAC`) - not while this bot is itself banged up against a foe
+     *  that, for all it knows, is still perfectly healthy. Falls back to the map's center
+     *  as a generic "go find the fight" heuristic otherwise - that cold trail's gone,
+     *  never existed (a fresh spawn), or just isn't worth the risk of walking back into. */
     private idleGoal(bot: Player): Vec2 {
         if (this.lastKnownEnemyPos) {
             const ageMs = bot.game.now - this.lastKnownEnemyTimeMs;
-            if (ageMs <= IDLE_LAST_KNOWN_MEMORY_MS) return this.lastKnownEnemyPos;
+            const healthFrac = bot.health / GameConfig.player.health;
+            const worthChecking = healthFrac >= 0.99
+                || this.lastKnownEnemyHealthFrac < ENEMY_LOW_HEALTH_FRAC;
+            if (ageMs <= IDLE_LAST_KNOWN_MEMORY_MS && worthChecking) return this.lastKnownEnemyPos;
         }
         return v2.create(bot.game.map.width / 2, bot.game.map.height / 2);
     }
@@ -557,6 +570,7 @@ export class BotBrain {
         if (this.target) {
             this.lastKnownEnemyPos = v2.copy(this.target.pos);
             this.lastKnownEnemyTimeMs = this.player.game.now;
+            this.lastKnownEnemyHealthFrac = this.target.health / GameConfig.player.health;
         }
     }
 }
