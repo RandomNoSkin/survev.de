@@ -464,6 +464,68 @@ test("Cover is dropped and re-picked the instant its obstacle dies, not on the n
     expect(state.coverObstacle).not.toBe(firstCover);
 });
 
+// "der Bot bleibt einfach hinter Deckung stehen, wo er leicht pushbar ist" - reaching
+// cover that only barely cleared SAFE_HEAL_DIST (20) used to be a permanent stop; now
+// heal/flee keeps opening distance past that first merely-safe-enough spot (see
+// RETREAT_SETTLE_MULT) instead of planting there as an easy target. Fixed geometry
+// (not the random "local" map) so the resulting cover's exact distance from the threat
+// is known and controllable.
+test("Fleeing to cover that's only just barely safe keeps retreating afterward instead of stopping", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const away = v2.create(1, 0);
+    const threatPos = v2.create(60, 60);
+    // Sits right at SAFE_HEAL_DIST (20) from the threat - the resulting cover point
+    // (past the crate's own edge) ends up a little further, comfortably still under
+    // RETREAT_SETTLE_MULT's bar (35).
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 20)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 200 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+
+    // Right after settling at this close cover, movement must still be active -
+    // continuing to open distance rather than planting here.
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(true);
+});
+
+// Same setup, but the cover sits far enough away from the start that the bot genuinely
+// has put real distance behind it by the time it settles - it must actually stop once
+// that distance is enough, not retreat forever regardless of how safe it already is.
+test("Fleeing to cover that's already well past the settle distance stops there", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const away = v2.create(1, 0);
+    const threatPos = v2.create(60, 60);
+    // Well past RETREAT_SETTLE_MULT's bar (35) on its own, before even adding the
+    // crate's own edge/buffer.
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 40)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 400 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(false);
+});
+
 // The "peek from cover, shoot peeking enemies" ask: once `engageHold` reaches cover, it
 // must not just sit there forever - it has to cycle out to a spot with line of sight
 // back to the threat and return to full cover, repeatedly. Same fixed-geometry setup as

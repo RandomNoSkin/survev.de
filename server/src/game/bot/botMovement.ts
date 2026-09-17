@@ -520,6 +520,17 @@ const SAFE_HEAL_DIST = 20;
  *  up from a real deficit. */
 const SAFE_RELOAD_DIST = 12;
 
+/** How much further past its own `minCoverDist` (see `retreatToCover`) a heal/flee/
+ *  reload retreat keeps pushing before it's willing to actually stop moving - "der Bot
+ *  bleibt einfach hinter Deckung stehen, wo er leicht pushbar ist". The bar to *start*
+ *  the heal itself (`isSafeToHeal`) stays exactly `minCoverDist` - unchanged, so healing
+ *  still begins the moment real separation exists - but standing rooted at the very
+ *  first spot that barely cleared that bar is an easy target the instant a fast pursuer
+ *  closes it back in. Scales off `minCoverDist` rather than a flat number so a heal
+ *  (which already demanded more separation) also keeps pushing further than a quick
+ *  reload does. */
+const RETREAT_SETTLE_MULT = 1.75;
+
 /** Moves toward, then holds at, cover from `threatPos` - shared by healing, fleeing,
  *  reloading, and (with `holdAndPeek`) holding a mid-fight position instead of standing
  *  in the open. `holdAndPeek` cycles peeking out once cover is reached (see
@@ -597,10 +608,22 @@ function retreatToCover(
         state.settledAtCover = true;
     }
 
+    if (holdAndPeek && nav) {
+        state.path = [];
+        return updatePeekCycle(bot, state, nav, threatPos, dt, recentlyVisible, aggression);
+    }
+    // Reached cover, but not holding position on purpose (heal/flee/reload) - keep
+    // opening distance well past this first merely-safe-enough spot instead of planting
+    // here and becoming an easy target the moment the threat closes back in - see
+    // `RETREAT_SETTLE_MULT`. Not cleared via `state.path = []` first: `retreatDirection`
+    // (via `followPath`) owns that path state itself, exactly like the "no cover found"
+    // branch above already relies on - clearing it here first would throw away a
+    // just-computed path before it's ever actually followed.
+    if (!holdAndPeek && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT) {
+        return retreatDirection(bot, state, nav, threatPos, dt);
+    }
     state.path = [];
-    return holdAndPeek && nav
-        ? updatePeekCycle(bot, state, nav, threatPos, dt, recentlyVisible, aggression)
-        : v2.create(0, 0);
+    return v2.create(0, 0);
 }
 
 /** Whether the bot has actually put enough separation between itself and `threatPos` to

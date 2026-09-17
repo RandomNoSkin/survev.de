@@ -7,6 +7,7 @@ import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { Player } from "../objects/player.ts";
 import type { BotTierDef } from "./botDefs.ts";
+import { hasLineOfSight } from "./botPerception.ts";
 
 /** Fire-mode-specific trigger state, persisted across ticks by the brain.
  *  `burstTimer < 0` is the "not engaged yet" sentinel: a fresh engagement must start by
@@ -430,6 +431,15 @@ const OFFENSIVE_THROWABLES: InventoryItem[] = ["frag", "mirv"];
 const THROW_MIN_DIST = 14;
 const THROW_MAX_DIST = 30;
 
+/** How far immediately in front of the bot has to be clear before it even considers
+ *  throwing - "wirft Granaten manchmal einfach vor sich gegen eine Wand". Deliberately
+ *  *not* a full line-of-sight check all the way to `threatPos`: the bait case's whole
+ *  point is throwing at someone who's specifically NOT in sight, over or around cover
+ *  further away - this only catches a wall immediately blocking the bot's own throw,
+ *  well short of `THROW_MIN_DIST`, which is never legitimately what's standing between
+ *  the bot and a target worth throwing at. */
+const THROW_CLEARANCE_DIST = 6;
+
 /** Per-bot grenade-throw state, persisted across ticks by the brain. */
 export class BotThrowState {
     /** Seconds until the next throw is even considered - staggered per bot so they
@@ -501,13 +511,17 @@ export function updateThrowable(
     if (friendlyFireInLine(bot, threatPos)) return;
     if (engageDist < THROW_MIN_DIST || engageDist > THROW_MAX_DIST) return;
 
+    const throwDir = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
+    const clearancePoint = v2.add(bot.pos, v2.mul(throwDir, THROW_CLEARANCE_DIST));
+    if (!hasLineOfSight(bot.game, bot.pos, clearancePoint, bot.layer)) return;
+
     const grenadeType = pickOffensiveThrowable(bot);
     if (!grenadeType) return;
 
     // Aimed explicitly at the intended spot, not left to whatever `bot.dir` currently
     // is - a blast-radius weapon can afford to just aim straight at it rather than
     // waiting out however much turn is still in progress.
-    bot.dirNew = v2.normalizeSafe(v2.sub(threatPos, bot.pos), bot.dirNew);
+    bot.dirNew = throwDir;
 
     const cur = wm.curWeapIdx;
     throwState.returnSlot = cur === WeaponSlot.Primary || cur === WeaponSlot.Secondary

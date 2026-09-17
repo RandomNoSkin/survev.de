@@ -492,6 +492,46 @@ test("updateThrowable throws to cover a retreat when the bot is fleeing", () => 
     expect(throwState.returnSlot).toBe(WeaponSlot.Primary);
 });
 
+// "wirft Granaten manchmal einfach vor sich gegen eine Wand" - an obstacle immediately
+// in the throw direction, well short of THROW_MIN_DIST (so it's never legitimately the
+// target's own cover), means the grenade would just hit it and drop back at the bot's
+// own feet - not worth throwing into at all.
+test("updateThrowable does not throw into an obstacle immediately in front of it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    game.map.genObstacle("crate_01", v2.create(4, 0)); // well inside THROW_CLEARANCE_DIST (6)
+    const threatPos = v2.create(20, 0);
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+
+    updateThrowable(bot, throwState, threatPos, 20, false, /* isFleeing */ true, 0.05);
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+// The bait case's whole point is throwing at someone who's specifically NOT in sight -
+// an obstacle further away, past the short clearance check but well before the actual
+// target, must not block the throw the way one immediately in front does.
+test("updateThrowable still throws over/around cover that's further away than the clearance check", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    game.map.genObstacle("crate_01", v2.create(12, 0)); // past THROW_CLEARANCE_DIST (6)
+    const threatPos = v2.create(20, 0);
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+
+    updateThrowable(bot, throwState, threatPos, 20, false, /* isFleeing */ true, 0.05);
+
+    expect(throwState.active).toBe(true);
+});
+
 test("updateThrowable hands the weapon slot back to the gun once the throw resolves", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
