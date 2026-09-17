@@ -6,6 +6,7 @@ import { collisionHelpers } from "../../../../shared/utils/collisionHelpers.ts";
 import { math } from "../../../../shared/utils/math.ts";
 import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
+import type { GameObject } from "../objects/gameObject.ts";
 import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 import { currentSweetSpot } from "./botCombat.ts";
@@ -337,6 +338,26 @@ function isExplosiveObstacle(o: Obstacle): boolean {
     return !!def.explosion;
 }
 
+/** How close a cover *candidate* is allowed to sit to some *other* live explosive
+ *  obstacle nearby, not just the one it's actually hiding behind - past
+ *  `explosion_barrel`'s own blast radius (12, `explosionsDefs.ts`) with margin. Cover
+ *  chosen behind an ordinary crate that happens to be sitting right next to a barrel is
+ *  just as much in the blast as cover that picked the barrel itself. */
+const BARREL_DANGER_RADIUS = 14;
+
+function nearLiveExplosive(objs: GameObject[], pos: Vec2, layer: number): boolean {
+    for (let i = 0; i < objs.length; i++) {
+        if (objs[i].__type !== ObjectType.Obstacle) continue;
+        const o = objs[i] as Obstacle;
+        if (o.dead || !util.sameLayer(o.layer, layer)) continue;
+        if (!isExplosiveObstacle(o)) continue;
+        if (v2.lengthSqr(v2.sub(pos, o.pos)) < BARREL_DANGER_RADIUS * BARREL_DANGER_RADIUS) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Whether `candidate` stays hidden from `threatPos` as more than just a single point -
  *  real bullets and LOS (`hasLineOfSight`) test against a player's actual collision
  *  circle, not its center. A cover spot whose center is blocked but whose near edge
@@ -398,6 +419,9 @@ export function findCover(
         if (v2.lengthSqr(v2.sub(candidate, threatPos)) < minDistSqr) continue;
         if (!pointClear(bot.game, navObstacles, candidate, layer, bot.rad)) continue;
         if (!isBodyHidden(bot, navObstacles, threatPos, candidate, layer)) continue; // still exposed
+        // Not just excluding a barrel *as* cover - a candidate right next to one is
+        // just as much in the blast as picking the barrel itself would be.
+        if (nearLiveExplosive(objs, candidate, layer)) continue;
 
         const distSqr = v2.lengthSqr(v2.sub(bot.pos, candidate));
         if (!best || distSqr < best.distSqr) best = { obstacle: o, pos: candidate, distSqr };

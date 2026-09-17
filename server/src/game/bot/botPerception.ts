@@ -30,6 +30,42 @@ const GRENADE_DANGER_RADIUS = 16;
  *  what actually read as the bot bolting to a "weird", constantly-shifting position. */
 const GRENADE_REACT_TIME = 1.3;
 
+/** How far a gunshot is loud enough to hear and roughly place, regardless of line of
+ *  sight - a real player reacts to nearby gunfire they can't see the source of, not just
+ *  what they can currently see. Well past typical engagement range, since sound carries
+ *  further than sightlines do. */
+const GUNSHOT_HEARING_RADIUS = 100;
+
+/** The origin of the nearest hostile gunshot fired *this tick*, or undefined if nothing
+ *  fired nearby. `game.bulletBarn.newBullets` holds exactly the bullets spawned this
+ *  tick (cleared once flushed to clients), and `Bullet.startPos` is where it was fired
+ *  from - not `pos`, which is the bullet's own current, travelling position. Deliberately
+ *  not gated on layer or line of sight the way `findVisibleTarget`/`hasLineOfSight` are:
+ *  a gunshot is heard, not seen, so it should still register through a wall or from a
+ *  different floor, just like a real player's ears would catch it. This only ever
+ *  produces a rough "something fired over there" position for movement/awareness - never
+ *  a precise-enough fix to aim or fire at, which would be hearing through walls in a way
+ *  no real player can. */
+export function findGunshotHint(bot: Player): Vec2 | undefined {
+    const game = bot.game;
+    const mates = bot.group?.livingPlayers;
+    let closest: Vec2 | undefined;
+    let closestDistSqr = GUNSHOT_HEARING_RADIUS * GUNSHOT_HEARING_RADIUS;
+
+    for (const bullet of game.bulletBarn.newBullets) {
+        if (bullet.playerId === bot.__id) continue;
+        const shooter = game.objectRegister.getById(bullet.playerId);
+        if (shooter?.__type === ObjectType.Player && mates?.includes(shooter)) continue;
+
+        const distSqr = v2.lengthSqr(v2.sub(bullet.startPos, bot.pos));
+        if (distSqr < closestDistSqr) {
+            closest = bullet.startPos;
+            closestDistSqr = distSqr;
+        }
+    }
+    return closest;
+}
+
 /** Position of the nearest live, explosive-armed throwable within `GRENADE_DANGER_RADIUS`
  *  that's genuinely about to explode (see `GRENADE_REACT_TIME`), or undefined if there's
  *  nothing worth reacting to yet. Not thrower-aware: a grenade doesn't care who threw it,

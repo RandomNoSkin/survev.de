@@ -1,8 +1,27 @@
 import { expect, test } from "vitest";
-import { findGrenadeThreat, findVisibleTarget } from "../../server/src/game/bot/botPerception.ts";
+import { findGrenadeThreat, findGunshotHint, findVisibleTarget } from "../../server/src/game/bot/botPerception.ts";
 import { GameConfig, TeamMode } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
+
+function fireTestBullet(
+    game: ReturnType<typeof createGame>,
+    shooter: ReturnType<typeof game.playerBarn.addTestPlayer>,
+) {
+    game.bulletBarn.fireBullet({
+        playerId: shooter.__id,
+        bulletType: "bullet_mac10_modified",
+        gameSourceType: "modified_mac10",
+        damageType: GameConfig.DamageType.Player,
+        pos: v2.copy(shooter.pos),
+        dir: v2.create(1, 0),
+        layer: shooter.layer,
+        damageMult: 1,
+        shotFx: true,
+        shotOffhand: false,
+        lastShot: true,
+    });
+}
 
 /**
  * A real player only sees what fits on their screen - a landscape rectangle - not an
@@ -117,4 +136,48 @@ test("findGrenadeThreat ignores a non-explosive throwable like smoke", () => {
     );
 
     expect(findGrenadeThreat(bot)).toBeUndefined();
+});
+
+// "checken in welche Richtung der Gegner sein könnte anhand von Schüssen" -
+// `findGunshotHint` is what lets a bot react to gunfire it can hear from an enemy it has
+// never actually seen.
+test("findGunshotHint finds a hostile gunshot fired this tick", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+
+    fireTestBullet(game, enemy);
+
+    expect(findGunshotHint(bot)).toEqual(enemy.pos);
+});
+
+test("findGunshotHint ignores its own gunfire", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+
+    fireTestBullet(game, bot);
+
+    expect(findGunshotHint(bot)).toBeUndefined();
+});
+
+test("findGunshotHint ignores a shot fired too far away to hear", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(200, 50) }); // past GUNSHOT_HEARING_RADIUS
+
+    fireTestBullet(game, enemy);
+
+    expect(findGunshotHint(bot)).toBeUndefined();
+});
+
+// Regression guard: a teammate's own gunfire isn't a threat to react to.
+test("findGunshotHint ignores a teammate's gunfire", () => {
+    const game = createGame(TeamMode.Squad, "test_normal");
+    const group = game.playerBarn.addGroup(false, false);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50), group });
+    const mate = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50), group });
+
+    fireTestBullet(game, mate);
+
+    expect(findGunshotHint(bot)).toBeUndefined();
 });

@@ -17,7 +17,7 @@ import {
 } from "./botCombat.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
 import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
-import { findGrenadeThreat, findVisibleTarget, hasLineOfSight } from "./botPerception.ts";
+import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasLineOfSight } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
 
@@ -93,6 +93,11 @@ const OFFSCREEN_MIN_SPEED = 1.5;
  *  after healing targets the actual moment that looked wrong without blunting ordinary
  *  aggression the rest of the time. */
 const POST_HEAL_PUSH_COOLDOWN_S = 1.5;
+/** How long a heard-but-unseen gunshot stays worth reacting to - see
+ *  `lastHeardShotPos`/`findGunshotHint`. Long enough to actually reposition toward it,
+ *  short enough that the bot doesn't spend the next 10s convinced someone's still right
+ *  there off one shot that's long since gone quiet. */
+const GUNSHOT_MEMORY_MS = 3000;
 
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
@@ -112,6 +117,16 @@ export class BotBrain {
      *  make hiding behind cover pointless - see `updateMovement`'s `engageHold`). */
     private lastKnownEnemyPos?: Vec2;
     private lastKnownEnemyTimeMs = 0;
+
+    /** Where a nearby hostile gunshot was last heard, and when - "checken in welche
+     *  Richtung der Gegner sein könnte anhand von Schüssen": gives `threatPos` something
+     *  to react to (repositioning, taking cover) even for an enemy the bot has never
+     *  actually laid eyes on, the same way a real player reacts to gunfire they can hear
+     *  but not see. Never feeds aim/fire (see `findGunshotHint`) - only ever a rough
+     *  "something happened over there", the lowest-priority of `threatPos`'s three
+     *  sources (behind an actually-visible target and a remembered sighting). */
+    private lastHeardShotPos?: Vec2;
+    private lastHeardShotTimeMs = 0;
 
     /** Wall-clock ms (`game.now`) this bot last took damage - see `onDamaged` and the
      *  heal-abort check in `update()`. */
@@ -158,6 +173,15 @@ export class BotBrain {
         if (this.thinkTimer <= 0) {
             this.thinkTimer += 1 / (this.tier.thinkHz * this.barn.thinkRateScale);
             this.think();
+        }
+
+        // Every tick, not gated behind `thinkTimer` like `think()`'s own perception: a
+        // gunshot only shows up in `newBullets` for the one tick it was actually fired,
+        // so checking at `tier.thinkHz` would miss most of them outright.
+        const gunshotPos = findGunshotHint(bot);
+        if (gunshotPos) {
+            this.lastHeardShotPos = gunshotPos;
+            this.lastHeardShotTimeMs = bot.game.now;
         }
 
         this.healAbortCooldown = Math.max(0, this.healAbortCooldown - dt);
@@ -255,13 +279,17 @@ export class BotBrain {
         // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
         // needs to see before it otherwise "fixes" the bot back onto a gun. `threatPos`/
         // `engageDist`/`recentlyVisible` (already computed above for movement) are what
-        // let it bait a target that just ducked into cover, not just finish a visible one.
+        // let it bait a target that just ducked into cover, not just finish a visible
+        // one. `this.aim.reactionTimer` (not `aimResult.canFire`) on purpose - a
+        // grenade's blast radius forgives imprecise aim in a way a bullet doesn't, so it
+        // only waits on "has it actually noticed them", not the gun's own tight
+        // fire-cone precision too - see `updateThrowable`'s own doc comment.
         updateThrowable(
             bot,
             this.throwState,
             this.target,
             dist,
-            aimResult.canFire,
+            this.aim.reactionTimer <= 0,
             threatPos,
             engageDist,
             recentlyVisible,
@@ -431,14 +459,24 @@ export class BotBrain {
         return !!this.movement.coverPos || this.sustainedlyLost(bot);
     }
 
-    /** Engagement position for everything downstream of perception: the target itself
-     *  if still visible, else wherever it was last seen, as long as that memory hasn't
-     *  gone stale. */
+    /** Engagement position for everything downstream of perception: the target itself if
+     *  still visible, else wherever it was last seen (as long as that memory hasn't gone
+     *  stale), else a nearby gunshot it heard but never actually saw the source of - the
+     *  same declining order of confidence a real player's own read on a fight would have.
+     *  Movement/positioning only; `aimTarget` (visible or offscreen-predicted) is what
+     *  actually gates aim/fire, and a mere gunshot direction is nowhere near precise
+     *  enough for that. */
     private threatPos(): Vec2 | undefined {
         if (this.target) return this.target.pos;
-        if (!this.lastKnownEnemyPos) return undefined;
-        const ageMs = this.player.game.now - this.lastKnownEnemyTimeMs;
-        return ageMs <= this.tier.memory * 1000 ? this.lastKnownEnemyPos : undefined;
+        if (this.lastKnownEnemyPos) {
+            const ageMs = this.player.game.now - this.lastKnownEnemyTimeMs;
+            if (ageMs <= this.tier.memory * 1000) return this.lastKnownEnemyPos;
+        }
+        if (this.lastHeardShotPos) {
+            const ageMs = this.player.game.now - this.lastHeardShotTimeMs;
+            if (ageMs <= GUNSHOT_MEMORY_MS) return this.lastHeardShotPos;
+        }
+        return undefined;
     }
 
     private think(): void {

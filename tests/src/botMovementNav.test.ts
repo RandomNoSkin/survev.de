@@ -326,7 +326,10 @@ test("findCover never picks an explosive obstacle, even when it's the only optio
 test("findCover picks an ordinary crate over a nearby explosive barrel", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const barrelPos = v2.create(100, 100);
-    const cratePos = v2.create(100, 108);
+    // Past BARREL_DANGER_RADIUS (14) from the barrel - close enough to still be a
+    // sensible "nearby" alternative for this map layout, but not itself within the
+    // barrel's own blast danger zone (see the dedicated test for that distinction).
+    const cratePos = v2.create(100, 118);
     game.map.genObstacle("barrel_01", barrelPos);
     const crate = game.map.genObstacle("crate_01", cratePos);
     const graph = buildNavGraph(game);
@@ -338,6 +341,23 @@ test("findCover picks an ordinary crate over a nearby explosive barrel", () => {
     const found = findCover(bot, graph.navObstacles, threatPos);
     expect(found).toBeDefined();
     expect(found!.obstacle).toBe(crate);
+});
+
+// Not just excluding a barrel *as* cover - an ordinary crate sitting right next to one
+// is just as much in the blast as picking the barrel itself would be, so it has to be
+// rejected too, even though the crate itself isn't explosive at all.
+test("findCover rejects an ordinary crate sitting too close to a live barrel", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const barrelPos = v2.create(100, 100);
+    game.map.genObstacle("barrel_01", barrelPos);
+    game.map.genObstacle("crate_01", v2.create(100, 108)); // well within BARREL_DANGER_RADIUS (14)
+    const graph = buildNavGraph(game);
+
+    const away = v2.create(1, 0);
+    const threatPos = v2.sub(barrelPos, v2.mul(away, 40));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(barrelPos, v2.mul(away, 5)) });
+
+    expect(findCover(bot, graph.navObstacles, threatPos)).toBeUndefined();
 });
 
 // The "auch wenn er pusht muss er sich so positionieren dass er in cover gehen kann"

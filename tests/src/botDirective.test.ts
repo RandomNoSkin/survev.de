@@ -428,3 +428,34 @@ test("A nearby live grenade cancels an in-progress heal", () => {
 
     expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
 });
+
+// "der bot muss auch iwie checken in welche richtung der gegner sein könnte anhand von
+// schüssen" - a gunshot heard from an enemy the bot has never actually seen still gives
+// `threatPos` something to react to (see `findGunshotHint`), not just idle wandering.
+// The enemy sits well beyond the view rectangle's ~25.3-unit half-height (never visible)
+// but within gunshot hearing range - the bot should engage toward the sound regardless.
+test("A bot reacts to a nearby gunshot from an enemy it has never seen", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(50, 110) });
+
+    game.bulletBarn.fireBullet({
+        playerId: enemy.__id,
+        bulletType: "bullet_mac10_modified",
+        gameSourceType: "modified_mac10",
+        damageType: GameConfig.DamageType.Player,
+        pos: v2.copy(enemy.pos),
+        dir: v2.create(0, -1),
+        layer: enemy.layer,
+        damageMult: 1,
+        shotFx: true,
+        shotOffhand: false,
+        lastShot: true,
+    });
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.y).toBeGreaterThan(0.5); // engaging toward the sound, +y here
+});
