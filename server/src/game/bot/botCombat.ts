@@ -136,6 +136,13 @@ function switchTo(bot: Player, fire: BotFireState, slot: number): boolean {
  * `cur !== Primary/Secondary` branch below for the other half (staying on melee instead
  * of immediately snapping back to a gun) and the un-flagged case for switching back the
  * moment fleeing ends.
+ *
+ * Also requires `!targetVisible`: real match debug logging caught the bot holding
+ * fists while the enemy was visible and as close as 1-3 units, unable to fire back at
+ * all right when it mattered most - fleeing is a reason to be fast, not a reason to be
+ * unarmed *while being watched*. The speed edge only actually matters once genuinely
+ * disengaging (target not in sight); with it still visible, staying able to shoot back
+ * is worth more than the small speed gain.
  */
 export function updateWeaponSelection(
     bot: Player,
@@ -143,10 +150,12 @@ export function updateWeaponSelection(
     fire: BotFireState,
     dist: number,
     isFleeing = false,
+    targetVisible = false,
 ): void {
     if (bot.actionType !== GameConfig.Action.None) return;
 
     const wm = bot.weaponManager;
+    const preferMelee = isFleeing && !targetVisible;
     // An in-progress bot-initiated grenade throw (see `updateThrowable`) owns this slot
     // until the weapon manager actually releases it - without this, the very first
     // check below (not holding a gun) would immediately switch straight back to a gun
@@ -171,16 +180,17 @@ export function updateWeaponSelection(
     // *except* while genuinely fleeing on melee already, where staying unarmed for the
     // speed bonus is the whole point (see the doc comment above).
     if (cur !== WeaponSlot.Primary && cur !== WeaponSlot.Secondary) {
-        if (isFleeing && cur === WeaponSlot.Melee && meleeType) return;
+        if (preferMelee && cur === WeaponSlot.Melee && meleeType) return;
         wm.setCurWeapIndex(bestRangeSlot(bot, slots, dist));
         fire.firedSinceSwitch = true; // wasn't holding a gun to have fired anyway
         return;
     }
 
-    // Hurt and running: trade the gun for melee's speed bonus - see the doc comment
-    // above. Reconsidered every tick, so the moment fleeing ends this falls through
-    // to the "not holding a gun" branch above instead and re-equips a real gun.
-    if (isFleeing && meleeType) {
+    // Hurt and running, with nothing actually watching right now: trade the gun for
+    // melee's speed bonus - see the doc comment above. Reconsidered every tick, so the
+    // moment fleeing ends *or* the target reappears, this falls through to the "not
+    // holding a gun" branch above instead and re-equips a real gun.
+    if (preferMelee && meleeType) {
         wm.setCurWeapIndex(WeaponSlot.Melee);
         fire.firedSinceSwitch = true;
         return;

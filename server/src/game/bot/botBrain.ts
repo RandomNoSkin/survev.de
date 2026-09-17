@@ -15,6 +15,7 @@ import {
     updateThrowable,
     updateWeaponSelection,
 } from "./botCombat.ts";
+import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
 import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
 import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasLineOfSight } from "./botPerception.ts";
@@ -203,9 +204,11 @@ export class BotBrain {
         if (bot.dead || bot.downed) return;
 
         this.thinkTimer -= dt;
+        let didThink = false;
         if (this.thinkTimer <= 0) {
             this.thinkTimer += 1 / (this.tier.thinkHz * this.barn.thinkRateScale);
             this.think();
+            didThink = true;
         }
 
         // Every tick, not gated behind `thinkTimer` like `think()`'s own perception: a
@@ -343,7 +346,7 @@ export class BotBrain {
         // happens to spot an enemy - see the melee-stuck case in
         // `updateWeaponSelection`. It also no-ops entirely while mid-action (healing,
         // reviving, ...), since switching would otherwise cancel that action.
-        updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing);
+        updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !!this.target);
         updateReload(bot);
         updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
 
@@ -360,6 +363,23 @@ export class BotBrain {
             && isSafeToHeal(bot, this.movement, engageDist, this.sustainedlyLost(bot))
         ) {
             updateHeal(bot, this.tier, !!this.target, this.positionSafeForHeal(bot));
+        }
+
+        if (didThink) {
+            logBotTick(bot, {
+                directive,
+                health: Math.round(bot.health),
+                pos: { x: Math.round(bot.pos.x), y: Math.round(bot.pos.y) },
+                targetVisible: !!this.target,
+                dist: Number.isFinite(dist) ? Math.round(dist) : null,
+                engageDist: Number.isFinite(engageDist) ? Math.round(engageDist) : null,
+                weapon: bot.weaponManager.activeWeapon,
+                canFire: aimResult.canFire,
+                shootStart: bot.shootStart,
+                shootHold: bot.shootHold,
+                stuck: this.movement.stuck,
+                move: bot.touchMoveActive ? v2.copy(bot.touchMoveDir) : null,
+            });
         }
     }
 

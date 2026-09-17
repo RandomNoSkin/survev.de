@@ -137,6 +137,50 @@ test("A fleeing bot stays on melee across repeated ticks instead of flip-floppin
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
 });
 
+// Real match debug logging caught the bot holding fists while the enemy was visible
+// and as close as 1-3 units, unable to fire back at all - fleeing is a reason to be
+// fast, not a reason to be unarmed *while being watched*. The speed edge only actually
+// matters once genuinely disengaging.
+test("A fleeing bot keeps its gun equipped while the target is still visible", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6, /* isFleeing */ true, /* targetVisible */ true);
+
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
+// Once the target actually ducks out of sight mid-flee, melee is fair game again - the
+// visibility check is reconsidered every tick just like `isFleeing` itself.
+test("A fleeing bot switches to melee once the target that was watching goes out of sight", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    const fire = new BotFireState();
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true, false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+});
+
+// And the reverse: reacquiring sight of the target while already on melee must snap
+// straight back to the gun, not wait for `isFleeing` to also change.
+test("A fleeing bot on melee re-equips its gun the instant the target becomes visible again", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    const fire = new BotFireState();
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true, false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6, true, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
 // Once fleeing ends, the bot needs its gun back - the same "not holding a gun" branch
 // that would otherwise fight this feature is exactly what re-equips it once `isFleeing`
 // stops being true.
