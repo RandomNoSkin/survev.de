@@ -26,21 +26,40 @@ test("updateMovement opens distance instead of chasing on the `flee` directive",
 // tests the flag's own detection logic in isolation: `bot.pos` is deliberately never
 // updated between calls (simulating a real collision blocking every attempted step,
 // without needing to engineer actual blocking geometry) while `flee` keeps producing a
-// genuine, non-trivial "move away" vector every tick - past a full second of that with
-// zero net progress is exactly what "stuck" means. Two calls with `dt` already past
-// STUCK_CHECK_INTERVAL (1s): the first always measures against the state's default,
-// not-yet-real `stuckAnchor` and never counts as stuck on its own; only the second
-// (anchored to where the bot actually was) is the real test.
-test("updateMovement marks the bot stuck after a full second of trying to move with no progress", () => {
+// genuine, non-trivial "move away" vector every tick - past several seconds of that
+// with zero net progress is exactly what "stuck" means. Calls with `dt` already past
+// STUCK_CHECK_INTERVAL (1s) each: the first always measures against the state's
+// default, not-yet-real `stuckAnchor` and never counts on its own; `stuck` itself only
+// goes true after STUCK_STREAK_FOR_FIGHT (3) consecutive real windows in a row.
+test("updateMovement marks the bot stuck after several seconds of trying to move with no progress", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
     const threat = v2.create(60, 50);
     const state = new BotMovementState();
 
-    updateMovement(bot, state, "flee", threat, 10, 1.1);
-    updateMovement(bot, state, "flee", threat, 10, 1.1);
+    for (let i = 0; i < 4; i++) {
+        updateMovement(bot, state, "flee", threat, 10, 1.1);
+    }
 
     expect(state.stuck).toBe(true);
+});
+
+// A single bad window (one cover-hop that happened to net little straight-line
+// distance, one tick of dodging fire) must not alone flip `stuck` - only a sustained
+// run does. This is the regression this fix is actually for: an earlier version fired
+// on the very first real window, which was found (via real match analysis) to make the
+// bot give up on retreating-to-heal almost immediately during ordinary, working
+// retreats - "der Bot heilt fast nie in echten Kämpfen".
+test("updateMovement does not mark the bot stuck from a single bad window alone", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const threat = v2.create(60, 50);
+    const state = new BotMovementState();
+
+    updateMovement(bot, state, "flee", threat, 10, 1.1); // stale-anchor window
+    updateMovement(bot, state, "flee", threat, 10, 1.1); // one real no-progress window
+
+    expect(state.stuck).toBe(false);
 });
 
 // The other half: a bot that's making real progress must never read as stuck, no

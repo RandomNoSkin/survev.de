@@ -45,6 +45,10 @@ const MAX_PATH_EXPANSIONS = 1500;
 const NODE_SEARCH_RADIUS = 40;
 const STUCK_CHECK_INTERVAL = 1;
 const STUCK_MOVE_THRESHOLD = 1;
+/** How many consecutive `STUCK_CHECK_INTERVAL` windows of zero progress it takes before
+ *  `BotMovementState.stuck` (the "give up and fight" signal) actually goes true - see
+ *  its own doc comment for why this needs real confidence, not a single bad window. */
+const STUCK_STREAK_FOR_FIGHT = 3;
 
 const COVER_SEARCH_RAD = 30;
 // Distance a cover spot sits past the obstacle's own edge, from the obstacle's center.
@@ -190,11 +194,21 @@ export class BotMovementState {
      *  waypoint) - both look identical as *raw position delta* alone, but only the
      *  first one is actually "stuck". */
     triedToMoveSinceCheck = false;
-    /** True once the anti-stuck check above has confirmed real movement was attempted
-     *  but genuinely failed to make progress - see `BotBrain.fleeOrFight`, which reads
-     *  this to give up on an ineffective retreat and fight back instead. Recomputed
-     *  fresh every `STUCK_CHECK_INTERVAL`, so a bot that frees back up (the deflection
-     *  worked, a path opened up) clears this again on its own. */
+    /** Consecutive `STUCK_CHECK_INTERVAL` windows in a row with zero real progress
+     *  despite trying - see `stuck`. A single bad window is cheap and common (cover
+     *  hopping to a slightly-further spot mid-retreat can net well under
+     *  `STUCK_MOVE_THRESHOLD` for one second without anything actually being wrong);
+     *  only a sustained run of them means the retreat itself has failed. */
+    stuckStreak = 0;
+    /** True once `stuckStreak` has been sustained for `STUCK_STREAK_FOR_FIGHT` windows
+     *  in a row - see `BotBrain.fleeOrFight`, which reads this to give up on an
+     *  ineffective retreat and fight back instead. Deliberately a much higher bar than
+     *  the single-window anti-stuck recovery below (which still fires every window,
+     *  cheap and harmless even on a false alarm): abandoning a heal/flee attempt
+     *  entirely on one noisy 1-second blip - a normal zigzag while dodging fire, or one
+     *  cover-hop netting little straight-line distance - was turning "the retreat is
+     *  briefly inefficient" into "give up and fight while still low", which is a much
+     *  more expensive mistake than one extra second of retreating that wasn't needed. */
     stuck = false;
 
     /** The path node currently being string-pulled toward - see `followPath`. Node id,
@@ -1041,9 +1055,11 @@ export function updateMovement(
     state.triedToMoveSinceCheck ||= v2.length(move) >= 0.01;
     state.stuckTimer += dt;
     if (state.stuckTimer >= STUCK_CHECK_INTERVAL) {
-        state.stuck = state.triedToMoveSinceCheck
+        const stuckThisWindow = state.triedToMoveSinceCheck
             && v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD;
-        if (state.stuck) {
+        state.stuckStreak = stuckThisWindow ? state.stuckStreak + 1 : 0;
+        state.stuck = state.stuckStreak >= STUCK_STREAK_FOR_FIGHT;
+        if (stuckThisWindow) {
             state.path = [];
             state.repathCooldown = 0;
             state.retreatRecheck = 0;
