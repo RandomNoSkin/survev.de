@@ -249,15 +249,17 @@ const MAX_RETREAT_DIST = 20;
  *  regardless of how close the equipped weapon's own sweet spot wants to stand - see
  *  the note in `updateMovement`'s `engageHold` branch.
  *
- *  Raised from 15: real match data showed the bot repeatedly eating a full-pellet
- *  shotgun volley (60-100+ damage in one hit, over half its max health) while holding
- *  at its old floor. The math behind why 15 wasn't actually safe: `bullet_flechette`'s
- *  `shotSpread` is a tight 4 degrees, so the spread radius at 15 units is well under a
- *  unit - a well-aimed volley lands almost entirely regardless of exact distance
- *  anywhere near that range. Standing further out doesn't make the *cone* meaningfully
- *  wider, but it does buy more bullet travel time and a harder angular-tracking problem
- *  for the shooter, which is the only real lever standing distance alone has here. */
-const SAFE_ENGAGE_DIST = 22;
+ *  Briefly raised to 22 over a "full shotgun volleys are devastating even at range"
+ *  read of `bullet_flechette`'s tight 4-degree spread - reverted back to 15 once a
+ *  decoded batch of 40 real human-vs-human 1v1 matches (same arena mode, same
+ *  `bullet_flechette`/`bullet_mosin` loadouts) showed real engagement distance sits at
+ *  a median of just 14.8 (even the bolt-action mosin's own median was 14.2) - real
+ *  players hold this close and win anyway, so backing further off was fighting the
+ *  actual meta of this game mode rather than fixing anything. The real lesson from
+ *  that data is that surviving close range is a movement/peek problem (breaking the
+ *  shooter's tracking), not a "stand further back" one - `SAFE_ENGAGE_DIST` alone was
+ *  never going to fix it. */
+const SAFE_ENGAGE_DIST = 15;
 
 /**
  * Schmitt-trigger range gate: a bot must clear `[retreatEdge, closeEdge]` to START
