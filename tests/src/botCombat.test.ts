@@ -141,19 +141,20 @@ test("A fleeing bot stays on melee across repeated ticks instead of flip-floppin
 // and as close as 1-3 units, unable to fire back at all - fleeing is a reason to be
 // fast, not a reason to be unarmed *while being watched*. The speed edge only actually
 // matters once genuinely disengaging.
-test("A fleeing bot keeps its gun equipped while the target is still visible", () => {
+test("A fleeing bot keeps its gun equipped with recent contact", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
 
-    updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6, /* isFleeing */ true, /* targetVisible */ true);
+    updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6, /* isFleeing */ true, /* recentContact */ true);
 
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });
 
-// Once the target actually ducks out of sight mid-flee, melee is fair game again - the
-// visibility check is reconsidered every tick just like `isFleeing` itself.
-test("A fleeing bot switches to melee once the target that was watching goes out of sight", () => {
+// Melee only becomes fair game once contact is genuinely, sustainedly lost - see
+// `recentContact`'s own doc comment for why a decoded full replay showed the bot's own
+// *current* visibility check alone wasn't a safe enough proxy for "they can't see me".
+test("A fleeing bot switches to melee once contact is genuinely lost", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
     equipActive(bot, WeaponSlot.Primary, "m870", 5);
@@ -166,9 +167,9 @@ test("A fleeing bot switches to melee once the target that was watching goes out
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
 });
 
-// And the reverse: reacquiring sight of the target while already on melee must snap
-// straight back to the gun, not wait for `isFleeing` to also change.
-test("A fleeing bot on melee re-equips its gun the instant the target becomes visible again", () => {
+// And the reverse: contact resuming while already on melee must snap straight back to
+// the gun, not wait for `isFleeing` to also change.
+test("A fleeing bot on melee re-equips its gun the instant contact resumes", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
     equipActive(bot, WeaponSlot.Primary, "m870", 5);

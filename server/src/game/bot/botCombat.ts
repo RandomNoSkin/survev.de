@@ -137,12 +137,18 @@ function switchTo(bot: Player, fire: BotFireState, slot: number): boolean {
  * of immediately snapping back to a gun) and the un-flagged case for switching back the
  * moment fleeing ends.
  *
- * Also requires `!targetVisible`: real match debug logging caught the bot holding
+ * Also requires `!recentContact`: real match debug logging caught the bot holding
  * fists while the enemy was visible and as close as 1-3 units, unable to fire back at
- * all right when it mattered most - fleeing is a reason to be fast, not a reason to be
- * unarmed *while being watched*. The speed edge only actually matters once genuinely
- * disengaging (target not in sight); with it still visible, staying able to shoot back
- * is worth more than the small speed gain.
+ * all right when it mattered most. A first fix gating this on the bot's own *current*
+ * visibility check wasn't enough - a full decoded-replay pass showed 50 of 51 "on
+ * melee" sightings landed within 2s of the human actually firing at it, 27 of 104
+ * match-seconds spent unarmed. The bot's own FOV is deliberately much narrower than
+ * what a real player can actually see/track (see `viewHalfExtentsFor`), so "I don't
+ * currently see them" is a bad proxy for "they can't see or hit me" - the asymmetry is
+ * exactly backwards from what's safe. `recentContact` is `!sustainedlyLost` instead -
+ * the same bar `isSafeToHeal` already trusts for "the fight has genuinely paused"
+ * (a real multi-second gap, not just this tick's momentary non-sighting) - so melee only
+ * gets preferred once there's real confidence nothing is still tracking the bot.
  */
 export function updateWeaponSelection(
     bot: Player,
@@ -150,12 +156,12 @@ export function updateWeaponSelection(
     fire: BotFireState,
     dist: number,
     isFleeing = false,
-    targetVisible = false,
+    recentContact = false,
 ): void {
     if (bot.actionType !== GameConfig.Action.None) return;
 
     const wm = bot.weaponManager;
-    const preferMelee = isFleeing && !targetVisible;
+    const preferMelee = isFleeing && !recentContact;
     // An in-progress bot-initiated grenade throw (see `updateThrowable`) owns this slot
     // until the weapon manager actually releases it - without this, the very first
     // check below (not holding a gun) would immediately switch straight back to a gun

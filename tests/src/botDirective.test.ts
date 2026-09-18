@@ -379,6 +379,33 @@ test("A bot stuck on melee mid-heal abandons it and re-arms once the enemy is vi
     expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Melee); // re-armed
 });
 
+// A first fix gated melee-preference on the bot's own *current* visibility check alone
+// - a decoded full replay then showed 50 of 51 "on melee" sightings landed within 2s of
+// the human actually firing at the bot, since the bot's own FOV is deliberately much
+// narrower than what a real player can actually see/track. `recentContact` requires
+// `sustainedlyLost` instead - the same multi-second bar `isSafeToHeal` already trusts.
+test("A fleeing bot stays armed right after losing sight, only prefers melee once genuinely lost", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(58, 50) });
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    bot.health = 20; // low, no heal item given - forces "flee" (see the "low, no item" test above)
+
+    bot.botBrain!.update(0.05); // spots the target, records lastKnownEnemyPos
+    target.pos = v2.create(500, 500); // out of FOV - no longer currently visible
+
+    game.now += 500; // well under SUSTAINED_LOST_MS (2.5s)
+    bot.botBrain!.update(0.05);
+    expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Melee); // too soon to trust it
+
+    game.now += 2500; // now past it - genuinely, sustainedly lost
+    bot.botBrain!.update(0.05);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Melee);
+});
+
 // "wenn er nicht 1 shot low ist kann er auch einfach voll durchziehen statt
 // abzubrechen" - a heal is worth just completing through a hit taken mid-way, rather
 // than throwing the whole thing away and having to re-expose itself all over again

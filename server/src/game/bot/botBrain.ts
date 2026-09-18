@@ -364,7 +364,7 @@ export class BotBrain {
         // happens to spot an enemy - see the melee-stuck case in
         // `updateWeaponSelection`. It also no-ops entirely while mid-action (healing,
         // reviving, ...), since switching would otherwise cancel that action.
-        updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !!this.target);
+        updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !this.sustainedlyLost(bot));
         updateReload(bot);
         updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
 
