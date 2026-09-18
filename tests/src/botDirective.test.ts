@@ -354,6 +354,31 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
 });
 
+// Real match debug logging caught this exact scenario: the bot preferred melee while
+// retreating-to-heal unseen (see `updateWeaponSelection`'s `preferMelee`), then the
+// enemy came back into view mid-bandage - `updateWeaponSelection` itself won't touch
+// loadout mid-action (fiddling with gear mid-bandage is its own bug), so without this
+// abort trigger the bot stayed defenseless on fists for the rest of the heal, unable to
+// fire back at all right when it mattered most.
+test("A bot stuck on melee mid-heal abandons it and re-arms once the enemy is visible again", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(65, 50) }); // visible, within FOV
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Melee);
+    bot.health = 20;
+    // Faked directly (not via useHealingItem) - same reasoning as the other abort
+    // tests: isolates the abort trigger from actually simulating a real bandage.
+    bot.actionType = GameConfig.Action.UseItem;
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None); // abandoned the heal
+    expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Melee); // re-armed
+});
+
 // "wenn er nicht 1 shot low ist kann er auch einfach voll durchziehen statt
 // abzubrechen" - a heal is worth just completing through a hit taken mid-way, rather
 // than throwing the whole thing away and having to re-expose itself all over again

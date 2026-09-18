@@ -258,21 +258,39 @@ export class BotBrain {
         // cancelling only after it's already been computed as "heal" would just have
         // that check immediately restart the exact bandage this cancels.
         //
-        // Deliberately *not* also a proximity check ("enemy within N units"): a heal
-        // only ever starts once `isSafeToHeal` has already confirmed real separation
-        // (or cover) exists, so plain distance alone right after that shouldn't flip
-        // back to "unsafe" on its own - and while it could still drift closer between
-        // recomputes, that's `pickRangeMode`'s job to correct once the heal ends, not a
-        // reason to cancel a heal nothing has actually threatened yet. A bot bailing out
-        // of every heal it starts, without ever having been shot at, is worse than
-        // occasionally finishing one a beat later than a human would.
+        // Deliberately *not* also a plain proximity check ("enemy within N units") for
+        // an *armed* bot: a heal only ever starts once `isSafeToHeal` has already
+        // confirmed real separation (or cover) exists, so plain distance alone right
+        // after that shouldn't flip back to "unsafe" on its own - and while it could
+        // still drift closer between recomputes, that's `pickRangeMode`'s job to
+        // correct once the heal ends, not a reason to cancel a heal nothing has
+        // actually threatened yet. A bot bailing out of every heal it starts, without
+        // ever having been shot at, is worse than occasionally finishing one a beat
+        // later than a human would.
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
             // Not in real danger of dying to a follow-up hit - tank this one and keep
             // going instead of throwing the whole heal away. See `ONE_SHOT_RISK_HEALTH_FRAC`.
             const healthFrac = bot.health / GameConfig.player.health;
             const pushThroughHit = healthFrac > ONE_SHOT_RISK_HEALTH_FRAC;
-            if ((justHit && !pushThroughHit) || grenadeThreat) {
+            // The one real exception to "no plain proximity check" above: unarmed on
+            // melee *with an actual gun to switch back to* (from preferring melee
+            // while fleeing/healing unseen - see `updateWeaponSelection`'s
+            // `preferMelee`) with the target now visible again is a different risk
+            // entirely - there's no "tank it and fight back" option at all while
+            // holding fists. `updateWeaponSelection` itself won't touch loadout
+            // mid-action (fiddling with gear mid-bandage is its own bug), so without
+            // this the bot stayed defenseless for the rest of the heal even after the
+            // exact threat that made healing risky reappeared - a real bug real match
+            // debug logging caught directly. The "has a gun" check matters: a bot with
+            // no gun at all (melee by default, nothing to switch to) has nothing to
+            // gain from aborting either way, so this must not fire for it.
+            const hasGun = !!bot.weaponManager.weapons[WeaponSlot.Primary].type
+                || !!bot.weaponManager.weapons[WeaponSlot.Secondary].type;
+            const exposedUnarmed = bot.weaponManager.curWeapIdx === WeaponSlot.Melee
+                && hasGun
+                && !!this.target;
+            if ((justHit && !pushThroughHit) || grenadeThreat || exposedUnarmed) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
