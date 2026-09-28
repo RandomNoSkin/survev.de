@@ -99,6 +99,22 @@ function peekPaceMult(aggression: number | undefined): number {
     return math.lerp(aggression, 1.6, 0.7);
 }
 
+/** Multiplier on `PEEK_EXPOSE_MIN/MAX` from `aggression` - the opposite direction from
+ *  `peekPaceMult`: a decisive bot commits to a peek *longer*, not shorter. Real match
+ *  data showed the bot pulling the trigger roughly half as often per minute as a human
+ *  opponent despite comparable accuracy - the fixed, tier-independent 0.5-1.0s expose
+ *  window was the reason: `PEEK_HOLD`'s own aggression scaling only ever sped up how
+ *  *often* a decisive bot leans back out, not how long it stays out once it does, so a
+ *  slower single/bolt-action weapon (this matchup's whole loadout) regularly ducked back
+ *  to cover before its own `fireDelay` cycled around for a second shot. A real player
+ *  peeking a fight that's going well just keeps trading, not retreating on a fixed
+ *  clock - `1` (unscaled) at `aggression = 0`, up to roughly double by `aggression = 1`,
+ *  and further past that for a tier deliberately pushed past 1 (see `BOT_TIERS.expert`). */
+function peekExposeMult(aggression: number | undefined): number {
+    if (aggression === undefined) return 1;
+    return math.lerp(aggression, 1, 2);
+}
+
 /** Multiplier on `COVER_RECOMPUTE_INTERVAL` from `aggression` - same neutral-when-absent
  *  shape as `peekPaceMult`. A more decisive bot re-checks cover against a moving/flanking
  *  enemy well more often than a hesitant one, instead of every tier reacting to
@@ -556,7 +572,8 @@ function updatePeekCycle(
             if (spot) {
                 state.peeking = true;
                 state.peekPos = spot;
-                state.peekTimer = util.random(PEEK_EXPOSE_MIN, PEEK_EXPOSE_MAX);
+                state.peekTimer = util.random(PEEK_EXPOSE_MIN, PEEK_EXPOSE_MAX)
+                    * peekExposeMult(aggression);
             } else {
                 state.peekTimer = PEEK_RETRY_DELAY;
             }

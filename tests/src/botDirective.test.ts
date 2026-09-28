@@ -307,7 +307,9 @@ test("A dry gun with a loaded backup does not trigger a reload retreat", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    // 18 units away - dead center of mosin's own ~[14.8, 21.2] hold band (see
+    // `sweetSpotFor`), so switching to it here holds in place rather than repositioning.
+    game.playerBarn.addTestPlayer({ pos: v2.create(68, 50) });
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 0;
     bot.weaponManager.weapons[WeaponSlot.Secondary].type = "mosin";

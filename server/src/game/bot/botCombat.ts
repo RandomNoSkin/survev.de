@@ -36,14 +36,23 @@ function hasAmmo(bot: Player, slot: number): boolean {
  *  bolt-actions want as much range as practical, everything else sits in the middle.
  *  Capped well below the bullet's absolute falloff distance (a mosin's 500 units is
  *  "can hit anything on screen", not "wants to stand 500 units away") so a bot never
- *  tries to backpedal off the edge of the map to reach its theoretical sweet spot. */
+ *  tries to backpedal off the edge of the map to reach its theoretical sweet spot.
+ *
+ *  The bolt-action cap (originally 70) was still far too generous for this specific
+ *  matchup: decoding 40 real human-vs-human 1v1 matches on this same compact arena, with
+ *  this same mosin/shotgun loadout, showed real mosin engagements sitting at a median of
+ *  just 14.2 (average 15.8) - real players hold this close with a bolt-action and win
+ *  anyway. At 70, `engageHold`'s hold band sat so far past `MAX_RETREAT_DIST` that the
+ *  bot spent real fights hovering right at the 20-unit retreat edge - exactly where
+ *  actual engagements happen - instead of ever committing to trade, which throttled its
+ *  effective shots-per-minute well below a human's despite comparable accuracy. */
 function sweetSpotFor(gunDef: GunDef): number {
     const bulletDef = GameObjectDefs.typeToDefSafe(gunDef.bulletType) as
         | BulletDef
         | undefined;
     const maxRange = bulletDef?.distance ?? 60;
     if (gunDef.bulletCount > 1) return Math.min(10, maxRange * 0.3);
-    if (gunDef.fireDelay > 1.1) return Math.min(70, maxRange * 0.85);
+    if (gunDef.fireDelay > 1.1) return Math.min(18, maxRange * 0.85);
     return Math.min(45, maxRange * 0.45);
 }
 

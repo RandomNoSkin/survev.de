@@ -182,23 +182,24 @@ test("Range mode has hysteresis: it does not flicker once committed to backing o
     for (const x of xSigns) expect(x).toBeLessThan(-0.5);
 });
 
-// Regression for a real bug found in manual play: a long-range weapon's sweet spot
-// (up to 70 units for a bolt-action rifle) is a fine reason to *close in* when too far
-// away, but backpedaling all the way out to it on a map far smaller than that just
-// walks a bot into the map edge - it looks exactly like "movement is dumb" to a
-// player, and it's how a duel between two bots equipped only with a sniper could run
-// out the clock without ever settling into a stable firing position.
-test("A long-range weapon's sweet spot never pulls the bot into retreating past MAX_RETREAT_DIST", () => {
+// Regression for a real bug found in manual play: a weapon's sweet spot is a fine
+// reason to *close in* when too far away, but backpedaling all the way out to it on a
+// map far smaller than that just walks a bot into the map edge - it looks exactly like
+// "movement is dumb" to a player, and it's how a duel could run out the clock without
+// ever settling into a stable firing position. Uses the no-gun fallback sweet spot (25,
+// see `currentSweetSpot`) rather than a real weapon: every real gun's own sweet spot is
+// now tuned low enough (see `sweetSpotFor` - recalibrated against real human match data
+// on this compact arena, see the mosin-specific tests below) that none of them can
+// exceed `MAX_RETREAT_DIST` on their own any more, so the fallback is what still
+// actually exercises this cap.
+test("A weapon's sweet spot never pulls the bot into retreating past MAX_RETREAT_DIST", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
     const threat = v2.create(100, 0);
-    bot.weaponManager.weapons[0].type = "mosin"; // sweet spot 70, per currentSweetSpot
-    bot.weaponManager.weapons[0].ammo = 5;
-    bot.weaponManager.setCurWeapIndex(0);
 
     const state = new BotMovementState();
-    // Comfortably closer than the mosin's 70-unit sweet spot, but not point-blank -
-    // a bot that tries to reach 70 units of separation here is the bug.
+    // 30 is already past the no-gun fallback's own 29.5-unit close edge - a bot that
+    // tries to back off from here instead of closing in is the bug.
     updateMovement(bot, state, "engageHold", threat, 30, 0.05);
 
     expect(bot.touchMoveDir.x).not.toBeLessThan(-0.5); // must not be retreating
@@ -212,17 +213,22 @@ test("A long-range weapon's sweet spot never pulls the bot into retreating past 
 test("push holds at a longer range for a long-range weapon instead of rushing to melee", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const threat = v2.create(20, 0);
-    bot.weaponManager.weapons[0].type = "mosin"; // sweet spot 70 -> push-hold ~31.5
+    // Mosin's own sweet spot is 18 (see `sweetSpotFor` - recalibrated from a
+    // theoretical 70 against real human match data on this compact arena), so its
+    // push-hold distance is max(PUSH_MIN_DIST, 18*0.45) = 8.1 - closer than it used to
+    // be, but still noticeably past a shotgun's own near-melee hold (see the sibling
+    // test below).
+    const threat = v2.create(7, 0);
+    bot.weaponManager.weapons[0].type = "mosin";
     bot.weaponManager.weapons[0].ammo = 5;
     bot.weaponManager.setCurWeapIndex(0);
 
     const state = new BotMovementState();
-    // 20 units is already well inside the mosin's push-hold distance - closing further
-    // here, all the way to a shotgun-appropriate range, is the bug. It's still free to
-    // move laterally once holding (see the no-cover push-hold test below) - the bug this
-    // guards against is specifically closing distance further, not moving at all.
-    updateMovement(bot, state, "push", threat, 20, 0.05);
+    // 7 units is already within the mosin's ~8.1-unit push-hold distance - closing
+    // further here, all the way to a shotgun-appropriate range, is the bug. It's still
+    // free to move laterally once holding (see the no-cover push-hold test below) - the
+    // bug this guards against is specifically closing distance further, not moving at all.
+    updateMovement(bot, state, "push", threat, 7, 0.05);
 
     expect(bot.touchMoveDir.x).not.toBeGreaterThan(0.3); // not still closing in, +x here
 });
@@ -276,24 +282,20 @@ test("engageHold's no-cover hold pulls back outward once drifted past the inner 
     expect(v2.dot(bot.touchMoveDir, towardThreat)).toBeLessThan(-0.05);
 });
 
-// Regression: the inward/outward correction above must reference the *same*,
-// `MAX_RETREAT_DIST`-capped edges `pickRangeMode` itself uses to decide "hold" in the
-// first place, not the equipped weapon's raw sweet spot +/- band - a bolt-action's own
-// sweet spot (70) sits far past where `MAX_RETREAT_DIST` (20) already capped real
-// backing-off, so 25 units is squarely "acceptable, stop repositioning" even though it's
-// nowhere near 70. Using the raw sweet spot here would fight to drag the bot back out to
-// a range the rest of the system already gave up on reaching.
-test("engageHold's no-cover hold applies no pull for a long-range weapon within its capped band", () => {
+// A weapon-specific sanity check on top of the no-gun cases above: mosin's own sweet
+// spot (18, see `sweetSpotFor`) puts its hold band at roughly [14.8, 21.2] - 18 sits
+// dead center, so no radial correction should apply at all.
+test("engageHold's no-cover hold applies no pull for a weapon within its own band", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const threat = v2.create(25, 0); // within the capped [20, 82.6] band, far from sweet (70)
+    const threat = v2.create(18, 0); // dead center of mosin's own ~[14.8, 21.2] band
     bot.weaponManager.weapons[0].type = "mosin";
     bot.weaponManager.weapons[0].ammo = 5;
     bot.weaponManager.setCurWeapIndex(0);
 
     const state = new BotMovementState();
     state.rangeMode = "hold";
-    updateMovement(bot, state, "engageHold", threat, 25, 0.05);
+    updateMovement(bot, state, "engageHold", threat, 18, 0.05);
 
     const towardThreat = v2.normalizeSafe(v2.sub(threat, bot.pos));
     expect(Math.abs(v2.dot(bot.touchMoveDir, towardThreat))).toBeLessThan(0.05);

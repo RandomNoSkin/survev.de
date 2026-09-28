@@ -779,6 +779,69 @@ test("engageHold's peek-hide duration scales with tier - expert re-engages soone
     }
 });
 
+// Regression, from real match data: the bot pulled the trigger roughly half as often
+// per minute as a human opponent despite comparable accuracy - `PEEK_EXPOSE_MIN/MAX`
+// (how long a peek stays leaned out before automatically retreating to cover) was a
+// fixed 0.5-1.0s for every tier, so a slower single/bolt-action weapon regularly didn't
+// even get a second shot off before ducking back, no matter how decisive the tier
+// otherwise was. A more aggressive tier should commit to a peek *longer*, the opposite
+// direction from the hide duration above - see `peekExposeMult`.
+test("engageHold's peek expose duration scales with tier - expert stays out longer than easy", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+    const isolated = candidates.filter(
+        (c) => !candidates.some((o) => o !== c && v2.distance(o.pos, c.pos) < 10),
+    );
+
+    const away = v2.create(1, 0);
+    const speed = 8;
+    const dt = 0.1;
+
+    for (const cover of isolated) {
+        const threatPos = v2.sub(cover.pos, v2.mul(away, 40));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cover.pos, v2.mul(away, 5)) });
+        const state = new BotMovementState();
+
+        let pos = v2.copy(bot.pos);
+        let reachedPeeking = false;
+        for (let i = 0; i < 200; i++) {
+            bot.pos = pos;
+            updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph);
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+            if (state.peeking) {
+                reachedPeeking = true;
+                break;
+            }
+        }
+        if (!reachedPeeking) continue;
+
+        // Force back to hidden, then let the hide timer expire next tick so the peek
+        // cycle picks a fresh spot and rolls a new *expose* duration - the thing under
+        // test here, not the hide duration the test above already covers.
+        state.peeking = false;
+        state.peekPos = undefined;
+        state.peekTimer = 0.001;
+        bot.pos = pos;
+        updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph, false, BOT_TIERS.expert);
+        if (!state.peeking) continue; // no peek spot found this attempt - try the next obstacle
+        const expertTimer = state.peekTimer;
+
+        state.peeking = false;
+        state.peekPos = undefined;
+        state.peekTimer = 0.001;
+        updateMovement(bot, state, "engageHold", threatPos, 25, dt, graph, false, BOT_TIERS.easy);
+        if (!state.peeking) continue;
+        const easyTimer = state.peekTimer;
+
+        expect(expertTimer).toBeGreaterThan(easyTimer);
+        return;
+    }
+});
+
 // The "dynamisch auf die gegner bewegungen eingehen" ask: `retreatToCover` only ever
 // re-evaluates cover against the enemy's *current* position on a fixed clock
 // (`COVER_RECOMPUTE_INTERVAL`) - a flanking enemy is only noticed on the next recompute,
