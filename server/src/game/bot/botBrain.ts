@@ -79,8 +79,17 @@ const LOW_HEALTH_FRAC_MULT = 0.75;
  *  free pass: the existing heal-abort safety net (`ABORT_HEAL_REACT_MS`) still cancels
  *  it the instant an actual hit lands, so this only ever costs the brief window before
  *  that - strictly better than certain, slow attrition death for standing still doing
- *  nothing to fix the actual problem. */
-const DESPERATE_HEAL_S = 3;
+ *  nothing to fix the actual problem.
+ *
+ *  Originally 3 - lowered after a second decoded loss showed the *entire* critical
+ *  window (dropping under the panic threshold to actually dying) lasting only ~4.3
+ *  seconds in this fast-ttk matchup. A 3-second wait before even trying left barely
+ *  enough of that window for a 2-3 second bandage to land, let alone finish before the
+ *  fight was already over - the bot was gambling too late to matter. Matches
+ *  `HEAL_ABORT_COOLDOWN_S`'s own timescale instead: long enough to not fire on a single
+ *  one-tick blip, short enough to actually get a real shot at completing before a fast
+ *  fight resolves either way. */
+const DESPERATE_HEAL_S = 1.2;
 /** How hurt the *target* has to be, as a fraction of max health, before `push` is
  *  willing to charge across open ground for it - see `pickDirective`. Pushing into a
  *  still-healthy enemy in the open is exactly the "dumb push" complaint: landing a
