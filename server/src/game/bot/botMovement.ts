@@ -135,6 +135,11 @@ const RETREAT_GOAL_REACHED_DIST = 4;
  *  center) before falling back to plain wandering in the area - generous, since this is
  *  "get to roughly the right neighborhood", not a precise cover/waypoint arrival. */
 const IDLE_GOAL_REACHED_DIST = 10;
+/** Distance past `IDLE_GOAL_REACHED_DIST` a bot that's stopped heading toward `idleGoal`
+ *  has to drift before it resumes - the other edge of the hysteresis band described on
+ *  `BotMovementState.headingToIdleGoal`. Wide enough that ordinary wander drift right
+ *  around the reached radius doesn't immediately flip back either. */
+const IDLE_GOAL_RESUME_DIST = IDLE_GOAL_REACHED_DIST + 8;
 /** How far around a raw straight-line movement goal to look for a non-`interior` node to
  *  redirect to instead - see `preferNonInteriorGoal`. Wide enough to actually find a
  *  nearby hull/open node from just inside a building, not so wide the goal drags
@@ -169,6 +174,14 @@ export class BotMovementState {
     strafeIntensity = 0.35;
     wanderDir: Vec2 = v2.randomUnit();
     wanderTimer = 0;
+    /** Sticky "still heading toward `idleGoal`" flag - see `updateMovement`'s idle
+     *  branch's `IDLE_GOAL_REACHED_DIST`/`IDLE_GOAL_RESUME_DIST` hysteresis band. Without
+     *  it, a bot arriving from any direction other than dead-on can cross the plain
+     *  distance threshold back and forth tick to tick as it moves, flipping between
+     *  path-following and picking a fresh random wander direction each time - which,
+     *  since those two point in essentially unrelated directions, cancels out net
+     *  progress and reads as the bot freezing in place short of its destination. */
+    headingToIdleGoal = true;
     /** Which of close/retreat/hold the bot is committed to - see `pickRangeMode`. */
     rangeMode: RangeMode = "hold";
     /** Which side the bot is currently deflecting around an obstacle, so it commits to
@@ -906,7 +919,17 @@ export function updateMovement(
         state.coverPos = undefined;
         state.peeking = false;
 
-        const headingToGoal = idleGoal && v2.distance(bot.pos, idleGoal) > IDLE_GOAL_REACHED_DIST;
+        if (!idleGoal) {
+            state.headingToIdleGoal = false;
+        } else {
+            const distToGoal = v2.distance(bot.pos, idleGoal);
+            if (state.headingToIdleGoal) {
+                if (distToGoal <= IDLE_GOAL_REACHED_DIST) state.headingToIdleGoal = false;
+            } else if (distToGoal > IDLE_GOAL_RESUME_DIST) {
+                state.headingToIdleGoal = true;
+            }
+        }
+        const headingToGoal = idleGoal && state.headingToIdleGoal;
         if (headingToGoal) {
             const pathDir = nav ? followPath(bot, state, nav, idleGoal, dt) : undefined;
             move = pathDir ?? v2.normalizeSafe(v2.sub(idleGoal, bot.pos));
@@ -1115,8 +1138,19 @@ export function updateMovement(
                 break;
             }
             if (isDirClear(bot, other, PROBE_DIST, state.coverObstacle)) {
+                // Use the other side for *this tick only* - flipping `deflectSign`
+                // itself here was the bug (see above): right at a concave corner,
+                // whichever side reads as clear can toggle from one tick to the next
+                // as the bot's position shifts by fractions of a unit, so permanently
+                // recommitting to "other" every time `preferred` briefly fails turned
+                // into exactly the "re-picking a side every tick" limit cycle this
+                // whole preference scheme was meant to prevent - the bot would vibrate
+                // in place near a corner for several real seconds doing net-zero
+                // progress. `deflectSign` itself now only ever changes from the
+                // deliberate once-a-second stuck check below, which is a real signal
+                // that the current side genuinely isn't working - not a same-tick
+                // guess based on a single probe.
                 move = other;
-                state.deflectSign = (state.deflectSign * -1) as 1 | -1;
                 deflected = true;
                 break;
             }

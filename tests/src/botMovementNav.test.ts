@@ -920,6 +920,56 @@ test("Fleeing gets unstuck and moves away even with an obstacle directly in its 
     // sampled candidates - nothing to assert against.
 });
 
+// Regression for a real "bot freezes in place for several seconds" match capture: local
+// obstacle deflection used to flip `BotMovementState.deflectSign` the instant the
+// preferred side failed and the other side happened to work - right at a corner, whether
+// each side reads as clear can toggle from one tick to the next as the bot's position
+// shifts by fractions of a unit, so that same-tick flip turned into exactly the
+// "re-picking a side every tick" limit cycle `deflectSign`'s whole preference scheme was
+// meant to prevent (near-zero net movement for seconds, evidenced in a decoded real
+// match - see the doc comment where it's fixed). `deflectSign` should now only ever
+// change from the deliberate once-a-second stuck check, never mid-window. No `nav`
+// passed deliberately, so `followPath` never runs - this isolates the local deflection
+// fallback itself from any pathfinding.
+test("Local obstacle deflection doesn't flip sides mid-window, only on a genuine stuck check", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+
+    const away = v2.create(1, 0);
+    const speed = 8;
+    const dt = 0.1; // 8 ticks below is 0.8s, safely under STUCK_CHECK_INTERVAL's 1s
+
+    for (const obstacle of candidates.slice(0, 30)) {
+        const threatPos = v2.sub(obstacle.pos, v2.mul(away, 30));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.sub(obstacle.pos, v2.mul(away, 5)) });
+        const state = new BotMovementState();
+        const initialSign = state.deflectSign;
+
+        let pos = v2.copy(bot.pos);
+        let deflected = false;
+        for (let i = 0; i < 8; i++) {
+            bot.pos = pos;
+            updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), dt);
+            if (state.deflectSign !== initialSign) {
+                throw new Error(
+                    `deflectSign flipped mid-window (tick ${i}) at obstacle ${JSON.stringify(obstacle.pos)}`,
+                );
+            }
+            // Deflection actually engaged if the bot isn't walking dead straight along
+            // `away` - confirms this obstacle is a real test of the fallback, not one
+            // the direct line happened to clear.
+            if (Math.abs(bot.touchMoveDir.y) > 0.05) deflected = true;
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+        }
+        if (deflected) return; // exercised and held - the regression this test is for
+    }
+
+    // No obstacle in this random layout happened to trigger the deflection fallback
+    // within the sampled candidates - nothing to assert against.
+});
+
 // "sich nicht innen trappen zu lassen": a raw straight-line retreat goal has no idea it
 // happens to land inside a building's interior lattice - `preferNonInteriorGoal` nudges
 // it onto the nearest non-`interior` node instead when the graph has one nearby, so
