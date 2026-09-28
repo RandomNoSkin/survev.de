@@ -188,6 +188,32 @@ test("Low (but not critical) health with no heal item flees instead of pushing",
     expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance, not pushing or holding
 });
 
+// Regression, from a decoded real loss: a bot spent 11+ seconds at 10-29% health against
+// a relentless pursuer that never let up enough for `shouldHeal`'s normal safety gate to
+// pass - passive regen only, no bandage ever actually used, until it was finished off.
+// `fleeOrFight`'s own escape valve (fight back once genuinely `stuck`) never covers this:
+// the bot was actively moving the whole time, just never gaining separation against a
+// same-speed chaser - `stuck` never goes true. Past `DESPERATE_HEAL_MS` of that, the bot
+// should gamble on healing right where it stands instead of continuing to wait for a
+// safety this specific opponent was never going to grant.
+test("Critical health past DESPERATE_HEAL_MS heals despite a visible, close enemy", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) }); // close - never lets up
+    bot.health = 30; // critical for expert (< 37.5%), but > shouldHeal's own 25% bar
+    bot.invManager.give("bandage", 5);
+
+    // Under the desperate threshold: still refuses, same as the existing "can't safely
+    // heal yet" case - fleeing (or holding, if genuinely `stuck`), not healing.
+    for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // 2s, under DESPERATE_HEAL_MS
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+
+    // Past it: gambles on the bandage right here.
+    for (let i = 0; i < 25; i++) bot.botBrain!.update(0.05); // +1.25s, past 3s total
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
 // Regression, from a decoded real match: a bot at 40% health (low, not critical)
 // retreated to heal while the enemy sat at 15% - an easy finish. By the time its own
 // heal wrapped up, the enemy had used that exact window to heal all the way back to

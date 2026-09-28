@@ -414,18 +414,23 @@ export function pickHealItem(
  *  visible enemy or critically low regardless. Split from `updateHeal` so the brain
  *  can also use it to decide *movement* (retreat instead of engaging) on the same
  *  tick it decides to heal, before actually spending the item. */
+/** `desperate` (see `BotBrain.desperateHeal`/`DESPERATE_HEAL_MS`) skips the
+ *  visible-enemy gate specifically - `actionType`/`cookingThrowable`/already-healed-past-
+ *  threshold still apply regardless, since none of those are the "opponent won't ever
+ *  let up" deadlock this exists for. */
 export function shouldHeal(
     bot: Player,
     tier: BotTierDef,
     hasVisibleEnemy: boolean,
     positionSafe: boolean,
+    desperate = false,
 ): boolean {
     if (bot.actionType !== GameConfig.Action.None) return false;
     if (bot.weaponManager.cookingThrowable) return false;
 
     const healthFrac = bot.health / GameConfig.player.health;
     if (healthFrac >= tier.healThreshold) return false;
-    if (hasVisibleEnemy && healthFrac > 0.25) return false;
+    if (!desperate && hasVisibleEnemy && healthFrac > 0.25) return false;
 
     return pickHealItem(bot, healthFrac, positionSafe) !== undefined;
 }
@@ -436,8 +441,9 @@ export function updateHeal(
     tier: BotTierDef,
     hasVisibleEnemy: boolean,
     positionSafe: boolean,
+    desperate = false,
 ): void {
-    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe)) return;
+    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate)) return;
     const healthFrac = bot.health / GameConfig.player.health;
     const item = pickHealItem(bot, healthFrac, positionSafe);
     if (item) bot.useHealingItem(item);

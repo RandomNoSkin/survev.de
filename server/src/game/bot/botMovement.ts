@@ -723,7 +723,12 @@ function retreatToCover(
  *  (`BotBrain.pickDirective` handles that by reading `actionType` directly) - deciding "I
  *  should heal" and immediately consuming the item regardless of whether the retreat has
  *  actually gone anywhere yet is what made bots visibly start a bandage and cancel it
- *  again on the very next tick, still standing right where the fight was. */
+ *  again on the very next tick, still standing right where the fight was.
+ *
+ *  `sustainedLost` doubles as `BotBrain`'s `desperateHeal` override (see
+ *  `DESPERATE_HEAL_MS`) - both mean the same thing here: treat this as safe regardless
+ *  of distance/cover, because the alternative (waiting for real separation that isn't
+ *  coming) is worse than the risk. */
 export function isSafeToHeal(
     bot: Player,
     state: BotMovementState,
