@@ -470,18 +470,36 @@ function isBodyHidden(
     return !isWalkClear(navObstacles, threatPos, worstCase, layer);
 }
 
+/** How much closer a fresh candidate has to be than the currently-held cover obstacle
+ *  before `findCover` actually switches to it - see the `preferred` param's own doc
+ *  comment for why this exists. */
+const COVER_STICKINESS_MARGIN = 5;
+
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
  *  as seen from `threatPos` - real cover, not just "away from the enemy". Every
  *  candidate is checked against the *current* state of the obstacle it hides behind
  *  (`dead`/`collidable`), so a piece of cover that gets shot apart is never handed out;
  *  the caller (`updateMovement`) also re-checks that same obstacle every tick it's
  *  held, not just when this is called, so cover dying out from under the bot mid-fight
- *  drops it immediately rather than on the next recompute. */
+ *  drops it immediately rather than on the next recompute.
+ *
+ *  `preferred` (`retreatToCover`'s currently-held `coverObstacle`, if any) - real match
+ *  evidence: with two obstacles sitting nearly equidistant from the bot, which one comes
+ *  out "nearest" can flip from one recompute to the next as the bot's own position shifts
+ *  by fractions of a unit, and at `COVER_RECOMPUTE_INTERVAL`'s pace (well under a tenth
+ *  of a second for a high-aggression tier) that read as the bot's retreat direction
+ *  reversing almost every tick - stuck oscillating between two cover spots, making real
+ *  progress toward neither, for multiple real seconds with a visible target it never
+ *  fired at. Still preferring the currently-held obstacle unless something else is
+ *  genuinely closer by a real margin, not just a coin-flip's worth, is the same
+ *  "commit to a choice, don't re-decide every tick" fix already applied to local-obstacle
+ *  deflection, `followPath`'s direct-vs-routed check, and idle-goal hysteresis. */
 export function findCover(
     bot: Player,
     navObstacles: Obstacle[],
     threatPos: Vec2,
     minDistFromThreat = 0,
+    preferred?: Obstacle,
 ): { obstacle: Obstacle; pos: Vec2 } | undefined {
     const layer = util.toGroundLayer(bot.layer);
     const aabb = collider.createAabbExtents(bot.pos, v2.create(COVER_SEARCH_RAD, COVER_SEARCH_RAD));
@@ -489,6 +507,7 @@ export function findCover(
     const minDistSqr = minDistFromThreat * minDistFromThreat;
 
     let best: { obstacle: Obstacle; pos: Vec2; distSqr: number } | undefined;
+    let preferredPick: { obstacle: Obstacle; pos: Vec2; distSqr: number } | undefined;
     for (let i = 0; i < objs.length; i++) {
         if (objs[i].__type !== ObjectType.Obstacle) continue;
         const o = objs[i] as Obstacle;
@@ -511,9 +530,21 @@ export function findCover(
         if (nearLiveExplosive(objs, candidate, layer)) continue;
 
         const distSqr = v2.lengthSqr(v2.sub(bot.pos, candidate));
-        if (!best || distSqr < best.distSqr) best = { obstacle: o, pos: candidate, distSqr };
+        const entry = { obstacle: o, pos: candidate, distSqr };
+        if (!best || distSqr < best.distSqr) best = entry;
+        if (o === preferred) preferredPick = entry;
     }
-    return best;
+
+    if (!preferredPick) return best;
+    if (!best || best.obstacle === preferred) return preferredPick;
+    // Plain distances, not squared - for two picks this close (the whole point is
+    // catching near-ties), the squared difference shrinks with their absolute distance
+    // from the bot (distSqr_a - distSqr_b = (a-b)(a+b)), so comparing it directly against
+    // a squared margin would only tolerate a real difference of a fraction of a unit at
+    // any realistic cover range, not the intended `COVER_STICKINESS_MARGIN`.
+    const preferredDist = Math.sqrt(preferredPick.distSqr);
+    const bestDist = Math.sqrt(best.distSqr);
+    return preferredDist - bestDist < COVER_STICKINESS_MARGIN ? preferredPick : best;
 }
 
 /** A point near `coverObstacle`'s edge, off to one side of "directly behind", that IS
@@ -650,7 +681,7 @@ function retreatToCover(
     state.coverRecheck -= dt;
     if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
         state.coverRecheck = COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression);
-        const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist);
+        const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist, state.coverObstacle);
         // Only treat this as a genuinely new spot - not just the periodic recompute
         // landing back on essentially the same point - as "un-arrive": resetting
         // `settledAtCover` on every recompute would interrupt an in-progress peek every

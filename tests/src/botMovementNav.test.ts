@@ -306,6 +306,47 @@ test("findCover with a minimum distance never returns a spot closer to the threa
     }
 });
 
+// Regression, from a decoded real loss: with two obstacles sitting nearly equidistant
+// from the bot, `findCover` used to pick whichever was strictly nearest fresh every
+// single recompute - at `COVER_RECOMPUTE_INTERVAL`'s pace (under a tenth of a second for
+// a high-aggression tier) a tiny position shift alone was enough to flip which one "won",
+// which read as the bot's retreat direction reversing almost every tick: stuck
+// oscillating between two cover spots for multiple real seconds, making progress toward
+// neither, with a visible target it never fired at. `findCover`'s `preferred` param
+// (the currently-held `coverObstacle`) should keep winning unless something else is
+// closer by a real margin (`COVER_STICKINESS_MARGIN`), not just a coin-flip's worth.
+test("findCover sticks with the currently-held obstacle over a marginally closer one", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    // `test_normal` is almost entirely water except a small landmass around its center -
+    // `pointClear` refuses any candidate sitting on water, so cover has to be placed
+    // there, not near the origin.
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    // Two crates placed symmetrically either side of the bot's starting spot - both
+    // independently valid cover, close enough in distance that a small position shift
+    // alone can flip which one comes out "nearest".
+    const obstacleA = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 12)));
+    const obstacleB = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, -12)));
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(5, 0)) });
+
+    const first = findCover(bot, graph.navObstacles, threatPos);
+    expect(first).toBeDefined();
+    const other = first!.obstacle === obstacleA ? obstacleB : obstacleA;
+
+    // Nudge the bot a small step toward the other obstacle - small enough that, absent
+    // stickiness, a fresh "nearest" pick flips to it (verified below), but well inside
+    // `COVER_STICKINESS_MARGIN`.
+    const towardOther = v2.normalizeSafe(v2.sub(other.pos, bot.pos));
+    bot.pos = v2.add(bot.pos, v2.mul(towardOther, 2));
+
+    const freshPick = findCover(bot, graph.navObstacles, threatPos);
+    expect(freshPick?.obstacle).toBe(other); // confirms this nudge is a real "nearest" flip, not a no-op
+
+    const stickyPick = findCover(bot, graph.navObstacles, threatPos, 0, first!.obstacle);
+    expect(stickyPick?.obstacle).toBe(first!.obstacle);
+});
+
 // The "der bot muss barrels/explosive obstacles verstehen" ask: hiding behind something
 // that explodes the moment it takes enough damage is worse than standing in the open in
 // the specific way that matters most - the enemy doesn't even need to hit the bot
