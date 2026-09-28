@@ -722,8 +722,19 @@ export function followPath(
 ): Vec2 | undefined {
     const layer = util.toGroundLayer(bot.layer);
 
-    if (isWalkClear(graph.navObstacles, bot.pos, goal, layer)) {
-        state.path = [];
+    // Only take the "fully clear, skip pathing entirely" shortcut while there's no
+    // active path yet - re-asking "is it clear *right now*" every tick once already
+    // routing around something is exactly the single-probe-every-tick antipattern
+    // fixed elsewhere in this file (see the local-deflection and `headingToIdleGoal`
+    // doc comments): right at a corner, whether the straight line to a *distant* goal
+    // grazes the obstacle or not can flip from one tick to the next as the bot's own
+    // position shifts by fractions of a unit, which flip-flopped `move` between "go
+    // straight at the goal" (often straight into the very obstacle just routed around)
+    // and the real path direction - two very different directions that canceled each
+    // other's progress out, reading as the bot vibrating in place for several real
+    // seconds. Once a path exists, only the pruning/repath logic below (with its own
+    // cooldowns and staleness check) gets to end it - never a fresh same-tick guess.
+    if (!state.path.length && isWalkClear(graph.navObstacles, bot.pos, goal, layer)) {
         return undefined;
     }
 

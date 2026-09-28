@@ -970,6 +970,54 @@ test("Local obstacle deflection doesn't flip sides mid-window, only on a genuine
     // within the sampled candidates - nothing to assert against.
 });
 
+// A second, distinct source of the same real-match "vibrates in place for several
+// seconds" symptom: `followPath`'s very first check re-asked "is the straight line to
+// the goal fully clear *right now*" from the bot's exact current position, every single
+// tick, even while already routing around something. Right at a corner that answer can
+// flip from one tick to the next as the bot's position shifts by fractions of a unit,
+// which flip-flopped `move` between the real, routed path direction and a straight line
+// at the *distant* goal (often straight back into the very obstacle just routed around) -
+// two very different directions whose alternation canceled almost all net progress,
+// masked from the anti-stuck check because the small amount of real progress each cycle
+// still smuggled through was just enough to stay under `STUCK_MOVE_THRESHOLD` per second.
+// Fixed by only taking that shortcut while there's no path yet (see `followPath`).
+test("A bot routing around an obstacle via followPath makes real progress, not a stall at the corner", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+    const candidates = game.map.obstacles.filter(
+        (o) => !o.dead && o.collidable && !o.isDoor && o.layer === 0,
+    );
+
+    const away = v2.create(1, 0);
+    const speed = 6.5;
+    const dt = 0.05;
+
+    for (const obstacle of candidates.slice(0, 40)) {
+        const idleGoal = v2.add(obstacle.pos, v2.mul(away, 25));
+        const bot = game.playerBarn.addTestPlayer({ pos: v2.sub(obstacle.pos, v2.mul(away, 25)) });
+        const state = new BotMovementState();
+
+        let pos = v2.copy(bot.pos);
+        const startPos = v2.copy(pos);
+        let usedPath = false;
+        for (let i = 0; i < 100; i++) { // 5 simulated seconds
+            bot.pos = pos;
+            updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
+            if (state.path.length) usedPath = true;
+            pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, speed * dt)) : pos;
+        }
+
+        if (!usedPath) continue; // straight line was clear the whole way - not a real test of this
+        // 5 seconds at this speed easily covers the ~50-unit straight-line span even
+        // with a real detour - a stall reads as barely more than the starting distance.
+        expect(v2.distance(pos, startPos)).toBeGreaterThan(20);
+        return;
+    }
+
+    // No obstacle in this random layout required a real detour within the sampled
+    // candidates - nothing to assert against.
+});
+
 // "sich nicht innen trappen zu lassen": a raw straight-line retreat goal has no idea it
 // happens to land inside a building's interior lattice - `preferNonInteriorGoal` nudges
 // it onto the nearest non-`interior` node instead when the graph has one nearby, so
