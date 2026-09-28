@@ -117,6 +117,17 @@ function feintChanceFor(aggression: number | undefined): number {
     return math.lerp(aggression, 0.1, 0.4);
 }
 
+/** Multiplier on `RETREAT_RECOMPUTE_INTERVAL` - same neutral-when-absent shape as
+ *  `coverRecomputeMult`. A fleeing bot only re-aims its retreat goal on this clock
+ *  (`retreatDirection`); holding it fixed at the same pace regardless of tier made even
+ *  `expert` re-route away from a cutting-off pursuer no faster than `easy` did, which
+ *  read as sluggish exactly where a "faster bot" complaint was aimed - see
+ *  `BOT_TIERS.expert`'s own note. */
+function retreatRecomputeMult(aggression: number | undefined): number {
+    if (aggression === undefined) return 1;
+    return math.lerp(aggression, 1.4, 0.5);
+}
+
 /** How far ahead a plain retreat (mode `retreat`, or `heal`/`flee`/`reload` with no
  *  cover found) picks a concrete destination to path toward, instead of just steering
  *  in the raw "away from the threat" direction. A straight line can walk directly into
@@ -646,7 +657,7 @@ function retreatToCover(
             const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
             return v2.mul(v2.perp(away), state.strafeSign);
         }
-        return retreatDirection(bot, state, nav, threatPos, dt);
+        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }
 
     // Approach `coverPos` itself only until first reached - once `settledAtCover`,
@@ -679,7 +690,7 @@ function retreatToCover(
     // branch above already relies on - clearing it here first would throw away a
     // just-computed path before it's ever actually followed.
     if (!holdAndPeek && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT) {
-        return retreatDirection(bot, state, nav, threatPos, dt);
+        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }
     state.path = [];
     return v2.create(0, 0);
@@ -835,6 +846,7 @@ function retreatDirection(
     nav: NavGraph | undefined,
     threatPos: Vec2,
     dt: number,
+    aggression: number | undefined,
 ): Vec2 {
     const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
     if (!nav) return away;
@@ -845,7 +857,7 @@ function retreatDirection(
         || state.retreatRecheck <= 0
         || v2.distance(bot.pos, state.retreatGoal) < RETREAT_GOAL_REACHED_DIST
     ) {
-        state.retreatRecheck = RETREAT_RECOMPUTE_INTERVAL;
+        state.retreatRecheck = RETREAT_RECOMPUTE_INTERVAL * retreatRecomputeMult(aggression);
         const rawGoal = v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD));
         state.retreatGoal = preferNonInteriorGoal(nav, rawGoal, util.toGroundLayer(bot.layer));
     }
@@ -1056,7 +1068,7 @@ export function updateMovement(
             state.coverObstacle = undefined;
             state.coverPos = undefined;
             state.peeking = false;
-            move = retreatDirection(bot, state, nav, threatPos, dt);
+            move = retreatDirection(bot, state, nav, threatPos, dt, aggression);
         } else {
             move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0, aggression);
             // No cover anywhere nearby: `retreatToCover` falls back to pure lateral

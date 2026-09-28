@@ -54,8 +54,14 @@ export interface BotTierDef {
 }
 
 /**
- * `expert` is deliberately not perfect - 0.18s reaction and 2.5 degrees of error is
- * roughly a strong human. A flawless tier would only be frustrating to play against.
+ * `expert` is deliberately not perfect - 0.1s reaction and 1.4 degrees of error is
+ * still a very strong human, not a flawless aimbot. `aggression` for `expert` is
+ * intentionally pushed past 1 - `peekPaceMult`/`coverRecomputeMult`/`feintChanceFor`/
+ * `retreatRecomputeMult` (see `botMovement.ts`) are plain, unclamped linear
+ * interpolations, so this extrapolates *past* their originally tuned ceiling instead of
+ * just hitting it - "der Bot muss einfach schneller sein" across peeking, re-covering,
+ * pushing and fleeing, in response to real playtesting still reading `expert` as
+ * noticeably slower to react and reposition than a genuinely strong human opponent.
  */
 export const BOT_TIERS: Record<BotDifficulty, BotTierDef> = {
     easy: {
@@ -101,18 +107,18 @@ export const BOT_TIERS: Record<BotDifficulty, BotTierDef> = {
         aggression: 0.7,
     },
     expert: {
-        reaction: 0.18,
-        aimErrorDeg: 2.5,
-        turnRate: 14,
+        reaction: 0.1,
+        aimErrorDeg: 1.4,
+        turnRate: 20,
         fireConeDeg: 4,
-        leadFactor: 0.92,
-        thinkHz: 20,
+        leadFactor: 0.97,
+        thinkHz: 28,
         memory: 6,
         healThreshold: 0.75,
         quickswitch: true,
         burstMin: 0.45,
         burstMax: 1,
-        aggression: 1,
+        aggression: 1.4,
     },
 };
 
