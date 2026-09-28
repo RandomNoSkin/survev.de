@@ -188,6 +188,45 @@ test("Low (but not critical) health with no heal item flees instead of pushing",
     expect(bot.touchMoveDir.x).toBeLessThan(-0.5); // opening distance, not pushing or holding
 });
 
+// Regression, from a decoded real match: a bot at 40% health (low, not critical)
+// retreated to heal while the enemy sat at 15% - an easy finish. By the time its own
+// heal wrapped up, the enemy had used that exact window to heal all the way back to
+// full and won the fight back. Being low myself shouldn't override finishing an enemy
+// who's already worse off than I am - only retreating (or healing) hands them the
+// recovery time that throws away an already-won fight.
+test("Low health still pushes an enemy who's even lower, instead of retreating to heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 40; // low (< 56.25% for expert) but not critical (< 37.5%)
+    target.health = 15; // worse off than the bot, and under ENEMY_LOW_HEALTH_FRAC (40%)
+    bot.invManager.give("bandage", 5); // has a heal item on hand - still shouldn't retreat to use it
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None); // never starts healing here
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing to finish, not retreating
+});
+
+// The mirror case: an enemy who's *also* low but not actually worse off than the bot
+// itself (or not low enough to count as a finishable target) should still send the bot
+// to heal/flee as normal - this isn't a blanket "ignore my own health if the enemy is
+// hurt too" override.
+test("Low health still retreats when the enemy isn't clearly worse off", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 40;
+    target.health = 45; // hurt too, but not worse off than the bot - not a finish
+    bot.invManager.give("bandage", 5);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // retreating, not pushing
+});
+
 // Regression: low health *with* a bandage on hand used to fall straight through to
 // `engageHold` here, because the only low-health check was `low && noHealItem`. On the
 // open `test_normal` map there's no cover to duck behind, so `this.target` never goes

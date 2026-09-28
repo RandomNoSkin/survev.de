@@ -429,33 +429,38 @@ export class BotBrain {
      * 3. Critically hurt with no way to heal right now (no item, or just interrupted
      *    and still cooling down) - disengage instead of trading (see `fleeOrFight`: a
      *    retreat that's demonstrably not going anywhere gets one exception).
-     * 4. Merely low (not yet critical) with no way to heal - still disengage rather
+     * 4. Merely low (not `critical` - that already returned above) but the target is
+     *    worse off than *I* am and genuinely low itself - finish them instead of
+     *    breaking off to heal. Retreating here just hands a nearly-dead enemy the exact
+     *    window it needs to heal back up and win the fight back - see the doc comment
+     *    at the check itself for the real match this was caught from.
+     * 5. Merely low (not yet critical) with no way to heal - still disengage rather
      *    than keep fighting or pushing at real risk just because it isn't dire yet.
-     * 5. Merely low, *has* an item, but `shouldHeal` still refuses (in practice: the
+     * 6. Merely low, *has* an item, but `shouldHeal` still refuses (in practice: the
      *    enemy is currently visible and health isn't critical enough to override
      *    that) - disengage anyway instead of fighting on hurt with a bandage it can't
      *    safely use. Breaking line of sight is what lets `shouldHeal` say yes next
      *    tick; standing and trading while "waiting" for an opening never creates one.
-     * 6. Hurt enough to want to heal - retreats toward cover/distance immediately, but
+     * 7. Hurt enough to want to heal - retreats toward cover/distance immediately, but
      *    doesn't actually consume the item until `isSafeToHeal` (in `update()`) says
      *    the retreat has actually gone somewhere.
-     * 7. A heal action just ended, completed or aborted (`POST_HEAL_RETREAT_COOLDOWN_S`)
+     * 8. A heal action just ended, completed or aborted (`POST_HEAL_RETREAT_COOLDOWN_S`)
      *    - keep opening distance for this short grace window instead of snapping
      *    straight back into holding or pushing at the exact spot the heal finished.
      *    "retreaten, dann healen, und weiter retreaten": creating a little extra
      *    separation right after a heal is worth more than immediately resuming the
      *    fight from wherever standing still to heal happened to leave the bot.
-     * 8. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
+     * 9. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
      *    retreat toward relative safety while the reload (already requested
      *    regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *    reloads in place under whichever directive comes next instead.
-     * 9. The target is visible and hurt enough to be worth finishing
-     *    (`ENEMY_LOW_HEALTH_FRAC`) and this bot itself isn't `low` - press it across
-     *    open ground rather than waiting for a hit streak to build first. Every real
-     *    disadvantage, including having just healed (point 7), has already returned
-     *    its own directive above, so reaching here already means pushing costs this
-     *    bot nothing. Short of pushing, `engageHold` closes distance using cover instead.
-     * 10. Default: hold a sane range, using cover once there instead of standing still.
+     * 10. The target is visible and hurt enough to be worth finishing
+     *     (`ENEMY_LOW_HEALTH_FRAC`) and this bot itself isn't `low` - press it across
+     *     open ground rather than waiting for a hit streak to build first. Every real
+     *     disadvantage, including having just healed (point 8), has already returned
+     *     its own directive above, so reaching here already means pushing costs this
+     *     bot nothing. Short of pushing, `engageHold` closes distance using cover instead.
+     * 11. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined): CombatDirective {
         if (bot.actionType === GameConfig.Action.UseItem) return "heal";
@@ -473,6 +478,21 @@ export class BotBrain {
         const noHealItem = pickHealItem(bot, healthFrac, positionSafe) === undefined;
 
         if (critical && (noHealItem || this.healAbortCooldown > 0)) return this.fleeOrFight();
+
+        // Even hurt myself (but not `critical` - survival above still takes priority
+        // over that), a target who's already worse off than me is closer to dying than
+        // I am - breaking off now just to heal hands them exactly the time they need to
+        // recover, throwing away a fight that's already won. Real match evidence: a bot
+        // at 40% retreated to heal while the enemy sat at 15%, well within finishing
+        // range - by the time its own heal wrapped up, the enemy had used that same
+        // window to heal all the way back to full and won the fight back. Requires
+        // being genuinely ahead (their fraction below *both* mine and
+        // `ENEMY_LOW_HEALTH_FRAC`, not just "also somewhat hurt") so this never fires
+        // as an excuse to keep trading from a mutually bad position.
+        if (low && this.target) {
+            const enemyFrac = this.target.health / GameConfig.player.health;
+            if (enemyFrac < healthFrac && enemyFrac < ENEMY_LOW_HEALTH_FRAC) return "push";
+        }
         // Low but not yet critical, and nothing to fix it with - disengage rather than
         // keep fighting (or even push) at real risk just because it isn't dire yet.
         if (low && noHealItem) return this.fleeOrFight();
