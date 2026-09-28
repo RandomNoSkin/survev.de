@@ -397,6 +397,12 @@ export class BotBrain {
                 shootHold: bot.shootHold,
                 stuck: this.movement.stuck,
                 move: bot.touchMoveActive ? v2.copy(bot.touchMoveDir) : null,
+                pathLen: this.movement.path.length,
+                pullTarget: this.movement.pullTarget ?? null,
+                coverPos: this.movement.coverPos ? v2.copy(this.movement.coverPos) : null,
+                settledAtCover: this.movement.settledAtCover,
+                deflectSign: this.movement.deflectSign,
+                layer: bot.layer,
             });
         }
     }
