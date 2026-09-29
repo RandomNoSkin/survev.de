@@ -1260,6 +1260,40 @@ test("A bot routing around an obstacle via followPath makes real progress, not a
     // candidates - nothing to assert against.
 });
 
+// Regression for a real match capture, reported as "der bot war verwirrt mit Containern":
+// `followPath`'s own "fully clear, skip pathing entirely" shortcut used `isWalkClear`, a
+// zero-width ray, to decide whether real pathing is even needed. A gap between two
+// obstacles - like the gap between adjacent containers - can have a genuinely obstacle-
+// free *line* threading it dead center while the bot's actual `bot.rad`-wide body can't
+// fit through: the ray reports "clear", so the shortcut kept firing and `followPath` never
+// built a real path at all (`state.path` stayed empty the whole time it was needed). In the
+// real capture this showed up as `stuck=true` for ~2s straight with `pathLen` at 0 the
+// entire episode - nothing for the waypoint-blacklist or repath machinery to act on, because
+// no path ever existed to begin with. Gap width (1 unit) is comfortably under the ~1.8 units
+// two `bot.rad`(1)-radius probes need to both clear it (see `CLEARANCE_SLOP`), so the disc-
+// aware check must treat this as blocked and hand off to real pathfinding.
+test("followPath doesn't skip pathing through a gap too narrow for the bot's own body", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const graph = buildNavGraph(game);
+    const center = v2.create(132, 132);
+    const gap = 1;
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 2.25 + gap / 2)));
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(0, -(2.25 + gap / 2))));
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.sub(center, v2.create(40, 0)) });
+    const goal = v2.add(center, v2.create(40, 0));
+    const state = new BotMovementState();
+
+    // A zero-width ray straight through the gap's exact center (same `y` on both ends)
+    // never touches either box - confirms the "clear" verdict this bug relied on is real,
+    // not a fluke of a segment check that happens to graze an edge.
+    expect(isWalkClear(graph.navObstacles, bot.pos, goal, 0)).toBe(true);
+
+    const move = followPath(bot, state, graph, goal, 0.1);
+    expect(move).not.toBeUndefined();
+    expect(state.path.length).toBeGreaterThan(0);
+});
+
 // Regression for a real match capture: raw displacement alone can be fooled. The bot
 // alternated between two near-opposite headings a hair unevenly right next to a
 // waypoint, creeping a real unit or more per `STUCK_CHECK_INTERVAL` window while never

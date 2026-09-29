@@ -948,7 +948,21 @@ export function followPath(
     // other's progress out, reading as the bot vibrating in place for several real
     // seconds. Once a path exists, only the pruning/repath logic below (with its own
     // cooldowns and staleness check) gets to end it - never a fresh same-tick guess.
-    if (!state.path.length && isWalkClear(graph.navObstacles, bot.pos, goal, layer)) {
+    //
+    // `isDirClear` (body-width-aware), not `isWalkClear` (a thin ray): a tight cluster
+    // of obstacles (a container yard, a real match capture found - "verwirrt mit
+    // Containern") can have a genuinely obstacle-free *line* threading the gaps that the
+    // bot's actual `bot.rad` body can't fit through cleanly - a thin ray reads that as
+    // "clear, no pathing needed", so this shortcut kept firing every tick and handing
+    // `move` straight back to raw direct steering, leaving local deflection alone to
+    // fight geometry it was never meant to solve by itself (no A* path ever existed to
+    // reroute or blacklist a waypoint out of - `pathLen` stayed 0 the entire time stuck).
+    // A real corridor this size reads as clear either way; a gap only wide enough for
+    // the ray now correctly doesn't.
+    const toGoal = v2.sub(goal, bot.pos);
+    const goalDist = v2.length(toGoal);
+    const directClear = goalDist < 0.01 || isDirClear(bot, v2.mul(toGoal, 1 / goalDist), goalDist);
+    if (!state.path.length && directClear) {
         return undefined;
     }
 
