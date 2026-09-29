@@ -1054,6 +1054,33 @@ test("isDirClear accounts for the bot's own body width, not just a thin center r
     expect(isDirClear(wellClear, dir, 12)).toBe(true);
 });
 
+// Regression for a follow-up real match capture, reported explicitly as "an der flachen
+// Wand" (at the flat wall) rather than a corner: sweeping a *full* `bot.rad` disc (the
+// fix above) made resting flush against a wall - the bot's completely ordinary state
+// while hugging cover - read as blocked for any heading that slides *along* that wall,
+// because the swept probe sits at essentially the same distance as the bot's own resting
+// contact the whole way down the segment. The collision resolver only ever pushes the
+// bot to `pen + 0.001` clear (see `Player.update`'s movement step), a razor-thin margin
+// real float noise routinely lands on the wrong side of - `-0.001` here stands in for
+// that everyday noise, not a contrived edge case. Five crates in a row build a genuinely
+// flat wall (no corner anywhere near the probed heading) so this isolates that failure
+// mode from the corner one above.
+test("isDirClear doesn't block sliding along a flat wall the bot is already resting against", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    for (let i = -2; i <= 2; i++) {
+        game.map.genObstacle("crate_01", v2.add(center, v2.create(i * 4.5, 0))); // edge-to-edge wall along x
+    }
+
+    const along = v2.create(1, 0);
+    for (const restingOverlap of [0, 0.001, 0.01, 0.05]) {
+        const bot = game.playerBarn.addTestPlayer({
+            pos: v2.add(center, v2.create(0, -2.25 - 1 + restingOverlap)),
+        });
+        expect(isDirClear(bot, along, 3)).toBe(true);
+    }
+});
+
 // Regression for a real "bot freezes in place for several seconds" match capture: local
 // obstacle deflection used to flip `BotMovementState.deflectSign` the instant the
 // preferred side failed and the other side happened to work - right at a corner, whether

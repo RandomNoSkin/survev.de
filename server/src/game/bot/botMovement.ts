@@ -375,7 +375,24 @@ function pickRangeMode(
 // wall corner for several real seconds" bug this is for. Sweeping a `bot.rad` disc
 // along the segment instead (one obstacle overlap test per unit of distance) actually
 // answers "can my body get through here", not just "is the point directly ahead free".
+//
+// `CLEARANCE_SLOP` shrinks that probe by a hair rather than using `bot.rad` exactly -
+// resting against a wall (the completely ordinary state a bot hugging cover is in most
+// of the time) already leaves it right at that boundary, and the collision resolver's
+// own push-out (`collision.pen + 0.001` in `Player.update`'s movement step) only
+// guarantees a razor-thin positive margin, not a comfortable one - real float noise
+// across a multi-obstacle resolve pass regularly lands a hair on the *other* side of
+// zero. Without slop, sliding *along* a wall the bot is already touching sweeps the
+// probe at that same razor-thin distance for the entire segment, and a few thousandths
+// of a unit of residual overlap reads every step of it as blocked - the exact same
+// "vibrating in place" symptom this whole function exists to fix, just triggered by
+// ordinary wall contact instead of a corner. Kept well under the corner fix's own
+// working range (the regression test below still needs an 0.6-unit clip caught) so this
+// only forgives genuine resting noise, not a real clip.
+const CLEARANCE_SLOP = 0.1;
+
 export function isDirClear(bot: Player, dir: Vec2, dist: number, ignore?: Obstacle): boolean {
+    const probeRad = Math.max(0, bot.rad - CLEARANCE_SLOP);
     const aabb = collider.createAabbExtents(bot.pos, v2.create(dist + bot.rad + 1, dist + bot.rad + 1));
     const objs = bot.game.grid.intersectCollider(aabb);
     const obstacles: Obstacle[] = [];
@@ -389,7 +406,7 @@ export function isDirClear(bot: Player, dir: Vec2, dist: number, ignore?: Obstac
     }
     const steps = Math.ceil(dist);
     for (let s = 1; s <= steps; s++) {
-        const probe = collider.createCircle(v2.add(bot.pos, v2.mul(dir, Math.min(s, dist))), bot.rad);
+        const probe = collider.createCircle(v2.add(bot.pos, v2.mul(dir, Math.min(s, dist))), probeRad);
         for (let i = 0; i < obstacles.length; i++) {
             if (coldet.test(probe, obstacles[i].collider)) return false;
         }
