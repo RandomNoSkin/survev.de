@@ -505,13 +505,16 @@ test("Cover is dropped and re-picked the instant its obstacle dies, not on the n
     expect(state.coverObstacle).not.toBe(firstCover);
 });
 
-// "der Bot bleibt einfach hinter Deckung stehen, wo er leicht pushbar ist" - reaching
-// cover that only barely cleared SAFE_HEAL_DIST (16) used to be a permanent stop; now
-// heal/flee keeps opening distance past that first merely-safe-enough spot (see
-// RETREAT_SETTLE_MULT) instead of planting there as an easy target. Fixed geometry
-// (not the random "local" map) so the resulting cover's exact distance from the threat
-// is known and controllable.
-test("Fleeing to cover that's only just barely safe keeps retreating afterward instead of stopping", () => {
+// Regression: reaching cover that only barely cleared SAFE_HEAL_DIST (16) used to be
+// abandoned immediately for "keep opening distance" (see RETREAT_SETTLE_MULT) purely
+// because raw distance to the threat was still under that bar - even though the cover
+// was already doing its actual job. On a compact arena, real cover naturally tends to
+// sit at exactly this kind of modest distance, so this was throwing away secured hiding
+// spots to chase a distance number in the open - "muss dafür sorgen, dass der Gegner
+// ihm nicht folgen kann", not abandon the one thing already accomplishing that. Fixed
+// geometry (not the random "local" map) so the resulting cover's exact distance from
+// the threat is known and controllable.
+test("Fleeing to cover that's only just barely safe still stops once genuinely hidden", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
     const threatPos = v2.create(60, 60);
@@ -532,11 +535,11 @@ test("Fleeing to cover that's only just barely safe keeps retreating afterward i
     }
     expect(state.settledAtCover).toBe(true);
 
-    // Right after settling at this close cover, movement must still be active -
-    // continuing to open distance rather than planting here.
+    // Right after settling at this close-but-genuinely-hidden cover, the bot should
+    // hold here - not abandon it to chase a raw distance number in the open.
     bot.pos = pos;
     updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
-    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveActive).toBe(false);
 });
 
 // Same setup, but the cover sits far enough away from the start that the bot genuinely

@@ -11,6 +11,7 @@ import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 import { currentSweetSpot } from "./botCombat.ts";
 import type { BotTierDef } from "./botDefs.ts";
+import { hasLineOfSight } from "./botPerception.ts";
 import { findPath } from "./nav/navAStar.ts";
 import { isOpenableDoor, isWalkClear, pointClear } from "./nav/navGeom.ts";
 import type { NavGraph } from "./nav/navGraph.ts";
@@ -50,7 +51,15 @@ const STUCK_MOVE_THRESHOLD = 1;
  *  its own doc comment for why this needs real confidence, not a single bad window. */
 const STUCK_STREAK_FOR_FIGHT = 3;
 
-const COVER_SEARCH_RAD = 30;
+/** How far `findCover` looks for a real hiding spot. Raised from 30 - a bot mid-fight
+ *  (holding or pushing) only has a moment to react and should grab whatever's genuinely
+ *  close, but a bot that's actually fleeing/healing has the time and every reason to
+ *  travel further for a real piece of cover instead of settling for "nothing nearby,
+ *  just run in the open" - "der Bot muss ordentlich weg rennen und dafür sorgen, dass
+ *  der Gegner ihm nicht folgen kann". Shared by every caller rather than a
+ *  directive-specific radius - a wider net never hurts `engageHold`/`push` either, it
+ *  just costs one grid query over a bigger (but still cheap, single-bot) area. */
+const COVER_SEARCH_RAD = 50;
 // Distance a cover spot sits past the obstacle's own edge, from the obstacle's center.
 // Needs to clear not just a player's collision radius (1) but also the slop
 // `COVER_REACHED_DIST` allows when "arriving" - the bot's actual resting position can
@@ -733,11 +742,20 @@ function retreatToCover(
     // Reached cover, but not holding position on purpose (heal/flee/reload) - keep
     // opening distance well past this first merely-safe-enough spot instead of planting
     // here and becoming an easy target the moment the threat closes back in - see
-    // `RETREAT_SETTLE_MULT`. Not cleared via `state.path = []` first: `retreatDirection`
-    // (via `followPath`) owns that path state itself, exactly like the "no cover found"
-    // branch above already relies on - clearing it here first would throw away a
-    // just-computed path before it's ever actually followed.
-    if (!holdAndPeek && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT) {
+    // `RETREAT_SETTLE_MULT`. Only actually resumes running, though, if this spot isn't
+    // doing its one job: still visible from the threat's own position. Raw distance
+    // alone used to be reason enough to abandon it, which meant a bot that found and
+    // reached genuine cover well within `minCoverDist * RETREAT_SETTLE_MULT` (an easy
+    // thing on a compact arena, where most cover naturally sits closer than that) walked
+    // straight back out into the open to chase a distance number instead of actually
+    // using the hiding spot it had just secured - "muss dafür sorgen, dass der Gegner
+    // ihm nicht folgen kann", not abandon the one thing already accomplishing that.
+    // Not cleared via `state.path = []` first: `retreatDirection` (via `followPath`)
+    // owns that path state itself, exactly like the "no cover found" branch above
+    // already relies on - clearing it here first would throw away a just-computed path
+    // before it's ever actually followed.
+    const stillExposed = hasLineOfSight(bot.game, threatPos, bot.pos, util.toGroundLayer(bot.layer));
+    if (!holdAndPeek && stillExposed && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }
     state.path = [];

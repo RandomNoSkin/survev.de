@@ -115,29 +115,49 @@ test("A bot pushes once it's cleared 'low', without needing to be fully healed",
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing
 });
 
-// The actual, narrower fix for "healed and immediately pushed while still low": a short
-// grace window right after a heal action ends (completed or aborted), not a permanently
-// higher health bar. This grace window now keeps the bot actively retreating, not just
-// blocking `push` - "retreaten, dann healen, und weiter retreaten". Faking the
-// actionType transition directly (rather than simulating a real multi-second bandage)
-// isolates the cooldown mechanism itself from the unrelated question of how long a heal
-// actually takes.
-test("A bot keeps retreating for a grace window right after a heal ends, then pushes once it passes", () => {
+// The user's explicit ask ("muss konsequenter pushen wenn der Gegner low ist") pushed
+// this further than the previous fix: a low enemy is now worth pressing even through
+// what would otherwise be the post-heal grace window below - waiting out
+// `POST_HEAL_RETREAT_COOLDOWN_S` on an already barely-alive target just hands it exactly
+// the recovery time it needs. `pickDirective`'s enemy-low push check now runs ahead of
+// `postHealRetreatCooldown` for this reason.
+test("A low enemy still gets pushed the instant a heal ends, without waiting out the grace window", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
-    target.health = 30;
+    target.health = 30; // low enough to justify pushing through the grace window
     bot.health = 80; // comfortably clear of "low"
 
     bot.actionType = GameConfig.Action.UseItem;
     bot.botBrain!.update(0.05);
     bot.actionType = GameConfig.Action.None; // the heal ends on this next tick
     bot.botBrain!.update(0.05);
-    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // still retreating, not pushing yet
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing immediately, no grace window
+});
+
+// The grace window itself still applies when the enemy ISN'T low enough to be worth
+// pressing through it - "retreaten, dann healen, und weiter retreaten" remains correct
+// for a target that could still fight back. Distinct from the push-through-grace-window
+// case above, which only fires once the enemy is actually low. Faking the actionType
+// transition directly (rather than simulating a real multi-second bandage) isolates the
+// cooldown mechanism itself from the unrelated question of how long a heal actually takes.
+test("A bot still retreats for a grace window right after a heal ends when the enemy isn't low", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // full health - not low
+    bot.health = 80; // comfortably clear of "low"
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.botBrain!.update(0.05);
+    bot.actionType = GameConfig.Action.None; // the heal ends on this next tick
+    bot.botBrain!.update(0.05);
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // still retreating, not engaging yet
 
     for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // past POST_HEAL_RETREAT_COOLDOWN_S (1.5s)
-    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing now that the grace window passed
+    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // back to holding at range, not still fleeing
 });
 
 test("A bot back up to tier.healThreshold pushes a low target normally", () => {

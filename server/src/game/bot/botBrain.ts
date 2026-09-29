@@ -497,23 +497,30 @@ export class BotBrain {
      * 8. Hurt enough to want to heal - retreats toward cover/distance immediately, but
      *    doesn't actually consume the item until `isSafeToHeal` (in `update()`) says
      *    the retreat has actually gone somewhere.
-     * 9. A heal action just ended, completed or aborted (`POST_HEAL_RETREAT_COOLDOWN_S`)
-     *    - keep opening distance for this short grace window instead of snapping
-     *    straight back into holding or pushing at the exact spot the heal finished.
-     *    "retreaten, dann healen, und weiter retreaten": creating a little extra
-     *    separation right after a heal is worth more than immediately resuming the
-     *    fight from wherever standing still to heal happened to leave the bot.
-     * 10. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
+     * 9. The target is visible and hurt enough to be worth finishing
+     *    (`ENEMY_LOW_HEALTH_FRAC`) and this bot itself isn't `low` - press it across
+     *    open ground rather than waiting for a hit streak to build first, and ahead of
+     *    the next three checks on purpose: an optional top-off heal, the post-heal
+     *    grace retreat, and a reload are all "not actually urgent" pauses that would
+     *    otherwise hand a barely-alive target exactly the recovery window it needs -
+     *    "muss konsequenter pushen wenn der Gegner low ist", not let a secondary
+     *    concern quietly override an easy finish. Short of pushing, `engageHold` still
+     *    knows how to close distance using cover instead.
+     * 10. Hurt enough to want an optional heal (not `low` - that already returned
+     *     above) - retreats toward cover/distance immediately, but doesn't actually
+     *     consume the item until `isSafeToHeal` (in `update()`) says the retreat has
+     *     actually gone somewhere.
+     * 11. A heal action just ended, completed or aborted (`POST_HEAL_RETREAT_COOLDOWN_S`)
+     *     - keep opening distance for this short grace window instead of snapping
+     *     straight back into holding or pushing at the exact spot the heal finished.
+     *     "retreaten, dann healen, und weiter retreaten": creating a little extra
+     *     separation right after a heal is worth more than immediately resuming the
+     *     fight from wherever standing still to heal happened to leave the bot.
+     * 12. Every equipped gun dry *and* actually under fire right now (`needsReload`) -
      *     retreat toward relative safety while the reload (already requested
      *     regardless, see `updateReload`) finishes. Dry with nobody shooting just
      *     reloads in place under whichever directive comes next instead.
-     * 11. The target is visible and hurt enough to be worth finishing
-     *     (`ENEMY_LOW_HEALTH_FRAC`) and this bot itself isn't `low` - press it across
-     *     open ground rather than waiting for a hit streak to build first. Every real
-     *     disadvantage, including having just healed (point 9), has already returned
-     *     its own directive above, so reaching here already means pushing costs this
-     *     bot nothing. Short of pushing, `engageHold` closes distance using cover instead.
-     * 12. Default: hold a sane range, using cover once there instead of standing still.
+     * 13. Default: hold a sane range, using cover once there instead of standing still.
      */
     private pickDirective(bot: Player, threatPos: Vec2 | undefined, dt: number): CombatDirective {
         // Reset unconditionally, not just on the branch that sets it true - every early
@@ -579,29 +586,32 @@ export class BotBrain {
         // and hope. Once concealed, `shouldHeal` flips to true on its own.
         if (low && !noHealItem && !canHealNow) return this.fleeOrFight();
 
+        // A visible target actually hurt enough to be worth finishing is reason enough
+        // to press it, on its own - no need to already be on a hit streak first, and
+        // ahead of every check below it: a real fresh-air window on a target this hurt
+        // rarely lasts long, and both an optional top-off heal (not yet `low`, just
+        // `canHealNow`-eligible) and the post-heal grace retreat/a reload are exactly the
+        // kind of "not actually urgent" pauses that hand a barely-alive target all the
+        // time it needs to recover - same reasoning as the `low`-but-enemy-lower push
+        // override above, just for the case where this bot itself isn't hurt at all.
+        // `!low` (not a full `tier.healThreshold` bar - see the doc comment above) is
+        // what stops "healed and immediately pushed while still low" without also
+        // making the bot generally reluctant to press an advantage. Requiring a hit
+        // streak *in addition* was the old "dumb push" fix's original mechanism; gating
+        // on the target's actual health directly (see `ENEMY_LOW_HEALTH_FRAC`) is the
+        // more direct fix, so the streak requirement was just needless hesitation once a
+        // target is genuinely low. Short of that, `engageHold` still knows how to close
+        // distance using cover instead.
+        const enemyLow = !!this.target
+            && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
+        if (!low && enemyLow) return "push";
+
         if (canHealNow) return "heal";
         // Just finished healing (or an abort just ended) - keep retreating for a short
         // grace window rather than immediately resuming the fight from right here. See
         // `POST_HEAL_RETREAT_COOLDOWN_S`.
         if (this.postHealRetreatCooldown > 0) return "flee";
         if (this.needsReload(bot)) return "reload";
-        // A visible target actually hurt enough to be worth finishing is reason enough
-        // to press it, on its own - no need to already be on a hit streak first. Every
-        // real disadvantage (own low health, needing to reload) has already returned
-        // its own directive above, so reaching here already means pushing costs this
-        // bot nothing. Requiring a hit streak *in addition* was the old "dumb push"
-        // fix's original mechanism; gating on the target's actual health directly (see
-        // `ENEMY_LOW_HEALTH_FRAC`) is the more direct fix, so the streak requirement
-        // was just needless hesitation once a target is genuinely low. Short of that,
-        // `engageHold` still knows how to close distance using cover instead.
-        const enemyLow = !!this.target
-            && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
-        // `!low` (not a full `tier.healThreshold` bar - see the doc comment above) is
-        // what stops "healed and immediately pushed while still low" without also
-        // making the bot generally reluctant to press an advantage - the
-        // `postHealRetreatCooldown` check above already handles "just finished healing
-        // entirely" before this is ever reached.
-        if (!low && enemyLow) return "push";
 
         return "engageHold";
     }
