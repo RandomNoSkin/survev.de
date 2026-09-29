@@ -277,6 +277,10 @@ export class BotMovementState {
      *  hands off entirely to the peek cycle instead of re-checking distance to the base
      *  cover point every tick. */
     settledAtCover = false;
+    /** Distance to the threat at the moment `settledAtCover` last became true - see
+     *  `retreatToCover`'s "threat closing in" check. `undefined` whenever cover isn't
+     *  settled (kept in sync with `settledAtCover` resetting to `false`). */
+    distAtSettle?: number;
 
     /** Peek cycle while holding cover mid-fight - see `updatePeekCycle`. `peeking`
      *  false means hiding at `coverPos`; true means leaning out to `peekPos`. */
@@ -685,6 +689,12 @@ const SAFE_RELOAD_DIST = 12;
  *  (which already demanded more separation) also keeps pushing further than a quick
  *  reload does. */
 const RETREAT_SETTLE_MULT = 1.75;
+/** How much closer the threat has to have gotten since `distAtSettle` was recorded
+ *  before settled-at-cover treats it as genuinely closing in, not just position noise
+ *  (the bot's own peek-adjacent micro-movement, a `threatPos` fallback swapping to a
+ *  slightly different remembered point) - see `retreatToCover`'s "threat closing in"
+ *  check. */
+const PUSH_DETECT_MARGIN = 4;
 
 /** Moves toward, then holds at, cover from `threatPos` - shared by healing, fleeing,
  *  reloading, and (with `holdAndPeek`) holding a mid-fight position instead of standing
@@ -712,6 +722,7 @@ function retreatToCover(
         state.coverObstacle = undefined;
         state.coverPos = undefined;
         state.settledAtCover = false;
+        state.distAtSettle = undefined;
         state.coverRecheck = 0;
         state.peeking = false;
     }
@@ -726,6 +737,7 @@ function retreatToCover(
         // window, forcing the bot back to `coverPos` before it ever really leaned out.
         if (!found || !state.coverPos || v2.distance(state.coverPos, found.pos) > 0.5) {
             state.settledAtCover = false;
+            state.distAtSettle = undefined;
         }
         state.coverObstacle = found?.obstacle;
         state.coverPos = found?.pos;
@@ -761,6 +773,7 @@ function retreatToCover(
             return pathDir ?? v2.normalizeSafe(v2.sub(state.coverPos, bot.pos));
         }
         state.settledAtCover = true;
+        state.distAtSettle = v2.distance(bot.pos, threatPos);
     }
 
     if (holdAndPeek && nav) {
@@ -771,19 +784,34 @@ function retreatToCover(
     // opening distance well past this first merely-safe-enough spot instead of planting
     // here and becoming an easy target the moment the threat closes back in - see
     // `RETREAT_SETTLE_MULT`. Only actually resumes running, though, if this spot isn't
-    // doing its one job: still visible from the threat's own position. Raw distance
-    // alone used to be reason enough to abandon it, which meant a bot that found and
-    // reached genuine cover well within `minCoverDist * RETREAT_SETTLE_MULT` (an easy
-    // thing on a compact arena, where most cover naturally sits closer than that) walked
-    // straight back out into the open to chase a distance number instead of actually
-    // using the hiding spot it had just secured - "muss dafür sorgen, dass der Gegner
-    // ihm nicht folgen kann", not abandon the one thing already accomplishing that.
+    // doing its one job: still visible from the threat's own position, *or* the threat
+    // is closing in regardless - "muss vor allem weiter retreaten wenn der Gegner pusht
+    // um die Fertigstellung des Healens zu garantieren". A pushing enemy doesn't have to
+    // have already rounded the corner to be a reason to keep moving: a fresh, closer
+    // `threatPos` (a gunshot heard through the wall counts, see `BotBrain.threatPos`)
+    // means they're advancing on this exact spot even before line of sight is actually
+    // reestablished, and standing rooted here waiting for that to happen is exactly the
+    // "got caught still healing at point-blank range" failure this is for - sitting
+    // still is only safe against a threat that isn't closing the distance. Raw distance
+    // alone used to be reason enough to abandon a genuinely-still-working hiding spot,
+    // which meant a bot that found and reached real cover well within
+    // `minCoverDist * RETREAT_SETTLE_MULT` (an easy thing on a compact arena, where most
+    // cover naturally sits closer than that) walked straight back out into the open to
+    // chase a distance number instead of actually using the hiding spot it had just
+    // secured - "muss dafür sorgen, dass der Gegner ihm nicht folgen kann", not abandon
+    // the one thing already accomplishing that the moment it's actually still working.
     // Not cleared via `state.path = []` first: `retreatDirection` (via `followPath`)
     // owns that path state itself, exactly like the "no cover found" branch above
     // already relies on - clearing it here first would throw away a just-computed path
     // before it's ever actually followed.
     const stillExposed = hasLineOfSight(bot.game, threatPos, bot.pos, util.toGroundLayer(bot.layer));
-    if (!holdAndPeek && stillExposed && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT) {
+    const threatClosingIn = state.distAtSettle !== undefined
+        && v2.distance(bot.pos, threatPos) < state.distAtSettle - PUSH_DETECT_MARGIN;
+    if (
+        !holdAndPeek
+        && (stillExposed || threatClosingIn)
+        && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT
+    ) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }
     state.path = [];

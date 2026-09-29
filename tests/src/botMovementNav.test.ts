@@ -580,6 +580,45 @@ test("Fleeing to cover that's already well past the settle distance stops there"
     expect(state.stuck).toBe(false);
 });
 
+// "muss vor allem weiter retreaten wenn der Gegner pusht um die Fertigstellung des
+// Healens zu garantieren" - settling behind real cover must not mean standing rooted
+// the instant the threat is merely out of sight for now. If the threat is actively
+// closing the distance (a fresh, closer `threatPos` - a heard gunshot counts just as
+// well as a sighting, see `BotBrain.threatPos`), retreat resumes even without having
+// regained line of sight to the bot's exact hiding spot yet - waiting for that to
+// happen first is waiting to get caught at point-blank range mid-heal. Same fixed
+// geometry as the settle-and-stop test above; the threat then advances along the same
+// axis, still on the near side of the crate (so it genuinely hasn't regained sight),
+// closer by well more than `PUSH_DETECT_MARGIN`.
+test("Fleeing resumes retreating once settled if the threat closes in, even without regaining sight", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const away = v2.create(1, 0);
+    const threatPos = v2.create(60, 60);
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 40)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 400 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(false); // settled and stopped, same as the test above
+
+    // The threat pushes 20 units closer along the same axis, still well short of the
+    // crate - genuinely hasn't regained sight of the bot hiding behind it.
+    const pushedThreatPos = v2.add(threatPos, v2.mul(away, 20));
+    updateMovement(bot, state, "flee", pushedThreatPos, v2.distance(pos, pushedThreatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(true);
+});
+
 // The "peek from cover, shoot peeking enemies" ask: once `engageHold` reaches cover, it
 // must not just sit there forever - it has to cycle out to a spot with line of sight
 // back to the threat and return to full cover, repeatedly. Same fixed-geometry setup as
