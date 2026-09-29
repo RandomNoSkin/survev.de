@@ -1200,7 +1200,7 @@ test("A bot routing around an obstacle via followPath makes real progress, not a
         let pos = v2.copy(bot.pos);
         const startPos = v2.copy(pos);
         let usedPath = false;
-        for (let i = 0; i < 100; i++) { // 5 simulated seconds
+        for (let i = 0; i < 300; i++) { // 15 simulated seconds
             bot.pos = pos;
             updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
             if (state.path.length) usedPath = true;
@@ -1208,8 +1208,12 @@ test("A bot routing around an obstacle via followPath makes real progress, not a
         }
 
         if (!usedPath) continue; // straight line was clear the whole way - not a real test of this
-        // 5 seconds at this speed easily covers the ~50-unit straight-line span even
-        // with a real detour - a stall reads as barely more than the starting distance.
+        // 15 seconds at this speed comfortably covers the ~50-unit straight-line span
+        // even with a real detour, *and* leaves real headroom for one genuine stuck-and-
+        // recover cycle (see `STUCK_NODE_BLACKLIST_S`'s own doc comment) - the anti-stuck
+        // system costs a real second or so of detection before it reroutes, which a
+        // tighter budget has no slack for even once it's actually working. A stall this
+        // still doesn't recover from reads as barely more than the starting distance.
         expect(v2.distance(pos, startPos)).toBeGreaterThan(20);
         return;
     }

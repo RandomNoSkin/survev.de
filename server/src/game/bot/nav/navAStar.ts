@@ -79,6 +79,12 @@ function heuristic(graph: NavGraph, a: number, goalPos: Vec2, goalLayer: number)
  * Allocates fresh scratch per call - fine at the arena-scale node counts this runs
  * against (see `NavGraph`'s doc comment); a BR-scale graph would want the expansion
  * cap and pre-allocated scratch arrays this skips for now.
+ *
+ * `excluded` - node ids never expanded into, as if they didn't exist - lets a caller
+ * that just got stuck failing to make progress toward a specific waypoint (see
+ * `followPath`'s `blacklistedNodes`) force a genuinely different route on the next
+ * search, instead of A* confidently handing back the exact same optimal-but-unreachable
+ * path it just failed to walk.
  */
 export function findPath(
     graph: NavGraph,
@@ -87,6 +93,7 @@ export function findPath(
     goalPos: Vec2,
     goalLayer: number,
     maxExpansions: number,
+    excluded?: ReadonlySet<number>,
 ): number[] | null {
     if (!startNodes.length || !goalNodes.size) return null;
 
@@ -96,7 +103,11 @@ export function findPath(
     const heap = new MinHeap();
 
     for (const s of startNodes) {
-        if (gScore.has(s)) continue;
+        // A blacklisted node excluded below (as a *neighbor*) would still slip back in
+        // here otherwise - seeding never goes through that check, and a bot that just
+        // got stuck is often sitting right next to (or on) the exact node it needs to
+        // avoid, so it's very likely to be one of the handful of candidate start nodes.
+        if (gScore.has(s) || excluded?.has(s)) continue;
         gScore.set(s, 0);
         heap.push(s, heuristic(graph, s, goalPos, goalLayer));
     }
@@ -115,7 +126,7 @@ export function findPath(
         const curG = gScore.get(cur)!;
         for (let i = 0; i < neighbors.length; i++) {
             const next = neighbors[i];
-            if (visited.has(next)) continue;
+            if (visited.has(next) || excluded?.has(next)) continue;
             const tentativeG = curG + costs[i];
             if (tentativeG < (gScore.get(next) ?? Infinity)) {
                 gScore.set(next, tentativeG);

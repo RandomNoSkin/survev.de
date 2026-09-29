@@ -50,6 +50,11 @@ const STUCK_MOVE_THRESHOLD = 1;
  *  `BotMovementState.stuck` (the "give up and fight" signal) actually goes true - see
  *  its own doc comment for why this needs real confidence, not a single bad window. */
 const STUCK_STREAK_FOR_FIGHT = 3;
+/** How long a waypoint node stays blacklisted (see `BotMovementState.blacklistedNodes`)
+ *  after the bot got stuck failing to make progress toward it - long enough that a
+ *  repath genuinely has to route around the dead end instead of just re-discovering the
+ *  same "optimal" path back the instant this expires. */
+const STUCK_NODE_BLACKLIST_S = 5;
 
 /** How far `findCover` looks for a real hiding spot. Raised from 30 - a bot mid-fight
  *  (holding or pushing) only has a moment to react and should grab whatever's genuinely
@@ -230,6 +235,13 @@ export class BotMovementState {
     /** The goal position `path` was computed for - a big enough move invalidates it. */
     pathGoal?: Vec2;
     repathCooldown = 0;
+    /** Node ids to route around for a while - see the stuck-recovery block in
+     *  `updateMovement` (what blacklists one) and `followPath` (what excludes them from
+     *  the next search). Value is remaining seconds, ticked down in `followPath` - not
+     *  `Game.now`-based like most of this file's other cooldowns, since a test harness
+     *  driving `updateMovement` directly (see `botMovementNav.test.ts`) never advances
+     *  that clock. */
+    blacklistedNodes = new Map<number, number>();
 
     /** Anti-stuck: if the bot barely moves while following a path, the path is
      *  probably bad (a doorway it failed to open in time, a sampling error) - drop it
@@ -860,6 +872,13 @@ export function followPath(
 ): Vec2 | undefined {
     const layer = util.toGroundLayer(bot.layer);
 
+    if (state.blacklistedNodes.size) {
+        for (const [id, remainingS] of state.blacklistedNodes) {
+            if (remainingS - dt <= 0) state.blacklistedNodes.delete(id);
+            else state.blacklistedNodes.set(id, remainingS - dt);
+        }
+    }
+
     // Only take the "fully clear, skip pathing entirely" shortcut while there's no
     // active path yet - re-asking "is it clear *right now*" every tick once already
     // routing around something is exactly the single-probe-every-tick antipattern
@@ -882,8 +901,11 @@ export function followPath(
         state.repathCooldown = REPATH_INTERVAL;
         const startNodes = graph.nearby(bot.pos, layer, NODE_SEARCH_RADIUS, 5);
         const goalNodes = new Set(graph.nearby(goal, layer, NODE_SEARCH_RADIUS, 5));
+        const excluded = state.blacklistedNodes.size
+            ? new Set(state.blacklistedNodes.keys())
+            : undefined;
         state.path = startNodes.length && goalNodes.size
-            ? findPath(graph, startNodes, goalNodes, goal, layer, MAX_PATH_EXPANSIONS) ?? []
+            ? findPath(graph, startNodes, goalNodes, goal, layer, MAX_PATH_EXPANSIONS, excluded) ?? []
             : [];
         state.pathGoal = v2.copy(goal);
     }
@@ -1256,6 +1278,21 @@ export function updateMovement(
             state.repathCooldown = 0;
             state.retreatRecheck = 0;
             state.deflectSign = (state.deflectSign * -1) as 1 | -1;
+            // Blacklist the exact waypoint that wasn't reachable (see
+            // `BotMovementState.blacklistedNodes`/`STUCK_NODE_BLACKLIST_S`) - repathing
+            // alone just rediscovers the identical "optimal" route straight back into
+            // the same dead end (a gap too narrow to fit through, a doorway the nav
+            // graph doesn't actually clear), which is exactly what turned into the bot
+            // ping-ponging between the same two points for 9 real seconds in a decoded
+            // match capture, `stuck` never even tripping because each individual swing
+            // stayed just under `STUCK_MOVE_THRESHOLD`. Reacting on the same single bad
+            // window as the deflect-side flip above, not waiting for `stuck`'s own
+            // higher (3-window) bar: blacklisting is cheap and short-lived (5s) even on
+            // a false alarm, while every extra second stuck here is a real cost in a
+            // 15-60s match `stuck`'s slower bar was never tuned to react fast about.
+            if (state.pullTarget !== undefined) {
+                state.blacklistedNodes.set(state.pullTarget, STUCK_NODE_BLACKLIST_S);
+            }
         }
         state.stuckTimer = 0;
         state.stuckAnchor = v2.copy(bot.pos);

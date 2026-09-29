@@ -120,3 +120,38 @@ test("Path waypoints never jump an unreasonable distance in one step", () => {
 
     expect(pathTotalLength(graph, path!)).toBeGreaterThan(0);
 });
+
+// Regression: a bot that gets stuck failing to make progress toward a waypoint
+// blacklists it (see `BotMovementState.blacklistedNodes` in botMovement.ts) so the next
+// repath is forced to find a genuinely different route instead of confidently handing
+// back the exact same "optimal" one straight into the same dead end - a real match
+// capture showed this reading as the bot ping-ponging between the same two points for
+// 9 seconds before this existed. `excluded` has to work at both ends of the search: as
+// a neighbor (already excluded before this fix) *and* as a start-node candidate (the
+// actual bug this fix landed for - a bot that just got stuck is often standing right
+// next to, or effectively at, the exact node it needs to avoid, so it's very likely to
+// be one of the handful of nearby start-node candidates too).
+test("findPath's excluded set is honored even when the excluded node is a start candidate", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const graph = buildNavGraph(game);
+
+    const from = v2.create(game.map.width * 0.2, game.map.height * 0.8);
+    const to = v2.create(game.map.width * 0.8, game.map.height * 0.2);
+    const startNodes = graph.nearby(from, 0, 40, 5);
+    const goalNodes = new Set(graph.nearby(to, 0, 40, 5));
+    // Needs a genuine alternative start candidate to reroute through - nothing to prove
+    // by excluding the only entry point there is.
+    if (startNodes.length <= 1) return;
+
+    const original = findPath(graph, startNodes, goalNodes, to, 0, 8000);
+    expect(original).not.toBeNull();
+    expect(original!.length).toBeGreaterThan(1);
+
+    // Exclude the very first start node the unmodified search actually used - the
+    // "stuck standing on/next to it" case in practice - not some arbitrary later hop.
+    const excluded = new Set([original![0]]);
+    const rerouted = findPath(graph, startNodes, goalNodes, to, 0, 8000, excluded);
+
+    expect(rerouted).not.toBeNull();
+    expect(rerouted!).not.toContain(original![0]);
+});
