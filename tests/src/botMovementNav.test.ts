@@ -543,6 +543,44 @@ test("Fleeing to cover that's only just barely safe still stops once genuinely h
     expect(bot.touchMoveActive).toBe(false);
 });
 
+// Regression for a real match capture: "wird gepusht und stirbt" - a bot camped one
+// exact spot for 7.6 straight seconds chaining heals with zero threat signal (no
+// sighting, no heard shot) the whole time, since `stillExposed`/`threatClosingIn` both
+// need *some* signal to fire on and a quiet push never produces one - the enemy simply
+// reappeared already close enough to finish it. Same close-but-settled geometry as the
+// test above (confirms the short-term "hold here" behavior is unaffected), but this
+// time enough real time passes with the threat position never updating at all - no
+// signal whatsoever - and the bot still has to resume moving on the strength of elapsed
+// time alone (see `SETTLED_MAX_S`).
+test("Fleeing resumes retreating once it's been settled too long, even with zero threat signal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const away = v2.create(1, 0);
+    const threatPos = v2.create(60, 60);
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 18)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 13)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 200 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(false); // holds here at first, same as the test above
+
+    // Same fixed spot, same unchanged threatPos - just enough real time elapsed (past
+    // SETTLED_MAX_S, 3.5s) that sitting still this long stops being "safe by default"
+    // on its own, with no sighting or gunshot needed to trigger it.
+    updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 4, graph);
+    expect(bot.touchMoveActive).toBe(true);
+});
+
 // Same setup, but the cover sits far enough away from the start that the bot genuinely
 // has put real distance behind it by the time it settles - it must actually stop once
 // that distance is enough, not retreat forever regardless of how safe it already is.

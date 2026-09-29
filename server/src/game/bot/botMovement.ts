@@ -293,6 +293,9 @@ export class BotMovementState {
      *  `retreatToCover`'s "threat closing in" check. `undefined` whenever cover isn't
      *  settled (kept in sync with `settledAtCover` resetting to `false`). */
     distAtSettle?: number;
+    /** Seconds since `settledAtCover` last became true - see `retreatToCover`'s "settled
+     *  too long" check/`SETTLED_MAX_S`. Reset alongside `distAtSettle`. */
+    settledForS = 0;
 
     /** Peek cycle while holding cover mid-fight - see `updatePeekCycle`. `peeking`
      *  false means hiding at `coverPos`; true means leaning out to `peekPos`. */
@@ -707,6 +710,16 @@ const RETREAT_SETTLE_MULT = 1.75;
  *  slightly different remembered point) - see `retreatToCover`'s "threat closing in"
  *  check. */
 const PUSH_DETECT_MARGIN = 4;
+/** How long settled-at-cover is willing to sit fully still with no threat signal at all
+ *  before treating that silence itself as a reason to move again - see the "settled too
+ *  long" check below. A real match capture showed a bot camp one exact spot for 7.6
+ *  straight seconds chaining multiple heals, getting silently walked up on and killed
+ *  the instant the enemy reappeared with no warning - `stillExposed`/`threatClosingIn`
+ *  both need *some* signal (a sighting, a heard shot) to fire at all, and a quiet push
+ *  simply never produces one until it's already too late. Long enough to comfortably
+ *  clear a single bandage/heal-item cycle uninterrupted, short enough that chaining
+ *  several in the exact same spot no longer happens for free. */
+const SETTLED_MAX_S = 3.5;
 
 /** Moves toward, then holds at, cover from `threatPos` - shared by healing, fleeing,
  *  reloading, and (with `holdAndPeek`) holding a mid-fight position instead of standing
@@ -735,6 +748,7 @@ function retreatToCover(
         state.coverPos = undefined;
         state.settledAtCover = false;
         state.distAtSettle = undefined;
+        state.settledForS = 0;
         state.coverRecheck = 0;
         state.peeking = false;
     }
@@ -750,6 +764,7 @@ function retreatToCover(
         if (!found || !state.coverPos || v2.distance(state.coverPos, found.pos) > 0.5) {
             state.settledAtCover = false;
             state.distAtSettle = undefined;
+            state.settledForS = 0;
         }
         state.coverObstacle = found?.obstacle;
         state.coverPos = found?.pos;
@@ -786,6 +801,9 @@ function retreatToCover(
         }
         state.settledAtCover = true;
         state.distAtSettle = v2.distance(bot.pos, threatPos);
+        state.settledForS = 0;
+    } else {
+        state.settledForS += dt;
     }
 
     if (holdAndPeek && nav) {
@@ -819,9 +837,17 @@ function retreatToCover(
     const stillExposed = hasLineOfSight(bot.game, threatPos, bot.pos, util.toGroundLayer(bot.layer));
     const threatClosingIn = state.distAtSettle !== undefined
         && v2.distance(bot.pos, threatPos) < state.distAtSettle - PUSH_DETECT_MARGIN;
+    // A third, independent reason to keep moving even with *no* threat signal at all: a
+    // quiet push (no shot fired, no sighting) never trips `stillExposed`/`threatClosingIn`
+    // in the first place, since both need some signal to react to - "wird gepusht und
+    // stirbt" from a real match capture, camped 7.6 straight seconds chaining heals at
+    // one exact spot with zero warning before the enemy reappeared already close enough
+    // to finish it. See `SETTLED_MAX_S`'s own doc comment for why this doesn't just
+    // interrupt an ordinary single heal.
+    const settledTooLong = state.settledForS > SETTLED_MAX_S;
     if (
         !holdAndPeek
-        && (stillExposed || threatClosingIn)
+        && (stillExposed || threatClosingIn || settledTooLong)
         && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT
     ) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);
