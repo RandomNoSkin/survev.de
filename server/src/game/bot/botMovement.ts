@@ -230,6 +230,10 @@ export class BotMovementState {
     headingToIdleGoal = true;
     /** Which of close/retreat/hold the bot is committed to - see `pickRangeMode`. */
     rangeMode: RangeMode = "hold";
+    /** Seconds spent in `close` mode without the target actually being visible - see
+     *  `BLIND_CLOSE_MAX_S`. Reset the instant the target is seen again or the mode isn't
+     *  `close`. */
+    blindCloseElapsedS = 0;
     /** Which side the bot is currently deflecting around an obstacle, so it commits to
      *  one direction instead of re-deciding independently every tick. */
     deflectSign: 1 | -1 = 1;
@@ -343,6 +347,18 @@ const MAX_RETREAT_DIST = 20;
  *  shooter's tracking), not a "stand further back" one - `SAFE_ENGAGE_DIST` alone was
  *  never going to fix it. */
 const SAFE_ENGAGE_DIST = 15;
+/** How long `close` mode keeps sprinting straight at a target it can't actually see
+ *  before giving up on that specific push and falling back to holding from cover
+ *  instead (see the `blindCloseElapsedS` override below `pickRangeMode`). A real match
+ *  capture showed the bot commit to a full-speed, cover-free chase toward nothing but a
+ *  gunshot's position estimate - which kept drifting as fresh shots landed - for 4.5
+ *  *straight* seconds of completely open ground, then took a hit within a quarter
+ *  second of the target actually reappearing. `close` mode's whole premise (matching a
+ *  real player closing on someone they're actively tracking) stops holding once "someone
+ *  I'm tracking" has degraded into "a rough, ageing guess" for this long - a cautious
+ *  player would have eased off cover-seeking well before then, not sprinted blind into
+ *  whatever's waiting. */
+const BLIND_CLOSE_MAX_S = 2;
 
 /**
  * Schmitt-trigger range gate: a bot must clear `[retreatEdge, closeEdge]` to START
@@ -1238,7 +1254,18 @@ export function updateMovement(
         state.strafeTimer -= dt;
         if (state.strafeTimer <= 0) rollStrafeCycle(state, aggression);
 
-        const mode = pickRangeMode(state, dist, sweet, band);
+        const rawMode = pickRangeMode(state, dist, sweet, band);
+        if (rawMode === "close" && !targetVisible) {
+            state.blindCloseElapsedS += dt;
+        } else {
+            state.blindCloseElapsedS = 0;
+        }
+        // Only downgrades this tick's actual behavior, not `state.rangeMode` itself -
+        // the underlying hysteresis keeps tracking "close" so a real sighting resumes
+        // pressing immediately, without needing to re-clear `closeEdge` from scratch.
+        const mode = rawMode === "close" && state.blindCloseElapsedS > BLIND_CLOSE_MAX_S
+            ? "hold"
+            : rawMode;
         if (mode === "close") {
             state.coverObstacle = undefined;
             state.coverPos = undefined;

@@ -1407,6 +1407,38 @@ test("engageHold's close mode avoids a building interior while chasing a memory,
     expect(visibleState.pathGoal).toEqual(threatPos);
 });
 
+// Regression for a real match capture: the bot committed to a full-speed, cover-free
+// "close" chase toward nothing but a gunshot's rough position estimate for 4.5 straight
+// seconds of open ground, then took a hit within a quarter second of the target actually
+// reappearing - "close" mode's own reasoning (matching a real player pressing someone
+// they're actively tracking) stops applying once it's been chasing a stale guess this
+// long. Same deterministic cover geometry as `findCover`'s own "sticks with the
+// currently-held obstacle" test - proven to produce a real, reachable hiding spot.
+test("engageHold's close mode gives up a blind chase past BLIND_CLOSE_MAX_S and holds from cover instead", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(60, 0));
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 12)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(5, 0)) });
+    const state = new BotMovementState();
+    const dist = v2.distance(bot.pos, threatPos); // ~65 - well past the close edge
+
+    // Under the cap: still fully committed to the open chase, no cover sought at all.
+    for (let i = 0; i < 15; i++) { // 1.5s - under BLIND_CLOSE_MAX_S (2s)
+        updateMovement(bot, state, "engageHold", threatPos, dist, 0.1, graph, false, undefined, false);
+    }
+    expect(state.coverPos).toBeUndefined();
+
+    // Past the cap, target still never reappeared: falls back to holding from the real
+    // cover that was there the whole time instead of continuing to sprint blind.
+    for (let i = 0; i < 10; i++) { // +1s, comfortably past the cap
+        updateMovement(bot, state, "engageHold", threatPos, dist, 0.1, graph, false, undefined, false);
+    }
+    expect(state.coverPos).toBeDefined();
+});
+
 test("util.sameLayer sanity used by tryOpenNearbyDoor treats ground and ground+stairs as the same layer", () => {
     // Guards the layer check inside tryOpenNearbyDoor/followPath against a regression
     // silently excluding doors that sit on a stairs-tagged ground tile.
