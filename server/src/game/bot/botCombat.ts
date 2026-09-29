@@ -1,13 +1,17 @@
 import type { BulletDef } from "../../../../shared/defs/gameObjects/bulletDefs.ts";
 import type { HealDef } from "../../../../shared/defs/gameObjects/gearDefs.ts";
 import type { GunDef } from "../../../../shared/defs/gameObjects/gunDefs.ts";
+import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs.ts";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GameConfig, type InventoryItem, WeaponSlot } from "../../../../shared/gameConfig.ts";
+import { ObjectType } from "../../../../shared/net/objectSerializeFns.ts";
+import { coldet } from "../../../../shared/utils/coldet.ts";
+import { collider } from "../../../../shared/utils/collider.ts";
 import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
+import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 import type { BotTierDef } from "./botDefs.ts";
-import { hasLineOfSight } from "./botPerception.ts";
 
 /** Fire-mode-specific trigger state, persisted across ticks by the brain.
  *  `burstTimer < 0` is the "not engaged yet" sentinel: a fresh engagement must start by
@@ -466,10 +470,45 @@ const THROW_MAX_DIST = 30;
  *  throwing - "wirft Granaten manchmal einfach vor sich gegen eine Wand". Deliberately
  *  *not* a full line-of-sight check all the way to `threatPos`: the bait case's whole
  *  point is throwing at someone who's specifically NOT in sight, over or around cover
- *  further away - this only catches a wall immediately blocking the bot's own throw,
- *  well short of `THROW_MIN_DIST`, which is never legitimately what's standing between
- *  the bot and a target worth throwing at. */
+ *  further away (a real throw arcs *over* a low obstacle it hasn't gained height to
+ *  clear yet only matters right at the start) - this only catches a wall immediately
+ *  blocking the bot's own throw, well short of `THROW_MIN_DIST`. */
 const THROW_CLEARANCE_DIST = 6;
+
+/** Sweeps the thrown projectile's own collision radius (not a thin ray - see below)
+ *  along the intended throw direction for `THROW_CLEARANCE_DIST`. A real match capture
+ *  showed a grenade thrown at a correctly-ranged, genuinely visible target instead clip
+ *  a wall right next to the bot, *bounce* (`Projectile`'s own obstacle collision
+ *  reflects it at 30% speed rather than just stopping it) and detonate back within its
+ *  own blast radius on the bot that threw it. A zero-width line-of-sight ray checked
+ *  over that same short distance used to miss exactly the kind of close wall/corner a
+ *  bot is *most* likely to be pressed against right when it decides to throw a covering
+ *  grenade while fleeing - the same "thin ray sees past what the real, radius-having
+ *  thing would still hit" gap `isDirClear` has its own fix for. */
+function hasThrowClearance(bot: Player, dir: Vec2, projectileRad: number): boolean {
+    const dist = THROW_CLEARANCE_DIST;
+    const aabb = collider.createAabbExtents(
+        bot.pos,
+        v2.create(dist + projectileRad + 1, dist + projectileRad + 1),
+    );
+    const objs = bot.game.grid.intersectCollider(aabb);
+    const obstacles: Obstacle[] = [];
+    for (let i = 0; i < objs.length; i++) {
+        if (objs[i].__type !== ObjectType.Obstacle) continue;
+        const o = objs[i] as Obstacle;
+        if (o.dead || !o.collidable || o.isWindow) continue;
+        if (!util.sameLayer(o.layer, bot.layer)) continue;
+        obstacles.push(o);
+    }
+    const steps = Math.ceil(dist);
+    for (let s = 1; s <= steps; s++) {
+        const probe = collider.createCircle(v2.add(bot.pos, v2.mul(dir, Math.min(s, dist))), projectileRad);
+        for (let i = 0; i < obstacles.length; i++) {
+            if (coldet.test(probe, obstacles[i].collider)) return false;
+        }
+    }
+    return true;
+}
 
 /** Per-bot grenade-throw state, persisted across ticks by the brain. */
 export class BotThrowState {
@@ -542,12 +581,12 @@ export function updateThrowable(
     if (friendlyFireInLine(bot, threatPos)) return;
     if (engageDist < THROW_MIN_DIST || engageDist > THROW_MAX_DIST) return;
 
-    const throwDir = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
-    const clearancePoint = v2.add(bot.pos, v2.mul(throwDir, THROW_CLEARANCE_DIST));
-    if (!hasLineOfSight(bot.game, bot.pos, clearancePoint, bot.layer)) return;
-
     const grenadeType = pickOffensiveThrowable(bot);
     if (!grenadeType) return;
+
+    const throwDir = v2.normalizeSafe(v2.sub(threatPos, bot.pos));
+    const projectileRad = (GameObjectDefs.typeToDefSafe(grenadeType) as ThrowableDef).rad;
+    if (!hasThrowClearance(bot, throwDir, projectileRad)) return;
 
     // Aimed explicitly at the intended spot, not left to whatever `bot.dir` currently
     // is - a blast-radius weapon can afford to just aim straight at it rather than

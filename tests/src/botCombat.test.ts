@@ -558,6 +558,42 @@ test("updateThrowable does not throw into an obstacle immediately in front of it
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });
 
+// Regression for a real match capture: a grenade thrown at a correctly-ranged, visible
+// target instead clipped a wall right next to the bot, bounced (`Projectile`'s own
+// collision reflects rather than stops), and detonated back on the bot that threw it -
+// a self-kill. The old clearance check was a zero-width ray that can graze past a
+// corner the thrown projectile's own body (`rad`) still clips, the same gap `isDirClear`
+// has its own fix for elsewhere. Geometry picked so the throw direction passes exactly
+// `offset` units outside `crate_01`'s corner, within `THROW_CLEARANCE_DIST` (6) of the
+// bot: less than frag's `rad` (1) is a real clip the old ray would still miss;
+// comfortably more than it is a genuine, uncontested clear throw.
+test("updateThrowable refuses a throw that grazes a corner within the projectile's own radius", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", center); // AABB spanning center +/- 2.25
+
+    const corner = v2.add(center, v2.create(2.25, -2.25));
+    const dir = v2.normalizeSafe(v2.create(1, 1)); // tangent past the corner, not through it
+    const outward = v2.normalizeSafe(v2.create(1, -1)); // away from the box, past the corner
+    const start = v2.sub(corner, v2.mul(dir, 5)); // 5 units short of the corner along dir
+
+    const grazing = game.playerBarn.addTestPlayer({ pos: v2.add(start, v2.mul(outward, 0.5)) });
+    equipActive(grazing, WeaponSlot.Primary, "m870", 5);
+    grazing.invManager.give("frag", 4);
+    const grazingThrow = new BotThrowState();
+    grazingThrow.cooldown = 0;
+    updateThrowable(grazing, grazingThrow, v2.add(grazing.pos, v2.mul(dir, 20)), 20, false, true, 0.05);
+    expect(grazingThrow.active).toBe(false);
+
+    const wellClear = game.playerBarn.addTestPlayer({ pos: v2.add(start, v2.mul(outward, 1.5)) });
+    equipActive(wellClear, WeaponSlot.Primary, "m870", 5);
+    wellClear.invManager.give("frag", 4);
+    const wellClearThrow = new BotThrowState();
+    wellClearThrow.cooldown = 0;
+    updateThrowable(wellClear, wellClearThrow, v2.add(wellClear.pos, v2.mul(dir, 20)), 20, false, true, 0.05);
+    expect(wellClearThrow.active).toBe(true);
+});
+
 // The bait case's whole point is throwing at someone who's specifically NOT in sight -
 // an obstacle further away, past the short clearance check but well before the actual
 // target, must not block the throw the way one immediately in front does.
