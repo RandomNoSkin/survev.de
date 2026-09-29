@@ -372,6 +372,36 @@ export class BotBrain {
 
         const aimResult = updateAim(bot, this.aim, this.tier, aimTarget, dt);
 
+        // Before `updateThrowable`, not after: a covering grenade and a just-becoming-
+        // safe heal can both turn eligible on the exact same tick - a bot forced to
+        // retreat almost always ends up at a `THROW_MIN_DIST`-`THROW_MAX_DIST` range and
+        // out of sight right around when it's also newly safe to heal. `updateThrowable`
+        // claims the `Throwable` slot and holds `shouldHeal`'s own `cookingThrowable`
+        // gate against it for the ~0.1s cook, which used to cost that first eligible
+        // heal tick to the grenade whenever both fired together - "er hätte sofort nach
+        // der Nade anfangen healen und weglaufen sollen", not have the heal wait out a
+        // throw it didn't need to make first. `updateThrowable` already refuses to start
+        // a new throw once `actionType !== None` (see its own `actionType` guard), so
+        // giving heal first claim here simply makes the throw wait a tick instead -
+        // never the other way around.
+        if (
+            directive === "heal"
+            && isSafeToHeal(
+                bot,
+                this.movement,
+                engageDist,
+                this.sustainedlyLost(bot) || this.desperateHeal,
+            )
+        ) {
+            updateHeal(
+                bot,
+                this.tier,
+                !!this.target,
+                this.positionSafeForHeal(bot),
+                this.desperateHeal,
+            );
+        }
+
         // Before weapon selection: an in-progress or freshly-triggered throw claims the
         // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
         // needs to see before it otherwise "fixes" the bot back onto a gun.
@@ -404,32 +434,6 @@ export class BotBrain {
         updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !this.sustainedlyLost(bot));
         updateReload(bot);
         updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
-
-        // Not just `directive === "heal"`: that flips true the instant `shouldHeal`
-        // does, before the retreat it kicks off in `updateMovement` above has actually
-        // gone anywhere. Consuming the item immediately regardless was the other half
-        // of the "starts a heal and cancels it right away" bug - `isSafeToHeal` gates
-        // the actual item-use on having reached cover or opened real distance first.
-        // Once healing is under way this is a no-op every tick anyway (`shouldHeal`
-        // itself returns false while `actionType !== None`), so it only matters for the
-        // very first tick.
-        if (
-            directive === "heal"
-            && isSafeToHeal(
-                bot,
-                this.movement,
-                engageDist,
-                this.sustainedlyLost(bot) || this.desperateHeal,
-            )
-        ) {
-            updateHeal(
-                bot,
-                this.tier,
-                !!this.target,
-                this.positionSafeForHeal(bot),
-                this.desperateHeal,
-            );
-        }
 
         if (didThink) {
             logBotTick(bot, {

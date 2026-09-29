@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
@@ -802,4 +802,48 @@ test("A hurt bot still walks back to a last-known enemy that was known to be low
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.9);
     expect(Math.abs(bot.touchMoveDir.y)).toBeLessThan(0.3);
+});
+
+// "er hätte sofort nach der Nade anfangen healen und weglaufen sollen" - a covering
+// grenade throw (`updateThrowable`, triggered by `isFleeing`) and a heal can turn
+// eligible on the exact same tick, since a bot forced to flee often ends up at exactly
+// a throwable-range distance right when it's also newly safe to heal. `update()` now
+// attempts the heal *before* `updateThrowable` for this reason - see the reordering's
+// own doc comment in botBrain.ts. `BotThrowState`'s initial cooldown is
+// `util.random(2, 5)`; mocking `Math.random` to 0 pins it at exactly 2 seconds, so the
+// throw's own gate (`cooldown -= dt`, then `if (cooldown > 0) return`) first lets a
+// throw through on the 40th `update(0.05)` call - reliable given the fixed dt step,
+// verified against float drift directly above. Health starts at 45 (low enough to keep
+// `isFleeing` - and so the throw's cooldown ticking down - true throughout, but not low
+// enough to pass `shouldHeal`'s own visible-enemy gate) and only drops to a heal-eligible
+// 20 right before that 40th call, so nothing but this exact tick could have started the
+// heal - a real "just took a hit" moment landing on the same tick the grenade was about
+// to go out.
+test("A heal that becomes safe on the same tick a covering grenade would fire starts the heal, not the throw", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+        const game = createGame(TeamMode.Solo, "test_normal");
+        primeGameClock(game);
+        const bot = makeBrainedBot(v2.create(0, 0), game);
+        game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) }); // inside throw range [14,30]
+        bot.invManager.give("frag", 4);
+        bot.invManager.give("bandage", 5);
+        bot.health = 45; // low (keeps isFleeing true) but not low enough for shouldHeal yet
+
+        let c = 2;
+        for (let i = 0; i < 40; i++) c -= 0.05;
+        expect(c).toBeLessThanOrEqual(0); // sanity: confirms the 40th call is the right one
+
+        for (let i = 0; i < 39; i++) bot.botBrain!.update(0.05);
+        expect(bot.actionType).toBe(GameConfig.Action.None); // not eligible yet - still refused
+
+        bot.health = 20; // a hit lands - now critical and past shouldHeal's 25% bar
+        bot.botBrain!.update(0.05); // the 40th call - both the heal and the throw want this tick
+
+        expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+        expect(bot.weaponManager.cookingThrowable).toBe(false);
+        expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Throwable);
+    } finally {
+        vi.restoreAllMocks();
+    }
 });
