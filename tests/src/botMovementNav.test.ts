@@ -1260,6 +1260,60 @@ test("A bot routing around an obstacle via followPath makes real progress, not a
     // candidates - nothing to assert against.
 });
 
+// Regression for a real match capture: raw displacement alone can be fooled. The bot
+// alternated between two near-opposite headings a hair unevenly right next to a
+// waypoint, creeping a real unit or more per `STUCK_CHECK_INTERVAL` window while never
+// actually closing in on it - `stuck`'s old raw-displacement check cleared every single
+// window, so neither the anti-stuck recovery nor the waypoint blacklist ever fired, and
+// the bot slowly drifted the *wrong* way while chained heals ran out the clock. Deterministic
+// repro: let a real path establish a genuine `pullTarget`, then orbit *around* that exact
+// point - real per-tick arc length, zero net progress toward it - and confirm it gets
+// blacklisted (see `PULL_TARGET_PROGRESS_MIN`) well before `stuck`'s own slower 3-window
+// bar would ever catch it from raw displacement alone.
+test("Orbiting a waypoint without closing in on it gets the waypoint blacklisted", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(8, 0)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(-30, 0)) });
+    const state = new BotMovementState();
+    const idleGoal = v2.add(center, v2.create(30, 0));
+    const dt = 0.1;
+
+    // Let a real path establish first, same as the test above.
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 30; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 6.5 * dt)) : pos;
+    }
+    expect(state.pullTarget).toBeDefined();
+    const pullPos = graph.pos(state.pullTarget!);
+    const radius = Math.min(1.5, v2.distance(pos, pullPos) * 0.5);
+
+    // Jump to the orbit's own starting point first and let the target settle there -
+    // teleporting can itself trigger one legitimate re-pick, which isn't what this is
+    // testing. Only *then* is it meaningful to call whatever it lands on "the" target
+    // this orbit is failing to make progress toward.
+    bot.pos = v2.add(pullPos, v2.create(radius, 0));
+    updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
+    expect(state.pullTarget).toBeDefined();
+    const orbitTarget = state.pullTarget!;
+
+    // Orbit around the exact waypoint instead of walking to it - real per-tick arc
+    // length, zero net progress toward it.
+    let blacklisted = false;
+    for (let i = 1; i < 40 && !blacklisted; i++) {
+        const angle = i * 0.5;
+        bot.pos = v2.add(pullPos, v2.create(Math.cos(angle) * radius, Math.sin(angle) * radius));
+        updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
+        blacklisted = state.blacklistedNodes.has(orbitTarget);
+    }
+
+    expect(blacklisted).toBe(true);
+});
+
 // "sich nicht innen trappen zu lassen": a raw straight-line retreat goal has no idea it
 // happens to land inside a building's interior lattice - `preferNonInteriorGoal` nudges
 // it onto the nearest non-`interior` node instead when the graph has one nearby, so

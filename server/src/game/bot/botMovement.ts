@@ -46,6 +46,11 @@ const MAX_PATH_EXPANSIONS = 1500;
 const NODE_SEARCH_RADIUS = 40;
 const STUCK_CHECK_INTERVAL = 1;
 const STUCK_MOVE_THRESHOLD = 1;
+/** Minimum real distance closed toward the current path waypoint per stuck-check window
+ *  to count as genuine progress - see `stuck`'s "no progress toward the actual target"
+ *  check. Deliberately smaller than `STUCK_MOVE_THRESHOLD`: this only has to catch
+ *  "basically not closing in at all", not demand fast progress. */
+const PULL_TARGET_PROGRESS_MIN = 0.5;
 /** How many consecutive `STUCK_CHECK_INTERVAL` windows of zero progress it takes before
  *  `BotMovementState.stuck` (the "give up and fight" signal) actually goes true - see
  *  its own doc comment for why this needs real confidence, not a single bad window. */
@@ -248,6 +253,16 @@ export class BotMovementState {
      *  and let the next tick request a fresh one. */
     stuckTimer = 0;
     stuckAnchor: Vec2 = v2.create(0, 0);
+    /** `pullTarget` and its distance at the start of the current stuck-check window -
+     *  see `stuck`'s "no progress toward the actual waypoint" check. A slow, wrong-
+     *  direction drift (alternating between two near-opposite headings a hair unevenly,
+     *  a real match capture found) can clear `STUCK_MOVE_THRESHOLD` in raw displacement
+     *  every single window while never actually closing in on where it's headed - this
+     *  catches that case directly instead of trusting raw movement alone. `undefined`
+     *  whenever there's no path being followed, or the target changed mid-window (a
+     *  real, voluntary re-pick, not evidence of anything stuck). */
+    pullTargetAtCheck?: number;
+    distToPullTargetAtCheck?: number;
     /** Whether movement genuinely *tried* to go somewhere (a non-trivial `move` vector)
      *  at any point since the last stuck check - see `stuck`. Distinguishes "tried to
      *  move but the position barely changed" (a real obstruction) from "chose to stand
@@ -1295,8 +1310,22 @@ export function updateMovement(
     state.triedToMoveSinceCheck ||= v2.length(move) >= 0.01;
     state.stuckTimer += dt;
     if (state.stuckTimer >= STUCK_CHECK_INTERVAL) {
+        // Raw displacement alone can be fooled: a real match capture found the bot
+        // alternating between two near-opposite headings a hair unevenly, creeping a
+        // real unit or more per window in the *wrong* direction - clearing
+        // `STUCK_MOVE_THRESHOLD` every single check while never actually closing in on
+        // `pullTarget`. Only counts when the same waypoint was the goal for the *whole*
+        // window (a fresh, voluntary re-pick isn't evidence of anything stuck) and a nav
+        // graph is actually in play.
+        const sameTargetAllWindow = nav
+            && state.pullTarget !== undefined
+            && state.pullTarget === state.pullTargetAtCheck
+            && state.distToPullTargetAtCheck !== undefined;
+        const noRealProgress = sameTargetAllWindow
+            && state.distToPullTargetAtCheck! - v2.distance(bot.pos, nav!.pos(state.pullTarget!))
+                < PULL_TARGET_PROGRESS_MIN;
         const stuckThisWindow = state.triedToMoveSinceCheck
-            && v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD;
+            && (v2.distance(bot.pos, state.stuckAnchor) < STUCK_MOVE_THRESHOLD || noRealProgress);
         state.stuckStreak = stuckThisWindow ? state.stuckStreak + 1 : 0;
         state.stuck = state.stuckStreak >= STUCK_STREAK_FOR_FIGHT;
         if (stuckThisWindow) {
@@ -1323,6 +1352,10 @@ export function updateMovement(
         state.stuckTimer = 0;
         state.stuckAnchor = v2.copy(bot.pos);
         state.triedToMoveSinceCheck = false;
+        state.pullTargetAtCheck = state.pullTarget;
+        state.distToPullTargetAtCheck = nav && state.pullTarget !== undefined
+            ? v2.distance(bot.pos, nav.pos(state.pullTarget))
+            : undefined;
     }
 
     if (v2.length(move) < 0.01) {
