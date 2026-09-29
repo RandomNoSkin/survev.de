@@ -1,8 +1,8 @@
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns.ts";
+import { coldet } from "../../../../shared/utils/coldet.ts";
 import { collider } from "../../../../shared/utils/collider.ts";
-import { collisionHelpers } from "../../../../shared/utils/collisionHelpers.ts";
 import { math } from "../../../../shared/utils/math.ts";
 import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
@@ -364,26 +364,37 @@ function pickRangeMode(
  *  it sideways and never letting it actually settle within `COVER_REACHED_DIST` - which
  *  looked like "never really goes into cover" and "never peeks" from the outside, since
  *  the peek cycle only starts once cover is actually reached. */
-function isDirClear(bot: Player, dir: Vec2, dist: number, ignore?: Obstacle): boolean {
-    const aabb = collider.createAabbExtents(bot.pos, v2.create(dist + 1, dist + 1));
+// Real movement collision stops the bot's whole `bot.rad`-radius body, not just its
+// center point - a thin zero-width ray straight down `dir` used to read a heading as
+// "clear" right past a corner the bot's own body still clipped, so the commanded
+// direction and the actual (zero) result disagreed right at that corner. Position
+// unchanged next tick means the same heading gets recomputed and, since it's right on
+// that knife's edge, sub-unit jitter can flip the same ray test from clear to blocked
+// and back - two near-opposite headings (direct vs. the full reverse below) alternating
+// every tick with no net progress at all, which is exactly the "vibrating in place at a
+// wall corner for several real seconds" bug this is for. Sweeping a `bot.rad` disc
+// along the segment instead (one obstacle overlap test per unit of distance) actually
+// answers "can my body get through here", not just "is the point directly ahead free".
+export function isDirClear(bot: Player, dir: Vec2, dist: number, ignore?: Obstacle): boolean {
+    const aabb = collider.createAabbExtents(bot.pos, v2.create(dist + bot.rad + 1, dist + bot.rad + 1));
     const objs = bot.game.grid.intersectCollider(aabb);
     const obstacles: Obstacle[] = [];
     for (let i = 0; i < objs.length; i++) {
         if (objs[i].__type !== ObjectType.Obstacle) continue;
         const o = objs[i] as Obstacle;
+        if (o.dead || !o.collidable || o.isWindow) continue;
+        if (!util.sameLayer(o.layer, bot.layer)) continue;
         if (isOpenableDoor(o) || o === ignore) continue;
         obstacles.push(o);
     }
-    const hitDist = collisionHelpers.intersectSegmentDist(
-        obstacles,
-        bot.pos,
-        dir,
-        dist,
-        0,
-        bot.layer,
-        false,
-    );
-    return hitDist >= dist - 0.1;
+    const steps = Math.ceil(dist);
+    for (let s = 1; s <= steps; s++) {
+        const probe = collider.createCircle(v2.add(bot.pos, v2.mul(dir, Math.min(s, dist))), bot.rad);
+        for (let i = 0; i < obstacles.length; i++) {
+            if (coldet.test(probe, obstacles[i].collider)) return false;
+        }
+    }
+    return true;
 }
 
 /** Opens the nearest closed, unlocked door within interaction range, if any - the same

@@ -6,6 +6,7 @@ import {
     BotMovementState,
     findCover,
     followPath,
+    isDirClear,
     preferNonInteriorGoal,
     tryOpenNearbyDoor,
     updateMovement,
@@ -1025,6 +1026,32 @@ test("Fleeing gets unstuck and moves away even with an obstacle directly in its 
 
     // No obstacle in this random layout happened to sit squarely in the way within the
     // sampled candidates - nothing to assert against.
+});
+
+// Regression for a real match capture: `isDirClear` used to test a single zero-width ray
+// down the center of the bot's own path, not the `bot.rad`-wide body that actually has to
+// fit through. Right at a box's corner, a heading can graze past just wide enough to miss
+// that thin ray while the bot's real collision radius still clips the corner and gets
+// stopped dead - "clear" and "the bot actually moved" disagreeing right where it matters
+// most. Geometry picked so the line passes exactly `offset` units outside `crate_01`'s
+// corner: less than `bot.rad` (1) is a real collision the thin ray would still miss;
+// comfortably more than it is a genuine, uncontested clear path - proving this isn't just
+// coincidentally always blocked.
+test("isDirClear accounts for the bot's own body width, not just a thin center ray", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", center); // AABB spanning center +/- 2.25
+
+    const corner = v2.add(center, v2.create(2.25, -2.25));
+    const dir = v2.normalizeSafe(v2.create(1, 1)); // tangent past the corner, not through it
+    const outward = v2.normalizeSafe(v2.create(1, -1)); // away from the box, past the corner
+    const start = v2.sub(corner, v2.mul(dir, 8)); // 8 units short of the corner along dir
+
+    const grazing = game.playerBarn.addTestPlayer({ pos: v2.add(start, v2.mul(outward, 0.6)) });
+    expect(isDirClear(grazing, dir, 12)).toBe(false);
+
+    const wellClear = game.playerBarn.addTestPlayer({ pos: v2.add(start, v2.mul(outward, 1.5)) });
+    expect(isDirClear(wellClear, dir, 12)).toBe(true);
 });
 
 // Regression for a real "bot freezes in place for several seconds" match capture: local
