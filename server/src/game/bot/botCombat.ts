@@ -259,14 +259,35 @@ export function updateWeaponSelection(
 }
 
 /** Same effect as a human pressing the reload key: just requests one, the weapon
- *  manager owns the actual timing/animation. */
-export function updateReload(bot: Player): void {
+ *  manager owns the actual timing/animation.
+ *
+ *  Single-loader guns (shell-by-shell reload - `maxReload < maxClip`, a pump/bolt gun's
+ *  tube or chamber, as opposed to swapping a whole magazine) top off whenever it's safe
+ *  to, not just once fully dry - "soll single reload guns wie spas und mosin immer
+ *  reloaden wenn gerade möglich um eig immer full mag zu haben", the same habit a real
+ *  player has of topping off a shotgun/bolt gun between engagements instead of waiting
+ *  to run completely dry. A magazine gun still only reloads once empty: swapping a mag
+ *  that's merely down a few rounds burns the *entire* magazine's worth of downtime for
+ *  no reason a single-loader (down one shell costs one shell's worth of downtime) never
+ *  has. Gated on no currently visible target so this never chooses to top off instead
+ *  of firing back mid-exchange - there's nothing to gain from one extra shell while
+ *  already able to shoot. */
+export function updateReload(bot: Player, hasVisibleTarget: boolean): void {
     const wm = bot.weaponManager;
     const cur = wm.curWeapIdx;
     if (cur !== WeaponSlot.Primary && cur !== WeaponSlot.Secondary) return;
     const weapon = wm.weapons[cur];
-    if (!weapon.type || weapon.ammo > 0 || wm.scheduledReload) return;
-    wm.scheduledReload = true;
+    if (!weapon.type || wm.scheduledReload) return;
+    if (weapon.ammo <= 0) {
+        wm.scheduledReload = true;
+        return;
+    }
+    if (hasVisibleTarget) return;
+    const def = GameObjectDefs.typeToDefSafe(weapon.type) as GunDef;
+    const stats = wm.getAmmoStats(def);
+    if (stats.maxReload < stats.maxClip && weapon.ammo < stats.maxClip) {
+        wm.scheduledReload = true;
+    }
 }
 
 /** True if a living teammate sits between the bot and `targetPos` - the single most

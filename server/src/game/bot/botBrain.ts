@@ -432,7 +432,7 @@ export class BotBrain {
         // `updateWeaponSelection`. It also no-ops entirely while mid-action (healing,
         // reviving, ...), since switching would otherwise cancel that action.
         updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !this.sustainedlyLost(bot));
-        updateReload(bot);
+        updateReload(bot, !!this.target);
         updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
 
         if (didThink) {

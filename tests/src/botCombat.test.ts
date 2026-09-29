@@ -309,7 +309,7 @@ test("An empty clip schedules a reload", () => {
     const bot = game.playerBarn.addTestPlayer({});
     equipActive(bot, WeaponSlot.Primary, "m870", 0);
 
-    updateReload(bot);
+    updateReload(bot, false);
     expect(bot.weaponManager.scheduledReload).toBe(true);
 });
 
@@ -327,7 +327,7 @@ test("A reload request survives a weapon switch on the same tick", () => {
     // Correct order: selection first (may switch to the mosin, since the m870 is dry),
     // then reload - for whichever weapon selection actually settled on.
     updateWeaponSelection(bot, BOT_TIERS.normal, new BotFireState(), 6);
-    updateReload(bot);
+    updateReload(bot, false);
 
     if (bot.weaponManager.curWeapIdx === WeaponSlot.Primary) {
         expect(bot.weaponManager.scheduledReload).toBe(true);
@@ -336,6 +336,43 @@ test("A reload request survives a weapon switch on the same tick", () => {
         // no *stale* reload request left over from before the switch.
         expect(bot.weaponManager.scheduledReload).toBe(false);
     }
+});
+
+// "soll single reload guns wie spas und mosin immer reloaden wenn gerade möglich um eig
+// immer full mag zu haben" - a shell-by-shell gun (`maxReload < maxClip`) tops off
+// whenever it's down any amount, not just once fully dry, as long as nothing's worth
+// shooting at right now.
+test("A single-loader gun tops off when it's down a shell and nothing's visible", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "spas12", 8); // maxClip 9 - down one shell
+
+    updateReload(bot, false);
+    expect(bot.weaponManager.scheduledReload).toBe(true);
+});
+
+// Topping off is only worth it during a lull - reloading instead of shooting back mid-
+// exchange throws away a shot that's already loaded for no gain.
+test("A single-loader gun does not top off while a target is visible", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "spas12", 8);
+
+    updateReload(bot, true);
+    expect(bot.weaponManager.scheduledReload).toBe(false);
+});
+
+// A magazine gun (`maxReload === maxClip`) swaps the *whole* clip in one reload, unlike
+// a single-loader's one-shell top-up - reloading merely-not-full burns that entire
+// magazine's worth of downtime for a couple of rounds, so it still only reloads once
+// actually empty (see "An empty clip schedules a reload" above for the empty case).
+test("A magazine gun does not top off early, even with nothing visible", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "ak47", 25); // maxClip 30 - down a few rounds
+
+    updateReload(bot, false);
+    expect(bot.weaponManager.scheduledReload).toBe(false);
 });
 
 // Regression for the exact bug reported in manual play: `setCurWeapIndex`
