@@ -637,9 +637,42 @@ test("Fleeing resumes retreating once it's been settled too long, even with zero
     expect(bot.touchMoveActive).toBe(false); // holds here at first, same as the test above
 
     // Same fixed spot, same unchanged threatPos - just enough real time elapsed (past
-    // SETTLED_MAX_S, 3.5s) that sitting still this long stops being "safe by default"
-    // on its own, with no sighting or gunshot needed to trigger it.
+    // SETTLED_MAX_S) that sitting still this long stops being "safe by default" on its
+    // own, with no sighting or gunshot needed to trigger it.
     updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 4, graph);
+    expect(bot.touchMoveActive).toBe(true);
+});
+
+// Regression for a second, more severe real match capture: a bot went fully still at 46
+// units' last-known separation and healed blind for 3.39s - just *under* the old
+// SETTLED_MAX_S (3.5) - before taking a lethal hit the instant the enemy reappeared
+// already at point-blank range, having silently closed that entire gap while the bot sat
+// there. Resuming movement doesn't cancel an in-progress heal (see `SETTLED_MAX_S`'s own
+// doc comment - `Player.cancelAction` is never called by movement), so there's no real
+// cost to cutting this bar down hard - locks in the tightened value (1.2s) directly,
+// rather than just proving *some* value eventually resumes movement like the test above.
+test("Fleeing resumes well before the old, nearly-fatal 3.5s settle bar", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const away = v2.create(1, 0);
+    const threatPos = v2.create(60, 60);
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 18)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 13)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 200 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+
+    // 2s of total silence: past the new 1.2s bar, comfortably short of the old 3.5s one -
+    // this is exactly the gap a real pursuer can close unseen.
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 2, graph);
     expect(bot.touchMoveActive).toBe(true);
 });
 

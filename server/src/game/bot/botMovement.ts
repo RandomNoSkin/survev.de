@@ -789,10 +789,20 @@ const PUSH_DETECT_MARGIN = 4;
  *  straight seconds chaining multiple heals, getting silently walked up on and killed
  *  the instant the enemy reappeared with no warning - `stillExposed`/`threatClosingIn`
  *  both need *some* signal (a sighting, a heard shot) to fire at all, and a quiet push
- *  simply never produces one until it's already too late. Long enough to comfortably
- *  clear a single bandage/heal-item cycle uninterrupted, short enough that chaining
- *  several in the exact same spot no longer happens for free. */
-const SETTLED_MAX_S = 3.5;
+ *  simply never produces one until it's already too late.
+ *
+ *  Cut hard from 3.5 down to 1.2 after a second real capture: a bot went completely
+ *  still at 46 units' last-known separation, healed blind for 3.39s - just *under* the
+ *  old bar - and took a lethal hit the instant the enemy reappeared already at point-
+ *  blank range, having closed that entire gap silently the whole time. 3.5 was chosen
+ *  to "comfortably clear a single bandage/heal-item cycle uninterrupted" - a mistaken
+ *  premise: resuming movement here doesn't touch `actionType` at all, so an in-progress
+ *  heal keeps ticking to completion exactly the same whether this fires after 1.2s or
+ *  10s (see `Player.cancelAction`'s actual call sites - none of them are movement).
+ *  There is no real bandage-completion cost to cutting this down hard, only upside: less
+ *  time spent as a stationary, silently-trackable target the instant nothing else is
+ *  telling the bot to move. */
+const SETTLED_MAX_S = 1.2;
 
 /** Moves toward, then holds at, cover from `threatPos` - shared by healing, fleeing,
  *  reloading, and (with `holdAndPeek`) holding a mid-fight position instead of standing
