@@ -847,3 +847,42 @@ test("A heal that becomes safe on the same tick a covering grenade would fire st
         vi.restoreAllMocks();
     }
 });
+
+// "das macht nur Sinn wenn der Gegner hinter Cover healt" wired end-to-end through the
+// full brain: once the enemy has been genuinely, sustainedly out of sight for a while
+// (`sustainedlyLost`, not just the instant-after-losing-sight bait window) a healthy bot
+// with nothing else driving it to throw still lobs one at their last-known spot - by this
+// point they're very likely holding still behind cover healing, not mid-peek-cycle.
+// `game.now += 3000` clears *both* `SUSTAINED_LOST_MS` (2.5s) and `RECENTLY_VISIBLE_MS`
+// (1.2s), isolating this from the bait-throw case; staying healthy the whole time
+// isolates it from `isFleeing` too - nothing but the enemy's own sustained absence could
+// have triggered this throw.
+test("A healthy bot throws a grenade at a sustainedly-lost target's last-known spot", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0); // pins BotThrowState's cooldown at util.random(2,5)'s floor, 2s
+    try {
+        const game = createGame(TeamMode.Solo, "test_normal");
+        primeGameClock(game);
+        const bot = makeBrainedBot(v2.create(50, 50), game);
+        const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) }); // 20 units - inside [14, 30]
+        bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+        bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+        bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+        bot.invManager.give("frag", 4);
+
+        bot.botBrain!.update(0.05); // spots the target, records its last-known position
+        target.pos = v2.create(500, 500); // well out of FOV - no longer currently visible
+
+        game.now += 3000;
+
+        let threw = false;
+        for (let i = 0; i < 45 && !threw; i++) { // clears the pinned 2s throw cooldown
+            bot.botBrain!.update(0.05);
+            threw = bot.weaponManager.curWeapIdx === WeaponSlot.Throwable;
+        }
+
+        expect(threw).toBe(true);
+        expect(bot.health).toBe(100); // confirms this isn't the isFleeing case
+    } finally {
+        vi.restoreAllMocks();
+    }
+});

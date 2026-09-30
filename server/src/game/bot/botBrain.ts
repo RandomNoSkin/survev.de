@@ -406,9 +406,12 @@ export class BotBrain {
         // `Throwable` slot for this tick, which `updateWeaponSelection`'s own guard
         // needs to see before it otherwise "fixes" the bot back onto a gun.
         // `threatPos`/`engageDist`/`recentlyVisible` (already computed above for
-        // movement) are what let it bait a target that just ducked into cover.
-        // `isFleeing` is the *other* legitimate reason to throw - a bot that's healthy
-        // and can see its target should always just shoot instead (see
+        // movement) are what let it bait a target that just ducked into cover;
+        // `sustainedlyLost` (already computed for `isSafeToHeal`/`positionSafeForHeal`)
+        // is the *enemy*-side "probably healing behind cover right now" case - a much
+        // better-telegraphed target than the instant right after `recentlyVisible`.
+        // `isFleeing` is the third, bot-side legitimate reason to throw - a bot that's
+        // healthy and can see its target should always just shoot instead (see
         // `updateThrowable`'s own doc comment for why finishing a visible target with a
         // grenade used to be a case here, and isn't anymore).
         const isFleeing = directive === "flee" || directive === "heal";
@@ -418,6 +421,7 @@ export class BotBrain {
             threatPos,
             engageDist,
             recentlyVisible,
+            this.sustainedlyLost(bot),
             isFleeing,
             dt,
         );

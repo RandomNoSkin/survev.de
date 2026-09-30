@@ -554,20 +554,26 @@ function pickOffensiveThrowable(bot: Player): InventoryItem | undefined {
 /**
  * Tactical grenade use - deliberately *not* a general "target visible, worth hurting"
  * tool: a gun is always the better choice whenever it's actually usable, so this never
- * throws just because a target happens to be there and in range. Only two cases earn
- * the slot instead of a bullet, both cases where shooting genuinely isn't the better
- * option right now:
+ * throws just because a target happens to be there and in range. Only three cases earn
+ * the slot instead of a bullet, all cases where shooting genuinely isn't the better
+ * option right now - "das macht nur Sinn wenn der Gegner hinter Cover healt, oder man ihn
+ * aus der Cover baiten will um ihn zu pushen, oder wenn man weg läuft um zu reseten":
  * - The enemy just ducked out of sight nearby (`justLostSight`, see `BotBrain`'s
  *   `recentlyVisible`) - can't shoot what it can't see, so lobbing one at `threatPos`,
  *   their last-known spot, is exactly the "bait them out of cover" tactic a real player
  *   uses a grenade for.
+ * - The enemy has been out of sight long enough (`enemyLikelyHealing`, see `BotBrain`'s
+ *   `sustainedlyLost`) that they're very likely holding still behind cover healing, not
+ *   just mid-peek-cycle - a much better-telegraphed target than the instant-after-
+ *   `justLostSight` case above, worth its own throw even once that shorter window has
+ *   already passed without one landing.
  * - The bot itself is hurt enough to be retreating (`isFleeing` - the brain's `flee`/
  *   `heal` directive) - trying to out-shoot a healthy pursuer while low is a losing
  *   trade; tossing one back at the threat to cover the retreat is worth the slot even
  *   though winning the fight outright isn't the goal here.
  *
- * `bot.dirNew` is aimed at `threatPos` explicitly in both cases, since `updateAim` only
- * ever tracks a currently-visible target and leaves `dir` untouched once one isn't.
+ * `bot.dirNew` is aimed at `threatPos` explicitly in all three cases, since `updateAim`
+ * only ever tracks a currently-visible target and leaves `dir` untouched once one isn't.
  *
  * Only owns the `Throwable` weapon slot while `active` - `updateWeaponSelection` leaves
  * that slot alone for the same reason (see its own guard), and this hands it straight
@@ -580,6 +586,7 @@ export function updateThrowable(
     threatPos: Vec2 | undefined,
     engageDist: number,
     justLostSight: boolean,
+    enemyLikelyHealing: boolean,
     isFleeing: boolean,
     dt: number,
 ): void {
@@ -598,7 +605,7 @@ export function updateThrowable(
     throwState.cooldown -= dt;
     if (throwState.cooldown > 0) return;
     if (bot.actionType !== GameConfig.Action.None) return;
-    if (!threatPos || !(justLostSight || isFleeing)) return;
+    if (!threatPos || !(justLostSight || enemyLikelyHealing || isFleeing)) return;
     if (friendlyFireInLine(bot, threatPos)) return;
     if (engageDist < THROW_MIN_DIST || engageDist > THROW_MAX_DIST) return;
 
