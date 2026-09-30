@@ -943,10 +943,26 @@ function retreatToCover(
     // one exact spot with zero warning before the enemy reappeared already close enough
     // to finish it. See `SETTLED_MAX_S`'s own doc comment for why this doesn't just
     // interrupt an ordinary single heal.
+    //
+    // Deliberately its OWN check, never folded into the `stillExposed`/`threatClosingIn`
+    // condition below (which is gated on still being within `minCoverDist *
+    // RETREAT_SETTLE_MULT`): a real match capture showed a bot settle at `engageDist` 38 -
+    // comfortably past that gate (28 for a heal) - and then sit completely still for a
+    // full 3+ seconds with zero signal, never once re-checked, because *no* distance was
+    // ever going to let `settledTooLong` past that outer condition. The last-known
+    // distance being "far enough" when the bot stopped says nothing about where the enemy
+    // actually is by the time `SETTLED_MAX_S` elapses - a hunting enemy closes ground
+    // exactly as unseen from 38 units as from 20. This is the whole reason
+    // `settledTooLong` exists at all (no signal, ever); gating it on the very distance
+    // that produced "no signal" undid it completely the moment a retreat succeeded well
+    // enough to clear that bar.
     const settledTooLong = state.settledForS > SETTLED_MAX_S;
+    if (!holdAndPeek && settledTooLong) {
+        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+    }
     if (
         !holdAndPeek
-        && (stillExposed || threatClosingIn || settledTooLong)
+        && (stillExposed || threatClosingIn)
         && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT
     ) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);

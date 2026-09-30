@@ -713,6 +713,44 @@ test("Fleeing to cover that's already well past the settle distance stops there"
     expect(state.stuck).toBe(false);
 });
 
+// Regression for a real match capture: a bot settled at `engageDist` 38 - comfortably
+// past RETREAT_SETTLE_MULT's bar (28 for a heal) - then sat completely still for over 3
+// real seconds with zero threat signal, never once re-checked, and took a lethal hit the
+// instant the enemy reappeared already close. `settledTooLong` (SETTLED_MAX_S) exists
+// specifically for "no signal at all, ever" - but used to be gated behind the very same
+// distance check that `stillExposed`/`threatClosingIn` use, so clearing that distance
+// (the retreat's own success) silently disabled the *only* safety net that doesn't need a
+// signal to fire. Same "already well past the settle distance" geometry as the test
+// above - confirms the far-away stop is real, but must not be forever.
+test("Fleeing resumes once settled too long, even far past the settle distance", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const away = v2.create(1, 0);
+    const threatPos = v2.create(60, 60);
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 40)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 400 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+    expect(v2.distance(pos, threatPos)).toBeGreaterThan(28); // past RETREAT_SETTLE_MULT's bar
+
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(false); // holds here at first, same as the test above
+
+    // 2s of total silence: past SETTLED_MAX_S, with the threat position never updating -
+    // must resume regardless of how far away that stale position already is.
+    updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 2, graph);
+    expect(bot.touchMoveActive).toBe(true);
+});
+
 // "muss vor allem weiter retreaten wenn der Gegner pusht um die Fertigstellung des
 // Healens zu garantieren" - settling behind real cover must not mean standing rooted
 // the instant the threat is merely out of sight for now. If the threat is actively
