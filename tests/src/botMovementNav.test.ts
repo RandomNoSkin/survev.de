@@ -506,6 +506,68 @@ test("Cover is dropped and re-picked the instant its obstacle dies, not on the n
     expect(state.coverObstacle).not.toBe(firstCover);
 });
 
+// Regression for a real match capture: the exact same physical cover point (identical
+// coordinates) was found, lost, and found again over and over across several seconds -
+// `findCover`'s checks (`isBodyHidden`, the `minDistFromThreat` gate) depend on `threatPos`
+// itself, a live read on a moving/estimated enemy position, so a threat distance wobbling
+// across a gate's threshold can flip "valid cover" to "nothing found" and back without the
+// bot's own situation changing at all. Before the fix, every miss reset `settledAtCover`
+// unconditionally, so the peek cycle - which only starts once settled - never got a real
+// chance to run. Fixed geometry with the threat kept on the exact same ray from the cover
+// obstacle (so the candidate point itself never moves, only its distance from the threat
+// does) isolates the `minCoverDist` gate as the controlled, deterministic stand-in for that
+// same-spot-flickers-valid symptom - see `COVER_MISS_GRACE`.
+test("Fleeing tolerates a single findCover miss on still-alive cover instead of un-settling", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const cratePos = v2.create(100, 100);
+    game.map.genObstacle("crate_01", cratePos);
+    const graph = buildNavGraph(game);
+
+    const away = v2.create(1, 0); // cover candidate sits on the +x side of the crate
+    // Same direction from the crate both times, so the candidate point itself is
+    // identical either way - only its distance from the threat (relative to
+    // SAFE_HEAL_DIST, 16) changes.
+    const threatFar = v2.sub(cratePos, v2.mul(away, 25)); // candidate clears SAFE_HEAL_DIST
+    const threatNear = v2.sub(cratePos, v2.mul(away, 10)); // candidate falls under it
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(cratePos, v2.mul(away, 10)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 200 && !state.settledAtCover; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatFar, v2.distance(pos, threatFar), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.settledAtCover).toBe(true);
+    const settledCover = state.coverPos;
+
+    // One recompute with the threat close enough to fail SAFE_HEAL_DIST - a single miss
+    // on cover that hasn't actually changed. Should be graced, not treated as a loss.
+    bot.pos = pos;
+    state.coverRecheck = 0;
+    updateMovement(bot, state, "flee", threatNear, v2.distance(pos, threatNear), 0.1, graph);
+    expect(state.coverMissStreak).toBe(1);
+    expect(state.settledAtCover).toBe(true);
+    expect(state.coverPos).toEqual(settledCover);
+
+    // The threat backs off again immediately after - confirms the graced miss didn't
+    // silently corrupt anything, and the streak clears back to 0 on the next real find.
+    state.coverRecheck = 0;
+    updateMovement(bot, state, "flee", threatFar, v2.distance(pos, threatFar), 0.1, graph);
+    expect(state.coverMissStreak).toBe(0);
+    expect(state.settledAtCover).toBe(true);
+    expect(state.coverPos).toEqual(settledCover);
+
+    // A second miss in a row, past the grace period, is a genuine loss - the bot un-
+    // settles and looks elsewhere rather than holding a spot that's stopped working.
+    state.coverRecheck = 0;
+    updateMovement(bot, state, "flee", threatNear, v2.distance(pos, threatNear), 0.1, graph);
+    state.coverRecheck = 0;
+    updateMovement(bot, state, "flee", threatNear, v2.distance(pos, threatNear), 0.1, graph);
+    expect(state.settledAtCover).toBe(false);
+});
+
 // Regression: reaching cover that only barely cleared SAFE_HEAL_DIST (16) used to be
 // abandoned immediately for "keep opening distance" (see RETREAT_SETTLE_MULT) purely
 // because raw distance to the threat was still under that bar - even though the cover
@@ -723,6 +785,41 @@ test("engageHold cycles between hiding at cover and peeking out to trade shots",
     // No isolated obstacle in this random layout happened to cycle within budget -
     // nothing to assert against (see the "no such pair" skip pattern used elsewhere
     // for randomized map generation).
+});
+
+// "das peaken muss ... weniger Fläche offenbaren" - a peek should lean out only as far
+// past cover's edge as it takes to regain line of sight, not further. Fixed, open
+// geometry (an isolated crate, nothing else nearby) means the very first, narrowest
+// angle in `PEEK_ANGLES` already clears line of sight, so `findPeekSpot`'s closest-first
+// loop is guaranteed to pick it - this isolates "how far the winning angle actually leans"
+// from the separate, unrelated question of whether a *wider* fallback angle is sometimes
+// needed against thinner or oddly-shaped cover.
+test("Peeking leans out only as far as PEEK_ANGLES' narrowest angle, not further", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", center);
+    const graph = buildNavGraph(game);
+
+    const away = v2.create(1, 0);
+    const threatPos = v2.sub(center, v2.mul(away, 40));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.mul(away, 5)) });
+    const state = new BotMovementState();
+
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 200 && !state.peeking; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "engageHold", threatPos, 25, 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(state.peeking).toBe(true);
+    expect(state.peekPos).toBeDefined();
+
+    const obstaclePos = state.coverObstacle!.pos;
+    const leanDir = v2.normalizeSafe(v2.sub(state.peekPos!, obstaclePos));
+    const leanAngle = Math.acos(Math.max(-1, Math.min(1, v2.dot(leanDir, away))));
+    // The narrowest angle this session tightened PEEK_ANGLES to (0.75) - a real regression
+    // against the pre-fix value would land at 1.05 instead, comfortably outside this.
+    expect(leanAngle).toBeCloseTo(0.75, 1);
 });
 
 // Regression: `retreatToCover`'s "have I reached cover" check used to compare distance
@@ -1409,6 +1506,63 @@ test("Fleeing with no cover available picks a retreat goal off an interior node"
 
     expect(state.retreatGoal).toBeDefined();
     expect(state.retreatGoal).toEqual(graph.pos(hullId));
+});
+
+// "high scope preferen, möglichst nicht in buildings laufen" - idle rotation (no known
+// threat, see `BotBrain.idleGoal`) used to path straight at the raw goal even when it
+// happened to sit inside a building, the same blind-spot `preferNonInteriorGoal` already
+// closed for a plain retreat and a blind chase. Same synthetic-graph shape as those two
+// regressions above: an interior node right on the raw goal, a hull node just past it.
+test("Idle rotation steers off an idle goal that sits inside a building", () => {
+    const graph = new NavGraph([]);
+    const rawGoal = v2.create(100, 100);
+    graph.addNode(rawGoal, 0, "interior");
+    // Off to the side, not collinear with the bot and the raw goal below - so heading at
+    // the raw goal and heading at the redirected hull node are visibly different
+    // directions, not the same line by coincidence.
+    const hullId = graph.addNode(v2.create(100, 105), 0, "hull");
+
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(80, 100) });
+    const state = new BotMovementState();
+
+    updateMovement(bot, state, "idle", undefined, Infinity, 0.1, graph, false, undefined, false, rawGoal);
+
+    const towardRawGoal = v2.normalizeSafe(v2.sub(rawGoal, bot.pos));
+    const towardHull = v2.normalizeSafe(v2.sub(graph.pos(hullId), bot.pos));
+    expect(v2.dot(bot.touchMoveDir, towardRawGoal)).toBeLessThan(0.999); // not heading raw
+    expect(v2.dot(bot.touchMoveDir, towardHull)).toBeGreaterThan(0.999); // heading redirected
+});
+
+// The other half of the same ask: plain wander (no idle goal at all, or already arrived
+// near one) has no destination to redirect - only a heading - so the fix has to check
+// candidate headings themselves before committing (see `pickWanderDir`). Synthetic graph
+// with an obviously-bad half (interior, +x) and an obviously-good half (open, -x): tried
+// many times, the fix should land on the good half all but a handful of times, where the
+// original code (a single unbiased `v2.randomUnit()`) picked the building side roughly
+// half the time by construction.
+test("Idle wander avoids heading into a building most of the time it can", () => {
+    const graph = new NavGraph([]);
+    graph.addNode(v2.create(15, 0), 0, "interior"); // +x reads as inside a building
+    graph.addNode(v2.create(-15, 0), 0, "open"); // -x reads as open ground
+
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const state = new BotMovementState();
+
+    let intoBuilding = 0;
+    const trials = 300;
+    for (let i = 0; i < trials; i++) {
+        state.wanderTimer = 0; // force a fresh pick every call
+        updateMovement(bot, state, "idle", undefined, Infinity, 0.1, graph);
+        if (state.wanderDir.x > 0.1) intoBuilding++;
+    }
+
+    // Only a run of bad luck across every one of `WANDER_DIR_ATTEMPTS` retries (and then
+    // the fallback itself landing badly too) picks the building side with the fix -
+    // comfortably under a tenth of these trials, well below the ~50% an unbiased pick
+    // would produce on this deliberately even split.
+    expect(intoBuilding / trials).toBeLessThan(0.15);
 });
 
 // "checkt nicht dass er nicht in Buildings sein sollte" - closing distance on an

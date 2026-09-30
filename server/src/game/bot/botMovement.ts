@@ -91,8 +91,14 @@ const COVER_REACHED_DIST = 0.75;
 
 /** Angles (radians) off "directly behind cover" tried when leaning out to peek - not 0,
  *  which is fully hidden, and not near π, which is fully in the open; these sample the
- *  obstacle's silhouette edge, closest offset first. */
-const PEEK_ANGLES = [1.05, -1.05, 1.4, -1.4, 1.75, -1.75];
+ *  obstacle's silhouette edge, closest offset first.
+ *
+ *  Narrowed from [1.05, 1.4, 1.75] - "peaken muss ... weniger Fläche offenbaren". The
+ *  smallest angle that actually clears line of sight wins (see `findPeekSpot`'s loop), so
+ *  this directly caps how much of the bot's silhouette a peek can expose past the cover's
+ *  edge, independent of `PEEK_EXPOSE_MIN/MAX` (how *long* it stays out - deliberately left
+ *  alone, see that constant's own note on real trade-rate data). */
+const PEEK_ANGLES = [0.75, -0.75, 1.0, -1.0, 1.25, -1.25];
 const PEEK_HOLD_MIN = 1.0;
 const PEEK_HOLD_MAX = 2.2;
 /** Hiding duration used instead of `PEEK_HOLD_MIN/MAX` right after the enemy was
@@ -191,6 +197,17 @@ const IDLE_GOAL_RESUME_DIST = IDLE_GOAL_REACHED_DIST + 8;
  *  nearby hull/open node from just inside a building, not so wide the goal drags
  *  somewhere unrelated to the original destination. */
 const NON_INTERIOR_GOAL_SEARCH_RADIUS = 15;
+
+/** How far ahead a candidate wander heading is checked for landing inside a building -
+ *  see `pickWanderDir`. Roughly what a wander leg actually covers before the next
+ *  re-pick (`util.random(1, 2.5)` seconds at wander pace), so this is asking "does
+ *  committing to this heading for the wander's own natural duration walk me into a
+ *  building", not an arbitrarily distant, unrelated point. */
+const WANDER_LOOKAHEAD = 15;
+/** How many random headings `pickWanderDir` tries before giving up and accepting
+ *  whichever one it already has - a bot standing inside a dense cluster of buildings
+ *  with no open heading nearby still has to wander *somewhere* rather than freeze. */
+const WANDER_DIR_ATTEMPTS = 5;
 
 /** `push` never closes tighter than this, full stop, regardless of weapon. Not just a
  *  style choice: a gun's aim/lead math (`botAim.ts`) works from the *muzzle* position
@@ -303,6 +320,10 @@ export class BotMovementState {
     coverObstacle?: Obstacle;
     coverPos?: Vec2;
     coverRecheck = 0;
+    /** Consecutive recomputes in a row where `findCover` came back empty despite
+     *  `coverObstacle` still being alive - see `COVER_MISS_GRACE`. Reset the moment a
+     *  recompute finds *something* again. */
+    coverMissStreak = 0;
     /** Whether the bot has actually reached `coverPos` since it was last (re)picked -
      *  see the doc comment on `retreatToCover` for why this matters: once true, control
      *  hands off entirely to the peek cycle instead of re-checking distance to the base
@@ -562,6 +583,27 @@ function isBodyHidden(
  *  comment for why this exists. */
 const COVER_STICKINESS_MARGIN = 5;
 
+/** How many consecutive `COVER_RECOMPUTE_INTERVAL` recomputes `retreatToCover` tolerates
+ *  `findCover` finding *nothing at all* for the still-alive obstacle it's currently
+ *  holding, before actually giving up on it - see `retreatToCover`. A real match capture
+ *  showed the exact same physical cover point (identical coordinates) get found, then
+ *  vanish, then get found again, over and over across several seconds: `isBodyHidden`'s
+ *  hidden/exposed verdict for a candidate depends only on `threatPos` (the candidate
+ *  itself is derived purely from the obstacle's own position, not the bot's), and
+ *  `threatPos` - a live, sometimes-estimated read on a moving opponent - can cross that
+ *  verdict's boundary and back within a single recompute window without the bot's actual
+ *  situation having changed at all. Every one of those blips was, until now, treated
+ *  identically to "the enemy really did move somewhere that invalidates this cover":
+ *  `settledAtCover` got reset and the bot walked back toward the same spot from scratch,
+ *  so the peek cycle - which only ever starts once `settledAtCover` is true - never got a
+ *  real chance to run, reading as "reaches cover, then never actually peeks" for the
+ *  entire fight. `1` (not higher): a `findCover` miss that repeats past a single
+ *  recompute is far more likely a genuine loss of that cover than jitter, and holding a
+ *  stale, no-longer-valid spot for several seconds while "generously" tolerating misses
+ *  would recreate the exact camping-blind risk `PUSH_DETECT_MARGIN`/`SETTLED_MAX_S` exist
+ *  to catch, just through a different door. */
+const COVER_MISS_GRACE = 1;
+
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
  *  as seen from `threatPos` - real cover, not just "away from the enemy". Every
  *  candidate is checked against the *current* state of the obstacle it hides behind
@@ -781,24 +823,40 @@ function retreatToCover(
         state.distAtSettle = undefined;
         state.settledForS = 0;
         state.coverRecheck = 0;
+        state.coverMissStreak = 0;
         state.peeking = false;
     }
     state.coverRecheck -= dt;
     if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
         state.coverRecheck = COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression);
         const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist, state.coverObstacle);
-        // Only treat this as a genuinely new spot - not just the periodic recompute
-        // landing back on essentially the same point - as "un-arrive": resetting
-        // `settledAtCover` on every recompute would interrupt an in-progress peek every
-        // `COVER_RECOMPUTE_INTERVAL` (0.4s), well inside a single peek's own exposure
-        // window, forcing the bot back to `coverPos` before it ever really leaned out.
-        if (!found || !state.coverPos || v2.distance(state.coverPos, found.pos) > 0.5) {
-            state.settledAtCover = false;
-            state.distAtSettle = undefined;
-            state.settledForS = 0;
+        if (
+            !found
+            && state.coverObstacle
+            && !state.coverObstacle.dead
+            && state.coverObstacle.collidable
+            && state.coverMissStreak < COVER_MISS_GRACE
+        ) {
+            // A single miss on an obstacle that's still perfectly good, physically
+            // unchanged cover - see `COVER_MISS_GRACE`. Hold the current spot exactly as
+            // if this recompute never happened, rather than treating one blip the same
+            // as a genuine loss.
+            state.coverMissStreak++;
+        } else {
+            state.coverMissStreak = 0;
+            // Only treat this as a genuinely new spot - not just the periodic recompute
+            // landing back on essentially the same point - as "un-arrive": resetting
+            // `settledAtCover` on every recompute would interrupt an in-progress peek every
+            // `COVER_RECOMPUTE_INTERVAL` (0.4s), well inside a single peek's own exposure
+            // window, forcing the bot back to `coverPos` before it ever really leaned out.
+            if (!found || !state.coverPos || v2.distance(state.coverPos, found.pos) > 0.5) {
+                state.settledAtCover = false;
+                state.distAtSettle = undefined;
+                state.settledForS = 0;
+            }
+            state.coverObstacle = found?.obstacle;
+            state.coverPos = found?.pos;
         }
-        state.coverObstacle = found?.obstacle;
-        state.coverPos = found?.pos;
     }
 
     if (!state.coverPos) {
@@ -1057,6 +1115,30 @@ export function preferNonInteriorGoal(nav: NavGraph, rawGoal: Vec2, layer: numbe
     return rawGoal;
 }
 
+/** A random heading for idle wander that, tried first, doesn't walk straight into a
+ *  building - "high scope preferen, möglichst nicht in buildings laufen". Unlike
+ *  `preferNonInteriorGoal` (steers a *destination* that already happens to sit on an
+ *  interior node), plain wander has no destination at all to steer - just a heading - so
+ *  the only way to keep it out of a building is to check candidate headings themselves
+ *  before committing to one, same "closest/first-viable-option wins" shape as
+ *  `findPeekSpot`. Without `nav` (steering fallback, no graph built), the wander is
+ *  purely direct-steering anyway and has no notion of buildings to avoid in the first
+ *  place - falls back to the original uniform-random heading unchanged. */
+function pickWanderDir(bot: Player, nav: NavGraph | undefined): Vec2 {
+    const first = v2.randomUnit();
+    if (!nav) return first;
+
+    const layer = util.toGroundLayer(bot.layer);
+    let dir = first;
+    for (let i = 0; i < WANDER_DIR_ATTEMPTS; i++) {
+        const lookahead = v2.add(bot.pos, v2.mul(dir, WANDER_LOOKAHEAD));
+        const nearest = nav.nearest(lookahead, layer);
+        if (nearest < 0 || nav.kind[nearest] !== "interior") return dir;
+        dir = v2.randomUnit();
+    }
+    return first; // every attempt landed in a building - wander has to go somewhere
+}
+
 /** Direction to retreat in, routed through the nav graph instead of a raw straight
  *  line - see `RETREAT_LOOKAHEAD`. Without `nav`, falls back to the plain "away from
  *  the threat" direction, same as before (worse around buildings, never broken). */
@@ -1162,26 +1244,38 @@ export function updateMovement(
         state.coverPos = undefined;
         state.peeking = false;
 
-        if (!idleGoal) {
+        // "high scope preferen, möglichst nicht in buildings laufen" - with no threat to
+        // actually react to, there's no reason for idle rotation to walk into a building
+        // that just happens to contain the raw goal (a last-known enemy spot, or the
+        // map's center - see `BotBrain.idleGoal`), trading a good sightline for a dead
+        // end. Same treatment `preferNonInteriorGoal` already gives a blind chase
+        // (`engageHold`'s "close" mode) and a plain retreat - nudge the destination onto a
+        // nearby open/hull node instead, never touching the raw goal itself so a route
+        // that genuinely leads through a building on the way there is unaffected.
+        const effectiveIdleGoal = idleGoal && nav
+            ? preferNonInteriorGoal(nav, idleGoal, util.toGroundLayer(bot.layer))
+            : idleGoal;
+
+        if (!effectiveIdleGoal) {
             state.headingToIdleGoal = false;
         } else {
-            const distToGoal = v2.distance(bot.pos, idleGoal);
+            const distToGoal = v2.distance(bot.pos, effectiveIdleGoal);
             if (state.headingToIdleGoal) {
                 if (distToGoal <= IDLE_GOAL_REACHED_DIST) state.headingToIdleGoal = false;
             } else if (distToGoal > IDLE_GOAL_RESUME_DIST) {
                 state.headingToIdleGoal = true;
             }
         }
-        const headingToGoal = idleGoal && state.headingToIdleGoal;
+        const headingToGoal = effectiveIdleGoal && state.headingToIdleGoal;
         if (headingToGoal) {
-            const pathDir = nav ? followPath(bot, state, nav, idleGoal, dt) : undefined;
-            move = pathDir ?? v2.normalizeSafe(v2.sub(idleGoal, bot.pos));
+            const pathDir = nav ? followPath(bot, state, nav, effectiveIdleGoal, dt) : undefined;
+            move = pathDir ?? v2.normalizeSafe(v2.sub(effectiveIdleGoal, bot.pos));
         } else {
             state.path = [];
             state.wanderTimer -= dt;
             if (state.wanderTimer <= 0) {
                 state.wanderTimer = util.random(1, 2.5);
-                state.wanderDir = v2.randomUnit();
+                state.wanderDir = pickWanderDir(bot, nav);
             }
             move = state.wanderDir;
         }
