@@ -336,6 +336,15 @@ export class BotMovementState {
     /** Seconds since `settledAtCover` last became true - see `retreatToCover`'s "settled
      *  too long" check/`SETTLED_MAX_S`. Reset alongside `distAtSettle`. */
     settledForS = 0;
+    /** Whether a heal/flee/reload retreat has already reached its first hiding spot and
+     *  is now pushing past it toward real distance - see `retreatToCover`'s "keep
+     *  retreating past the first spot" logic. Once true, the approach-`coverPos` check is
+     *  skipped for the rest of this push: without it, moving even one step away from the
+     *  just-reached `coverPos` (which is exactly what pushing further does) immediately
+     *  re-triggers "not yet at `coverPos`", walking the bot straight back to the same
+     *  fixed point it just left - a one-tick oscillation that would never make any real
+     *  progress toward genuine distance. Reset alongside `settledAtCover`. */
+    pushedPastCover = false;
 
     /** Peek cycle while holding cover mid-fight - see `updatePeekCycle`. `peeking`
      *  false means hiding at `coverPos`; true means leaning out to `peekPos`. */
@@ -622,21 +631,36 @@ const COVER_MISS_GRACE = 1;
  *  fired at. Still preferring the currently-held obstacle unless something else is
  *  genuinely closer by a real margin, not just a coin-flip's worth, is the same
  *  "commit to a choice, don't re-decide every tick" fix already applied to local-obstacle
- *  deflection, `followPath`'s direct-vs-routed check, and idle-goal hysteresis. */
+ *  deflection, `followPath`'s direct-vs-routed check, and idle-goal hysteresis.
+ *
+ *  `avoidInterior` (only passed while actually fleeing, not mid-fight peek-cover - see
+ *  `retreatToCover`'s own call) - "Gebäude nur zum Durchlaufen nutzen, nicht zu lange
+ *  drin bleiben": a real match capture showed a fleeing bot commit to a cover candidate
+ *  that happened to sit on a building's `interior` lattice, then stall for the better
+ *  part of a second working `followPath`/a door to actually reach it while the enemy
+ *  closed in and finished it - a building makes a fine thing to run *through* on the way
+ *  to real distance, a poor thing to detour *into* and get held up navigating just to
+ *  hide behind whatever's sitting in that specific room. Non-interior candidates are
+ *  preferred as their own pool whenever any exist at all; interior ones are only ever
+ *  handed out as a last resort, exactly the same fallback shape `preferNonInteriorGoal`
+ *  already uses for a retreat's raw destination. */
 export function findCover(
     bot: Player,
     navObstacles: Obstacle[],
     threatPos: Vec2,
     minDistFromThreat = 0,
     preferred?: Obstacle,
+    avoidInterior?: NavGraph,
 ): { obstacle: Obstacle; pos: Vec2 } | undefined {
     const layer = util.toGroundLayer(bot.layer);
     const aabb = collider.createAabbExtents(bot.pos, v2.create(COVER_SEARCH_RAD, COVER_SEARCH_RAD));
     const objs = bot.game.grid.intersectCollider(aabb);
     const minDistSqr = minDistFromThreat * minDistFromThreat;
 
-    let best: { obstacle: Obstacle; pos: Vec2; distSqr: number } | undefined;
-    let preferredPick: { obstacle: Obstacle; pos: Vec2; distSqr: number } | undefined;
+    type Candidate = { obstacle: Obstacle; pos: Vec2; distSqr: number };
+    const openCandidates: Candidate[] = [];
+    const interiorCandidates: Candidate[] = [];
+
     for (let i = 0; i < objs.length; i++) {
         if (objs[i].__type !== ObjectType.Obstacle) continue;
         const o = objs[i] as Obstacle;
@@ -660,20 +684,33 @@ export function findCover(
 
         const distSqr = v2.lengthSqr(v2.sub(bot.pos, candidate));
         const entry = { obstacle: o, pos: candidate, distSqr };
-        if (!best || distSqr < best.distSqr) best = entry;
-        if (o === preferred) preferredPick = entry;
+        const nearestNode = avoidInterior?.nearest(candidate, layer) ?? -1;
+        const isInterior = nearestNode >= 0 && avoidInterior!.kind[nearestNode] === "interior";
+        (isInterior ? interiorCandidates : openCandidates).push(entry);
     }
 
-    if (!preferredPick) return best;
-    if (!best || best.obstacle === preferred) return preferredPick;
-    // Plain distances, not squared - for two picks this close (the whole point is
-    // catching near-ties), the squared difference shrinks with their absolute distance
-    // from the bot (distSqr_a - distSqr_b = (a-b)(a+b)), so comparing it directly against
-    // a squared margin would only tolerate a real difference of a fraction of a unit at
-    // any realistic cover range, not the intended `COVER_STICKINESS_MARGIN`.
-    const preferredDist = Math.sqrt(preferredPick.distSqr);
-    const bestDist = Math.sqrt(best.distSqr);
-    return preferredDist - bestDist < COVER_STICKINESS_MARGIN ? preferredPick : best;
+    const pickFrom = (candidates: Candidate[]): Candidate | undefined => {
+        let best: Candidate | undefined;
+        let preferredPick: Candidate | undefined;
+        for (const entry of candidates) {
+            if (!best || entry.distSqr < best.distSqr) best = entry;
+            if (entry.obstacle === preferred) preferredPick = entry;
+        }
+        if (!preferredPick) return best;
+        if (!best || best.obstacle === preferred) return preferredPick;
+        // Plain distances, not squared - for two picks this close (the whole point is
+        // catching near-ties), the squared difference shrinks with their absolute
+        // distance from the bot (distSqr_a - distSqr_b = (a-b)(a+b)), so comparing it
+        // directly against a squared margin would only tolerate a real difference of a
+        // fraction of a unit at any realistic cover range, not the intended
+        // `COVER_STICKINESS_MARGIN`.
+        const preferredDist = Math.sqrt(preferredPick.distSqr);
+        const bestDist = Math.sqrt(best.distSqr);
+        return preferredDist - bestDist < COVER_STICKINESS_MARGIN ? preferredPick : best;
+    };
+
+    const picked = openCandidates.length ? pickFrom(openCandidates) : pickFrom(interiorCandidates);
+    return picked ? { obstacle: picked.obstacle, pos: picked.pos } : undefined;
 }
 
 /** A point near `coverObstacle`'s edge, off to one side of "directly behind", that IS
@@ -832,6 +869,7 @@ function retreatToCover(
         state.settledAtCover = false;
         state.distAtSettle = undefined;
         state.settledForS = 0;
+        state.pushedPastCover = false;
         state.coverRecheck = 0;
         state.coverMissStreak = 0;
         state.peeking = false;
@@ -839,7 +877,14 @@ function retreatToCover(
     state.coverRecheck -= dt;
     if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
         state.coverRecheck = COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression);
-        const found = findCover(bot, nav.navObstacles, threatPos, minCoverDist, state.coverObstacle);
+        const found = findCover(
+            bot,
+            nav.navObstacles,
+            threatPos,
+            minCoverDist,
+            state.coverObstacle,
+            holdAndPeek ? undefined : nav,
+        );
         if (
             !found
             && state.coverObstacle
@@ -863,6 +908,7 @@ function retreatToCover(
                 state.settledAtCover = false;
                 state.distAtSettle = undefined;
                 state.settledForS = 0;
+                state.pushedPastCover = false;
             }
             state.coverObstacle = found?.obstacle;
             state.coverPos = found?.pos;
@@ -891,14 +937,38 @@ function retreatToCover(
     // would immediately see that as "not at cover" and snap it straight back - the
     // peek would never actually get anywhere before reversing, which reads as "barely
     // peeks at all" and leaves the bot lingering right at the cover/peek boundary
-    // instead of either fully hidden or meaningfully exposed.
+    // instead of either fully hidden or meaningfully exposed. Both the approach check
+    // and the "far enough yet" push below must stay nested inside `!settledAtCover` for
+    // exactly this reason - hoisting the approach check above it was tried once and
+    // immediately broke peeking: `state.peeking` steers the bot to `peekPos`, which is
+    // more than `COVER_REACHED_DIST` from `coverPos` by design, so an un-nested check
+    // read that as "wandered off cover" and routed straight back to it every tick,
+    // silently skipping `updatePeekCycle` (and so never touching `peekTimer`) for the
+    // rest of the fight.
     if (!state.settledAtCover) {
-        if (v2.distance(bot.pos, state.coverPos) > COVER_REACHED_DIST) {
+        // `pushedPastCover` skips the approach check once it's true - see its own doc
+        // comment on `BotMovementState`. Never set for `holdAndPeek`, which always
+        // settles the instant it reaches its held range regardless of raw distance.
+        if (!state.pushedPastCover && v2.distance(bot.pos, state.coverPos) > COVER_REACHED_DIST) {
             state.peeking = false;
             const pathDir = nav ? followPath(bot, state, nav, state.coverPos, dt) : undefined;
             return pathDir ?? v2.normalizeSafe(v2.sub(state.coverPos, bot.pos));
         }
+        // "der bot rennt, beginnt zu healen, und retreated weiter bis zu einer sicheren
+        // Position" - reaching the very first spot that merely blocks line of sight
+        // isn't itself a reason to stop: moving doesn't cancel an in-progress heal (see
+        // `SETTLED_MAX_S`'s own doc comment), so there's no cost to continuing to open
+        // real distance while one runs, only upside. `holdAndPeek` (engageHold, mid-
+        // fight) settles immediately regardless - it's already holding a deliberately
+        // *close* range, not trying to maximize separation.
+        const farEnough = holdAndPeek
+            || v2.distance(bot.pos, threatPos) >= minCoverDist * RETREAT_SETTLE_MULT;
+        if (!farEnough) {
+            state.pushedPastCover = true;
+            return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+        }
         state.settledAtCover = true;
+        state.pushedPastCover = false;
         state.distAtSettle = v2.distance(bot.pos, threatPos);
         state.settledForS = 0;
     } else {

@@ -348,6 +348,57 @@ test("findCover sticks with the currently-held obstacle over a marginally closer
     expect(stickyPick?.obstacle).toBe(first!.obstacle);
 });
 
+// "Gebäude nur zum Durchlaufen nutzen, nicht zu lange drin bleiben": a fleeing bot must
+// not pick a cover candidate that sits on a building's interior lattice while a
+// perfectly good non-interior one exists too, even if the interior one is nearer - a
+// real match capture showed a bot commit to exactly that, stall out navigating a door to
+// actually reach it, and get caught by the enemy closing in during the delay. A
+// synthetic `NavGraph` with hand-placed node kinds (not `buildNavGraph`'s real map
+// classification) keeps which candidate is "interior" fully known, not just hoped-for.
+test("findCover with avoidInterior skips a nearer candidate that sits on a building interior", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    const nearCrate = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 5))); // closer to the bot
+    const farCrate = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, -30))); // farther, but open ground
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(0, -2)) });
+    const graph = buildNavGraph(game); // real navObstacles, for the LOS/clearance checks
+
+    // A separate, synthetic graph purely for node-kind classification - decoupled from
+    // the real graph above so exactly which candidate counts as "interior" is fully
+    // known, not just hoped-for from the map's real (irrelevant, `test_normal` has none
+    // of its own) building layout.
+    const kinds = new NavGraph([]);
+    kinds.addNode(nearCrate.pos, 0, "interior");
+    kinds.addNode(farCrate.pos, 0, "open");
+
+    // Without avoidInterior, the nearer candidate wins as always.
+    const unweighted = findCover(bot, graph.navObstacles, threatPos, 0);
+    expect(unweighted?.obstacle).toBe(nearCrate);
+
+    // With it, the interior candidate is skipped in favor of the farther, open one.
+    const weighted = findCover(bot, graph.navObstacles, threatPos, 0, undefined, kinds);
+    expect(weighted?.obstacle).toBe(farCrate);
+});
+
+// A genuine dead end (every candidate sits on interior nodes) has no non-interior
+// alternative to fall back to - handing out the interior pick here is still strictly no
+// worse than before this fix existed, never a new way to end up with nothing at all.
+test("findCover with avoidInterior falls back to an interior candidate when nothing else exists", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    const crate = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 5)));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(0, -2)) });
+    const graph = buildNavGraph(game);
+
+    const kinds = new NavGraph([]);
+    kinds.addNode(crate.pos, 0, "interior");
+
+    const found = findCover(bot, graph.navObstacles, threatPos, 0, undefined, kinds);
+    expect(found?.obstacle).toBe(crate);
+});
+
 // The "der bot muss barrels/explosive obstacles verstehen" ask: hiding behind something
 // that explodes the moment it takes enough damage is worse than standing in the open in
 // the specific way that matters most - the enemy doesn't even need to hit the bot
@@ -568,64 +619,71 @@ test("Fleeing tolerates a single findCover miss on still-alive cover instead of 
     expect(state.settledAtCover).toBe(false);
 });
 
-// Regression: reaching cover that only barely cleared SAFE_HEAL_DIST (16) used to be
-// abandoned immediately for "keep opening distance" (see RETREAT_SETTLE_MULT) purely
-// because raw distance to the threat was still under that bar - even though the cover
-// was already doing its actual job. On a compact arena, real cover naturally tends to
-// sit at exactly this kind of modest distance, so this was throwing away secured hiding
-// spots to chase a distance number in the open - "muss dafür sorgen, dass der Gegner
-// ihm nicht folgen kann", not abandon the one thing already accomplishing that. Fixed
-// geometry (not the random "local" map) so the resulting cover's exact distance from
-// the threat is known and controllable.
-test("Fleeing to cover that's only just barely safe still stops once genuinely hidden", () => {
+// "der Bot rennt, beginnt zu healen, und retreated weiter bis zu einer sicheren
+// Position" - reaching the very first spot that merely blocks line of sight is no longer
+// itself a reason to stop: since moving doesn't cancel an in-progress heal (see
+// `SETTLED_MAX_S`'s own doc comment), there's no cost to continuing to open real distance
+// while one runs. This reverses an earlier, also real-match-driven fix that had the bot
+// stop the instant *any* genuinely hidden cover was reached, regardless of how close -
+// confirmed obsolete by a later capture where exactly that early stop, at cover this
+// close, gave a hunting enemy enough time to close in and land a kill during the wait.
+// Fixed geometry (not the random "local" map) so the resulting cover's exact distance
+// from the threat, and how far still short of the settle bar it lands, are both known.
+test("Fleeing past cover that's only just barely safe, instead of stopping there", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
     const threatPos = v2.create(60, 60);
     // A few units past SAFE_HEAL_DIST (16) from the threat - the resulting cover point
     // (past the crate's own edge) ends up a little further still, comfortably under
-    // RETREAT_SETTLE_MULT's bar (28).
+    // RETREAT_SETTLE_MULT's bar (28) - genuinely hidden, but not yet "safe enough".
     game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 18)));
     const graph = buildNavGraph(game);
 
     const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 13)) });
     const state = new BotMovementState();
 
+    // Reach this close cover point first (without it, the push-past logic below has
+    // nothing to prove - the bot has to actually get there before choosing to keep going).
     let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 15; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
+    }
+    expect(v2.distance(pos, v2.add(threatPos, v2.mul(away, 18)))).toBeLessThan(6); // near the crate by now
+    expect(state.settledAtCover).toBe(false); // not yet - still short of RETREAT_SETTLE_MULT's bar
+
+    // Keep running until genuinely far enough - never plants at the merely-hidden spot.
     for (let i = 0; i < 200 && !state.settledAtCover; i++) {
         bot.pos = pos;
         updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
         pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
     }
     expect(state.settledAtCover).toBe(true);
-
-    // Right after settling at this close-but-genuinely-hidden cover, the bot should
-    // hold here - not abandon it to chase a raw distance number in the open.
-    bot.pos = pos;
-    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
-    expect(bot.touchMoveActive).toBe(false);
+    expect(v2.distance(pos, threatPos)).toBeGreaterThanOrEqual(28); // RETREAT_SETTLE_MULT's bar
 });
 
 // Regression for a real match capture: "wird gepusht und stirbt" - a bot camped one
 // exact spot for 7.6 straight seconds chaining heals with zero threat signal (no
 // sighting, no heard shot) the whole time, since `stillExposed`/`threatClosingIn` both
 // need *some* signal to fire on and a quiet push never produces one - the enemy simply
-// reappeared already close enough to finish it. Same close-but-settled geometry as the
-// test above (confirms the short-term "hold here" behavior is unaffected), but this
-// time enough real time passes with the threat position never updating at all - no
-// signal whatsoever - and the bot still has to resume moving on the strength of elapsed
-// time alone (see `SETTLED_MAX_S`).
+// reappeared already close enough to finish it. Same "already well past the settle
+// distance" geometry as the dedicated test for that (confirms the short-term "hold here"
+// behavior is unaffected), but this time enough real time passes with the threat
+// position never updating at all - no signal whatsoever - and the bot still has to
+// resume moving on the strength of elapsed time alone (see `SETTLED_MAX_S`).
 test("Fleeing resumes retreating once it's been settled too long, even with zero threat signal", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
     const threatPos = v2.create(60, 60);
-    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 18)));
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 40)));
     const graph = buildNavGraph(game);
 
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 13)) });
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
     const state = new BotMovementState();
 
     let pos = v2.copy(bot.pos);
-    for (let i = 0; i < 200 && !state.settledAtCover; i++) {
+    for (let i = 0; i < 400 && !state.settledAtCover; i++) {
         bot.pos = pos;
         updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
         pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
@@ -634,7 +692,7 @@ test("Fleeing resumes retreating once it's been settled too long, even with zero
 
     bot.pos = pos;
     updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
-    expect(bot.touchMoveActive).toBe(false); // holds here at first, same as the test above
+    expect(bot.touchMoveActive).toBe(false); // holds here at first, once genuinely far enough
 
     // Same fixed spot, same unchanged threatPos - just enough real time elapsed (past
     // SETTLED_MAX_S) that sitting still this long stops being "safe by default" on its
@@ -655,19 +713,23 @@ test("Fleeing resumes well before the old, nearly-fatal 3.5s settle bar", () => 
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
     const threatPos = v2.create(60, 60);
-    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 18)));
+    game.map.genObstacle("crate_01", v2.add(threatPos, v2.mul(away, 40)));
     const graph = buildNavGraph(game);
 
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 13)) });
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(threatPos, v2.mul(away, 15)) });
     const state = new BotMovementState();
 
     let pos = v2.copy(bot.pos);
-    for (let i = 0; i < 200 && !state.settledAtCover; i++) {
+    for (let i = 0; i < 400 && !state.settledAtCover; i++) {
         bot.pos = pos;
         updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
         pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 8 * 0.1)) : pos;
     }
     expect(state.settledAtCover).toBe(true);
+
+    bot.pos = pos;
+    updateMovement(bot, state, "flee", threatPos, v2.distance(pos, threatPos), 0.1, graph);
+    expect(bot.touchMoveActive).toBe(false); // holds here at first, once genuinely far enough
 
     // 2s of total silence: past the new 1.2s bar, comfortably short of the old 3.5s one -
     // this is exactly the gap a real pursuer can close unseen.
