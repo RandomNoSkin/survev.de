@@ -218,6 +218,11 @@ export class BotBrain {
      *  the actual bandage on the exact distance/cover requirement this whole escape
      *  valve exists to bypass. */
     private desperateHeal = false;
+    /** Set by `pickDirective` every tick (not just while actually healing) - read back in
+     *  `update()` for `updateMovement`'s `critical` param, which refuses `findCover`'s
+     *  interior-cover fallback while fleeing. See `findCover`'s own doc comment on
+     *  `noInteriorFallback` for the real match capture this is for. */
+    private critical = false;
 
     private thinkTimer: number;
     private readonly aim = new BotAimState();
@@ -359,6 +364,7 @@ export class BotBrain {
             this.tier,
             !!this.target,
             this.idleGoal(bot),
+            this.critical,
         );
 
         // A live grenade landing nearby overrides whatever movement the directive above
@@ -550,17 +556,21 @@ export class BotBrain {
         // from an earlier tick around to wrongly wave a *different*, non-desperate heal
         // through `update()`'s `isSafeToHeal` gate later this same tick.
         this.desperateHeal = false;
+        // Computed up front, before any early return, so `this.critical` (read back by
+        // `update()` for `updateMovement`'s own `findCover` interior-fallback refusal -
+        // see its own doc comment) always reflects the bot's actual health this tick,
+        // not a stale value from whichever branch last happened to compute it.
+        const healthFrac = bot.health / GameConfig.player.health;
+        const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
+        this.critical = critical;
         if (bot.actionType === GameConfig.Action.UseItem) return "heal";
         if (!threatPos) {
-            const healthFrac = bot.health / GameConfig.player.health;
             const canHeal = healthFrac < this.tier.healThreshold
                 && pickHealItem(bot, healthFrac, /* positionSafe */ true, this.tier.healThreshold)
                     !== undefined;
             return canHeal ? "heal" : "idle";
         }
 
-        const healthFrac = bot.health / GameConfig.player.health;
-        const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
         const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT;
         const positionSafe = this.positionSafeForHeal(bot);
         const noHealItem = pickHealItem(bot, healthFrac, positionSafe, this.tier.healThreshold) === undefined;

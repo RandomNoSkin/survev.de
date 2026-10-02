@@ -400,6 +400,38 @@ test("findCover with avoidInterior falls back to an interior candidate when noth
     expect(found?.obstacle).toBe(crate);
 });
 
+// Regression for a real match loss: a critically hurt bot, reacquired by its pursuer
+// mid-flee, committed to the nearest interior pick (the only candidate left near a map
+// edge) and died approaching it, never actually reaching cover at all - "ist zum healen
+// in ein Haus statt durch gelaufen, ist dann im Haus gestorben". Same dead-end geometry
+// as the test above (only an interior candidate exists at all), but with
+// `noInteriorFallback` set - a critical bot should get *nothing* here, not a gamble on
+// navigating into an unfamiliar building under direct fire, so the caller falls back to
+// `retreatDirection`'s already-working open retreat instead.
+test("findCover with noInteriorFallback refuses the interior pick when critical", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 5)));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(0, -2)) });
+    const graph = buildNavGraph(game);
+
+    const kinds = new NavGraph([]);
+    kinds.addNode(v2.add(center, v2.create(0, 5)), 0, "interior");
+
+    const found = findCover(
+        bot,
+        graph.navObstacles,
+        threatPos,
+        0,
+        undefined,
+        kinds,
+        undefined,
+        /* noInteriorFallback */ true,
+    );
+    expect(found).toBeUndefined();
+});
+
 // Regression for a real match capture: the bot's held cover obstacle died mid-approach
 // (shot apart - the enemy stayed visible the whole time), and the replacement `findCover`
 // picked next was a *different*, nearer-to-the-bot obstacle that sat roughly in the

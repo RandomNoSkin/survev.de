@@ -837,7 +837,19 @@ function filterByReachability(
  *  candidate on the far side of a wall from both the bot's actual approach and the
  *  enemy's own straight-line position can still sit right next to a short way around for
  *  the enemy to flank through, which plain "far enough from the threat right now"
- *  (`minDistFromThreat`/`approachBaseline`) never catches on its own. */
+ *  (`minDistFromThreat`/`approachBaseline`) never catches on its own.
+ *
+ *  `noInteriorFallback` turns the interior pool's own "last resort, something beats
+ *  nothing" fallback off entirely - a real match capture showed a critically hurt bot,
+ *  reacquired by its pursuer mid-flee, commit to the nearest interior pick (the only
+ *  candidate left once the open pool was empty near a map edge) and die approaching it,
+ *  never actually reaching cover at all. A building is still a perfectly good thing to
+ *  retreat *through*, but gambling critical health on navigating into one specifically
+ *  (a door, an unfamiliar room) under direct fire is a worse bet than just continuing an
+ *  already-working, already-pathfound open retreat (`retreatDirection`, what the caller
+ *  falls back to when `findCover` returns nothing at all) - not finding cover here isn't
+ *  the same failure as it is for a merely-low, not-yet-critical retreat with time to
+ *  spare, which still wants the interior fallback over nothing. */
 export function findCover(
     bot: Player,
     navObstacles: Obstacle[],
@@ -846,6 +858,7 @@ export function findCover(
     preferred?: Obstacle,
     avoidInterior?: NavGraph,
     approachBaseline?: number,
+    noInteriorFallback = false,
 ): { obstacle: Obstacle; pos: Vec2 } | undefined {
     const layer = util.toGroundLayer(bot.layer);
     const aabb = collider.createAabbExtents(bot.pos, v2.create(COVER_SEARCH_RAD, COVER_SEARCH_RAD));
@@ -919,6 +932,8 @@ export function findCover(
         : openCandidates;
     const picked = openPool.length
         ? pickFrom(openPool)
+        : noInteriorFallback
+        ? undefined
         : pickFrom(
             avoidInterior
                 ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, interiorCandidates)
@@ -1065,7 +1080,12 @@ const SETTLED_MAX_S = 1.2;
  *
  *  `minCoverDist` is how far from the threat a candidate cover spot must itself be to
  *  count (0 for `holdAndPeek`, which is holding an already-acceptable range rather than
- *  trying to put real distance between itself and the threat). */
+ *  trying to put real distance between itself and the threat).
+ *
+ *  `critical` (never set for `holdAndPeek` - see `findCover`'s own doc comment on
+ *  `noInteriorFallback`) refuses the interior-cover fallback: a critically hurt bot with
+ *  nothing better nearby should keep running an already-working open retreat rather than
+ *  gamble on navigating into an unfamiliar building under direct fire. */
 function retreatToCover(
     bot: Player,
     state: BotMovementState,
@@ -1076,6 +1096,7 @@ function retreatToCover(
     recentlyVisible: boolean,
     minCoverDist: number,
     aggression: number | undefined,
+    critical: boolean,
 ): Vec2 {
     // Captured before the death-check below can wipe `coverPos` this same tick - see
     // `findCover`'s own doc comment on `approachBaseline`. Whatever distance the bot
@@ -1107,6 +1128,7 @@ function retreatToCover(
             state.coverObstacle,
             holdAndPeek ? undefined : nav,
             holdAndPeek ? undefined : priorSafeDist,
+            !holdAndPeek && critical,
         );
         if (
             !found
@@ -1575,6 +1597,7 @@ export function updateMovement(
     tier?: BotTierDef,
     targetVisible = true,
     idleGoal?: Vec2,
+    critical = false,
 ): void {
     let move = v2.create(0, 0);
     const aggression = tier?.aggression;
@@ -1630,6 +1653,7 @@ export function updateMovement(
             recentlyVisible,
             SAFE_HEAL_DIST,
             aggression,
+            critical,
         );
     } else if (directive === "reload") {
         move = retreatToCover(
@@ -1642,6 +1666,7 @@ export function updateMovement(
             recentlyVisible,
             SAFE_RELOAD_DIST,
             aggression,
+            false,
         );
     } else if (directive === "push") {
         const pushHoldDist = Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
@@ -1683,7 +1708,7 @@ export function updateMovement(
             // a nearly-finished target real breathing room to heal or turn the fight
             // back around between peeks - it read as the bot's own offense going soft
             // right when it should be pressing hardest.
-            move = retreatToCover(bot, state, nav, threatPos, dt, true, true, 0, 1);
+            move = retreatToCover(bot, state, nav, threatPos, dt, true, true, 0, 1, false);
         }
     } else {
         // engageHold: close distance if too far, back off if too close, otherwise hold
@@ -1735,7 +1760,18 @@ export function updateMovement(
             state.peeking = false;
             move = retreatDirection(bot, state, nav, threatPos, dt, aggression);
         } else {
-            move = retreatToCover(bot, state, nav, threatPos, dt, true, recentlyVisible, 0, aggression);
+            move = retreatToCover(
+                bot,
+                state,
+                nav,
+                threatPos,
+                dt,
+                true,
+                recentlyVisible,
+                0,
+                aggression,
+                false,
+            );
             // No cover anywhere nearby: `retreatToCover` falls back to pure lateral
             // strafing with no radial component at all, which has nothing keeping it
             // near an acceptable range - left alone, it drifts wherever strafing happens
