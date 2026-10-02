@@ -554,7 +554,8 @@ export class BotBrain {
         if (!threatPos) {
             const healthFrac = bot.health / GameConfig.player.health;
             const canHeal = healthFrac < this.tier.healThreshold
-                && pickHealItem(bot, healthFrac, /* positionSafe */ true) !== undefined;
+                && pickHealItem(bot, healthFrac, /* positionSafe */ true, this.tier.healThreshold)
+                    !== undefined;
             return canHeal ? "heal" : "idle";
         }
 
@@ -562,7 +563,7 @@ export class BotBrain {
         const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
         const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT;
         const positionSafe = this.positionSafeForHeal(bot);
-        const noHealItem = pickHealItem(bot, healthFrac, positionSafe) === undefined;
+        const noHealItem = pickHealItem(bot, healthFrac, positionSafe, this.tier.healThreshold) === undefined;
         const canHealNow = !noHealItem
             && shouldHeal(bot, this.tier, !!this.target, positionSafe);
 

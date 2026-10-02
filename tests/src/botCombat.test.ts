@@ -508,19 +508,24 @@ test("A bot does not stop to heal a graze while an enemy is in sight", () => {
     expect(bot.actionType).toBe(GameConfig.Action.None);
 });
 
-// The explicit ask: a medkit only makes sense when it's actually faster than fully
-// healing with bandages *and* the position can absorb that longer, harder-to-abort
-// commitment. Missing 60 HP (health 40%, above the critical override below) needs 4
-// bandage uses (12s total, `heal: 15`/`useTime: 3`) against the medkit's flat 6s -
-// clearly faster, so this isolates the position half of the decision on its own.
+// The explicit ask: a medkit only makes sense when it's actually faster than closing
+// the gap back to `healThreshold` with bandages *and* the position can absorb that
+// longer, harder-to-abort commitment - not faster than healing all the way to 100,
+// which `shouldHeal` would never let a bandage regimen run that long anyway (see
+// `pickHealItem`'s own doc comment). Missing 35 to a 0.75 threshold (health 40%, above
+// the critical override below) needs 3 bandage uses (9s total, `heal: 15`/`useTime: 3`)
+// against the medkit's flat 6s - clearly faster, so this isolates the position half of
+// the decision on its own.
 test("pickHealItem reaches for the medkit when it's faster and the position is safe", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
     bot.invManager.give("bandage", 10);
     bot.invManager.give("healthkit", 2);
-    bot.health = 40; // missing 60, above the critical (<=25%) override
+    bot.health = 40; // missing 35 to threshold, above the critical (<=25%) override
 
-    expect(pickHealItem(bot, 0.4, /* positionSafe */ true)).toBe("healthkit");
+    expect(pickHealItem(bot, 0.4, /* positionSafe */ true, /* healThreshold */ 0.75)).toBe(
+        "healthkit",
+    );
 });
 
 test("pickHealItem sticks with the bandage even when the medkit would be faster, if exposed", () => {
@@ -528,21 +533,25 @@ test("pickHealItem sticks with the bandage even when the medkit would be faster,
     const bot = game.playerBarn.addTestPlayer({});
     bot.invManager.give("bandage", 10);
     bot.invManager.give("healthkit", 2);
-    bot.health = 40; // same 60-missing case as above - only positionSafe differs
+    bot.health = 40; // same case as above - only positionSafe differs
 
-    expect(pickHealItem(bot, 0.4, /* positionSafe */ false)).toBe("bandage");
+    expect(pickHealItem(bot, 0.4, /* positionSafe */ false, /* healThreshold */ 0.75)).toBe(
+        "bandage",
+    );
 });
 
-// Missing only 15 HP is a single bandage use (3s) against the medkit's 6s - bandage is
-// already faster on its own, so position shouldn't matter here either way.
+// Missing only 15 to threshold is a single bandage use (3s) against the medkit's 6s -
+// bandage is already faster on its own, so position shouldn't matter here either way.
 test("pickHealItem prefers the bandage outright when it isn't actually slower", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
     bot.invManager.give("bandage", 10);
     bot.invManager.give("healthkit", 2);
-    bot.health = 85; // missing 15
+    bot.health = 60; // missing 15 to a 0.75 threshold
 
-    expect(pickHealItem(bot, 0.85, /* positionSafe */ true)).toBe("bandage");
+    expect(pickHealItem(bot, 0.6, /* positionSafe */ true, /* healThreshold */ 0.75)).toBe(
+        "bandage",
+    );
 });
 
 // Critically hurt always grabs the fastest option regardless of position - delaying
@@ -554,7 +563,28 @@ test("pickHealItem grabs the medkit at critical health even when exposed", () =>
     bot.invManager.give("healthkit", 2);
     bot.health = 20; // <= 25%, critical override
 
-    expect(pickHealItem(bot, 0.2, /* positionSafe */ false)).toBe("healthkit");
+    expect(pickHealItem(bot, 0.2, /* positionSafe */ false, /* healThreshold */ 0.75)).toBe(
+        "healthkit",
+    );
+});
+
+// Regression for a real-data finding: across several decoded bot replays, the bot
+// reached for a medkit nearly every single time it healed at all, something a decoded
+// human player's own games never did nearly as lopsidedly - the old comparison judged a
+// bandage regimen against healing all the way to 100, which `shouldHeal` would never
+// actually let happen (it stops wanting to heal at all past `healThreshold`). An
+// ordinary top-up - safely hurt, but not by much - should reach for the quick bandage,
+// not commit to a medkit's full 6 seconds for a deficit a single bandage mostly covers.
+test("pickHealItem reaches for a bandage on an ordinary top-up, not a medkit, even when safe", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 10);
+    bot.invManager.give("healthkit", 2);
+    bot.health = 65; // missing 10 to a 0.75 threshold - one bandage mostly closes it
+
+    expect(pickHealItem(bot, 0.65, /* positionSafe */ true, /* healThreshold */ 0.75)).toBe(
+        "bandage",
+    );
 });
 
 // "der bot soll nades nicht benutzen wenn schießen besser ist" - a healthy bot that can

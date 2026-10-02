@@ -408,16 +408,30 @@ export function updateFiring(
  * confident break in contact - see `BotBrain`'s `SUSTAINED_LOST_MS`) is what makes that
  * longer medkit commitment worth it: reaching for the slower-but-bigger heal on a
  * position that can't actually absorb 6 uninterrupted seconds just trades a shorter
- * bandage tick (which can bail between uses) for a longer, harder-to-abort one. */
+ * bandage tick (which can bail between uses) for a longer, harder-to-abort one.
+ *
+ * `healThreshold` (the caller's `BotTierDef.healThreshold`) bounds how much "missing"
+ * actually counts toward that comparison - real match replays showed the bot picking a
+ * medkit over a bandage almost every single time it healed at all, something a decoded
+ * human player's own games never did nearly as lopsidedly. The old comparison measured
+ * bandage time against healing the *entire* deficit back to 100, but `shouldHeal` stops
+ * wanting to heal at all once back past `healThreshold` - a bot is never actually going
+ * to sit there bandaging all the way to full, so judging the bandage plan against a
+ * regimen it would never finish systematically made the medkit look faster than the
+ * bandage count it would genuinely take. Comparing against the threshold instead - what
+ * a heal decision actually needs to close - routinely favors a single quick bandage for
+ * an ordinary top-up, only reaching for the medkit once genuinely several bandages'
+ * worth behind, matching how real players mix the two. */
 export function pickHealItem(
     bot: Player,
     healthFrac: number,
     positionSafe: boolean,
+    healThreshold: number,
 ): InventoryItem | undefined {
-    const missing = (1 - healthFrac) * GameConfig.player.health;
+    const missingToThreshold = Math.max(0, (healThreshold - healthFrac) * GameConfig.player.health);
     const bandageDef = GameObjectDefs.typeToDefSafe("bandage") as HealDef;
     const healthkitDef = GameObjectDefs.typeToDefSafe("healthkit") as HealDef;
-    const bandageTime = Math.ceil(missing / bandageDef.heal) * bandageDef.useTime;
+    const bandageTime = Math.ceil(missingToThreshold / bandageDef.heal) * bandageDef.useTime;
     const medkitFaster = healthkitDef.useTime < bandageTime;
 
     // Critically hurt: grab whichever heals at all regardless of position - at this
@@ -457,7 +471,7 @@ export function shouldHeal(
     if (healthFrac >= tier.healThreshold) return false;
     if (!desperate && hasVisibleEnemy && healthFrac > 0.25) return false;
 
-    return pickHealItem(bot, healthFrac, positionSafe) !== undefined;
+    return pickHealItem(bot, healthFrac, positionSafe, tier.healThreshold) !== undefined;
 }
 
 /** Heals when hurt and it's safe to. See `shouldHeal` for the decision. */
@@ -470,7 +484,7 @@ export function updateHeal(
 ): void {
     if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate)) return;
     const healthFrac = bot.health / GameConfig.player.health;
-    const item = pickHealItem(bot, healthFrac, positionSafe);
+    const item = pickHealItem(bot, healthFrac, positionSafe, tier.healThreshold);
     if (item) bot.useHealingItem(item);
 }
 
