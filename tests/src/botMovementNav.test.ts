@@ -399,6 +399,67 @@ test("findCover with avoidInterior falls back to an interior candidate when noth
     expect(found?.obstacle).toBe(crate);
 });
 
+// Regression for a real match capture: the bot's held cover obstacle died mid-approach
+// (shot apart - the enemy stayed visible the whole time), and the replacement `findCover`
+// picked next was a *different*, nearer-to-the-bot obstacle that sat roughly in the
+// threat's own direction - reaching it meant closing distance from 25 units down to 6 in
+// full view before the pursuer finished it. "Nearest to the bot" alone says nothing
+// about which side of the threat that nearest point sits on. Same `avoidInterior` gate as
+// the building-interior fix above (both are fleeing-only concerns, never mid-fight
+// peek-cover) - here with a candidate directly on the bot-to-threat line, well under the
+// bot's own current distance from the threat.
+test("findCover with avoidInterior rejects a nearer candidate that closes distance on the threat", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const threatPos = v2.create(60, 60);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(60, 85) }); // 25 units from the threat
+
+    // Between the bot and the threat - its cover point ends up *closer* to the threat
+    // than the bot already is, despite being the closest obstacle to the bot by far.
+    const crateCloser = game.map.genObstacle("crate_01", v2.create(60, 72));
+    // Well past the bot, in the opposite direction from the threat - a real step toward
+    // safety, just farther to walk.
+    const crateSafe = game.map.genObstacle("crate_01", v2.create(60, 100));
+    const graph = buildNavGraph(game);
+
+    // Without an approachBaseline, the nearer (but dangerous) candidate wins as always.
+    const unweighted = findCover(bot, graph.navObstacles, threatPos, 0);
+    expect(unweighted?.obstacle).toBe(crateCloser);
+
+    // With one (the bot's own current 25-unit separation, as `retreatToCover` passes
+    // once something was already held a moment ago), the candidate that would require
+    // closing distance is rejected in favor of the one that's actually a step toward
+    // safety.
+    const weighted = findCover(
+        bot,
+        graph.navObstacles,
+        threatPos,
+        0,
+        undefined,
+        graph,
+        v2.distance(bot.pos, threatPos),
+    );
+    expect(weighted?.obstacle).toBe(crateSafe);
+});
+
+// The very first pick of an engagement has nothing to regress *from* - a bot can easily,
+// legitimately start out farther from the threat than every real piece of cover nearby
+// (it hasn't begun retreating at all yet), and that's completely ordinary, not something
+// to reject. Same geometry as the test above, but without `approachBaseline` - exactly
+// what `retreatToCover` passes the very first time it ever looks for cover this
+// engagement (`priorSafeDist` stays `undefined` until something has actually been held).
+test("findCover without an approachBaseline accepts the nearer candidate on a first pick", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const threatPos = v2.create(60, 60);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(60, 85) });
+
+    const crateCloser = game.map.genObstacle("crate_01", v2.create(60, 72));
+    game.map.genObstacle("crate_01", v2.create(60, 100));
+    const graph = buildNavGraph(game);
+
+    const found = findCover(bot, graph.navObstacles, threatPos, 0, undefined, graph);
+    expect(found?.obstacle).toBe(crateCloser);
+});
+
 // The "der bot muss barrels/explosive obstacles verstehen" ask: hiding behind something
 // that explodes the moment it takes enough damage is worse than standing in the open in
 // the specific way that matters most - the enemy doesn't even need to hit the bot

@@ -575,6 +575,16 @@ function pickOffensiveThrowable(bot: Player): InventoryItem | undefined {
  * `bot.dirNew` is aimed at `threatPos` explicitly in all three cases, since `updateAim`
  * only ever tracks a currently-visible target and leaves `dir` untouched once one isn't.
  *
+ * `hasCleanShot` (visible target, reaction elapsed, aim within the fire cone - see
+ * `updateAim`'s own `canFire`) guards the `isFleeing` case specifically: a real match
+ * capture showed the bot interrupt a dead-on, ready shot at 15-23 units the instant
+ * health crossed the flee threshold, wasting the ~0.1s `cookTime` switch-away (and the
+ * shot itself) on a grenade instead - "oft wären gezielte Schüsse eig besser". The other
+ * two cases never need this guard: both already require the target to not currently be
+ * visible (`justLostSight` is only "was visible a moment ago", `enemyLikelyHealing`
+ * requires a sustained *lack* of sight), so `hasCleanShot` is always false for them
+ * anyway - a shot that isn't there can't be interrupted.
+ *
  * Only owns the `Throwable` weapon slot while `active` - `updateWeaponSelection` leaves
  * that slot alone for the same reason (see its own guard), and this hands it straight
  * back to `returnSlot` the instant `weaponManager` reports the throw resolved, so a
@@ -588,6 +598,7 @@ export function updateThrowable(
     justLostSight: boolean,
     enemyLikelyHealing: boolean,
     isFleeing: boolean,
+    hasCleanShot: boolean,
     dt: number,
 ): void {
     const wm = bot.weaponManager;
@@ -605,7 +616,8 @@ export function updateThrowable(
     throwState.cooldown -= dt;
     if (throwState.cooldown > 0) return;
     if (bot.actionType !== GameConfig.Action.None) return;
-    if (!threatPos || !(justLostSight || enemyLikelyHealing || isFleeing)) return;
+    const fleeingWithoutAShot = isFleeing && !hasCleanShot;
+    if (!threatPos || !(justLostSight || enemyLikelyHealing || fleeingWithoutAShot)) return;
     if (friendlyFireInLine(bot, threatPos)) return;
     if (engageDist < THROW_MIN_DIST || engageDist > THROW_MAX_DIST) return;
 

@@ -546,6 +546,7 @@ test("updateThrowable does not throw at a visible target it could just shoot ins
         /* justLostSight */ false,
         /* enemyLikelyHealing */ false,
         /* isFleeing */ false,
+        /* hasCleanShot */ true,
         0.05,
     );
 
@@ -566,13 +567,55 @@ test("updateThrowable throws to cover a retreat when the bot is fleeing", () => 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
 
-    updateThrowable(bot, throwState, threatPos, 20, false, /* enemyLikelyHealing */ false, /* isFleeing */ true, 0.05);
+    updateThrowable(
+        bot,
+        throwState,
+        threatPos,
+        20,
+        false,
+        /* enemyLikelyHealing */ false,
+        /* isFleeing */ true,
+        /* hasCleanShot */ false,
+        0.05,
+    );
 
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Throwable);
     expect(bot.weaponManager.weapons[WeaponSlot.Throwable].type).toBe("frag");
     expect(bot.shootStart).toBe(true);
     expect(throwState.active).toBe(true);
     expect(throwState.returnSlot).toBe(WeaponSlot.Primary);
+});
+
+// "oft wären gezielte Schüsse eig besser" - a real match capture showed the bot
+// interrupt a dead-on, ready shot the instant health crossed the flee threshold,
+// wasting the throw's own switch-away on a grenade instead of taking the shot it
+// already had lined up. A fleeing bot with a currently clean shot should keep shooting,
+// not throw - the other two throw cases (bait, enemy-healing) are unaffected since they
+// both already require the target to not currently be visible.
+test("updateThrowable does not interrupt a clean shot just because the bot started fleeing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threatPos = v2.create(20, 0); // inside [14,30]
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.invManager.give("frag", 4);
+
+    const throwState = new BotThrowState();
+    throwState.cooldown = 0;
+
+    updateThrowable(
+        bot,
+        throwState,
+        threatPos,
+        20,
+        false,
+        /* enemyLikelyHealing */ false,
+        /* isFleeing */ true,
+        /* hasCleanShot */ true,
+        0.05,
+    );
+
+    expect(throwState.active).toBe(false);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });
 
 // "wirft Granaten manchmal einfach vor sich gegen eine Wand" - an obstacle immediately
@@ -590,7 +633,17 @@ test("updateThrowable does not throw into an obstacle immediately in front of it
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
 
-    updateThrowable(bot, throwState, threatPos, 20, false, /* enemyLikelyHealing */ false, /* isFleeing */ true, 0.05);
+    updateThrowable(
+        bot,
+        throwState,
+        threatPos,
+        20,
+        false,
+        /* enemyLikelyHealing */ false,
+        /* isFleeing */ true,
+        /* hasCleanShot */ false,
+        0.05,
+    );
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -620,7 +673,7 @@ test("updateThrowable refuses a throw that grazes a corner within the projectile
     grazing.invManager.give("frag", 4);
     const grazingThrow = new BotThrowState();
     grazingThrow.cooldown = 0;
-    updateThrowable(grazing, grazingThrow, v2.add(grazing.pos, v2.mul(dir, 20)), 20, false, false, true, 0.05);
+    updateThrowable(grazing, grazingThrow, v2.add(grazing.pos, v2.mul(dir, 20)), 20, false, false, true, false, 0.05);
     expect(grazingThrow.active).toBe(false);
 
     const wellClear = game.playerBarn.addTestPlayer({ pos: v2.add(start, v2.mul(outward, 1.5)) });
@@ -628,7 +681,17 @@ test("updateThrowable refuses a throw that grazes a corner within the projectile
     wellClear.invManager.give("frag", 4);
     const wellClearThrow = new BotThrowState();
     wellClearThrow.cooldown = 0;
-    updateThrowable(wellClear, wellClearThrow, v2.add(wellClear.pos, v2.mul(dir, 20)), 20, false, false, true, 0.05);
+    updateThrowable(
+        wellClear,
+        wellClearThrow,
+        v2.add(wellClear.pos, v2.mul(dir, 20)),
+        20,
+        false,
+        false,
+        true,
+        false,
+        0.05,
+    );
     expect(wellClearThrow.active).toBe(true);
 });
 
@@ -646,7 +709,17 @@ test("updateThrowable still throws over/around cover that's further away than th
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
 
-    updateThrowable(bot, throwState, threatPos, 20, false, /* enemyLikelyHealing */ false, /* isFleeing */ true, 0.05);
+    updateThrowable(
+        bot,
+        throwState,
+        threatPos,
+        20,
+        false,
+        /* enemyLikelyHealing */ false,
+        /* isFleeing */ true,
+        /* hasCleanShot */ false,
+        0.05,
+    );
 
     expect(throwState.active).toBe(true);
 });
@@ -660,7 +733,7 @@ test("updateThrowable hands the weapon slot back to the gun once the throw resol
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, threatPos, 20, false, false, true, 0.05);
+    updateThrowable(bot, throwState, threatPos, 20, false, false, true, false, 0.05);
     expect(throwState.active).toBe(true);
 
     // Advance real game ticks so `weaponManager.update` actually cooks and releases the
@@ -668,7 +741,7 @@ test("updateThrowable hands the weapon slot back to the gun once the throw resol
     // the input fields, exactly like a human's InputMsg would.
     for (let i = 0; i < 10 && throwState.active; i++) {
         game.update(0.05);
-        updateThrowable(bot, throwState, threatPos, 20, false, false, true, 0.05);
+        updateThrowable(bot, throwState, threatPos, 20, false, false, true, false, 0.05);
     }
 
     expect(throwState.active).toBe(false);
@@ -684,7 +757,7 @@ test("updateThrowable does not throw at point-blank range (self-splash risk)", (
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, threatPos, 6, false, false, true, 0.05);
+    updateThrowable(bot, throwState, threatPos, 6, false, false, true, false, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -698,7 +771,7 @@ test("updateThrowable does not throw without a grenade in inventory", () => {
 
     const throwState = new BotThrowState();
     throwState.cooldown = 0;
-    updateThrowable(bot, throwState, threatPos, 20, false, false, true, 0.05);
+    updateThrowable(bot, throwState, threatPos, 20, false, false, true, false, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -714,7 +787,7 @@ test("updateThrowable waits out its own cooldown between throws", () => {
     const throwState = new BotThrowState();
     throwState.cooldown = 3; // hasn't elapsed yet
 
-    updateThrowable(bot, throwState, threatPos, 20, false, false, true, 0.05);
+    updateThrowable(bot, throwState, threatPos, 20, false, false, true, false, 0.05);
 
     expect(throwState.active).toBe(false);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
@@ -742,6 +815,7 @@ test("updateThrowable bait-throws at a target's last-known spot right after losi
         /* justLostSight */ true,
         /* enemyLikelyHealing */ false,
         /* isFleeing */ false,
+        /* hasCleanShot */ false,
         0.05,
     );
 
@@ -770,6 +844,7 @@ test("updateThrowable does not bait-throw at a stale memory (not recently lost)"
         /* justLostSight */ false,
         /* enemyLikelyHealing */ false,
         /* isFleeing */ false,
+        /* hasCleanShot */ false,
         0.05,
     );
 
@@ -800,6 +875,7 @@ test("updateThrowable throws at a target that's likely healing behind cover, sus
         /* justLostSight */ false,
         /* enemyLikelyHealing */ true,
         /* isFleeing */ false,
+        /* hasCleanShot */ false,
         0.05,
     );
 

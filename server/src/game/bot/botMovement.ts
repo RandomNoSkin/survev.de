@@ -613,6 +613,14 @@ const COVER_STICKINESS_MARGIN = 5;
  *  to catch, just through a different door. */
 const COVER_MISS_GRACE = 1;
 
+/** How much closer to the threat a *fresh* cover pick is allowed to be than the bot's
+ *  own current distance, while fleeing - see `findCover`'s own doc comment on
+ *  `avoidInterior`. A small tolerance, not zero: the bot's own position wobbles a little
+ *  tick to tick (strafing, local deflection), and a candidate that's only a hair closer
+ *  than "current distance" because of that noise is still a perfectly reasonable pick,
+ *  not the multi-unit regression this exists to catch. */
+const COVER_APPROACH_MARGIN = 3;
+
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
  *  as seen from `threatPos` - real cover, not just "away from the enemy". Every
  *  candidate is checked against the *current* state of the obstacle it hides behind
@@ -633,17 +641,33 @@ const COVER_MISS_GRACE = 1;
  *  "commit to a choice, don't re-decide every tick" fix already applied to local-obstacle
  *  deflection, `followPath`'s direct-vs-routed check, and idle-goal hysteresis.
  *
- *  `avoidInterior` (only passed while actually fleeing, not mid-fight peek-cover - see
- *  `retreatToCover`'s own call) - "Gebäude nur zum Durchlaufen nutzen, nicht zu lange
- *  drin bleiben": a real match capture showed a fleeing bot commit to a cover candidate
- *  that happened to sit on a building's `interior` lattice, then stall for the better
- *  part of a second working `followPath`/a door to actually reach it while the enemy
- *  closed in and finished it - a building makes a fine thing to run *through* on the way
- *  to real distance, a poor thing to detour *into* and get held up navigating just to
- *  hide behind whatever's sitting in that specific room. Non-interior candidates are
- *  preferred as their own pool whenever any exist at all; interior ones are only ever
- *  handed out as a last resort, exactly the same fallback shape `preferNonInteriorGoal`
- *  already uses for a retreat's raw destination. */
+ *  `approachBaseline` (only passed while actually fleeing, not mid-fight peek-cover -
+ *  see `retreatToCover`'s own call, which threads through the distance it already had a
+ *  moment ago, captured *before* a dead cover obstacle's reset could wipe it) rejects any
+ *  candidate closer to the threat than that baseline - a fresh pick that would mean
+ *  closing distance just to reach it. A real match capture showed the bot's held cover
+ *  obstacle die mid-approach (likely shot apart - the enemy stayed visible the whole
+ *  time), and the replacement `findCover` picked next was a *different* obstacle over 25
+ *  units away in roughly the threat's own direction - "nearest to the bot" alone says
+ *  nothing about which side of the threat that nearest point sits on. The bot then
+ *  walked that whole distance in full view, closing from 25 units down to 6 before the
+ *  pursuer finished it. `undefined` (never held any cover at all yet this engagement) -
+ *  not just "no obstacle currently held", which a same-tick death reset can't tell apart
+ *  from a genuine first pick - skips the check entirely: there's nothing to regress
+ *  *from* on a real first pick, and a bot simply starting out farther from the threat
+ *  than literally every piece of cover nearby is completely ordinary, not a regression.
+ *
+ *  `avoidInterior` separately gates a second, independent fleeing-only preference:
+ *  "Gebäude nur zum Durchlaufen nutzen, nicht zu lange drin bleiben" - a real match
+ *  capture showed a fleeing bot commit to a cover candidate that happened to sit on a
+ *  building's `interior` lattice, then stall for the better part of a second working
+ *  `followPath`/a door to actually reach it while the enemy closed in and finished it -
+ *  a building makes a fine thing to run *through* on the way to real distance, a poor
+ *  thing to detour *into* and get held up navigating just to hide behind whatever's
+ *  sitting in that specific room. Non-interior candidates are preferred as their own
+ *  pool whenever any exist at all; interior ones are only ever handed out as a last
+ *  resort, exactly the same fallback shape `preferNonInteriorGoal` already uses for a
+ *  retreat's raw destination. */
 export function findCover(
     bot: Player,
     navObstacles: Obstacle[],
@@ -651,6 +675,7 @@ export function findCover(
     minDistFromThreat = 0,
     preferred?: Obstacle,
     avoidInterior?: NavGraph,
+    approachBaseline?: number,
 ): { obstacle: Obstacle; pos: Vec2 } | undefined {
     const layer = util.toGroundLayer(bot.layer);
     const aabb = collider.createAabbExtents(bot.pos, v2.create(COVER_SEARCH_RAD, COVER_SEARCH_RAD));
@@ -681,6 +706,14 @@ export function findCover(
         // Not just excluding a barrel *as* cover - a candidate right next to one is
         // just as much in the blast as picking the barrel itself would be.
         if (nearLiveExplosive(objs, candidate, layer)) continue;
+        // See this function's own doc comment on `approachBaseline`.
+        if (
+            approachBaseline !== undefined
+            && o !== preferred
+            && v2.distance(candidate, threatPos) < approachBaseline - COVER_APPROACH_MARGIN
+        ) {
+            continue;
+        }
 
         const distSqr = v2.lengthSqr(v2.sub(bot.pos, candidate));
         const entry = { obstacle: o, pos: candidate, distSqr };
@@ -863,6 +896,13 @@ function retreatToCover(
     minCoverDist: number,
     aggression: number | undefined,
 ): Vec2 {
+    // Captured before the death-check below can wipe `coverPos` this same tick - see
+    // `findCover`'s own doc comment on `approachBaseline`. Whatever distance the bot
+    // already had a moment ago (cover obstacle dead or not) is the right "don't regress
+    // below this" baseline for the recompute just below; `undefined` (never held any
+    // cover at all yet) means there's nothing to regress *from*, so no constraint.
+    const priorSafeDist = state.coverPos ? v2.distance(bot.pos, threatPos) : undefined;
+
     if (state.coverObstacle?.dead || state.coverObstacle?.collidable === false) {
         state.coverObstacle = undefined;
         state.coverPos = undefined;
@@ -884,6 +924,7 @@ function retreatToCover(
             minCoverDist,
             state.coverObstacle,
             holdAndPeek ? undefined : nav,
+            holdAndPeek ? undefined : priorSafeDist,
         );
         if (
             !found

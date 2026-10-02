@@ -413,7 +413,10 @@ export class BotBrain {
         // `isFleeing` is the third, bot-side legitimate reason to throw - a bot that's
         // healthy and can see its target should always just shoot instead (see
         // `updateThrowable`'s own doc comment for why finishing a visible target with a
-        // grenade used to be a case here, and isn't anymore).
+        // grenade used to be a case here, and isn't anymore). `hasCleanShot` (already
+        // computed above as `aimResult.canFire`, which itself requires a currently
+        // visible target) keeps a *newly*-fleeing bot from throwing away a shot that's
+        // ready right now - see `updateThrowable`'s own doc comment on that guard.
         const isFleeing = directive === "flee" || directive === "heal";
         updateThrowable(
             bot,
@@ -423,6 +426,7 @@ export class BotBrain {
             recentlyVisible,
             this.sustainedlyLost(bot),
             isFleeing,
+            aimResult.canFire,
             dt,
         );
 

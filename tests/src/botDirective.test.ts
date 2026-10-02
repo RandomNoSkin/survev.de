@@ -886,3 +886,61 @@ test("A healthy bot throws a grenade at a sustainedly-lost target's last-known s
         vi.restoreAllMocks();
     }
 });
+
+// "oft wären gezielte Schüsse eig besser" wired end-to-end through the full brain: a
+// bot that already has a dead-on, ready shot lined up on a visible target must not throw
+// it away for a grenade the instant health crosses the flee threshold. Real `Math.random`
+// throughout (not mocked) - `updateAim`'s own drifting-aim-error model (`gaussianRandom`,
+// a Box-Muller transform) degenerates into a single huge, constant bias when every draw
+// is pinned to the same value, which never lets the aim actually converge - this needs
+// the real aim model to behave realistically. Also drives `game.update(dt)` alongside
+// `bot.botBrain!.update(dt)` on every tick, not just the brain alone like every other test
+// in this file: those only ever need the brain's own decisions (directive, movement,
+// actionType), but actually consuming ammo on a shot is `weaponManager.update`'s job,
+// which only runs as part of the full game tick - `botBarn.update` (what normally drives
+// this in a real match) no-ops here since `makeBrainedBot` wires the brain directly rather
+// than registering with it.
+test("A fleeing bot with a ready shot keeps shooting instead of throwing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) }); // 20 units - inside throw range [14,30]
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "m870";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    bot.invManager.give("frag", 4);
+
+    // Let aim converge and land a real shot, still healthy - a shot actually taken
+    // before ever becoming eligible to flee, not something that only coincidentally
+    // lines up on the same tick.
+    let fired = false;
+    for (let i = 0; i < 100 && !fired; i++) {
+        bot.botBrain!.update(0.05);
+        game.update(0.05);
+        fired = bot.weaponManager.weapons[WeaponSlot.Primary].ammo < 5;
+    }
+    expect(fired).toBe(true); // sanity: confirms this scenario actually has a real shot to interrupt
+
+    // Reset back to a known-good setup right before the check - position/ammo/weapon
+    // slot are all free to have drifted from the live engagement above (strafing,
+    // emptying the clip, ...), any one of which would refuse a throw/shot for a reason
+    // unrelated to this guard and defeat the test either way. The throw's own
+    // `util.random(2, 5)` cooldown is reset directly for the same reason - it's on a
+    // similar timescale to reaction + aim convergence, so a real warmup can't reliably
+    // guarantee it has *also* cleared by now without running long enough that a stray
+    // bait-throw (`justLostSight`, unrelated to this guard, from an incidental visibility
+    // blip during 100 ticks of real strafing) becomes a real risk of its own.
+    bot.pos = v2.create(50, 50);
+    target.pos = v2.create(70, 50);
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    // Reaching past BotBrain's `private` throw state - TypeScript-only, not a real
+    // runtime boundary - is the only way to deterministically neutralize it as a
+    // confound here.
+    (bot.botBrain as unknown as { throwState: { cooldown: number } }).throwState.cooldown = 0;
+
+    bot.health = 20; // now low enough to flee, with that ready shot already in hand
+    bot.botBrain!.update(0.05);
+
+    expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Throwable);
+});
