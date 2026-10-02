@@ -102,6 +102,14 @@ const COVER_RECOMPUTE_INTERVAL = 0.4;
 // enough slop, by itself, to walk the bot's exposed edge right back into view.
 const COVER_REACHED_DIST = 0.75;
 
+/** How close the bot has to already be to `coverPos` before `followPath` is allowed to
+ *  ignore the cover obstacle itself as a blocker - see `followPath`'s own doc comment on
+ *  `ignore`. Well past `COVER_BUFFER` (2.75, how far the point sits off the obstacle's own
+ *  edge): close enough that the straight line to it is genuinely just grazing that edge by
+ *  design, not a sign the obstacle's bulk is still sitting *between* the bot and a point
+ *  on its far side - that longer-range case still needs real routing around it. */
+const COVER_APPROACH_IGNORE_DIST = 6;
+
 /** Max turn rate (rad/s) for the raw-steering direction while closing the last stretch
  *  to `coverPos` - see `retreatToCover`'s approach branch. A real match capture showed a
  *  bot visibly vibrate in place for 1.4+ seconds at critical health closing in on its own
@@ -1195,9 +1203,26 @@ function retreatToCover(
         // `pushedPastCover` skips the approach check once it's true - see its own doc
         // comment on `BotMovementState`. Never set for `holdAndPeek`, which always
         // settles the instant it reaches its held range regardless of raw distance.
-        if (!state.pushedPastCover && v2.distance(bot.pos, state.coverPos) > COVER_REACHED_DIST) {
+        const distToCover = v2.distance(bot.pos, state.coverPos);
+        if (!state.pushedPastCover && distToCover > COVER_REACHED_DIST) {
             state.peeking = false;
-            const pathDir = nav ? followPath(bot, state, nav, state.coverPos, dt) : undefined;
+            // Only ignore the cover obstacle itself once already close to the point
+            // behind it - see `followPath`'s own doc comment on `ignore`. Farther out,
+            // the obstacle's bulk can genuinely sit *between* the bot and that point
+            // (approaching from the threat's own side of it, say), where routing around
+            // it is still exactly correct - only the final couple of units, where the
+            // straight line is naturally grazing the obstacle's edge by design, should
+            // skip pathing around it entirely.
+            const pathDir = nav
+                ? followPath(
+                    bot,
+                    state,
+                    nav,
+                    state.coverPos,
+                    dt,
+                    distToCover < COVER_APPROACH_IGNORE_DIST ? state.coverObstacle : undefined,
+                )
+                : undefined;
             if (pathDir) {
                 state.approachDir = undefined; // a real path is doing the steering now
                 return pathDir;
@@ -1339,13 +1364,25 @@ export function isSafeToHeal(
  *  steers straight at `goal` itself) or when no usable path exists at all (nav isn't
  *  built yet, or the graph genuinely has nothing nearby) - both cases fall back to the
  *  M1 direct-steering behavior, which is worse but never broken.
- */
+ *
+ *  `ignore` (passed by `retreatToCover`'s approach branch as `state.coverObstacle`) keeps
+ *  the direct-clear shortcut below from seeing the bot's own held cover obstacle as a
+ *  blocker - a real match capture showed a bot settled at cover take a hit, the cover
+ *  recompute's own position noise un-arrive it (see the "un-arrive" doc comment on the
+ *  recompute block), and the resulting re-approach to a goal point sitting right behind
+ *  that exact obstacle read as "blocked" by it, forcing a full nav-graph detour for what
+ *  should have been a two-unit direct step - the detour briefly walked the bot *away*
+ *  from safety while a visible, closing enemy took it from 48 HP to 7 in under half a
+ *  second. Same reasoning `isDirClear`'s own `ignore` param already documents for the
+ *  generic local-deflection probe - approaching within a couple of units of the obstacle
+ *  a cover point sits behind is the intended destination, not something to route around. */
 export function followPath(
     bot: Player,
     state: BotMovementState,
     graph: NavGraph,
     goal: Vec2,
     dt: number,
+    ignore?: Obstacle,
 ): Vec2 | undefined {
     const layer = util.toGroundLayer(bot.layer);
 
@@ -1381,7 +1418,8 @@ export function followPath(
     // the ray now correctly doesn't.
     const toGoal = v2.sub(goal, bot.pos);
     const goalDist = v2.length(toGoal);
-    const directClear = goalDist < 0.01 || isDirClear(bot, v2.mul(toGoal, 1 / goalDist), goalDist);
+    const directClear = goalDist < 0.01
+        || isDirClear(bot, v2.mul(toGoal, 1 / goalDist), goalDist, ignore);
     if (!state.path.length && directClear) {
         return undefined;
     }

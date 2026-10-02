@@ -863,6 +863,31 @@ test("Approaching cover damps rapid tick-to-tick direction swings from position 
     }
 });
 
+// Regression for a real match capture: a bot settled at cover took a hit, the cover
+// recompute's own position noise "un-arrived" it (see the recompute block's own
+// "un-arrive" comment), and the resulting short re-approach to a goal point sitting right
+// behind that SAME obstacle read as "blocked" by it, forcing a full nav-graph detour for
+// what should have been a two-unit direct step - while a visible, closing enemy took it
+// from 48 HP to 7 in under half a second during that detour. `ignore` (the bot's own held
+// cover obstacle) lets the direct-clear shortcut see past it specifically for this final
+// approach, same reasoning `isDirClear`'s own `ignore` param already documents.
+test("followPath ignores the bot's own cover obstacle for the final approach to it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const obstacle = game.map.genObstacle("crate_01", v2.create(100, 100));
+    const graph = buildNavGraph(game);
+    // Just past the obstacle's far edge from the bot - the straight line from the bot to
+    // it grazes the obstacle itself, the same geometry a real cover point has relative to
+    // the obstacle it hides behind.
+    const goal = v2.create(104, 100);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(97, 101) });
+
+    const withoutIgnore = followPath(bot, new BotMovementState(), graph, goal, 0.1);
+    expect(withoutIgnore).toBeDefined(); // forced into a real path/detour
+
+    const withIgnore = followPath(bot, new BotMovementState(), graph, goal, 0.1, obstacle);
+    expect(withIgnore).toBeUndefined(); // direct steering - no detour needed
+});
+
 // Regression for a real match capture: "wird gepusht und stirbt" - a bot camped one
 // exact spot for 7.6 straight seconds chaining heals with zero threat signal (no
 // sighting, no heard shot) the whole time, since `stillExposed`/`threatClosingIn` both
