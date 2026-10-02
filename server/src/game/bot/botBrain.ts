@@ -37,8 +37,9 @@ const ABORT_HEAL_REACT_MS = 350;
  *  scratch after an abort costs strictly more total exposure than just tanking one hit
  *  and continuing, regardless of whether the abort happens early or late. */
 const ONE_SHOT_RISK_HEALTH_FRAC = 0.35;
-/** After an abort, don't immediately re-start the same heal - open some distance
- *  first, which is exactly what `flee` (see `pickDirective`) is for. */
+/** After an abort, open some distance before the desperate-gamble override
+ *  (`DESPERATE_HEAL_S`) is willing to kick in - see `healAbortCooldown`'s own doc
+ *  comment for why this stops short of blocking a *genuinely* safe re-heal outright. */
 const HEAL_ABORT_COOLDOWN_S = 1.2;
 /** Being out of ammo is only worth retreating over if actually under fire this
  *  recently - see `needsReload`. Reloading in place is fine when nothing is shooting
@@ -190,8 +191,12 @@ export class BotBrain {
     /** Wall-clock ms (`game.now`) this bot last took damage - see `onDamaged` and the
      *  heal-abort check in `update()`. */
     private lastHitTakenTime = -Infinity;
-    /** Set for a short window after an aborted heal, so the bot doesn't immediately
-     *  re-start the exact bandage that just got interrupted - see `pickDirective`. */
+    /** Set for a short window after an aborted heal. No longer a hard block on
+     *  re-starting while critical (see `pickDirective`'s own doc comment on why that was
+     *  a real bug) - genuine safety (`canHealNow`) always governs that. Still suppresses
+     *  `criticalUnsafeElapsedS` from accumulating during this same window, so the
+     *  desperate-gamble override can't fire in the very first instant after an abort,
+     *  only once genuinely stuck past it. */
     private healAbortCooldown = 0;
     /** Set for a short window the instant a heal action ends, completed or aborted
      *  alike - see `POST_HEAL_RETREAT_COOLDOWN_S`/`pickDirective`. Firing on an abort too
@@ -333,7 +338,7 @@ export class BotBrain {
             }
         }
 
-        const directive = this.pickDirective(bot, threatPos, dt);
+        const directive = this.pickDirective(bot, threatPos, dt, !!grenadeThreat);
 
         // Not visible *right now*, but was a moment ago - almost always means the enemy
         // just ducked back behind their own cover, not that the bot genuinely lost
@@ -534,7 +539,12 @@ export class BotBrain {
      *     reloads in place under whichever directive comes next instead.
      * 13. Default: hold a sane range, using cover once there instead of standing still.
      */
-    private pickDirective(bot: Player, threatPos: Vec2 | undefined, dt: number): CombatDirective {
+    private pickDirective(
+        bot: Player,
+        threatPos: Vec2 | undefined,
+        dt: number,
+        grenadeThreat: boolean,
+    ): CombatDirective {
         // Reset unconditionally, not just on the branch that sets it true - every early
         // return below (already mid-heal, no target) must never leave a stale `true`
         // from an earlier tick around to wrongly wave a *different*, non-desperate heal
@@ -566,7 +576,28 @@ export class BotBrain {
             this.criticalUnsafeElapsedS = 0;
         }
 
-        if (critical && (noHealItem || this.healAbortCooldown > 0)) return this.fleeOrFight();
+        // Deliberately *not* also gated on `this.healAbortCooldown > 0` here, even though
+        // an abort is what sets it - a real match loss showed the bot take a near-fatal
+        // hit mid-heal (correctly aborting - `ONE_SHOT_RISK_HEALTH_FRAC`), lose the
+        // enemy's sight within ~150ms, and then just keep fleeing anyway for another
+        // second-plus purely because the cooldown hadn't expired yet - genuinely safe to
+        // heal again (`canHealNow` already true) the whole time it was forced to wait.
+        // "er hat gezögert, dann angefangen zu healen" - the pursuer closed back in
+        // during exactly that forced wait and finished it. The cooldown's own purpose
+        // (don't immediately re-start the *same* exposed heal, see its own doc comment)
+        // only makes sense while still genuinely unsafe - `canHealNow` below already
+        // requires real safety before healing resumes regardless, so it isn't a free
+        // pass; `healAbortCooldown` still suppresses `criticalUnsafeElapsedS` just below
+        // while that's true, so the desperate-gamble override doesn't fire in the first
+        // instant after an abort either, only once genuinely stuck for a while.
+        //
+        // `grenadeThreat` is checked explicitly here instead, rather than leaning on the
+        // cooldown to incidentally cover it: unlike a survived hit (a one-off event, safe
+        // to re-evaluate from scratch a moment later), a live grenade is an ongoing
+        // hazard this exact spot - `canHealNow`/`isSafeToHeal` never factor it in at all,
+        // so without this a bot could cancel and immediately re-start a heal right next
+        // to a still-ticking grenade the instant distance/cover alone looked safe.
+        if (critical && (noHealItem || grenadeThreat)) return this.fleeOrFight();
         // Been critical and unable to safely heal for too long - gamble on starting the
         // bandage right here instead of continuing to flee (or fight) toward a safety
         // this specific opponent is never going to grant. The existing heal-abort safety

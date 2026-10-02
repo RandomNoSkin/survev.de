@@ -438,7 +438,13 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     });
     bot.botBrain!.update(0.05);
 
-    expect(bot.actionType).toBe(GameConfig.Action.None); // aborted, not finished blind
+    // With a safe distance already in hand, the bot immediately re-starts a *fresh*
+    // bandage instead of sitting idle (see `pickDirective`'s own doc comment on why the
+    // abort cooldown no longer blocks this) - `action.time` resetting to 0 instead of
+    // continuing from where the old one left off proves the old heal was genuinely
+    // interrupted, not finished blind.
+    expect(bot.action.time).toBe(0);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
 
 // Real match debug logging caught this exact scenario: the bot preferred melee while
@@ -578,6 +584,45 @@ test("A heal still aborts when the bot is in real one-shot danger", () => {
     bot.botBrain!.update(0.05);
 
     expect(bot.actionType).toBe(GameConfig.Action.None); // still aborts - real risk
+});
+
+// Regression for a real match loss: the bot took a near-fatal hit mid-heal (correctly
+// aborting - see the test above) at a distance already well past `SAFE_HEAL_DIST`, lost
+// the enemy's sight within ~150ms, and then just kept fleeing anyway for another
+// second-plus purely because `healAbortCooldown` hadn't expired yet - genuinely safe to
+// heal again (by plain distance alone, before sight was even lost) the entire time it
+// was forced to wait. "er hat gezögert, dann angefangen zu healen, dadurch konnte ich
+// ihn töten" - the pursuer closed back in during exactly that forced wait and finished
+// it. A critical, already-safe bot must not wait out the full `HEAL_ABORT_COOLDOWN_S`
+// (1.2s) before trying again.
+test("A critical heal resumes right after an abort, not after the full abort cooldown", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    // 35 units - already past SAFE_HEAL_DIST (16), same as the real capture's dist=18
+    // right as the critical hit landed.
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    bot.invManager.give("bandage", 5);
+    bot.health = 20; // well under ONE_SHOT_RISK_HEALTH_FRAC (35%) after this hit
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 2.5;
+    bot.action.time = 1; // mid-heal
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+
+    bot.damage({
+        amount: 5,
+        damageType: GameConfig.DamageType.Player,
+        dir: v2.create(-1, 0),
+        source: target,
+    });
+    // One tick, 0.05s - nowhere near the 1.2s cooldown. The old flat
+    // `healAbortCooldown > 0` gate forced `fleeOrFight` regardless of `canHealNow`
+    // already being true here; this must resume right away instead.
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem); // resumed, not stuck fleeing
 });
 
 test("A bot mid-heal keeps retreating even with a low target, instead of pushing blind", () => {
