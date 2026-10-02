@@ -147,7 +147,11 @@ test("A bot still retreats for a grace window right after a heal ends when the e
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // full health - not low
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 70; // not low, and not more than the bot's own health either - isolates
+    // this from `behindOnHealth` ("wenn nicht full und der Gegner mehr hp hat dann sollte
+    // heilen Prio sein"), which is a separate, legitimate reason to keep retreating this
+    // test deliberately avoids triggering.
     bot.health = 80; // comfortably clear of "low"
 
     bot.actionType = GameConfig.Action.UseItem;
@@ -158,6 +162,26 @@ test("A bot still retreats for a grace window right after a heal ends when the e
 
     for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // past POST_HEAL_RETREAT_COOLDOWN_S (1.5s)
     expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // back to holding at range, not still fleeing
+});
+
+// "wenn nicht full und der Gegner mehr hp hat dann sollte heilen eig prio sein" - merely
+// clearing the bot's own `low` bar isn't enough to justify holding ground against a
+// visible enemy who's genuinely ahead on health; every point matters for how the
+// eventual trade plays out. `canHealNow` itself still can't fire yet (the enemy is
+// visible - `shouldHeal`'s own safety gate), but the new relative-health trigger should
+// still send the bot looking for a safe moment instead of settling into `engageHold`.
+test("A bot retreats to heal when not full and a visible enemy has meaningfully more health", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 85; // comfortably clear of the old, purely self-health "low" bar
+    target.health = 100; // ahead by well more than HEALTH_DEFICIT_MARGIN
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // retreating from the target (+x), not holding/pushing
 });
 
 test("A bot back up to tier.healThreshold pushes a low target normally", () => {

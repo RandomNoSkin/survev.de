@@ -457,21 +457,44 @@ export function pickHealItem(
  *  visible-enemy gate specifically - `actionType`/`cookingThrowable`/already-healed-past-
  *  threshold still apply regardless, since none of those are the "opponent won't ever
  *  let up" deadlock this exists for. */
+/** The real heal "aim point" for `shouldHeal`/`pickHealItem` - normally just
+ *  `tier.healThreshold`, but raised to a full 100% whenever a currently-tracked enemy
+ *  has more health than the bot does right now. "wenn nicht full und der Gegner mehr hp
+ *  hat dann sollte heilen Prio sein" - every point of health matters for how a 1v1 trade
+ *  actually plays out, so a real, currently-visible-enemy deficit is worth closing once
+ *  safe even past the tier's own ordinary "good enough" bar, not just when hurt enough
+ *  to be in real danger. `enemyHealthFrac` is `undefined` whenever there's no
+ *  currently-tracked enemy to compare against (a remembered last-seen position or a
+ *  gunshot has no health reading to go on) - falls back to the plain tier threshold,
+ *  same as always. Composes with the existing visibility gate below rather than
+ *  bypassing it: this only actually matters once the enemy isn't currently in sight (a
+ *  real safe window), the same as any other top-up. */
+export function effectiveHealThreshold(
+    tier: BotTierDef,
+    healthFrac: number,
+    enemyHealthFrac?: number,
+): number {
+    if (enemyHealthFrac !== undefined && enemyHealthFrac > healthFrac) return 1;
+    return tier.healThreshold;
+}
+
 export function shouldHeal(
     bot: Player,
     tier: BotTierDef,
     hasVisibleEnemy: boolean,
     positionSafe: boolean,
     desperate = false,
+    enemyHealthFrac?: number,
 ): boolean {
     if (bot.actionType !== GameConfig.Action.None) return false;
     if (bot.weaponManager.cookingThrowable) return false;
 
     const healthFrac = bot.health / GameConfig.player.health;
-    if (healthFrac >= tier.healThreshold) return false;
+    const healThreshold = effectiveHealThreshold(tier, healthFrac, enemyHealthFrac);
+    if (healthFrac >= healThreshold) return false;
     if (!desperate && hasVisibleEnemy && healthFrac > 0.25) return false;
 
-    return pickHealItem(bot, healthFrac, positionSafe, tier.healThreshold) !== undefined;
+    return pickHealItem(bot, healthFrac, positionSafe, healThreshold) !== undefined;
 }
 
 /** Heals when hurt and it's safe to. See `shouldHeal` for the decision. */
@@ -481,10 +504,12 @@ export function updateHeal(
     hasVisibleEnemy: boolean,
     positionSafe: boolean,
     desperate = false,
+    enemyHealthFrac?: number,
 ): void {
-    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate)) return;
+    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate, enemyHealthFrac)) return;
     const healthFrac = bot.health / GameConfig.player.health;
-    const item = pickHealItem(bot, healthFrac, positionSafe, tier.healThreshold);
+    const healThreshold = effectiveHealThreshold(tier, healthFrac, enemyHealthFrac);
+    const item = pickHealItem(bot, healthFrac, positionSafe, healThreshold);
     if (item) bot.useHealingItem(item);
 }
 

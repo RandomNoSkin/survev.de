@@ -7,6 +7,7 @@ import type { BotBarn } from "./botBarn.ts";
 import {
     BotFireState,
     BotThrowState,
+    effectiveHealThreshold,
     pickHealItem,
     shouldHeal,
     updateFiring,
@@ -99,6 +100,14 @@ const DESPERATE_HEAL_S = 1.2;
  *  that's ahead trades itself away. Without a currently visible target to read health
  *  from, `push` never has enough information to justify it either. */
 const ENEMY_LOW_HEALTH_FRAC = 0.4;
+/** How far ahead a currently-tracked enemy's health has to be, as a fraction of max
+ *  health, before being behind on it alone counts as worth retreating to fix - see
+ *  `pickDirective`'s `behindOnHealth`. Not zero: health moves in real chunks (a graze, a
+ *  passive-regen tick), and treating "enemy is 1-2 HP ahead right now" as a reason to
+ *  break off would flip `low` back and forth every time either health value ticks across
+ *  the other by a sliver - the exact tick-to-tick flapping already fixed elsewhere in
+ *  this file (cover stickiness, range-mode hysteresis) for the same underlying reason. */
+const HEALTH_DEFICIT_MARGIN = 0.05;
 /** How recently the target has to have actually been visible to count as "just ducked
  *  out of sight" rather than "genuinely lost track of them" - see `updateMovement`'s
  *  `recentlyVisible` and the eager re-peek it triggers. Comfortably past a peek's own
@@ -410,6 +419,7 @@ export class BotBrain {
                 !!this.target,
                 this.positionSafeForHeal(bot),
                 this.desperateHeal,
+                this.target ? this.target.health / GameConfig.player.health : undefined,
             );
         }
 
@@ -571,11 +581,25 @@ export class BotBrain {
             return canHeal ? "heal" : "idle";
         }
 
-        const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT;
         const positionSafe = this.positionSafeForHeal(bot);
-        const noHealItem = pickHealItem(bot, healthFrac, positionSafe, this.tier.healThreshold) === undefined;
+        // "wenn nicht full und der Gegner mehr hp hat dann sollte heilen Prio sein" -
+        // treated the same as ordinary `low` health below: worth disengaging to look for
+        // a safe moment to close a real relative deficit, not just once hurt enough on
+        // its own terms. See `effectiveHealThreshold`'s own doc comment for the matching
+        // change to the actual heal-safety gate just below - without it, `low` alone
+        // would retreat looking for safety and then just stand there once it found some,
+        // since the plain tier threshold would still say "no need, already above it".
+        const enemyHealthFrac = this.target
+            ? this.target.health / GameConfig.player.health
+            : undefined;
+        const behindOnHealth = healthFrac < 1
+            && enemyHealthFrac !== undefined
+            && enemyHealthFrac - healthFrac > HEALTH_DEFICIT_MARGIN;
+        const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT || behindOnHealth;
+        const healThreshold = effectiveHealThreshold(this.tier, healthFrac, enemyHealthFrac);
+        const noHealItem = pickHealItem(bot, healthFrac, positionSafe, healThreshold) === undefined;
         const canHealNow = !noHealItem
-            && shouldHeal(bot, this.tier, !!this.target, positionSafe);
+            && shouldHeal(bot, this.tier, !!this.target, positionSafe, false, enemyHealthFrac);
 
         // See `DESPERATE_HEAL_S`: tracks how long `critical` has gone on with an item
         // on hand that `shouldHeal` won't yet allow - an equally fast pursuer can hold
