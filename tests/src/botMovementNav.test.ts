@@ -442,6 +442,66 @@ test("findCover with avoidInterior rejects a nearer candidate that closes distan
     expect(weighted?.obstacle).toBe(crateSafe);
 });
 
+// "der Bot muss sich überlegen über welche Wege der Gegner wie schnell erreichbar ist, um
+// die richtige Deckung zu wählen" - straight-line distance from the threat
+// (`approachBaseline`, above) only catches a candidate on the wrong side of the threat
+// entirely; it says nothing about a candidate that's farther away in a straight line yet
+// sits right next to a short, direct route for the enemy to flank around to. A synthetic
+// `NavGraph` with hand-placed edges (not `buildNavGraph`'s real map geometry) keeps each
+// side's actual route length fully known, not just hoped-for from real map layout - same
+// "separate graph, only for the one property under test" shape as the interior-avoidance
+// tests above.
+// Resolves the exact point `findCover` would compute for a single obstacle in isolation -
+// used below to place synthetic nav nodes precisely on top of each real candidate point,
+// so the graph's sparse hand-placed nodes can't accidentally resolve "nearest node" to the
+// wrong thing (a real, densely-sampled `buildNavGraph` output never has this ambiguity;
+// a 5-node synthetic one, with the bot sitting only a few units from both candidates by
+// the very nature of this scenario, otherwise would).
+function soloCoverPos(obstaclePos: Vec2, threatPos: Vec2, botPos: Vec2): Vec2 {
+    const g = createGame(TeamMode.Solo, "test_normal");
+    g.map.genObstacle("crate_01", obstaclePos);
+    const b = g.playerBarn.addTestPlayer({ pos: botPos });
+    const graph = buildNavGraph(g);
+    return findCover(b, graph.navObstacles, threatPos, 0)!.pos;
+}
+
+test("findCover prefers a candidate the enemy's own route takes much longer to reach", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    const botPos = v2.add(center, v2.create(3, 7));
+    // Both crates are hidden from the threat; `flankable`'s cover point is the closer of
+    // the two to the bot, so plain nearest-wins picks it below.
+    const flankable = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, 10)));
+    const defensible = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, -10)));
+    const bot = game.playerBarn.addTestPlayer({ pos: botPos });
+    const graph = buildNavGraph(game); // real navObstacles, for the LOS/clearance checks
+
+    const unweighted = findCover(bot, graph.navObstacles, threatPos, 0);
+    expect(unweighted?.obstacle).toBe(flankable); // confirms it really is the naive "nearest" pick
+
+    const flankPos = soloCoverPos(flankable.pos, threatPos, botPos);
+    const safePos = soloCoverPos(defensible.pos, threatPos, botPos);
+
+    // Both cover points sit an equally short walk from the bot; `flankable`'s also sits
+    // right next to a short, direct route for the threat (the actual flanking danger),
+    // while `defensible`'s is only reachable from the threat via a long way around.
+    const nav = new NavGraph([]);
+    const botNode = nav.addNode(botPos, 0, "open");
+    const threatNode = nav.addNode(threatPos, 0, "open");
+    const flankNode = nav.addNode(flankPos, 0, "open");
+    const safeNode = nav.addNode(safePos, 0, "open");
+    const detourNode = nav.addNode(v2.add(center, v2.create(-30, -30)), 0, "open");
+    nav.link(botNode, flankNode, 8);
+    nav.link(botNode, safeNode, 8);
+    nav.link(threatNode, flankNode, 8); // short - the enemy can flank here just as fast
+    nav.link(threatNode, detourNode, 25);
+    nav.link(detourNode, safeNode, 25); // long way around - the enemy can't catch up here
+
+    const weighted = findCover(bot, graph.navObstacles, threatPos, 0, undefined, nav);
+    expect(weighted?.obstacle).toBe(defensible);
+});
+
 // The very first pick of an engagement has nothing to regress *from* - a bot can easily,
 // legitimately start out farther from the threat than every real piece of cover nearby
 // (it hasn't begun retreating at all yet), and that's completely ordinary, not something

@@ -654,6 +654,135 @@ const COVER_MISS_GRACE = 1;
  *  not the multi-unit regression this exists to catch. */
 const COVER_APPROACH_MARGIN = 3;
 
+/** How many of a pool's nearest-to-bot candidates actually get evaluated for enemy
+ *  reachability - see `filterByReachability`. Bounded, not every surviving candidate:
+ *  each one costs a real nav-graph A* search in both directions (bot and threat), and a
+ *  dense obstacle cluster can turn up a dozen+ otherwise-equal candidates after the
+ *  existing hidden/distance filters. Evaluating only the ones already closest to the bot
+ *  - which `pickFrom` was going to prefer anyway on plain distance - never discards a
+ *  candidate that could actually have won; it only skips spending a search budget on ones
+ *  `pickFrom` would have passed over regardless. */
+const REACHABILITY_CANDIDATES = 3;
+/** Expansion budget for each reachability probe - well under `MAX_PATH_EXPANSIONS`
+ *  (the bot's own real movement path): this only needs a *relative* comparison between a
+ *  handful of nearby candidates on an arena-scale graph, not a guaranteed solve of a
+ *  long-range route. Smaller than `followPath`'s own budget also because
+ *  `pathCostEstimate` runs an unheaped linear scan for its cheapest open node each step
+ *  (see its own doc comment on why it can't reuse `findPath`'s heap-based search as-is) -
+ *  fine at this size, not at `MAX_PATH_EXPANSIONS`'s. */
+const REACHABILITY_MAX_EXPANSIONS = 150;
+/** How much longer the enemy's own nav-graph route to a cover candidate has to be than
+ *  the bot's, before that candidate counts as genuinely defensible - see
+ *  `filterByReachability`. A candidate the enemy can reach in roughly the same time it
+ *  takes the bot (or faster) offers no real window: by the time the bot settles in, the
+ *  enemy may already be standing at the exact spot that re-exposes it. "der Bot muss sich
+ *  überlegen über welche Wege der Gegner wie schnell erreichbar ist, um die richtige
+ *  Deckung zu wählen" - deliberately a first-pass value, not real-match-tuned yet (no
+ *  decoded capture of this specific failure mode exists to calibrate against the way
+ *  most constants in this file are) - some real margin past plain position/path noise (a
+ *  handful of units, the same scale as `COVER_APPROACH_MARGIN`/`COVER_STICKINESS_MARGIN`
+ *  above), not a precisely measured number. */
+const REACHABILITY_MARGIN = 6;
+
+/** Rough nav-graph path-length estimate between two points - used to compare how long
+ *  the BOT needs to reach a cover candidate against how long the ENEMY would need to
+ *  reach (or flank around to) that same spot, see `filterByReachability`. A fresh,
+ *  throwaway search each call, not reusing `followPath`'s own path state - this is pure
+ *  comparison between candidates, never actually walked.
+ *
+ *  Deliberately its own small search, not a call into `findPath`: `findPath` seeds every
+ *  node within `NODE_SEARCH_RADIUS` of the start at gScore *zero*, and treats arriving at
+ *  any node within that same radius of the goal as "done" - both exactly right for
+ *  actually steering a bot (a real nearby node is always a legitimate, similarly-cheap
+ *  entry point in a densely-sampled real graph, and the last few units are covered by
+ *  ordinary direct movement anyway) but wrong for *measuring* a distance between two
+ *  specific points that might themselves sit fairly close together: it can silently let
+ *  the search hop through some OTHER node that merely happens to also fall within that
+ *  same generous radius of the destination, crediting a real detour's cost as if it were
+ *  already "close enough", without ever actually paying for the edges that detour exists
+ *  to avoid. Single exact nearest-node matching on both ends, plus the real leftover
+ *  distance from/to those nodes added back in, has no such shortcut - the search can only
+ *  reach the goal node via the graph's actual edges. Falls back to straight-line distance
+ *  when the graph has no node at all on this layer, or no route is found within
+ *  `REACHABILITY_MAX_EXPANSIONS` - still a usable (if optimistic) estimate rather than
+ *  refusing to score the candidate at all. */
+function pathCostEstimate(nav: NavGraph, from: Vec2, to: Vec2, layer: number): number {
+    const startNode = nav.nearest(from, layer);
+    const goalNode = nav.nearest(to, layer);
+    if (startNode < 0 || goalNode < 0) return v2.distance(from, to);
+    const leftover = v2.distance(from, nav.pos(startNode)) + v2.distance(nav.pos(goalNode), to);
+    if (startNode === goalNode) return leftover;
+
+    const gScore = new Map<number, number>([[startNode, 0]]);
+    const visited = new Set<number>();
+    for (let expansions = 0; expansions < REACHABILITY_MAX_EXPANSIONS; expansions++) {
+        let cur = -1;
+        let curG = Infinity;
+        for (const [id, g] of gScore) {
+            if (!visited.has(id) && g < curG) {
+                curG = g;
+                cur = id;
+            }
+        }
+        if (cur < 0) break;
+        if (cur === goalNode) return leftover + curG;
+        visited.add(cur);
+
+        const neighbors = nav.neighbors[cur];
+        const costs = nav.costs[cur];
+        for (let i = 0; i < neighbors.length; i++) {
+            const next = neighbors[i];
+            if (visited.has(next)) continue;
+            const tentative = curG + costs[i];
+            if (tentative < (gScore.get(next) ?? Infinity)) gScore.set(next, tentative);
+        }
+    }
+    return v2.distance(from, to);
+}
+
+type CoverCandidate = { obstacle: Obstacle; pos: Vec2; distSqr: number };
+
+/** Drops any of `candidates`' nearest-to-bot entries (see `REACHABILITY_CANDIDATES`) the
+ *  enemy could reach about as fast as the bot, or faster - see `REACHABILITY_MARGIN`.
+ *  Straight-line distance from the threat (`approachBaseline`'s own check, in `findCover`
+ *  below) already catches a candidate on the wrong side of the threat entirely, but says
+ *  nothing about a candidate that's further away in a straight line yet sits right next
+ *  to a short, direct route for the enemy to flank around to - exactly the geometry a
+ *  building corner or an obstacle cluster creates.
+ *
+ *  `preferred` (the currently-held obstacle, if any) is always kept in the running
+ *  regardless of its own score, and force-included in the evaluated set even if it
+ *  wouldn't otherwise make the nearest-`REACHABILITY_CANDIDATES` cut - same reasoning as
+ *  `pickFrom`'s own stickiness just below: a held piece of cover that becomes marginally
+ *  less defensible by this measure on one recompute isn't a reason to drop it from
+ *  consideration outright, only `pickFrom`'s normal distance-based competition should
+ *  ever actually unseat it. Returns the single nearest candidate, unfiltered, if
+ *  literally nothing clears the bar - the same "something beats nothing" fallback
+ *  `findCover` already relies on for its interior-candidates pool. */
+function filterByReachability(
+    nav: NavGraph,
+    bot: Player,
+    threatPos: Vec2,
+    layer: number,
+    preferred: Obstacle | undefined,
+    candidates: CoverCandidate[],
+): CoverCandidate[] {
+    if (!candidates.length) return candidates;
+    const sorted = [...candidates].sort((a, b) => a.distSqr - b.distSqr);
+    const shortlist = sorted.slice(0, REACHABILITY_CANDIDATES);
+    if (preferred) {
+        const preferredEntry = candidates.find((c) => c.obstacle === preferred);
+        if (preferredEntry && !shortlist.includes(preferredEntry)) shortlist.push(preferredEntry);
+    }
+    const kept = shortlist.filter((entry) => {
+        if (entry.obstacle === preferred) return true;
+        const botCost = pathCostEstimate(nav, bot.pos, entry.pos, layer);
+        const enemyCost = pathCostEstimate(nav, threatPos, entry.pos, layer);
+        return enemyCost - botCost >= REACHABILITY_MARGIN;
+    });
+    return kept.length ? kept : sorted.slice(0, 1);
+}
+
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
  *  as seen from `threatPos` - real cover, not just "away from the enemy". Every
  *  candidate is checked against the *current* state of the obstacle it hides behind
@@ -700,7 +829,15 @@ const COVER_APPROACH_MARGIN = 3;
  *  sitting in that specific room. Non-interior candidates are preferred as their own
  *  pool whenever any exist at all; interior ones are only ever handed out as a last
  *  resort, exactly the same fallback shape `preferNonInteriorGoal` already uses for a
- *  retreat's raw destination. */
+ *  retreat's raw destination.
+ *
+ *  `avoidInterior` also gates a third, independent preference: `filterByReachability`
+ *  drops the nearest-to-bot candidates the enemy could reach (via its own nav-graph
+ *  route, not just straight-line distance) about as fast as the bot, or faster - a
+ *  candidate on the far side of a wall from both the bot's actual approach and the
+ *  enemy's own straight-line position can still sit right next to a short way around for
+ *  the enemy to flank through, which plain "far enough from the threat right now"
+ *  (`minDistFromThreat`/`approachBaseline`) never catches on its own. */
 export function findCover(
     bot: Player,
     navObstacles: Obstacle[],
@@ -715,9 +852,8 @@ export function findCover(
     const objs = bot.game.grid.intersectCollider(aabb);
     const minDistSqr = minDistFromThreat * minDistFromThreat;
 
-    type Candidate = { obstacle: Obstacle; pos: Vec2; distSqr: number };
-    const openCandidates: Candidate[] = [];
-    const interiorCandidates: Candidate[] = [];
+    const openCandidates: CoverCandidate[] = [];
+    const interiorCandidates: CoverCandidate[] = [];
 
     for (let i = 0; i < objs.length; i++) {
         if (objs[i].__type !== ObjectType.Obstacle) continue;
@@ -755,9 +891,9 @@ export function findCover(
         (isInterior ? interiorCandidates : openCandidates).push(entry);
     }
 
-    const pickFrom = (candidates: Candidate[]): Candidate | undefined => {
-        let best: Candidate | undefined;
-        let preferredPick: Candidate | undefined;
+    const pickFrom = (candidates: CoverCandidate[]): CoverCandidate | undefined => {
+        let best: CoverCandidate | undefined;
+        let preferredPick: CoverCandidate | undefined;
         for (const entry of candidates) {
             if (!best || entry.distSqr < best.distSqr) best = entry;
             if (entry.obstacle === preferred) preferredPick = entry;
@@ -775,7 +911,19 @@ export function findCover(
         return preferredDist - bestDist < COVER_STICKINESS_MARGIN ? preferredPick : best;
     };
 
-    const picked = openCandidates.length ? pickFrom(openCandidates) : pickFrom(interiorCandidates);
+    // Reachability only while genuinely fleeing, not mid-fight `holdAndPeek` cover -
+    // `avoidInterior` is exactly that signal already (see this function's own doc
+    // comment), reused here rather than adding a second near-duplicate flag.
+    const openPool = avoidInterior
+        ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, openCandidates)
+        : openCandidates;
+    const picked = openPool.length
+        ? pickFrom(openPool)
+        : pickFrom(
+            avoidInterior
+                ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, interiorCandidates)
+                : interiorCandidates,
+        );
     return picked ? { obstacle: picked.obstacle, pos: picked.pos } : undefined;
 }
 
