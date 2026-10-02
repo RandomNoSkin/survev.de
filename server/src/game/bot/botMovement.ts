@@ -48,9 +48,22 @@ const STUCK_CHECK_INTERVAL = 1;
 const STUCK_MOVE_THRESHOLD = 1;
 /** Minimum real distance closed toward the current path waypoint per stuck-check window
  *  to count as genuine progress - see `stuck`'s "no progress toward the actual target"
- *  check. Deliberately smaller than `STUCK_MOVE_THRESHOLD`: this only has to catch
- *  "basically not closing in at all", not demand fast progress. */
-const PULL_TARGET_PROGRESS_MIN = 0.5;
+ *  check.
+ *
+ *  Raised from 0.5 after a real match capture: a fleeing bot at critical health (19-21)
+ *  slid along something (a wall/container edge the path routed it right against) at
+ *  roughly a quarter of normal move speed for over a second - real, nonzero progress the
+ *  whole time, so neither this check nor the raw-displacement one ever fired - and took
+ *  the hit that finished it during exactly that window. 0.5 was deliberately lenient
+ *  ("only has to catch basically not closing in at all, not demand fast progress"), which
+ *  is exactly what let a bot crawling at ~2 units/s read as "making progress, nothing to
+ *  fix" for as long as it took to die - "retreaten muss schneller und effektiver sein".
+ *  2.5 is still well under a full second of normal move speed (~8 units/s even just
+ *  along a straight line to the waypoint), so a real detour or a brief slowdown rounding
+ *  a corner isn't mistaken for this - it only catches the specific "far slower than
+ *  intended for a sustained window" case this capture showed actually happens and costs
+ *  real fights. */
+const PULL_TARGET_PROGRESS_MIN = 2.5;
 /** How many consecutive `STUCK_CHECK_INTERVAL` windows of zero progress it takes before
  *  `BotMovementState.stuck` (the "give up and fight" signal) actually goes true - see
  *  its own doc comment for why this needs real confidence, not a single bad window. */

@@ -1639,6 +1639,53 @@ test("Orbiting a waypoint without closing in on it gets the waypoint blacklisted
     expect(blacklisted).toBe(true);
 });
 
+// Regression for a real match capture: a fleeing bot at critical health (19-21) slid
+// along something (a wall/container edge the path routed it right against) at roughly a
+// quarter of normal move speed for over a second - real, nonzero progress the whole
+// time, low enough to clear the old 0.5-unit `PULL_TARGET_PROGRESS_MIN` bar every single
+// window - and took the hit that finished it during exactly that window. Same geometry
+// as the orbit test above, but crawling in a straight line toward the real waypoint
+// (not circling it) at a small fraction of normal speed: nonzero raw displacement too
+// (above `STUCK_MOVE_THRESHOLD`), so only the progress-toward-target check can catch
+// this, not the raw-displacement one.
+test("Crawling toward a waypoint far slower than normal speed still gets flagged", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(8, 0)));
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(-30, 0)) });
+    const state = new BotMovementState();
+    const idleGoal = v2.add(center, v2.create(30, 0));
+    const dt = 0.1;
+
+    // Let a real path establish first, at normal speed.
+    let pos = v2.copy(bot.pos);
+    for (let i = 0; i < 30; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 6.5 * dt)) : pos;
+    }
+    expect(state.pullTarget).toBeDefined();
+    const crawlTarget = state.pullTarget!;
+
+    // Now crawl in the commanded direction at 1.5 units/s instead of ~6.5 - real per-tick
+    // movement, same as normal play, just far slower, as if sliding along an obstacle
+    // edge at a shallow angle. Over a full `STUCK_CHECK_INTERVAL` (1s) that's ~1.5 units
+    // of raw displacement: above `STUCK_MOVE_THRESHOLD` (1), so the *old* check alone
+    // would have read this as "moving fine" - but under the new `PULL_TARGET_PROGRESS_MIN`
+    // (2.5), so it's flagged as real but insufficient progress instead.
+    let flagged = false;
+    for (let i = 0; i < 15 && !flagged; i++) {
+        bot.pos = pos;
+        updateMovement(bot, state, "idle", undefined, Infinity, dt, graph, false, undefined, false, idleGoal);
+        pos = bot.touchMoveActive ? v2.add(pos, v2.mul(bot.touchMoveDir, 1.5 * dt)) : pos;
+        flagged = state.blacklistedNodes.has(crawlTarget);
+    }
+
+    expect(flagged).toBe(true);
+});
+
 // "sich nicht innen trappen zu lassen": a raw straight-line retreat goal has no idea it
 // happens to land inside a building's interior lattice - `preferNonInteriorGoal` nudges
 // it onto the nearest non-`interior` node instead when the graph has one nearby, so
