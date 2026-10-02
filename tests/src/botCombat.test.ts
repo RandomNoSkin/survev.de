@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import {
     BotFireState,
     BotThrowState,
@@ -13,6 +13,7 @@ import {
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
+import * as net from "../../shared/net/net.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 
@@ -461,6 +462,39 @@ test("A hurt, unthreatened bot heals itself", () => {
     updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ false, /* positionSafe */ false);
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// "kannst du so machen dass der bot nach einem successvollen heal das in den chat
+// schreibt, so das ich das sehe" - a visible confirmation while watching/tuning bot
+// behavior live, since a successful heal is otherwise only inferable from watching the
+// health bar tick up. Gated on `bot.bot` in `Player.update` itself (the completion code
+// a real multi-second bandage runs through, not `updateHeal`'s own one-shot
+// action-starting call) - drives real ticks via `game.update` rather than faking
+// `actionType`/`action.time` the way the directive-only tests above do, since this is
+// specifically testing that completion code path's new side effect.
+test("A bot broadcasts a chat message after a heal completes", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.bot = true;
+    bot.invManager.give("bandage", 5);
+    bot.health = 40;
+
+    updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ false, /* positionSafe */ false);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+
+    const broadcastSpy = vi.spyOn(game, "broadcastMsg");
+    for (let i = 0; i < 100 && bot.actionType !== GameConfig.Action.None; i++) {
+        game.update(0.1);
+    }
+    expect(bot.actionType).toBe(GameConfig.Action.None); // sanity: the heal actually finished
+    expect(bot.health).toBeGreaterThan(40); // sanity: it actually healed
+
+    const chatCall = broadcastSpy.mock.calls.find(([type, msg]) => {
+        return type === net.MsgType.KillFeed
+            && (msg as net.KillFeedMsg).type === net.KillFeedMsgType.ChatMsg;
+    });
+    expect(chatCall).toBeDefined();
+    expect((chatCall![1] as net.KillFeedMsg).player).toBe(bot.name);
 });
 
 test("A bot does not stop to heal a graze while an enemy is in sight", () => {
