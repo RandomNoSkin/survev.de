@@ -16,6 +16,7 @@ import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
 import { NavGraph } from "../../server/src/game/bot/nav/navGraph.ts";
 import { TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
+import { math } from "../../shared/utils/math.ts";
 import { util } from "../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
@@ -722,6 +723,52 @@ test("Fleeing past cover that's only just barely safe, instead of stopping there
     }
     expect(state.settledAtCover).toBe(true);
     expect(v2.distance(pos, threatPos)).toBeGreaterThanOrEqual(28); // RETREAT_SETTLE_MULT's bar
+});
+
+// Regression for a real match capture: a bot closing the last stretch to its own cover
+// visibly vibrated in place for 1.4+ seconds at critical health instead of reaching it -
+// `normalizeSafe(coverPos - bot.pos)`, recomputed fresh every tick, amplifies small
+// position noise into large angular swings once the remaining distance gets small (a few
+// tenths of a unit of ordinary per-tick noise is a much bigger fraction of "2 units left"
+// than of "20 units left"). Deliberately bounces the bot between two points a few units
+// apart on alternating sides of a fixed cover candidate each tick - worse than anything a
+// real collision resolve would produce - to prove the *commanded* direction stays turn-
+// rate-bounded (`APPROACH_TURN_RATE`, 8 rad/s) regardless of how wildly the raw geometry
+// swings underneath it.
+test("Approaching cover damps rapid tick-to-tick direction swings from position noise", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    game.map.genObstacle("crate_01", center);
+    const graph = buildNavGraph(game);
+
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(center, v2.create(7, 0)) });
+    const state = new BotMovementState();
+    const dt = 0.05;
+
+    updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), dt, graph);
+    expect(state.coverPos).toBeDefined();
+    expect(state.settledAtCover).toBe(false); // still approaching, not yet arrived
+    const candidate = v2.copy(state.coverPos!);
+
+    const maxStepRad = 8 * dt; // APPROACH_TURN_RATE * dt
+    let prevAngle: number | undefined;
+    for (let i = 0; i < 20; i++) {
+        // Alternates sides of the candidate each tick, a couple of units out - close
+        // enough that the raw, un-slewed direction to it would swing by a large angle
+        // tick to tick.
+        const side = i % 2 === 0 ? 1 : -1;
+        bot.pos = v2.add(candidate, v2.create(side * 1.5, 1.5));
+        updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), dt, graph);
+        expect(bot.touchMoveActive).toBe(true);
+
+        const angle = Math.atan2(bot.touchMoveDir.y, bot.touchMoveDir.x);
+        if (prevAngle !== undefined) {
+            const diff = Math.abs(math.angleDiff(prevAngle, angle));
+            expect(diff).toBeLessThanOrEqual(maxStepRad + 1e-6);
+        }
+        prevAngle = angle;
+    }
 });
 
 // Regression for a real match capture: "wird gepusht und stirbt" - a bot camped one

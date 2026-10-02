@@ -102,6 +102,21 @@ const COVER_RECOMPUTE_INTERVAL = 0.4;
 // enough slop, by itself, to walk the bot's exposed edge right back into view.
 const COVER_REACHED_DIST = 0.75;
 
+/** Max turn rate (rad/s) for the raw-steering direction while closing the last stretch
+ *  to `coverPos` - see `retreatToCover`'s approach branch. A real match capture showed a
+ *  bot visibly vibrate in place for 1.4+ seconds at critical health closing in on its own
+ *  cover: `normalizeSafe(coverPos - bot.pos)`, recomputed fresh every tick, is exactly the
+ *  kind of direction calculation that amplifies small position noise into large angular
+ *  swings once the remaining distance gets small - a few tenths of a unit of ordinary
+ *  per-tick movement noise is a much bigger fraction of "2 units left to go" than of "20
+ *  units left to go". Every swing also fed `isDirClear`'s local deflection a different
+ *  base direction to deflect *from*, compounding rather than damping it. Same turn-rate-
+ *  slew technique `updateAim`'s own `aim.dir` already uses for exactly this reason - fast
+ *  enough to redirect toward a genuinely new cover pick within a fraction of a second
+ *  (half a turn in under 0.4s), slow enough that one noisy tick can't reverse the
+ *  commanded direction outright. */
+const APPROACH_TURN_RATE = 8;
+
 /** Angles (radians) off "directly behind cover" tried when leaning out to peek - not 0,
  *  which is fully hidden, and not near π, which is fully in the open; these sample the
  *  obstacle's silhouette edge, closest offset first.
@@ -333,6 +348,11 @@ export class BotMovementState {
     coverObstacle?: Obstacle;
     coverPos?: Vec2;
     coverRecheck = 0;
+    /** Turn-rate-slewed direction while raw-steering toward `coverPos` (no real A* path
+     *  needed, see `retreatToCover`'s approach branch) - see `APPROACH_TURN_RATE`'s own
+     *  doc comment. `undefined` whenever a real path is doing the steering instead, or no
+     *  approach is in progress at all. */
+    approachDir?: Vec2;
     /** Consecutive recomputes in a row where `findCover` came back empty despite
      *  `coverObstacle` still being alive - see `COVER_MISS_GRACE`. Reset the moment a
      *  recompute finds *something* again. */
@@ -923,6 +943,7 @@ function retreatToCover(
         state.distAtSettle = undefined;
         state.settledForS = 0;
         state.pushedPastCover = false;
+        state.approachDir = undefined;
         state.coverRecheck = 0;
         state.coverMissStreak = 0;
         state.peeking = false;
@@ -963,6 +984,7 @@ function retreatToCover(
                 state.distAtSettle = undefined;
                 state.settledForS = 0;
                 state.pushedPastCover = false;
+                state.approachDir = undefined;
             }
             state.coverObstacle = found?.obstacle;
             state.coverPos = found?.pos;
@@ -1006,7 +1028,26 @@ function retreatToCover(
         if (!state.pushedPastCover && v2.distance(bot.pos, state.coverPos) > COVER_REACHED_DIST) {
             state.peeking = false;
             const pathDir = nav ? followPath(bot, state, nav, state.coverPos, dt) : undefined;
-            return pathDir ?? v2.normalizeSafe(v2.sub(state.coverPos, bot.pos));
+            if (pathDir) {
+                state.approachDir = undefined; // a real path is doing the steering now
+                return pathDir;
+            }
+            // See `APPROACH_TURN_RATE`'s own doc comment - raw-steering straight at a
+            // nearby point gets numerically unstable as the remaining distance shrinks,
+            // so this slews toward it at a bounded turn rate instead of snapping to a
+            // fresh angle every tick.
+            const rawDir = v2.normalizeSafe(v2.sub(state.coverPos, bot.pos));
+            if (!state.approachDir) {
+                state.approachDir = rawDir;
+                return rawDir;
+            }
+            const curAngle = Math.atan2(state.approachDir.y, state.approachDir.x);
+            const goalAngle = Math.atan2(rawDir.y, rawDir.x);
+            const maxStep = APPROACH_TURN_RATE * dt;
+            const step = math.clamp(math.angleDiff(curAngle, goalAngle), -maxStep, maxStep);
+            const newAngle = curAngle + step;
+            state.approachDir = v2.create(Math.cos(newAngle), Math.sin(newAngle));
+            return state.approachDir;
         }
         // "der bot rennt, beginnt zu healen, und retreated weiter bis zu einer sicheren
         // Position" - reaching the very first spot that merely blocks line of sight
@@ -1023,6 +1064,7 @@ function retreatToCover(
         }
         state.settledAtCover = true;
         state.pushedPastCover = false;
+        state.approachDir = undefined;
         state.distAtSettle = v2.distance(bot.pos, threatPos);
         state.settledForS = 0;
     } else {
