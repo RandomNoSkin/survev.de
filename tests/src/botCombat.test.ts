@@ -70,6 +70,27 @@ test("Weapon selection prefers the shotgun up close and the sniper at range", ()
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });
 
+// Regression for a real match capture: a bot hovering right where the spas12/mosin sweet
+// spots cross (~14 units) flipped weapons on nearly every shot - each swap eating a switch
+// delay and resetting the quickswitch slowdown, so it fired a fraction of what it could
+// have. Holding the mosin at the midpoint should stay put; a clearly closer fight should
+// still bring the spas back in.
+test("Weapon choice holds the current gun at the sweet-spot midpoint instead of flipping", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "spas12", 5);
+    equipActive(bot, WeaponSlot.Secondary, "mosin", 5);
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Secondary);
+    const fire = new BotFireState();
+    fire.firedSinceSwitch = true;
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 14);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary);
+
+    updateWeaponSelection(bot, BOT_TIERS.normal, fire, 6);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
 test("currentSweetSpot never sends a bot chasing a sniper's full falloff range", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});

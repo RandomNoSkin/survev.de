@@ -74,9 +74,18 @@ export function currentSweetSpot(bot: Player): number {
     return def ? sweetSpotFor(def) : 25;
 }
 
+/** How much better (in sweet-spot distance units, see `scoreWeaponForRange`) another
+ *  slot has to fit the current range before `bestRangeSlot` actually swaps to it. Without
+ *  this, a bot whose distance hovers right where two guns' sweet spots cross (a real match
+ *  had it oscillate between 8 and 17 units, crossing the spas12/mosin midpoint at ~14)
+ *  flipped weapons on nearly every shot - each swap costing a switch delay and the
+ *  quickswitch slowdown reset, so it fired a fraction of what it could have. */
+const WEAPON_RANGE_SWITCH_MARGIN = 4;
+
 /** The equipped slot (Primary/Secondary) that best fits `dist`, regardless of whether
- *  it's currently ready to fire - "what do I want to be holding". */
-function bestRangeSlot(bot: Player, slots: number[], dist: number): number {
+ *  it's currently ready to fire - "what do I want to be holding". `current` keeps the
+ *  gun already in hand unless another one fits by `WEAPON_RANGE_SWITCH_MARGIN` more. */
+function bestRangeSlot(bot: Player, slots: number[], dist: number, current?: number): number {
     const wm = bot.weaponManager;
     let best = slots[0];
     let bestScore = scoreWeaponForRange(wm.weapons[best].type, dist);
@@ -86,6 +95,10 @@ function bestRangeSlot(bot: Player, slots: number[], dist: number): number {
             best = slots[i];
             bestScore = score;
         }
+    }
+    if (current !== undefined && slots.includes(current) && best !== current) {
+        const curScore = scoreWeaponForRange(wm.weapons[current].type, dist);
+        if (bestScore - curScore < WEAPON_RANGE_SWITCH_MARGIN) return current;
     }
     return best;
 }
@@ -255,7 +268,7 @@ export function updateWeaponSelection(
     // the doc comment above for why this matters.
     if (!fire.firedSinceSwitch) return;
 
-    switchTo(bot, fire, bestRangeSlot(bot, slots, dist));
+    switchTo(bot, fire, bestRangeSlot(bot, slots, dist, cur));
 }
 
 /** Same effect as a human pressing the reload key: just requests one, the weapon
