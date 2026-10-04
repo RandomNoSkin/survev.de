@@ -111,6 +111,10 @@ const HEALTH_DEFICIT_MARGIN = 0.05;
 /** How long a chosen retreat (heal/flee) holds against an immediate drop to holding ground -
  *  see `stickyRetreat`. */
 const RETREAT_HOLD_MS = 500;
+/** How long after taking a hit the bot waits before starting a non-critical heal. A real
+ *  match had the bot start heals 1-2 seconds after a hit and get hit again mid-bandage; the
+ *  player it was up against started them 7-21 seconds after the last hit. */
+const HEAL_QUIET_MS = 4000;
 /** How recently the target has to have actually been visible to count as "just ducked
  *  out of sight" rather than "genuinely lost track of them" - see `updateMovement`'s
  *  `recentlyVisible` and the eager re-peek it triggers. Comfortably past a peek's own
@@ -415,6 +419,7 @@ export class BotBrain {
         // never the other way around.
         if (
             directive === "heal"
+            && this.healQuietEnough(bot)
             && isSafeToHeal(
                 bot,
                 this.movement,
@@ -624,6 +629,7 @@ export class BotBrain {
             this.enemySightBlocksHeal(bot),
         ) === undefined;
         const canHealNow = !noHealItem
+            && this.healQuietEnough(bot)
             && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac);
 
         // See `DESPERATE_HEAL_S`: tracks how long `critical` has gone on with an item
@@ -835,6 +841,13 @@ export class BotBrain {
             if (ageMs <= GUNSHOT_MEMORY_MS) return this.lastHeardShotPos;
         }
         return undefined;
+    }
+
+    /** Whether enough time has passed since the last hit to start a non-critical heal - see
+     *  `HEAL_QUIET_MS`. Critical bots heal regardless, that's the survival case. */
+    private healQuietEnough(bot: Player): boolean {
+        const critical = bot.health / GameConfig.player.health < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
+        return critical || bot.game.now - this.lastHitTakenTime >= HEAL_QUIET_MS;
     }
 
     /** Whether a visible enemy should block starting a heal. Sticky for RECENTLY_VISIBLE_MS

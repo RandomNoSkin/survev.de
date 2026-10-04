@@ -1096,3 +1096,25 @@ test("A chosen retreat holds against an immediate drop to holding ground while s
     game.now += 1000;
     expect(brain.stickyRetreat("engageHold", bot)).toBe("engageHold");
 });
+
+// Regression from a real match: the bot started heals 1-2 seconds after a hit, got hit again
+// mid-bandage, and never finished one. A non-critical bot waits out a quiet stretch first;
+// the enemy can't see it here, so the only thing holding the heal back is the recent hit.
+test("A non-critical bot waits out a quiet stretch after a hit before starting a heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.health = 40; // hurt, not critical for expert
+    bot.invManager.give("bandage", 5);
+    const movement = (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement;
+    movement.coverPos = v2.copy(bot.pos);
+    movement.coverRecheck = 99;
+    bot.botBrain!.onDamaged(bot);
+
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+
+    game.now += 4500;
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
