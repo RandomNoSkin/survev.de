@@ -510,20 +510,6 @@ test("Single-fire weapons pulse shootStart once per shot, not every tick", () =>
     expect(bot.shootHold).toBe(false);
 });
 
-test("A bot mid-reload still fires at a visible target - the game doesn't stop a shot during a reload", () => {
-    const game = createGame(TeamMode.Solo, "test_normal");
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(10, 0) });
-    equipActive(bot, WeaponSlot.Primary, "m870", 5);
-    bot.actionType = GameConfig.Action.Reload;
-
-    // Real match: a flee with the enemy in view spent ~40% of its visible ticks reloading
-    // and holding fire, the same ticks the user kept shooting back while retreating.
-    const fire = new BotFireState();
-    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 10, /* canFire */ true, 0.05);
-    expect(bot.shootStart).toBe(true);
-});
-
 test("A hurt, unthreatened bot heals itself", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});

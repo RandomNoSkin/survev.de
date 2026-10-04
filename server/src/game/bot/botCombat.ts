@@ -370,14 +370,7 @@ export function updateFiring(
     const cur = wm.curWeapIdx;
     const gunDef = gunDefOf(wm.activeWeapon);
 
-    // A reload doesn't stop a shot: the game's own gun update fires regardless of it, and
-    // the reload's fill is computed from the ammo left when it finishes. Holding fire
-    // through one (as this used to) gave the enemy free shots while the bot retreated.
-    const busy = bot.actionType !== GameConfig.Action.None
-        && bot.actionType !== GameConfig.Action.Reload
-        && bot.actionType !== GameConfig.Action.ReloadAlt;
-
-    if (!targetPos || !gunDef || !canFire || busy) {
+    if (!targetPos || !gunDef || !canFire || bot.actionType !== GameConfig.Action.None) {
         bot.shootHold = false;
         fire.firing = true;
         fire.burstTimer = -1; // next engagement starts by firing, see BotFireState
