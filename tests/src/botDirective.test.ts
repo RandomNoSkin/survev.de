@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
+import type { CombatDirective } from "../../server/src/game/bot/botMovement.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
@@ -1075,4 +1076,23 @@ test("A fleeing bot with a ready shot keeps shooting instead of throwing", () =>
     bot.botBrain!.update(0.05);
 
     expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Throwable);
+});
+
+// Regression from a real match: heal/flee/engageHold cycled every few hundred ms as sight
+// flickered, and the retreat kept reversing. A retreat just chosen holds against an immediate
+// drop to holding ground while the bot is still hurt - but only for a short window.
+test("A chosen retreat holds against an immediate drop to holding ground while still hurt", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.health = 40;
+    const brain = bot.botBrain as unknown as {
+        stickyRetreat: (d: CombatDirective, b: typeof bot) => CombatDirective;
+    };
+
+    expect(brain.stickyRetreat("flee", bot)).toBe("flee");
+    game.now += 100;
+    expect(brain.stickyRetreat("engageHold", bot)).toBe("flee");
+    game.now += 1000;
+    expect(brain.stickyRetreat("engageHold", bot)).toBe("engageHold");
 });

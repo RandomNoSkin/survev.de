@@ -108,6 +108,9 @@ const ENEMY_LOW_HEALTH_FRAC = 0.4;
  *  the other by a sliver - the exact tick-to-tick flapping already fixed elsewhere in
  *  this file (cover stickiness, range-mode hysteresis) for the same underlying reason. */
 const HEALTH_DEFICIT_MARGIN = 0.05;
+/** How long a chosen retreat (heal/flee) holds against an immediate drop to holding ground -
+ *  see `stickyRetreat`. */
+const RETREAT_HOLD_MS = 500;
 /** How recently the target has to have actually been visible to count as "just ducked
  *  out of sight" rather than "genuinely lost track of them" - see `updateMovement`'s
  *  `recentlyVisible` and the eager re-peek it triggers. Comfortably past a peek's own
@@ -180,6 +183,9 @@ export class BotBrain {
      *  make hiding behind cover pointless - see `updateMovement`'s `engageHold`). */
     private lastKnownEnemyPos?: Vec2;
     private lastKnownEnemyTimeMs = 0;
+    /** The last retreat directive chosen and when - see `stickyRetreat`. */
+    private lastRetreat?: CombatDirective;
+    private lastRetreatMs = -Infinity;
     /** The enemy's health fraction at that same last sighting - see `idleGoal`, which
      *  only walks back to `lastKnownEnemyPos` when this bot is itself at full health or
      *  the enemy was already known to be hurt. Health can't be "seen" once out of sight
@@ -352,7 +358,10 @@ export class BotBrain {
             }
         }
 
-        const directive = this.pickDirective(bot, threatPos, dt, !!grenadeThreat);
+        const directive = this.stickyRetreat(
+            this.pickDirective(bot, threatPos, dt, !!grenadeThreat),
+            bot,
+        );
 
         // Not visible *right now*, but was a moment ago - almost always means the enemy
         // just ducked back behind their own cover, not that the bot genuinely lost
@@ -483,6 +492,8 @@ export class BotBrain {
                 coverPos: this.movement.coverPos ? v2.copy(this.movement.coverPos) : null,
                 settledAtCover: this.movement.settledAtCover,
                 deflectSign: this.movement.deflectSign,
+                pushedPastCover: this.movement.pushedPastCover,
+                peeking: this.movement.peeking,
                 layer: bot.layer,
             });
         }
@@ -827,6 +838,26 @@ export class BotBrain {
      *  never actually started a bandage. */
     private enemySightBlocksHeal(bot: Player): boolean {
         return !!this.target || bot.game.now - this.lastKnownEnemyTimeMs < RECENTLY_VISIBLE_MS;
+    }
+
+    /** Keeps a retreat (heal/flee) going for RETREAT_HOLD_MS after it was last chosen,
+     *  instead of dropping straight to holding ground the instant a sight flicker makes the
+     *  retreat's own gates read differently for a tick. A real match showed the bot cycling
+     *  heal/flee/engageHold every few hundred ms with the cover spot unchanged, its movement
+     *  reversing as it went. */
+    private stickyRetreat(directive: CombatDirective, bot: Player): CombatDirective {
+        const retreating = directive === "heal" || directive === "flee";
+        if (retreating) {
+            this.lastRetreat = directive;
+            this.lastRetreatMs = bot.game.now;
+            return directive;
+        }
+        const recent = bot.game.now - this.lastRetreatMs < RETREAT_HOLD_MS;
+        const stillHurt = bot.health / GameConfig.player.health < this.tier.healThreshold;
+        if (directive === "engageHold" && this.lastRetreat && recent && stillHurt) {
+            return this.lastRetreat;
+        }
+        return directive;
     }
 
     /** The enemy's health fraction right now if visible, else the last sighting's while
