@@ -1,5 +1,6 @@
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
 import { MapObjectDefs } from "../../../../shared/defs/register.ts";
+import { GameConfig } from "../../../../shared/gameConfig.ts";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns.ts";
 import { coldet } from "../../../../shared/utils/coldet.ts";
 import { collider } from "../../../../shared/utils/collider.ts";
@@ -1395,12 +1396,16 @@ function retreatToCover(
     // that produced "no signal" undid it completely the moment a retreat succeeded well
     // enough to clear that bar.
     const settledTooLong = state.settledForS > SETTLED_MAX_S;
-    if (!holdAndPeek && settledTooLong) {
+    // Mid-heal in cover: finish the heal there. Only being seen (`stillExposed`) is worth
+    // breaking off for - running while healing with the enemy merely closing in is what gets
+    // the bot caught out in the open.
+    const healing = bot.actionType === GameConfig.Action.UseItem;
+    if (!holdAndPeek && settledTooLong && !healing) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }
     if (
         !holdAndPeek
-        && (stillExposed || threatClosingIn)
+        && (stillExposed || (threatClosingIn && !healing))
         && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT
     ) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);

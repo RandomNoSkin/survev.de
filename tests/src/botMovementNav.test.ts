@@ -15,7 +15,7 @@ import { findPath } from "../../server/src/game/bot/nav/navAStar.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
 import { NavGraph } from "../../server/src/game/bot/nav/navGraph.ts";
-import { TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
+import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { math } from "../../shared/utils/math.ts";
 import { util } from "../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
@@ -892,6 +892,28 @@ test("Fleeing tolerates a single findCover miss on still-alive cover instead of 
 // close, gave a hunting enemy enough time to close in and land a kill during the wait.
 // Fixed geometry (not the random "local" map) so the resulting cover's exact distance
 // from the threat, and how far still short of the settle bar it lands, are both known.
+// Regression from real matches: the bot ran off mid-heal, and running while healing got it
+// caught in the open. Settled behind cover and mid-heal, a closing enemy that can't see it
+// is no reason to leave - the heal finishes there. Being seen still is.
+test("Mid-heal in cover, a closing enemy that can't see the bot doesn't make it run", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(30, 0));
+    game.map.genObstacle("crate_01", v2.sub(center, v2.create(4, 0))); // between threat and bot
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.copy(center) });
+    const state = new BotMovementState();
+    state.coverPos = v2.copy(bot.pos);
+    state.coverRecheck = 99;
+    state.settledAtCover = true;
+    state.distAtSettle = 30;
+    bot.actionType = GameConfig.Action.UseItem;
+
+    updateMovement(bot, state, "heal", v2.sub(center, v2.create(14, 0)), 14, 0.1, graph, false, undefined, false);
+
+    expect(v2.length(bot.touchMoveDir) * (bot.touchMoveActive ? 1 : 0)).toBe(0);
+});
+
 test("Fleeing past cover that's only just barely safe, instead of stopping there", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const away = v2.create(1, 0);
