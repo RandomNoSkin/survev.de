@@ -697,6 +697,42 @@ const REACHABILITY_MARGIN = 6;
  *  grid-sampling granularity alone. */
 const COVER_MAX_DETOUR = 2.5;
 const COVER_DETOUR_SLACK = 16;
+/** How many nav nodes further from the threat than a cover spot must be reachable from it
+ *  for the spot to count as having a way out - see hasEscapeRoom. */
+const ESCAPE_ROOM_NODES = 4;
+/** Graph nodes a hasEscapeRoom search may visit before giving up. */
+const ESCAPE_ROOM_SEARCH = 80;
+/** How much further from the threat than the spot itself a node has to be to count as
+ *  an escape route rather than more of the same pocket. */
+const ESCAPE_ROOM_MARGIN = 6;
+
+/** Whether a fleeing bot can keep going from pos - enough graph nodes reachable from there
+ *  lead further from the threat. A spot in a corner or a dead-end pocket (a real match: the
+ *  bot retreated into the map's edge and was pushed down with nowhere left to go) fails it,
+ *  however well hidden. */
+function hasEscapeRoom(nav: NavGraph, pos: Vec2, threatPos: Vec2, layer: number): boolean {
+    const start = nav.nearest(pos, layer);
+    // No connections at all means no graph to judge by, not a dead end.
+    if (start < 0 || nav.neighbors[start].length === 0) return true;
+    const farther = v2.distance(pos, threatPos) + ESCAPE_ROOM_MARGIN;
+    const seen = new Set<number>([start]);
+    const queue: number[] = [start];
+    let found = 0;
+    for (let i = 0; i < queue.length && i < ESCAPE_ROOM_SEARCH; i++) {
+        const cur = queue[i];
+        if (v2.distance(nav.pos(cur), threatPos) > farther) {
+            found++;
+            if (found >= ESCAPE_ROOM_NODES) return true;
+        }
+        for (const next of nav.neighbors[cur]) {
+            if (!seen.has(next)) {
+                seen.add(next);
+                queue.push(next);
+            }
+        }
+    }
+    return false;
+}
 
 /** Rough nav-graph path-length estimate between two points - used to compare how long
  *  the BOT needs to reach a cover candidate against how long the ENEMY would need to
@@ -804,13 +840,15 @@ function filterByReachability(
     };
     const botCanReach = (entry: CoverCandidate): boolean =>
         walkTo(entry) <= v2.distance(bot.pos, entry.pos) * COVER_MAX_DETOUR + COVER_DETOUR_SLACK;
+    const usable = (entry: CoverCandidate): boolean =>
+        botCanReach(entry) && hasEscapeRoom(nav, entry.pos, threatPos, layer);
     const kept = shortlist.filter((entry) => {
-        if (!botCanReach(entry)) return false;
+        if (!usable(entry)) return false;
         if (entry.obstacle === preferred) return true;
         const enemyCost = pathCostEstimate(nav, threatPos, entry.pos, layer);
         return enemyCost - walkTo(entry) >= REACHABILITY_MARGIN;
     });
-    const fallback = sorted.find(botCanReach);
+    const fallback = sorted.find(usable);
     const result = kept.length ? kept : fallback ? [fallback] : [];
     if (!rankByWalk) return result;
     // Critical under pressure: the closest cover by straight line isn't necessarily the one

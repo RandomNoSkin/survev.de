@@ -489,6 +489,17 @@ test("findCover with avoidInterior rejects a nearer candidate that closes distan
 // wrong thing (a real, densely-sampled `buildNavGraph` output never has this ambiguity;
 // a 5-node synthetic one, with the bot sitting only a few units from both candidates by
 // the very nature of this scenario, otherwise would).
+// A way out from a cover node, further from the threat (which sits to the west here) - see
+// `hasEscapeRoom`. Without it a cover node is a dead end.
+function addEscapeRoute(nav: NavGraph, from: number, at: Vec2): void {
+    let prev = from;
+    for (let i = 1; i <= 4; i++) {
+        const n = nav.addNode(v2.add(at, v2.create(i * 12, 0)), 0, "open");
+        nav.link(prev, n, 12);
+        prev = n;
+    }
+}
+
 function soloCoverPos(obstaclePos: Vec2, threatPos: Vec2, botPos: Vec2): Vec2 {
     const g = createGame(TeamMode.Solo, "test_normal");
     g.map.genObstacle("crate_01", obstaclePos);
@@ -525,6 +536,41 @@ test("findCover refuses a cover point the bot itself can only reach by a long de
 // first - a near cover behind a long detour loses to a farther one that's a direct walk.
 // Non-critical fleeing still takes the nearest; critical (`noInteriorFallback`) ranks by the
 // real walk.
+// Regression from a real match: the bot retreated into the map's edge, a dead-end pocket
+// with nothing further to run to, and was pushed down there. A cover spot needs a way out -
+// the same spot counts only when the graph leads on from it, away from the threat.
+test("findCover refuses a cover spot in a dead-end pocket, but takes it with a way out", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    const botPos = v2.add(center, v2.create(3, 7));
+    const crate = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, -10)));
+    const bot = game.playerBarn.addTestPlayer({ pos: botPos });
+    const graph = buildNavGraph(game);
+    const candPos = soloCoverPos(crate.pos, threatPos, botPos);
+
+    const build = (escape: boolean): NavGraph => {
+        const nav = new NavGraph([]);
+        const botNode = nav.addNode(botPos, 0, "open");
+        const candNode = nav.addNode(candPos, 0, "open");
+        nav.link(botNode, candNode, 12);
+        if (escape) {
+            let prev = candNode;
+            for (const x of [20, 30, 40, 50]) {
+                const n = nav.addNode(v2.add(center, v2.create(x, -20)), 0, "open");
+                nav.link(prev, n, 12);
+                prev = n;
+            }
+        }
+        return nav;
+    };
+
+    expect(findCover(bot, graph.navObstacles, threatPos, 0, undefined, build(false))).toBeUndefined();
+    expect(findCover(bot, graph.navObstacles, threatPos, 0, undefined, build(true))?.obstacle).toBe(
+        crate,
+    );
+});
+
 test("A critical bot picks the cover it can walk to first, not the nearest by straight line", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const center = v2.create(132, 132);
@@ -541,6 +587,8 @@ test("A critical bot picks the cover it can walk to first, not the nearest by st
     const botNode = nav.addNode(botPos, 0, "open");
     const nodeA = nav.addNode(posA, 0, "open");
     const nodeB = nav.addNode(posB, 0, "open");
+    addEscapeRoute(nav, nodeA, posA);
+    addEscapeRoute(nav, nodeB, posB);
     const threatNode = nav.addNode(threatPos, 0, "open");
     const detour = nav.addNode(v2.add(center, v2.create(3, -30)), 0, "open");
     nav.link(botNode, detour, 15); // A is only reachable the long way round...
@@ -582,6 +630,8 @@ test("findCover prefers a candidate the enemy's own route takes much longer to r
     const threatNode = nav.addNode(threatPos, 0, "open");
     const flankNode = nav.addNode(flankPos, 0, "open");
     const safeNode = nav.addNode(safePos, 0, "open");
+    addEscapeRoute(nav, flankNode, flankPos);
+    addEscapeRoute(nav, safeNode, safePos);
     const detourNode = nav.addNode(v2.add(center, v2.create(-30, -30)), 0, "open");
     nav.link(botNode, flankNode, 8);
     nav.link(botNode, safeNode, 8);
