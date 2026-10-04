@@ -493,6 +493,11 @@ export class BotBrain {
                 settledAtCover: this.movement.settledAtCover,
                 deflectSign: this.movement.deflectSign,
                 pushedPastCover: this.movement.pushedPastCover,
+                actionType: bot.actionType,
+                ammo: {
+                    primary: bot.weaponManager.weapons[WeaponSlot.Primary].ammo,
+                    secondary: bot.weaponManager.weapons[WeaponSlot.Secondary].ammo,
+                },
                 peeking: this.movement.peeking,
                 layer: bot.layer,
             });
