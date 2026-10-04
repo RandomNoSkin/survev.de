@@ -582,6 +582,9 @@ export class BotBrain {
         }
 
         const positionSafe = this.positionSafeForHeal(bot);
+        // Visible enemy's real health, or the last sighting's while it's still inside the
+        // same memory window `threatPos` uses - see the push checks below.
+        const knownEnemyFrac = this.knownEnemyHealthFrac(bot);
         // "wenn nicht full und der Gegner mehr hp hat dann sollte heilen Prio sein" -
         // treated the same as ordinary `low` health below: worth disengaging to look for
         // a safe moment to close a real relative deficit, not just once hurt enough on
@@ -652,9 +655,13 @@ export class BotBrain {
         // being genuinely ahead (their fraction below *both* mine and
         // `ENEMY_LOW_HEALTH_FRAC`, not just "also somewhat hurt") so this never fires
         // as an excuse to keep trading from a mutually bad position.
-        if (low && !critical && this.target) {
-            const enemyFrac = this.target.health / GameConfig.player.health;
-            if (enemyFrac < healthFrac && enemyFrac < ENEMY_LOW_HEALTH_FRAC) return "push";
+        // Uses the enemy's *remembered* health too, not just a currently visible reading -
+        // a real match capture showed the bot heal/flee for several seconds at 52 HP while
+        // the enemy, just out of sight, sat at 18 and got time to heal all the way back.
+        if (low && !critical && knownEnemyFrac !== undefined) {
+            if (knownEnemyFrac < healthFrac && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC) {
+                return "push";
+            }
         }
         // Low but not yet critical, and nothing to fix it with - disengage rather than
         // keep fighting (or even push) at real risk just because it isn't dire yet.
@@ -680,8 +687,7 @@ export class BotBrain {
         // more direct fix, so the streak requirement was just needless hesitation once a
         // target is genuinely low. Short of that, `engageHold` still knows how to close
         // distance using cover instead.
-        const enemyLow = !!this.target
-            && this.target.health / GameConfig.player.health < ENEMY_LOW_HEALTH_FRAC;
+        const enemyLow = knownEnemyFrac !== undefined && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC;
         if (!low && enemyLow) return "push";
 
         if (canHealNow) return "heal";
@@ -800,6 +806,15 @@ export class BotBrain {
             if (ageMs <= GUNSHOT_MEMORY_MS) return this.lastHeardShotPos;
         }
         return undefined;
+    }
+
+    /** The enemy's health fraction right now if visible, else the last sighting's while
+     *  it's still inside `threatPos`'s own memory window - `undefined` once that's stale. */
+    private knownEnemyHealthFrac(bot: Player): number | undefined {
+        if (this.target) return this.target.health / GameConfig.player.health;
+        if (this.lastKnownEnemyHealthFrac === undefined) return undefined;
+        if (bot.game.now - this.lastKnownEnemyTimeMs > this.tier.memory * 1000) return undefined;
+        return this.lastKnownEnemyHealthFrac;
     }
 
     private think(): void {

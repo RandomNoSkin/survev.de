@@ -184,6 +184,27 @@ test("A bot retreats to heal when not full and a visible enemy has meaningfully 
     expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // retreating from the target (+x), not holding/pushing
 });
 
+// Regression for a real match capture: the bot healed and fled for several seconds at
+// 52 HP while the enemy, just out of sight, sat at 18 HP and got time to heal back to
+// full. A low enemy's *last-seen* health is still worth chasing within the memory window -
+// "aggressiv sobald der Gegner low ist".
+test("A bot pushes a recently-seen low enemy even once it's out of sight", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 52; // low by the tier's own bar, not critical
+    target.health = 18; // well under ENEMY_LOW_HEALTH_FRAC
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05); // sees the enemy, records its health
+    target.pos = v2.create(500, 500); // duck out of sight
+    game.now += 500; // still well inside the tier's memory window
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // pushing toward its last-known spot (+x)
+});
+
 test("A bot back up to tier.healThreshold pushes a low target normally", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
