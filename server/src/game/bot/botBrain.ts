@@ -665,11 +665,18 @@ export class BotBrain {
         }
         // Low but not yet critical, and nothing to fix it with - disengage rather than
         // keep fighting (or even push) at real risk just because it isn't dire yet.
-        if (low && noHealItem) return this.fleeOrFight();
+        // Except against a visible enemy that isn't ahead on health: real matches showed
+        // the bot fleeing from such fights for 40-60% of its visible time while still
+        // having a clean shot, so it fought back at range instead of running.
+        const holdInsteadOfFlee = !!this.target && !critical
+            && !(knownEnemyFrac !== undefined && knownEnemyFrac - healthFrac > HEALTH_DEFICIT_MARGIN);
+        if (low && noHealItem) return holdInsteadOfFlee ? "engageHold" : this.fleeOrFight();
         // Has a bandage but can't safely use it yet (almost always: the enemy can
         // still see it) - disengage to break line of sight rather than fight on hurt
         // and hope. Once concealed, `shouldHeal` flips to true on its own.
-        if (low && !noHealItem && !canHealNow) return this.fleeOrFight();
+        if (low && !noHealItem && !canHealNow) {
+            return holdInsteadOfFlee ? "engageHold" : this.fleeOrFight();
+        }
 
         // A visible target actually hurt enough to be worth finishing is reason enough
         // to press it, on its own - no need to already be on a hit streak first, and

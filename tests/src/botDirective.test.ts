@@ -184,6 +184,23 @@ test("A bot retreats to heal when not full and a visible enemy has meaningfully 
     expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // retreating from the target (+x), not holding/pushing
 });
 
+// Regression from several real matches: a bot under half health kept fleeing from a visible
+// enemy of about equal health (40-60% of its visible time, still with a clean shot) instead
+// of fighting back at range. Not critical, and not behind on health - so no reason to run.
+test("A bot holds ground against a visible equal-health enemy instead of fleeing when low", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 50; // low for expert (below 56%), not critical
+    target.health = 50; // not ahead on health
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(-0.3); // not running away from the target (+x)
+});
+
 // Regression for a real match capture: the bot healed and fled for several seconds at
 // 52 HP while the enemy, just out of sight, sat at 18 HP and got time to heal back to
 // full. A low enemy's *last-seen* health is still worth chasing within the memory window -
@@ -301,10 +318,11 @@ test("Low health still pushes an enemy who's even lower, instead of retreating t
 });
 
 // The mirror case: an enemy who's *also* low but not actually worse off than the bot
-// itself (or not low enough to count as a finishable target) should still send the bot
-// to heal/flee as normal - this isn't a blanket "ignore my own health if the enemy is
-// hurt too" override.
-test("Low health still retreats when the enemy isn't clearly worse off", () => {
+// itself (or not low enough to count as a finishable target) must not be treated as a
+// finish - the bot should not push blind. Since a visible enemy that isn't ahead on health
+// no longer triggers a flee either (see `holdInsteadOfFlee`), the bot holds ground rather
+// than running; it's the enemy-clearly-ahead case that still retreats.
+test("Low health doesn't push an enemy who isn't clearly worse off, and doesn't run either", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -315,7 +333,8 @@ test("Low health still retreats when the enemy isn't clearly worse off", () => {
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
 
-    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // retreating, not pushing
+    expect(bot.touchMoveDir.x).toBeGreaterThan(-0.3); // not running away
+    expect(bot.touchMoveDir.x).toBeLessThan(0.5); // not charging blind
 });
 
 // Regression: low health *with* a bandage on hand used to fall straight through to
