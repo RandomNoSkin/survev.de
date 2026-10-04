@@ -416,7 +416,7 @@ export class BotBrain {
             updateHeal(
                 bot,
                 this.tier,
-                !!this.target,
+                this.enemySightBlocksHeal(bot),
                 this.positionSafeForHeal(bot),
                 this.desperateHeal,
                 this.target ? this.target.health / GameConfig.player.health : undefined,
@@ -602,7 +602,7 @@ export class BotBrain {
         const healThreshold = effectiveHealThreshold(this.tier, healthFrac, enemyHealthFrac);
         const noHealItem = pickHealItem(bot, healthFrac, positionSafe, healThreshold) === undefined;
         const canHealNow = !noHealItem
-            && shouldHeal(bot, this.tier, !!this.target, positionSafe, false, enemyHealthFrac);
+            && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac);
 
         // See `DESPERATE_HEAL_S`: tracks how long `critical` has gone on with an item
         // on hand that `shouldHeal` won't yet allow - an equally fast pursuer can hold
@@ -813,6 +813,14 @@ export class BotBrain {
             if (ageMs <= GUNSHOT_MEMORY_MS) return this.lastHeardShotPos;
         }
         return undefined;
+    }
+
+    /** Whether a visible enemy should block starting a heal. Sticky for RECENTLY_VISIBLE_MS
+     *  after the last sighting - a raw per-tick target read flickers as the enemy ducks in
+     *  and out of view, so the heal/flee choice built on it flipped every tick and the bot
+     *  never actually started a bandage. */
+    private enemySightBlocksHeal(bot: Player): boolean {
+        return !!this.target || bot.game.now - this.lastKnownEnemyTimeMs < RECENTLY_VISIBLE_MS;
     }
 
     /** The enemy's health fraction right now if visible, else the last sighting's while

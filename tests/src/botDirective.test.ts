@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
-import { v2 } from "../../shared/utils/v2.ts";
+import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 
 /**
@@ -182,6 +182,29 @@ test("A bot retreats to heal when not full and a visible enemy has meaningfully 
     bot.botBrain!.update(0.05);
 
     expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // retreating from the target (+x), not holding/pushing
+});
+
+// Regression: a heal/flee choice built on a raw per-tick "enemy visible" read flickered
+// every tick while the enemy ducked in and out of view, so the bot never actually started a
+// bandage. A sighting a moment ago still counts as the enemy being there for the heal gate.
+test("A sighting a moment ago still blocks starting a heal, instead of flickering", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 30;
+    bot.invManager.give("bandage", 5);
+    (bot.botBrain as unknown as { movement: { coverPos?: Vec2 } }).movement.coverPos = v2.copy(bot.pos);
+
+    bot.botBrain!.update(0.05); // sees the enemy
+    target.pos = v2.create(500, 500); // ducks out of view
+    game.now += 300; // still well inside the recently-visible window
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+
+    game.now += 1500; // past the window
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
 
 // Regression from several real matches: a bot under half health kept fleeing from a visible
