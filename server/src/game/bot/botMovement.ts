@@ -691,6 +691,12 @@ const REACHABILITY_MAX_EXPANSIONS = 150;
  *  handful of units, the same scale as `COVER_APPROACH_MARGIN`/`COVER_STICKINESS_MARGIN`
  *  above), not a precisely measured number. */
 const REACHABILITY_MARGIN = 6;
+/** How far a cover point's real walking route may be, relative to the straight line to it,
+ *  before the bot counts it as unreachable in practice - see filterByReachability.
+ *  Plus COVER_DETOUR_SLACK, so a short point right next to the bot never fails on
+ *  grid-sampling granularity alone. */
+const COVER_MAX_DETOUR = 2.5;
+const COVER_DETOUR_SLACK = 16;
 
 /** Rough nav-graph path-length estimate between two points - used to compare how long
  *  the BOT needs to reach a cover candidate against how long the ENEMY would need to
@@ -782,13 +788,24 @@ function filterByReachability(
         const preferredEntry = candidates.find((c) => c.obstacle === preferred);
         if (preferredEntry && !shortlist.includes(preferredEntry)) shortlist.push(preferredEntry);
     }
+    // Whether the bot can realistically walk there - a point behind a wall whose only
+    // route in is a long way around (a real match: the bot wedged against a building's
+    // wall for seconds, its cover point inside the building) is no cover at all, however
+    // far the enemy is from it.
+    const botCanReach = (entry: CoverCandidate): boolean => {
+        const botCost = pathCostEstimate(nav, bot.pos, entry.pos, layer);
+        return botCost <= v2.distance(bot.pos, entry.pos) * COVER_MAX_DETOUR + COVER_DETOUR_SLACK;
+    };
     const kept = shortlist.filter((entry) => {
+        if (!botCanReach(entry)) return false;
         if (entry.obstacle === preferred) return true;
         const botCost = pathCostEstimate(nav, bot.pos, entry.pos, layer);
         const enemyCost = pathCostEstimate(nav, threatPos, entry.pos, layer);
         return enemyCost - botCost >= REACHABILITY_MARGIN;
     });
-    return kept.length ? kept : sorted.slice(0, 1);
+    if (kept.length) return kept;
+    const fallback = sorted.find(botCanReach);
+    return fallback ? [fallback] : [];
 }
 
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle

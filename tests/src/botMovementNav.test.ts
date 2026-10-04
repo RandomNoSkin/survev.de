@@ -497,6 +497,30 @@ function soloCoverPos(obstaclePos: Vec2, threatPos: Vec2, botPos: Vec2): Vec2 {
     return findCover(b, graph.navObstacles, threatPos, 0)!.pos;
 }
 
+// Regression from a real match: the bot wedged against a building's wall for seconds, its
+// flee/heal cover point sitting inside the building. The enemy-reachability check only ever
+// compared the two routes, so a point the bot itself could only reach via a long detour
+// was still handed out. A candidate the bot can't realistically walk to is no cover.
+test("findCover refuses a cover point the bot itself can only reach by a long detour", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    const botPos = v2.add(center, v2.create(3, 7));
+    const crate = game.map.genObstacle("crate_01", v2.add(center, v2.create(0, -10)));
+    const bot = game.playerBarn.addTestPlayer({ pos: botPos });
+    const graph = buildNavGraph(game);
+
+    const candidatePos = soloCoverPos(crate.pos, threatPos, botPos);
+    const nav = new NavGraph([]);
+    const botNode = nav.addNode(botPos, 0, "open");
+    const candNode = nav.addNode(candidatePos, 0, "open");
+    const farNode = nav.addNode(v2.add(center, v2.create(-60, 40)), 0, "open");
+    nav.link(botNode, farNode, 60); // the bot's only way out goes a long way round
+    nav.link(farNode, candNode, 60);
+
+    expect(findCover(bot, graph.navObstacles, threatPos, 0, undefined, nav)).toBeUndefined();
+});
+
 test("findCover prefers a candidate the enemy's own route takes much longer to reach", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const center = v2.create(132, 132);
