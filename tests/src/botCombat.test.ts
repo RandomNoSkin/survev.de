@@ -70,6 +70,24 @@ test("Weapon selection prefers the shotgun up close and the sniper at range", ()
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });
 
+// Regression from a real match: at 19 HP the bot started a 6-second medkit with the enemy
+// still around, got hit at 27 HP, and the medkit was aborted - nothing gained, dead soon
+// after. With a threat recently seen, the quick bandage should be the pick.
+test("pickHealItem reaches for the quick bandage under a recently seen threat, not the medkit", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 5);
+    bot.invManager.give("healthkit", 2);
+    bot.health = 19;
+
+    expect(pickHealItem(bot, 0.19, /* positionSafe */ true, 0.75, /* threatened */ true)).toBe(
+        "bandage",
+    );
+    expect(pickHealItem(bot, 0.19, /* positionSafe */ true, 0.75, /* threatened */ false)).toBe(
+        "healthkit",
+    );
+});
+
 // Regression from a real match: the bot shot its mosin, went into a single-shell reload, and
 // couldn't quickswitch to its loaded SPAS until the reload finished - moving slowed-down the
 // whole time, and easy to hit. A reload must not block a quickswitch to a loaded gun.

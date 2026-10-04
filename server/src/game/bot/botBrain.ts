@@ -600,7 +600,13 @@ export class BotBrain {
             && enemyHealthFrac - healthFrac > HEALTH_DEFICIT_MARGIN;
         const low = healthFrac < this.tier.healThreshold * LOW_HEALTH_FRAC_MULT || behindOnHealth;
         const healThreshold = effectiveHealThreshold(this.tier, healthFrac, enemyHealthFrac);
-        const noHealItem = pickHealItem(bot, healthFrac, positionSafe, healThreshold) === undefined;
+        const noHealItem = pickHealItem(
+            bot,
+            healthFrac,
+            positionSafe,
+            healThreshold,
+            this.enemySightBlocksHeal(bot),
+        ) === undefined;
         const canHealNow = !noHealItem
             && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac);
 

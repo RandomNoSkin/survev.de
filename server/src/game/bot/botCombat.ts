@@ -457,6 +457,7 @@ export function pickHealItem(
     healthFrac: number,
     positionSafe: boolean,
     healThreshold: number,
+    threatened = false,
 ): InventoryItem | undefined {
     const missingToThreshold = Math.max(0, (healThreshold - healthFrac) * GameConfig.player.health);
     const bandageDef = GameObjectDefs.typeToDefSafe("bandage") as HealDef;
@@ -464,9 +465,12 @@ export function pickHealItem(
     const bandageTime = Math.ceil(missingToThreshold / bandageDef.heal) * bandageDef.useTime;
     const medkitFaster = healthkitDef.useTime < bandageTime;
 
-    // Critically hurt: grab whichever heals at all regardless of position - at this
-    // point delaying is the bigger risk, not the exposure window a medkit costs.
-    const wantsFull = healthFrac <= 0.25 || (medkitFaster && positionSafe);
+    // A medkit is a 6-second commitment - under a recently seen enemy one hit is enough to
+    // abort it and throw all that exposure away (a real match: 19 HP, medkit started, shot
+    // at 27 HP, aborted at 6 HP, dead). With a threat recently around, the quick bandage is
+    // the one that can actually finish. Without one, critically hurt still grabs whichever
+    // heals at all - delaying is the bigger risk there.
+    const wantsFull = !threatened && (healthFrac <= 0.25 || (medkitFaster && positionSafe));
     const order: InventoryItem[] = wantsFull
         ? ["healthkit", "bandage"]
         : ["bandage", "healthkit"];
@@ -524,7 +528,7 @@ export function shouldHeal(
     if (healthFrac >= healThreshold) return false;
     if (!desperate && hasVisibleEnemy && healthFrac > 0.25) return false;
 
-    return pickHealItem(bot, healthFrac, positionSafe, healThreshold) !== undefined;
+    return pickHealItem(bot, healthFrac, positionSafe, healThreshold, hasVisibleEnemy) !== undefined;
 }
 
 /** Heals when hurt and it's safe to. See `shouldHeal` for the decision. */
@@ -539,7 +543,7 @@ export function updateHeal(
     if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate, enemyHealthFrac)) return;
     const healthFrac = bot.health / GameConfig.player.health;
     const healThreshold = effectiveHealThreshold(tier, healthFrac, enemyHealthFrac);
-    const item = pickHealItem(bot, healthFrac, positionSafe, healThreshold);
+    const item = pickHealItem(bot, healthFrac, positionSafe, healThreshold, hasVisibleEnemy);
     if (item) bot.useHealingItem(item);
 }
 
