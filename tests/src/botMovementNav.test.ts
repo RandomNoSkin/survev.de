@@ -521,6 +521,41 @@ test("findCover refuses a cover point the bot itself can only reach by a long de
     expect(findCover(bot, graph.navObstacles, threatPos, 0, undefined, nav)).toBeUndefined();
 });
 
+// Under pressure the closest cover by straight line isn't necessarily the one the bot reaches
+// first - a near cover behind a long detour loses to a farther one that's a direct walk.
+// Non-critical fleeing still takes the nearest; critical (`noInteriorFallback`) ranks by the
+// real walk.
+test("A critical bot picks the cover it can walk to first, not the nearest by straight line", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const center = v2.create(132, 132);
+    const threatPos = v2.sub(center, v2.create(40, 0));
+    const botPos = v2.add(center, v2.create(3, -6));
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(6, 0))); // near cover A
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(22, 0))); // farther cover B, behind A
+    const bot = game.playerBarn.addTestPlayer({ pos: botPos });
+    const graph = buildNavGraph(game);
+    const posA = soloCoverPos(v2.add(center, v2.create(6, 0)), threatPos, botPos);
+    const posB = soloCoverPos(v2.add(center, v2.create(22, 0)), threatPos, botPos);
+
+    const nav = new NavGraph([]);
+    const botNode = nav.addNode(botPos, 0, "open");
+    const nodeA = nav.addNode(posA, 0, "open");
+    const nodeB = nav.addNode(posB, 0, "open");
+    const threatNode = nav.addNode(threatPos, 0, "open");
+    const detour = nav.addNode(v2.add(center, v2.create(3, -30)), 0, "open");
+    nav.link(botNode, detour, 15); // A is only reachable the long way round...
+    nav.link(detour, nodeA, 15);
+    nav.link(botNode, nodeB, 17); // ...while B is a direct walk
+    nav.link(threatNode, nodeA, 200);
+    nav.link(threatNode, nodeB, 200);
+
+    const calm = findCover(bot, graph.navObstacles, threatPos, 0, undefined, nav, undefined, false);
+    expect(calm?.obstacle.pos).toEqual(v2.add(center, v2.create(6, 0)));
+
+    const critical = findCover(bot, graph.navObstacles, threatPos, 0, undefined, nav, undefined, true);
+    expect(critical?.obstacle.pos).toEqual(v2.add(center, v2.create(22, 0)));
+});
+
 test("findCover prefers a candidate the enemy's own route takes much longer to reach", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const center = v2.create(132, 132);

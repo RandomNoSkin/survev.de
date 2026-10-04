@@ -780,6 +780,7 @@ function filterByReachability(
     layer: number,
     preferred: Obstacle | undefined,
     candidates: CoverCandidate[],
+    rankByWalk = false,
 ): CoverCandidate[] {
     if (!candidates.length) return candidates;
     const sorted = [...candidates].sort((a, b) => a.distSqr - b.distSqr);
@@ -788,24 +789,37 @@ function filterByReachability(
         const preferredEntry = candidates.find((c) => c.obstacle === preferred);
         if (preferredEntry && !shortlist.includes(preferredEntry)) shortlist.push(preferredEntry);
     }
-    // Whether the bot can realistically walk there - a point behind a wall whose only
-    // route in is a long way around (a real match: the bot wedged against a building's
-    // wall for seconds, its cover point inside the building) is no cover at all, however
-    // far the enemy is from it.
-    const botCanReach = (entry: CoverCandidate): boolean => {
-        const botCost = pathCostEstimate(nav, bot.pos, entry.pos, layer);
-        return botCost <= v2.distance(bot.pos, entry.pos) * COVER_MAX_DETOUR + COVER_DETOUR_SLACK;
+    // The bot's own real walk to each candidate, computed once per candidate. A point behind
+    // a wall whose only route in is a long way round (a real match: the bot wedged against
+    // a building's wall for seconds, its cover point inside the building) is no cover at
+    // all, however far the enemy is from it.
+    const walk = new Map<CoverCandidate, number>();
+    const walkTo = (entry: CoverCandidate): number => {
+        let cost = walk.get(entry);
+        if (cost === undefined) {
+            cost = pathCostEstimate(nav, bot.pos, entry.pos, layer);
+            walk.set(entry, cost);
+        }
+        return cost;
     };
+    const botCanReach = (entry: CoverCandidate): boolean =>
+        walkTo(entry) <= v2.distance(bot.pos, entry.pos) * COVER_MAX_DETOUR + COVER_DETOUR_SLACK;
     const kept = shortlist.filter((entry) => {
         if (!botCanReach(entry)) return false;
         if (entry.obstacle === preferred) return true;
-        const botCost = pathCostEstimate(nav, bot.pos, entry.pos, layer);
         const enemyCost = pathCostEstimate(nav, threatPos, entry.pos, layer);
-        return enemyCost - botCost >= REACHABILITY_MARGIN;
+        return enemyCost - walkTo(entry) >= REACHABILITY_MARGIN;
     });
-    if (kept.length) return kept;
     const fallback = sorted.find(botCanReach);
-    return fallback ? [fallback] : [];
+    const result = kept.length ? kept : fallback ? [fallback] : [];
+    if (!rankByWalk) return result;
+    // Critical under pressure: the closest cover by straight line isn't necessarily the one
+    // the bot reaches first - rank the survivors by the real walk instead, reusing
+    // `pickFrom`'s nearest-wins logic on the walk length.
+    return result.map((entry) => {
+        const walkCost = walkTo(entry);
+        return { ...entry, distSqr: walkCost * walkCost };
+    });
 }
 
 /** Picks the nearest point (to the bot) that sits just past a live, collidable obstacle
@@ -953,7 +967,7 @@ export function findCover(
     // `avoidInterior` is exactly that signal already (see this function's own doc
     // comment), reused here rather than adding a second near-duplicate flag.
     const openPool = avoidInterior
-        ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, openCandidates)
+        ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, openCandidates, noInteriorFallback)
         : openCandidates;
     const picked = openPool.length
         ? pickFrom(openPool)
@@ -961,7 +975,15 @@ export function findCover(
         ? undefined
         : pickFrom(
             avoidInterior
-                ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, interiorCandidates)
+                ? filterByReachability(
+                    avoidInterior,
+                    bot,
+                    threatPos,
+                    layer,
+                    preferred,
+                    interiorCandidates,
+                    noInteriorFallback,
+                )
                 : interiorCandidates,
         );
     return picked ? { obstacle: picked.obstacle, pos: picked.pos } : undefined;
