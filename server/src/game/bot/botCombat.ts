@@ -483,6 +483,13 @@ export function pickHealItem(
     return undefined;
 }
 
+/** Actions a heal may start over: nothing, or a reload (which `updateHeal` cancels). */
+function isHealableAction(action: number): boolean {
+    return action === GameConfig.Action.None
+        || action === GameConfig.Action.Reload
+        || action === GameConfig.Action.ReloadAlt;
+}
+
 /** Whether the bot wants to heal right now: hurt, not mid-action, and either no
  *  visible enemy or critically low regardless. Split from `updateHeal` so the brain
  *  can also use it to decide *movement* (retreat instead of engaging) on the same
@@ -520,7 +527,10 @@ export function shouldHeal(
     desperate = false,
     enemyHealthFrac?: number,
 ): boolean {
-    if (bot.actionType !== GameConfig.Action.None) return false;
+    // A reload doesn't block a heal - the game's own `useHealingItem` only refuses
+    // while another item, a revive, or a modify is in progress. Blocking here kept the
+    // bot in flee-and-reload loops with bandages in its pocket.
+    if (!isHealableAction(bot.actionType)) return false;
     if (bot.weaponManager.cookingThrowable) return false;
 
     const healthFrac = bot.health / GameConfig.player.health;
@@ -544,7 +554,11 @@ export function updateHeal(
     const healthFrac = bot.health / GameConfig.player.health;
     const healThreshold = effectiveHealThreshold(tier, healthFrac, enemyHealthFrac);
     const item = pickHealItem(bot, healthFrac, positionSafe, healThreshold, hasVisibleEnemy);
-    if (item) bot.useHealingItem(item);
+    if (!item) return;
+    if (bot.actionType === GameConfig.Action.Reload || bot.actionType === GameConfig.Action.ReloadAlt) {
+        bot.cancelAction();
+    }
+    bot.useHealingItem(item);
 }
 
 /** Standard damage-dealing throwables, in priority order - deliberately excludes

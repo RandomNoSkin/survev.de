@@ -510,6 +510,20 @@ test("Single-fire weapons pulse shootStart once per shot, not every tick", () =>
     expect(bot.shootHold).toBe(false);
 });
 
+test("A hurt bot mid-reload still starts a heal - the game allows a heal during a reload", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 5);
+    bot.health = 40; // below BOT_TIERS.normal.healThreshold (0.5)
+    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
+    // A top-up reload started while the bot was out of sight - the real match had the
+    // bot stuck in these for most of a 25s flee, never getting to its bandages.
+    bot.actionType = GameConfig.Action.Reload;
+
+    updateHeal(bot, BOT_TIERS.normal, /* hasVisibleEnemy */ false, /* positionSafe */ true);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
 test("A hurt, unthreatened bot heals itself", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
