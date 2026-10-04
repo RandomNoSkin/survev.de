@@ -184,7 +184,11 @@ export function updateWeaponSelection(
     isFleeing = false,
     recentContact = false,
 ): void {
-    if (bot.actionType !== GameConfig.Action.None) return;
+    // A reload is the one action that doesn't block a quickswitch - see the reloading
+    // branch below. Anything else (healing, reviving, ...) still owns the loadout.
+    const reloading = bot.actionType === GameConfig.Action.Reload
+        || bot.actionType === GameConfig.Action.ReloadAlt;
+    if (bot.actionType !== GameConfig.Action.None && !reloading) return;
 
     const wm = bot.weaponManager;
     const preferMelee = isFleeing && !recentContact;
@@ -202,6 +206,19 @@ export function updateWeaponSelection(
 
     const cur = wm.curWeapIdx;
     const meleeType = wm.weapons[WeaponSlot.Melee].type;
+
+    // Mid-reload, the only switch allowed is a quickswitch to a loaded gun - it cancels
+    // the reload (see `setCurWeapIndex`), and the reload itself was what kept the bot on
+    // the slowed-down gun in a real match: it shot the mosin, couldn't swap to a loaded
+    // SPAS while the single-shell reload ran, and moved at slowed-down speed the whole time.
+    if (reloading) {
+        const alt = slots.find((i) => i !== cur && hasAmmo(bot, i));
+        if (tier.quickswitch && fire.firedSinceSwitch && bot.shotSlowdownTimer > 0 && alt !== undefined) {
+            wm.setCurWeapIndex(alt);
+            fire.firedSinceSwitch = true;
+        }
+        return;
+    }
 
     // Not holding a gun at all - fresh spawn, right after a role assigns weapons into
     // slots but leaves `curWeapIdx` on melee (see `Player.promoteToRole`/`setWeapon`),

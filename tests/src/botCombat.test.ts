@@ -70,6 +70,24 @@ test("Weapon selection prefers the shotgun up close and the sniper at range", ()
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
 });
 
+// Regression from a real match: the bot shot its mosin, went into a single-shell reload, and
+// couldn't quickswitch to its loaded SPAS until the reload finished - moving slowed-down the
+// whole time, and easy to hit. A reload must not block a quickswitch to a loaded gun.
+test("A mid-reload bot still quickswitches to a loaded gun when slowed down", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "spas12", 5);
+    equipActive(bot, WeaponSlot.Secondary, "mosin", 0);
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Secondary);
+    bot.actionType = GameConfig.Action.ReloadAlt;
+    bot.shotSlowdownTimer = 1;
+    const fire = new BotFireState();
+    fire.firedSinceSwitch = true;
+
+    updateWeaponSelection(bot, BOT_TIERS.expert, fire, 14);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
+
 // Regression for a real match capture: a bot hovering right where the spas12/mosin sweet
 // spots cross (~14 units) flipped weapons on nearly every shot - each swap eating a switch
 // delay and resetting the quickswitch slowdown, so it fired a fraction of what it could
