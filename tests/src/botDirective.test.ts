@@ -187,7 +187,7 @@ test("A bot retreats to heal when not full and a visible enemy has meaningfully 
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
-    bot.health = 85; // comfortably clear of the old, purely self-health "low" bar
+    bot.health = 60; // below FIGHT_FLOOR_FRAC (70%) - above it the bot fights on instead
     target.health = 100; // ahead by well more than HEALTH_DEFICIT_MARGIN
     bot.invManager.give("bandage", 5);
 
@@ -1249,4 +1249,49 @@ test("A hit from an enemy seen behind a crate does not abort a heal", () => {
     bot.botBrain!.update(0.05);
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// Fight above 70 HP: a visible enemy that is ahead on health doesn't make a healthy bot run.
+test("A bot above 70 HP holds ground against a visible enemy that is ahead on health", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 75;
+    target.health = 100;
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(-0.3); // not running away from the target (+x)
+});
+
+// Push when the enemy is at least 20 HP behind, even above 70 HP.
+test("A bot above 70 HP pushes a visible enemy that is at least 20 HP down", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 80;
+    target.health = 55;
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
+});
+
+// Below 70 HP, a visible enemy with any health advantage over the bot is worth pushing
+// instead of spending the turn healing.
+test("A bot below 70 HP pushes a visible enemy with less health even when it could heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 60;
+    target.health = 50;
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
 });

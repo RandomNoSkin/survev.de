@@ -104,6 +104,13 @@ const ENEMY_LOW_HEALTH_FRAC = 0.4;
  *  the other by a sliver - the exact tick-to-tick flapping already fixed elsewhere in
  *  this file (cover stickiness, range-mode hysteresis) for the same underlying reason. */
 const HEALTH_DEFICIT_MARGIN = 0.05;
+/** Health fraction (of max) above which a bot fights on regardless of how the enemy's
+ *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
+ *  healing takes priority again unless the enemy has less health to push into. */
+const FIGHT_FLOOR_FRAC = 0.7;
+/** How far ahead on health (as a fraction of max) the bot has to be before it pushes a
+ *  visible or recently seen enemy outright, at any health - see `pickDirective`. */
+const PUSH_HEALTH_ADVANTAGE_FRAC = 0.2;
 /** How long a chosen retreat (heal/flee) holds against an immediate drop to holding ground -
  *  see `stickyRetreat`. */
 const RETREAT_HOLD_MS = 500;
@@ -628,7 +635,10 @@ export class BotBrain {
         // change to the actual heal-safety gate just below - without it, `low` alone
         // would retreat looking for safety and then just stand there once it found some,
         // since the plain tier threshold would still say "no need, already above it".
-        const enemyHealthFrac = this.target
+        // Above `FIGHT_FLOOR_FRAC` the enemy's health doesn't count against the bot at all:
+        // it keeps fighting instead of healing or running, and only a clear health advantage
+        // (`PUSH_HEALTH_ADVANTAGE_FRAC`) sends it forward - see the push checks below.
+        const enemyHealthFrac = this.target && healthFrac < FIGHT_FLOOR_FRAC
             ? this.target.health / GameConfig.player.health
             : undefined;
         const behindOnHealth = healthFrac < 1
@@ -701,6 +711,14 @@ export class BotBrain {
         // Uses the enemy's *remembered* health too, not just a currently visible reading -
         // a real match capture showed the bot heal/flee for several seconds at 52 HP while
         // the enemy, just out of sight, sat at 18 and got time to heal all the way back.
+        // Push rules: an enemy at least `PUSH_HEALTH_ADVANTAGE_FRAC` down is always worth
+        // pressing; below `FIGHT_FLOOR_FRAC` any health advantage is, ahead of healing.
+        if (!critical && knownEnemyFrac !== undefined) {
+            const pushAdvantage = knownEnemyFrac <= healthFrac - PUSH_HEALTH_ADVANTAGE_FRAC;
+            const hurtAndAhead = healthFrac < FIGHT_FLOOR_FRAC
+                && knownEnemyFrac < healthFrac - HEALTH_DEFICIT_MARGIN;
+            if (pushAdvantage || hurtAndAhead) return "push";
+        }
         if (low && !critical && knownEnemyFrac !== undefined) {
             if (knownEnemyFrac < healthFrac && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC) {
                 return "push";
