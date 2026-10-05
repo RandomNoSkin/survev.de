@@ -1321,3 +1321,24 @@ test("A bot mid-heal with an open, aimed shot on a visible enemy takes the shot 
 
     expect(bot.actionType).toBe(GameConfig.Action.None);
 });
+
+// Real match: at 22 HP the bot stopped about 3 units short of its cover point, and the
+// heal-start gate only counts a bot as safe on the exact cover spot. It then kept picking
+// new cover further out, walking through the open for 1-2 seconds without healing, and died.
+// Close enough to the cover to be in it should be enough to start the heal.
+test("A critical bot a few units short of its cover starts healing instead of walking on", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
+    target.health = 100;
+    bot.health = 22;
+    bot.invManager.give("bandage", 5);
+    const movement = (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement;
+    movement.coverPos = v2.create(53, 50); // 3 units short of the cover point
+    movement.coverRecheck = 99;
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});

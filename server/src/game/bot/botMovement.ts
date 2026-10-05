@@ -1129,6 +1129,10 @@ const SAFE_HEAL_DIST = 16;
  *  isn't, as long as nothing can currently see the bot. */
 const CRITICAL_COVER_WALK_MAX = 8;
 
+/** How close to its cover point a bot has to be to start a heal there - looser than
+ *  `COVER_REACHED_DIST`, which is the exact spot a bot never quite stops on. See `isSafeToHeal`. */
+const HEAL_START_COVER_DIST = 3;
+
 /** Same idea as `SAFE_HEAL_DIST`, but for retreating to reload instead of to heal - a
  *  shorter distance, since being out of ammo is more urgent to resolve (there's nothing
  *  to fight back with in the meantime) and reloading is generally quicker than healing
@@ -1464,7 +1468,9 @@ export function isSafeToHeal(
     // Too far to walk to cover while critical and unseen - heal here, see CRITICAL_COVER_WALK_MAX.
     if (state.coverPos && critical && !enemyVisible
         && v2.distance(bot.pos, state.coverPos) > CRITICAL_COVER_WALK_MAX) return true;
-    if (state.coverPos) return v2.distance(bot.pos, state.coverPos) <= COVER_REACHED_DIST;
+    // Within `HEAL_START_COVER_DIST` counts as in the cover - a bot always stops a few units
+    // short of the exact point, and demanding the exact spot made it re-pick cover instead.
+    if (state.coverPos) return v2.distance(bot.pos, state.coverPos) <= HEAL_START_COVER_DIST;
     return engageDist >= SAFE_HEAL_DIST;
 }
 
