@@ -1426,6 +1426,12 @@ function retreatToCover(
     ) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }
+    // Still in a clear line of fire at any range: the close-range rule above doesn't cover a
+    // bot healing out in the open 30 units from the enemy, which stood still and got shot.
+    // Moving doesn't cancel the heal, so keep retreating while exposed.
+    if (!holdAndPeek && stillExposed) {
+        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+    }
     state.path = [];
     return v2.create(0, 0);
 }

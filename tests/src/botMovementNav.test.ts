@@ -2219,3 +2219,23 @@ test("A fleeing bot against the map border does not keep pushing into the wall",
 
     expect(bot.touchMoveDir.x).toBeLessThan(0.2); // not pushing further into the right-hand wall
 });
+
+// Real match: the bot healed out in the open at 30 units from a visible enemy, its cover still
+// ~11 units away, and held still while being shot. The "finish the heal in cover" rule only
+// retreats while exposed within a close range, so at 30 units it did nothing. An exposed bot
+// with a clear line of fire should keep moving toward cover even when it's far from the threat.
+test("A healing bot in a clear line of fire at long range keeps moving toward its cover", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(30, 0)); // clear line, 30 units out
+    const state = new BotMovementState();
+    state.coverPos = v2.add(bot.pos, v2.create(-11, 0));
+    state.settledAtCover = true;
+    state.coverRecheck = 99;
+    bot.actionType = GameConfig.Action.UseItem;
+
+    updateMovement(bot, state, "heal", threat, 30, 0.05, undefined, true, undefined, false);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // back toward the cover behind it (-x)
+});
