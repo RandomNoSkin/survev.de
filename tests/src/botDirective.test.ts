@@ -1282,7 +1282,7 @@ test("A bot above 70 HP pushes a visible enemy that is at least 20 HP down and n
 
 // Below 70 HP, a visible enemy with any health advantage over the bot is worth pushing
 // instead of spending the turn healing.
-test("A bot below 70 HP pushes a visible enemy with less health even when it could heal", () => {
+test("A bot below 70 HP with a heal in hand does not push a visible enemy with less health", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
@@ -1293,7 +1293,7 @@ test("A bot below 70 HP pushes a visible enemy with less health even when it cou
 
     bot.botBrain!.update(0.05);
 
-    expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
+    expect(bot.touchMoveDir.x).toBeLessThan(0.3); // not closing in on the target (+x) - healing first
 });
 
 // Real match: the bot kept healing with the enemy in an open line, its aim already on it, and a
@@ -1536,4 +1536,22 @@ test("A bot above 70 HP pushes an enemy it has just been dealing damage to", () 
     bot.botBrain!.update(0.05);
 
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
+});
+
+// Option B: below 70 HP, with a heal in hand, the bot doesn't push - it retreats and heals to 70
+// first, even against an enemy with less health. Only without any heal item is a push its way out.
+test("A bot below 70 HP with a bandage does not push an enemy with less health, it heals first", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    target.health = 30;
+    bot.health = 51;
+    bot.invManager.give("bandage", 5);
+    bot.botBrain!.update(0.05);
+
+    const directive = (bot.botBrain as unknown as {
+        pickDirective(b: unknown, threat: unknown, dt: number, grenade: unknown): string;
+    }).pickDirective(bot, target.pos, 0.05, undefined);
+    expect(directive).not.toBe("push");
 });

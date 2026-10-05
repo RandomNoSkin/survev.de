@@ -122,6 +122,9 @@ const CHIP_HIT_HEALTH_LOSS = 10;
  *  target to be within finishing range (`PUSH_FINISH_FRAC`). See `pickDirective`. */
 const RECENT_DAMAGE_DEALT_MS = 2000;
 const PUSH_FINISH_FRAC = 0.3;
+/** Below the fight floor with a heal in hand, the bot heals first - except against an enemy at or
+ *  under this health fraction, which is worth pressing right away. See `healFirst`. */
+const HEAL_FIRST_FINISH_FRAC = 0.2;
 const CHIP_HIT_COVER_DIST = 4;
 /** How far ahead on health (as a fraction of max) the bot has to be before it pushes a
  *  visible or recently seen enemy outright, at any health - see `pickDirective`. */
@@ -771,7 +774,12 @@ export class BotBrain {
         // the enemy, just out of sight, sat at 18 and got time to heal all the way back.
         // Push rules: an enemy at least `PUSH_HEALTH_ADVANTAGE_FRAC` down is always worth
         // pressing; below `FIGHT_FLOOR_FRAC` any health advantage is, ahead of healing.
-        if (!critical && knownEnemyFrac !== undefined) {
+        // Below the fight floor with a heal in hand, healing comes first: the bot retreats out of
+        // sight and heals to the floor rather than pushing, even against a weaker enemy.
+        // An enemy in finishing range is still pressed, even with a heal in hand.
+        const healFirst = healthFrac < FIGHT_FLOOR_FRAC && !noHealItem
+            && !(knownEnemyFrac !== undefined && knownEnemyFrac <= HEAL_FIRST_FINISH_FRAC);
+        if (!critical && !healFirst && knownEnemyFrac !== undefined) {
             const pushAdvantage = knownEnemyFrac <= healthFrac - PUSH_HEALTH_ADVANTAGE_FRAC;
             const hurtAndAhead = healthFrac < FIGHT_FLOOR_FRAC
                 && knownEnemyFrac < healthFrac - HEALTH_DEFICIT_MARGIN;
@@ -782,7 +790,7 @@ export class BotBrain {
                 || bot.game.now - this.lastEnemyDamageMs < RECENT_DAMAGE_DEALT_MS;
             if ((pushAdvantage && pushWorthIt) || hurtAndAhead) return "push";
         }
-        if (low && !critical && knownEnemyFrac !== undefined) {
+        if (low && !critical && !healFirst && knownEnemyFrac !== undefined) {
             if (knownEnemyFrac < healthFrac && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC) {
                 return "push";
             }
@@ -824,8 +832,10 @@ export class BotBrain {
         // more direct fix, so the streak requirement was just needless hesitation once a
         // target is genuinely low. Short of that, `engageHold` still knows how to close
         // distance using cover instead.
+        // Heal first below the floor: out of sight, not standing in the open waiting to push.
+        if (healFirst && !canHealNow) return this.fleeOrFight();
         const enemyLow = knownEnemyFrac !== undefined && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC;
-        if (!low && enemyLow) return "push";
+        if (!low && enemyLow && !healFirst) return "push";
 
         if (canHealNow) return "heal";
         // Just finished healing (or an abort just ended) - keep retreating for a short
