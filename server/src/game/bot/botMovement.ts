@@ -12,7 +12,7 @@ import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 import { currentSweetSpot } from "./botCombat.ts";
 import type { BotTierDef } from "./botDefs.ts";
-import { hasLineOfSight } from "./botPerception.ts";
+import { hasBodyLineOfSight } from "./botPerception.ts";
 import { findPath } from "./nav/navAStar.ts";
 import { isOpenableDoor, isWalkClear, pointClear } from "./nav/navGeom.ts";
 import type { NavGraph } from "./nav/navGraph.ts";
@@ -386,6 +386,9 @@ export class BotMovementState {
      *  `retreatToCover`'s "threat closing in" check. `undefined` whenever cover isn't
      *  settled (kept in sync with `settledAtCover` resetting to `false`). */
     distAtSettle?: number;
+    /** Where the threat was when `settledAtCover` last latched - see the sideways-shift check
+     *  in `retreatToCover`. */
+    threatAtSettle?: Vec2;
     /** Seconds since `settledAtCover` last became true - see `retreatToCover`'s "settled
      *  too long" check/`SETTLED_MAX_S`. Reset alongside `distAtSettle`. */
     settledForS = 0;
@@ -1157,6 +1160,9 @@ const RETREAT_SETTLE_MULT = 1.75;
  *  slightly different remembered point) - see `retreatToCover`'s "threat closing in"
  *  check. */
 const PUSH_DETECT_MARGIN = 4;
+/** How far the threat has to have moved round from where a bot settled before its cover is
+ *  re-picked against the new angle - see `threatShifted` in `retreatToCover`. */
+const THREAT_SHIFT_RECOVER_DIST = 5;
 /** How long settled-at-cover is willing to sit fully still with no threat signal at all
  *  before treating that silence itself as a reason to move again - see the "settled too
  *  long" check below. A real match capture showed a bot camp one exact spot for 7.6
@@ -1361,6 +1367,7 @@ function retreatToCover(
         state.pushedPastCover = false;
         state.approachDir = undefined;
         state.distAtSettle = v2.distance(bot.pos, threatPos);
+        state.threatAtSettle = v2.copy(threatPos);
         state.settledForS = 0;
     } else {
         state.settledForS += dt;
@@ -1394,9 +1401,13 @@ function retreatToCover(
     // owns that path state itself, exactly like the "no cover found" branch above
     // already relies on - clearing it here first would throw away a just-computed path
     // before it's ever actually followed.
-    const stillExposed = hasLineOfSight(bot.game, threatPos, bot.pos, util.toGroundLayer(bot.layer));
+    const stillExposed = hasBodyLineOfSight(bot.game, threatPos, bot.pos, util.toGroundLayer(bot.layer));
     const threatClosingIn = state.distAtSettle !== undefined
         && v2.distance(bot.pos, threatPos) < state.distAtSettle - PUSH_DETECT_MARGIN;
+    // The threat stepping sideways round the cover - same distance, different angle, so
+    // `threatClosingIn` never trips - can open a line the cover was blocking.
+    const threatShifted = state.threatAtSettle !== undefined
+        && v2.distance(threatPos, state.threatAtSettle) > THREAT_SHIFT_RECOVER_DIST;
     // A third, independent reason to keep moving even with *no* threat signal at all: a
     // quiet push (no shot fired, no sighting) never trips `stillExposed`/`threatClosingIn`
     // in the first place, since both need some signal to react to - "wird gepusht und
@@ -1426,7 +1437,7 @@ function retreatToCover(
     // waiting in place for them to walk round it is how a healing bot got finished off. Moving
     // doesn't cancel the heal, so give up this spot and move with the threat; next tick cover is
     // picked against where they are now. An enemy that can't see the bot still doesn't make it run.
-    if (!holdAndPeek && healing && threatClosingIn && stillExposed) {
+    if (!holdAndPeek && stillExposed && (threatClosingIn || threatShifted)) {
         state.settledAtCover = false;
         state.distAtSettle = undefined;
         state.settledForS = 0;

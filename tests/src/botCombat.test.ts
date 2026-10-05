@@ -12,10 +12,10 @@ import {
     updateWeaponSelection,
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
-import { findVisibleTarget } from "../../server/src/game/bot/botPerception.ts";
+import { findVisibleTarget, hasBodyLineOfSight, hasLineOfSight } from "../../server/src/game/bot/botPerception.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import * as net from "../../shared/net/net.ts";
-import { v2 } from "../../shared/utils/v2.ts";
+import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 
 /** Equips a slot and makes it active, then clears the cooldown the very first
@@ -1052,4 +1052,21 @@ test("A bot under a zoom region sees only as far as its real zoom, not the usual
     bot.insideZoomRegion = true;
     bot.zoom = 28; // 1x
     expect(findVisibleTarget(bot)).toBeUndefined();
+});
+
+// A bullet leaves from the gun, not the bot's centre, and a body is more than a point: a line
+// that grazes past the cover's edge to the bot's body counts as open, so the bot doesn't treat
+// a grazed body as safely covered.
+test("A line to a bot's body counts as open when only its centre is blocked", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.map.genObstacle("crate_01", v2.create(60, 50));
+    const from = v2.create(50, 50);
+    // Scan for a grazing angle: the centre-to-centre line is blocked, but a line to the body is open.
+    let grazed: Vec2 | undefined;
+    for (let dy = -6; dy <= 6 && !grazed; dy += 0.25) {
+        const to = v2.create(70, 50 + dy);
+        if (!hasLineOfSight(game, from, to, 0) && hasBodyLineOfSight(game, from, to, 0)) grazed = to;
+    }
+    expect(grazed).toBeDefined();
+    expect(hasBodyLineOfSight(game, from, grazed!, 0)).toBe(true);
 });

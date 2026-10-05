@@ -19,7 +19,7 @@ import {
 import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
 import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
-import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasLineOfSight } from "./botPerception.ts";
+import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasBodyLineOfSight } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
 
@@ -185,7 +185,7 @@ const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
  *  there's nothing to abort for - the bot keeps healing behind whatever is between them. */
 function enemyCanHitSoon(bot: Player, enemy: Player | undefined): boolean {
     if (!enemy) return false;
-    if (!hasLineOfSight(bot.game, enemy.pos, bot.pos, bot.layer)) return false;
+    if (!hasBodyLineOfSight(bot.game, enemy.pos, bot.pos, bot.layer)) return false;
     if (enemy.actionType === GameConfig.Action.Reload || enemy.actionType === GameConfig.Action.ReloadAlt) {
         return false;
     }
@@ -387,7 +387,7 @@ export class BotBrain {
             // bullet line to them gets the shot instead. `lastCanFire` is last tick's aim -
             // this check runs before this tick's aim update.
             const openShotReady = this.lastCanFire && !!this.target
-                && hasLineOfSight(bot.game, bot.pos, this.target.pos, bot.layer)
+                && hasBodyLineOfSight(bot.game, bot.pos, this.target.pos, bot.layer)
                 && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
             if ((justHit && enemyRefireReady) || grenadeThreat || exposedUnarmed || openShotReady) {
                 bot.cancelAction();
@@ -858,7 +858,7 @@ export class BotBrain {
             this.lastKnownEnemyPos,
             v2.mul(this.aim.vel, elapsedMs / 1000),
         );
-        if (!hasLineOfSight(bot.game, bot.pos, predictedPos, bot.layer)) return undefined;
+        if (!hasBodyLineOfSight(bot.game, bot.pos, predictedPos, bot.layer)) return undefined;
 
         return { __id: this.aim.targetId, pos: predictedPos };
     }
@@ -936,7 +936,7 @@ export class BotBrain {
 
     private think(): void {
         this.target = findVisibleTarget(this.player);
-        if (this.target && hasLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)) {
+        if (this.target && hasBodyLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)) {
             this.lastClearLineMs = this.player.game.now;
         }
         this.state = this.target ? "engage" : "idle";

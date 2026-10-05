@@ -2285,3 +2285,23 @@ test("A healing bot in cover that sees the enemy push closer gives up its spot i
     expect(state.settledAtCover).toBe(false);
     expect(bot.touchMoveActive).toBe(true);
 });
+
+// Real match: the bot sat on its cover while the user stepped sideways round it - the distance
+// never changed, so "closing in" never fired, and the cover stopped hiding it. A settled bot
+// whose threat has shifted well off where it settled, and can see the bot, should re-pick cover.
+test("A settled bot whose threat shifts sideways and can see it gives up its spot", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(0, 20)); // same distance as when it settled, moved round
+    const state = new BotMovementState();
+    state.coverPos = v2.copy(bot.pos);
+    state.settledAtCover = true;
+    state.distAtSettle = 20;
+    state.threatAtSettle = v2.add(bot.pos, v2.create(20, 0));
+    state.coverRecheck = 99;
+    bot.actionType = GameConfig.Action.UseItem;
+
+    updateMovement(bot, state, "heal", threat, 20, 0.05, undefined, true, undefined, true);
+
+    expect(state.settledAtCover).toBe(false);
+});

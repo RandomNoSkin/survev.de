@@ -119,6 +119,26 @@ function viewHalfExtentsFor(bot: Player): Vec2 {
     return v2.create(halfWidth, halfWidth / (16 / 9));
 }
 
+/** Half-width of the body rays `hasBodyLineOfSight` also tries, either side of the centre line. */
+const BODY_LOS_OFFSET = 1.5;
+
+/**
+ * `hasLineOfSight`, but a line counts as open if it reaches either side of the bot's body
+ * too, not just its exact centre. A bullet starts at the gun and a body isn't a point, so a
+ * centre-to-centre check called a grazed body "covered" when a shot could still reach it.
+ */
+export function hasBodyLineOfSight(game: Game, from: Vec2, to: Vec2, layer: number): boolean {
+    if (hasLineOfSight(game, from, to, layer)) return true;
+    const dist = v2.distance(from, to);
+    if (dist < 0.01) return true;
+    const perp = v2.create(-(to.y - from.y) / dist, (to.x - from.x) / dist);
+    for (const side of [-1, 1]) {
+        const shift = v2.mul(perp, side * BODY_LOS_OFFSET);
+        if (hasLineOfSight(game, v2.add(from, shift), v2.add(to, shift), layer)) return true;
+    }
+    return false;
+}
+
 /**
  * Line-of-sight check using the exact same primitive bullets use
  * (`collisionHelpers.intersectSegment`, with the bullet height), so "the bot can see
