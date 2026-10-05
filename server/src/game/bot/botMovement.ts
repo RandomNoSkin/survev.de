@@ -291,6 +291,8 @@ export class BotMovementState {
     /** Whether this heading toward the idle goal has already had its route checked for
      *  building interiors - see `idleRouteCrossesInterior`. */
     idleRouteChecked = false;
+    /** Whether the walk to the idle goal routes around building interiors - see `updateMovement`. */
+    idleAvoidInterior = false;
     /** Which of close/retreat/hold the bot is committed to - see `pickRangeMode`. */
     rangeMode: RangeMode = "hold";
     /** Seconds spent in `close` mode without the target actually being visible - see
@@ -1498,6 +1500,7 @@ export function followPath(
     goal: Vec2,
     dt: number,
     ignore?: Obstacle,
+    avoidInterior = false,
 ): Vec2 | undefined {
     const layer = util.toGroundLayer(bot.layer);
 
@@ -1545,9 +1548,11 @@ export function followPath(
         state.repathCooldown = REPATH_INTERVAL;
         const startNodes = graph.nearby(bot.pos, layer, NODE_SEARCH_RADIUS, 5);
         const goalNodes = new Set(graph.nearby(goal, layer, NODE_SEARCH_RADIUS, 5));
-        const excluded = state.blacklistedNodes.size
-            ? new Set(state.blacklistedNodes.keys())
-            : undefined;
+        const excluded = avoidInterior
+            ? new Set([...state.blacklistedNodes.keys(), ...interiorNodes(graph)])
+            : state.blacklistedNodes.size
+                ? new Set(state.blacklistedNodes.keys())
+                : undefined;
         state.path = startNodes.length && goalNodes.size
             ? findPath(graph, startNodes, goalNodes, goal, layer, MAX_PATH_EXPANSIONS, excluded) ?? []
             : [];
@@ -1630,16 +1635,43 @@ export function preferNonInteriorGoal(nav: NavGraph, rawGoal: Vec2, layer: numbe
     return rawGoal;
 }
 
-/** Whether the nav route from an open-ground bot to `goal` steps through any building
- *  interior. A bot already inside a building may leave it either way, so it never counts. */
-function idleRouteCrossesInterior(nav: NavGraph, bot: Player, goal: Vec2): boolean {
+/** Whether the bot's own nearest nav node is a building interior. */
+function isInteriorNode(nav: NavGraph, bot: Player): boolean {
+    const id = nav.nearest(bot.pos, util.toGroundLayer(bot.layer));
+    return id >= 0 && nav.kind[id] === "interior";
+}
+
+/** Whether an idle walk from here to `goal` can avoid building interiors entirely (see
+ *  `followPath`'s `avoidInterior`). Already inside a building it's always fine - leaving
+ *  one has to cross its interior anyway. */
+function idleRouteAvoidingInterior(nav: NavGraph, bot: Player, goal: Vec2): boolean {
+    if (isInteriorNode(nav, bot)) return true;
     const layer = util.toGroundLayer(bot.layer);
     const from = nav.nearest(bot.pos, layer);
-    if (from < 0 || nav.kind[from] === "interior") return false;
     const to = nav.nearest(goal, layer);
-    if (to < 0 || to === from) return false;
-    const route = findPath(nav, [from], new Set([to]), goal, layer, MAX_PATH_EXPANSIONS);
-    return !!route && route.some((id) => nav.kind[id] === "interior");
+    if (from < 0 || to < 0) return false;
+    if (nav.kind[to] === "interior") return false;
+    if (to === from) return true;
+    const route = findPath(
+        nav,
+        [from],
+        new Set([to]),
+        goal,
+        layer,
+        MAX_PATH_EXPANSIONS,
+        interiorNodes(nav),
+    );
+    return route !== null;
+}
+
+/** Every building-interior node id in the graph - the `excluded` set for an interior-free
+ *  path search. */
+function interiorNodes(nav: NavGraph): Set<number> {
+    const set = new Set<number>();
+    for (let id = 0; id < nav.kind.length; id++) {
+        if (nav.kind[id] === "interior") set.add(id);
+    }
+    return set;
 }
 
 /** A random heading for idle wander that, tried first, doesn't walk straight into a
@@ -1826,14 +1858,19 @@ export function updateMovement(
                     state.headingToIdleGoal = false;
                     state.idleRouteChecked = false;
                 } else if (!state.idleRouteChecked) {
-                    // With no threat, a route that cuts through a building's interior from open
-                    // ground isn't worth it - the real match had the bot idle inside one while the
-                    // enemy walked up. Checked once per heading (the bot starts out already
-                    // heading, so the transition below never sees it). Drop it for a while if so.
+                    // With no threat, the walk to the idle goal shouldn't go through a building's
+                    // interior - the real match had the bot idle inside one while the enemy walked
+                    // up. So it routes around buildings instead (see `followPath`'s
+                    // `avoidInterior`), and only gives the goal up for a while when no such route
+                    // exists. Checked once per heading (the bot starts out already heading, so the
+                    // transition below never sees it).
                     state.idleRouteChecked = true;
-                    if (nav && idleRouteCrossesInterior(nav, bot, effectiveIdleGoal)) {
+                    state.path = [];
+                    if (nav && !idleRouteAvoidingInterior(nav, bot, effectiveIdleGoal)) {
                         state.headingToIdleGoal = false;
                         state.idleGoalCooldown = IDLE_INTERIOR_ROUTE_COOLDOWN_S;
+                    } else {
+                        state.idleAvoidInterior = !!nav && !isInteriorNode(nav, bot);
                     }
                 }
             } else if (distToGoal > IDLE_GOAL_RESUME_DIST && state.idleGoalCooldown <= 0) {
@@ -1843,7 +1880,9 @@ export function updateMovement(
         }
         const headingToGoal = effectiveIdleGoal && state.headingToIdleGoal;
         if (headingToGoal) {
-            const pathDir = nav ? followPath(bot, state, nav, effectiveIdleGoal, dt) : undefined;
+            const pathDir = nav
+                ? followPath(bot, state, nav, effectiveIdleGoal, dt, undefined, state.idleAvoidInterior)
+                : undefined;
             move = pathDir ?? v2.normalizeSafe(v2.sub(effectiveIdleGoal, bot.pos));
         } else {
             state.path = [];

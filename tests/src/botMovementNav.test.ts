@@ -2239,3 +2239,28 @@ test("A healing bot in a clear line of fire at long range keeps moving toward it
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeLessThan(-0.3); // back toward the cover behind it (-x)
 });
+
+// An idle walk to its goal goes around a building when there's a way around, instead of giving
+// the goal up - the real match had the bot wander at random (into map corners) for want of it.
+test("An idle bot walks to its idle goal around a building when a way around exists", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    // A wall blocks the straight line; a building interior sits right on the direct route, and an
+    // open route goes around it.
+    const wall = game.map.genObstacle("crate_01", v2.create(60, 50));
+    const nav = new NavGraph([wall]);
+    const a = nav.addNode(v2.create(50, 50), 0, "open");
+    const interior = nav.addNode(v2.create(60, 44), 0, "interior");
+    const around = nav.addNode(v2.create(60, 58), 0, "open");
+    const goal = nav.addNode(v2.create(70, 50), 0, "open");
+    nav.link(a, interior, 10);
+    nav.link(interior, goal, 10);
+    nav.link(a, around, 10);
+    nav.link(around, goal, 10);
+    const state = new BotMovementState();
+
+    updateMovement(bot, state, "idle", undefined, Infinity, 0.05, nav, false, undefined, false, v2.create(70, 50));
+
+    expect(state.headingToIdleGoal).toBe(true);
+    expect(state.path).not.toContain(interior);
+});
