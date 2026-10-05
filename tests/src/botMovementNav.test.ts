@@ -2305,3 +2305,25 @@ test("A settled bot whose threat shifts sideways and can see it gives up its spo
 
     expect(state.settledAtCover).toBe(false);
 });
+
+// Real match: the bot reached a good cover, then the user stepped round it into a clear line.
+// The shift response ran straight away from the threat, walking the bot out of the cover and into
+// open ground where it was shot down. A sideways shift should re-pick cover where it stands, not
+// retreat across open ground.
+test("A settled bot whose threat shifts round it re-picks cover instead of walking out into the open", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(0, 20));
+    const state = new BotMovementState();
+    state.coverPos = v2.copy(bot.pos);
+    state.settledAtCover = true;
+    state.distAtSettle = 20;
+    state.threatAtSettle = v2.add(bot.pos, v2.create(20, 0));
+    state.coverRecheck = 99;
+
+    updateMovement(bot, state, "flee", threat, 20, 0.05, undefined, true, undefined, true);
+
+    expect(state.settledAtCover).toBe(false);
+    expect(state.coverRecheck).toBe(0); // cover is re-picked next tick against where the threat is now
+    expect(bot.touchMoveActive).toBe(false); // and not walked away across open ground meanwhile
+});

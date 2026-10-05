@@ -1437,6 +1437,17 @@ function retreatToCover(
     // waiting in place for them to walk round it is how a healing bot got finished off. Moving
     // doesn't cancel the heal, so give up this spot and move with the threat; next tick cover is
     // picked against where they are now. An enemy that can't see the bot still doesn't make it run.
+    // A sideways shift re-picks cover in place: retreating straight away from the threat walked
+    // a bot out of a good cover into open ground. Next tick cover is recomputed against where
+    // the threat is now, and a real retreat only happens if it's closing in.
+    if (!holdAndPeek && stillExposed && threatShifted && !threatClosingIn) {
+        state.settledAtCover = false;
+        state.distAtSettle = undefined;
+        state.settledForS = 0;
+        state.coverRecheck = 0;
+        state.path = [];
+        return v2.create(0, 0);
+    }
     if (!holdAndPeek && stillExposed && (threatClosingIn || threatShifted)) {
         state.settledAtCover = false;
         state.distAtSettle = undefined;
