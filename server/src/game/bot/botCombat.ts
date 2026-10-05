@@ -310,7 +310,9 @@ export function updateReload(bot: Player, hasVisibleTarget: boolean): void {
     const weapon = wm.weapons[cur];
     if (!weapon.type || wm.scheduledReload) return;
     if (weapon.ammo <= 0) {
-        wm.scheduledReload = true;
+        // Not in view of the enemy: a reload there holds the bot out in the open with nothing to
+        // shoot back with. The reload directive retreats to cover for it instead.
+        if (!hasVisibleTarget) wm.scheduledReload = true;
         return;
     }
     if (hasVisibleTarget) return;

@@ -1092,3 +1092,18 @@ test("An enemy's muzzle can have a line to the bot when its centre doesn't", () 
     }
     expect(found).toBe(true);
 });
+
+// An empty gun is not reloaded in view of the enemy: the reload would hold the bot out in the open
+// with nothing to shoot back with. It reloads once out of sight (and retreats to cover for it).
+test("An empty gun is not reloaded while an enemy is in view", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    equipActive(bot, WeaponSlot.Primary, "mosin", 0);
+    bot.weaponManager.scheduledReload = false; // equipping an empty gun schedules one on its own
+
+    updateReload(bot, /* hasVisibleTarget */ true);
+    expect(bot.weaponManager.scheduledReload).toBe(false);
+
+    updateReload(bot, /* hasVisibleTarget */ false);
+    expect(bot.weaponManager.scheduledReload).toBe(true);
+});
