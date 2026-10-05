@@ -1039,3 +1039,17 @@ test("A bot sees an enemy behind a crate inside its view, but does not fire thro
     expect(bot.shootStart).toBe(false);
     expect(bot.shootHold).toBe(false);
 });
+
+// Under a zoom region (a pavilion, say) a human's screen shrinks to the real zoom, so an enemy
+// 40 units off is out of view. The bot's usual 45-unit view floor shouldn't keep it in sight.
+test("A bot under a zoom region sees only as far as its real zoom, not the usual view floor", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(90, 50) }); // 40 units out
+
+    expect(findVisibleTarget(bot)).toBe(enemy); // open ground: the 45-unit floor applies
+
+    bot.insideZoomRegion = true;
+    bot.zoom = 28; // 1x
+    expect(findVisibleTarget(bot)).toBeUndefined();
+});

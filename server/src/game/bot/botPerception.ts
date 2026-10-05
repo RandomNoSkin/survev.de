@@ -109,6 +109,12 @@ export function findGrenadeThreat(bot: Player): Vec2 | undefined {
  *  regardless of scope entirely - even a maxed-out 15x scope's `zoom * 0.35` never beat
  *  it, so scope never actually mattered before either). */
 function viewHalfExtentsFor(bot: Player): Vec2 {
+    // Inside a zoom region (a pavilion, say) the screen shrinks to the real zoom, just as a
+    // human's does (the server culls at zoom + 4), so the floor doesn't apply there.
+    if (bot.insideZoomRegion) {
+        const zoomHalf = bot.zoom + 4;
+        return v2.create(zoomHalf, zoomHalf / (16 / 9));
+    }
     const halfWidth = Math.min(90, Math.max(45, bot.zoom * 0.9));
     return v2.create(halfWidth, halfWidth / (16 / 9));
 }
