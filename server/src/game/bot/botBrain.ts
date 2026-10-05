@@ -8,6 +8,7 @@ import {
     BotFireState,
     BotThrowState,
     effectiveHealThreshold,
+    FIGHT_FLOOR_FRAC,
     pickHealItem,
     shouldHeal,
     updateFiring,
@@ -122,10 +123,6 @@ const CHIP_HIT_HEALTH_LOSS = 10;
 const RECENT_DAMAGE_DEALT_MS = 2000;
 const PUSH_FINISH_FRAC = 0.3;
 const CHIP_HIT_COVER_DIST = 4;
-/** Health fraction (of max) above which a bot fights on regardless of how the enemy's
- *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
- *  healing takes priority again unless the enemy has less health to push into. */
-const FIGHT_FLOOR_FRAC = 0.7;
 /** How far ahead on health (as a fraction of max) the bot has to be before it pushes a
  *  visible or recently seen enemy outright, at any health - see `pickDirective`. */
 const PUSH_HEALTH_ADVANTAGE_FRAC = 0.2;

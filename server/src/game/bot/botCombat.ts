@@ -516,12 +516,17 @@ function isHealableAction(action: number): boolean {
  *  same as always. Composes with the existing visibility gate below rather than
  *  bypassing it: this only actually matters once the enemy isn't currently in sight (a
  *  real safe window), the same as any other top-up. */
+/** Below this health fraction a bot heals up to it before fighting on - a heal under way is
+ *  finished to here, not stopped at the tier's own threshold. See `effectiveHealThreshold`. */
+export const FIGHT_FLOOR_FRAC = 0.7;
+
 export function effectiveHealThreshold(
     tier: BotTierDef,
     healthFrac: number,
     enemyHealthFrac?: number,
 ): number {
     if (enemyHealthFrac !== undefined && enemyHealthFrac > healthFrac) return 1;
+    if (healthFrac < FIGHT_FLOOR_FRAC) return Math.max(tier.healThreshold, FIGHT_FLOOR_FRAC);
     return tier.healThreshold;
 }
 

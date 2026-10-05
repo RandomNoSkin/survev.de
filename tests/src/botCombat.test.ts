@@ -3,6 +3,8 @@ import {
     BotFireState,
     BotThrowState,
     currentSweetSpot,
+    effectiveHealThreshold,
+    FIGHT_FLOOR_FRAC,
     pickHealItem,
     shouldHeal,
     updateFiring,
@@ -1106,4 +1108,13 @@ test("An empty gun is not reloaded while an enemy is in view", () => {
 
     updateReload(bot, /* hasVisibleTarget */ false);
     expect(bot.weaponManager.scheduledReload).toBe(true);
+});
+
+// Below 70 HP healing takes priority, and a heal already under way is finished up to the fight
+// floor - one bandage that gets a bot to 49 shouldn't stop it there and send it pushing.
+test("Below 70 HP the heal threshold is the fight floor, not just the tier's own threshold", () => {
+    expect(effectiveHealThreshold(BOT_TIERS.expert, 0.49)).toBe(
+        Math.max(BOT_TIERS.expert.healThreshold, FIGHT_FLOOR_FRAC),
+    );
+    expect(effectiveHealThreshold(BOT_TIERS.expert, 0.8)).toBe(BOT_TIERS.expert.healThreshold);
 });
