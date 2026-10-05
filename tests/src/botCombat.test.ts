@@ -12,7 +12,7 @@ import {
     updateWeaponSelection,
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
-import { findVisibleTarget, hasBodyLineOfSight, hasLineOfSight } from "../../server/src/game/bot/botPerception.ts";
+import { findVisibleTarget, hasBodyLineOfSight, hasLineOfSight, muzzlePos } from "../../server/src/game/bot/botPerception.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import * as net from "../../shared/net/net.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
@@ -1069,4 +1069,26 @@ test("A line to a bot's body counts as open when only its centre is blocked", ()
     }
     expect(grazed).toBeDefined();
     expect(hasBodyLineOfSight(game, from, grazed!, 0)).toBe(true);
+});
+
+// A bullet leaves the shooter's muzzle, not its centre, so an enemy can have a line to the bot
+// that the centre-to-centre check misses. Scan for a spot where that's the case.
+test("An enemy's muzzle can have a line to the bot when its centre doesn't", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.map.genObstacle("crate_01", v2.create(60, 50));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    enemy.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    enemy.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    enemy.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    enemy.dir = v2.create(-1, 0); // facing the bot
+
+    let found = false;
+    for (let dy = -6; dy <= 6 && !found; dy += 0.25) {
+        enemy.pos = v2.create(70, 50 + dy);
+        const centreBlocked = !hasBodyLineOfSight(game, enemy.pos, bot.pos, 0);
+        const muzzleOpen = hasBodyLineOfSight(game, muzzlePos(enemy), bot.pos, 0);
+        if (centreBlocked && muzzleOpen) found = true;
+    }
+    expect(found).toBe(true);
 });

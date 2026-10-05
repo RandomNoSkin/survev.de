@@ -1482,3 +1482,26 @@ test("A bot mid-heal does not break off to shoot a moving target", () => {
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// A small chip hit with cover a step away isn't a reason to give up the heal: keep healing and
+// step behind the cover, instead of breaking off and peeking out.
+test("A small hit does not abort a heal when cover is a step away", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
+    armEnemy(target, "spas12", 8, 0);
+    bot.health = 27;
+    (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement.coverPos = v2.create(52, 50);
+    (bot.botBrain as unknown as { movement: { coverRecheck: number } }).movement.coverRecheck = 99;
+
+    bot.botBrain!.update(0.05);
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 3;
+    bot.action.time = 0;
+    bot.damage({ amount: 5, damageType: GameConfig.DamageType.Player, dir: v2.create(-1, 0), source: target });
+    bot.health = 22; // the chip actually cost 5 HP
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});

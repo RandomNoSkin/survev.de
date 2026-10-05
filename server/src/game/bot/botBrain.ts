@@ -19,7 +19,7 @@ import {
 import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
 import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
-import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasBodyLineOfSight } from "./botPerception.ts";
+import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasBodyLineOfSight, muzzlePos } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
 
@@ -115,6 +115,9 @@ const HEAL_FINISH_GRACE_S = 1.0;
 /** Slower than this (units/s, from the aim's own velocity estimate) and a target counts as moving
  *  enough to dodge a shot - see `openShotReady` in `update()`. */
 const SURE_SHOT_MAX_TARGET_SPEED = 1.5;
+/** A hit costing less than this (HP) is a chip; with cover this close, a chip doesn't break a heal. */
+const CHIP_HIT_HEALTH_LOSS = 10;
+const CHIP_HIT_COVER_DIST = 4;
 /** Health fraction (of max) above which a bot fights on regardless of how the enemy's
  *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
  *  healing takes priority again unless the enemy has less health to push into. */
@@ -196,7 +199,7 @@ const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
  *  there's nothing to abort for - the bot keeps healing behind whatever is between them. */
 function enemyCanHitSoon(bot: Player, enemy: Player | undefined): boolean {
     if (!enemy) return false;
-    if (!hasBodyLineOfSight(bot.game, enemy.pos, bot.pos, bot.layer)) return false;
+    if (!hasBodyLineOfSight(bot.game, muzzlePos(enemy), bot.pos, bot.layer)) return false;
     if (enemy.actionType === GameConfig.Action.Reload || enemy.actionType === GameConfig.Action.ReloadAlt) {
         return false;
     }
@@ -244,6 +247,9 @@ export class BotBrain {
     /** Whether the aim was on target with the shot ready on the previous tick - see
      *  `openShotReady` in `update()`. */
     private lastCanFire = false;
+    /** Health seen on the previous tick, and how much the most recent hit cost - see `update()`. */
+    private lastHealthSeen = -1;
+    private hitLossAtLastHit = 0;
     /** `game.now` the enemy last had a clear bullet line to the bot - what blocks a heal (see
      *  `enemySightBlocksHeal`). Seeing an enemy in the screen isn't enough. */
     private lastClearLineMs = -Infinity;
@@ -370,6 +376,13 @@ export class BotBrain {
         // actually threatened yet. A bot bailing out of every heal it starts, without
         // ever having been shot at, is worse than occasionally finishing one a beat
         // later than a human would.
+        // How much HP the latest hit actually cost (armour cuts a lot of raw damage).
+        const healthNow = bot.health;
+        if (this.lastHealthSeen >= 0 && healthNow < this.lastHealthSeen) {
+            this.hitLossAtLastHit = this.lastHealthSeen - healthNow;
+        }
+        this.lastHealthSeen = healthNow;
+
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
             // Abort only when the enemy can hit again right away. A single hit followed by
@@ -409,7 +422,12 @@ export class BotBrain {
                 && healLeftS > HEAL_FINISH_GRACE_S
                 && hasBodyLineOfSight(bot.game, bot.pos, this.target!.pos, bot.layer)
                 && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
-            if ((justHit && enemyRefireReady) || grenadeThreat || exposedUnarmed || openShotReady) {
+            // A small chip with cover a step away: keep healing and step behind it, rather than
+            // breaking off to peek out and shoot.
+            const chipWithCoverNear = this.hitLossAtLastHit < CHIP_HIT_HEALTH_LOSS
+                && !!this.movement.coverPos
+                && v2.distance(bot.pos, this.movement.coverPos) <= CHIP_HIT_COVER_DIST;
+            if ((justHit && enemyRefireReady && !chipWithCoverNear) || grenadeThreat || exposedUnarmed || openShotReady) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -962,7 +980,8 @@ export class BotBrain {
 
     private think(): void {
         this.target = findVisibleTarget(this.player);
-        if (this.target && hasBodyLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)) {
+        if (this.target && (hasBodyLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)
+            || hasBodyLineOfSight(this.player.game, muzzlePos(this.target), this.player.pos, this.player.layer))) {
             this.lastClearLineMs = this.player.game.now;
         }
         this.state = this.target ? "engage" : "idle";

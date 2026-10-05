@@ -119,6 +119,22 @@ function viewHalfExtentsFor(bot: Player): Vec2 {
     return v2.create(halfWidth, halfWidth / (16 / 9));
 }
 
+/**
+ * Where a shooter's bullets actually start: the muzzle, offset from its centre by the gun's
+ * barrel length forward and barrel offset sideways - the same spot `WeaponManager.fireWeapon`
+ * spawns a bullet at (before obstacle clipping). Without a gun, the centre.
+ */
+export function muzzlePos(shooter: Player): Vec2 {
+    const def = GameObjectDefs.typeToDefSafe(shooter.weaponManager.activeWeapon) as
+        | { barrelLength?: number; barrelOffset?: number }
+        | undefined;
+    const len = def?.barrelLength ?? 0;
+    const offset = def?.barrelOffset ?? 0;
+    const dir = shooter.dir;
+    const perp = v2.create(-dir.y, dir.x);
+    return v2.add(shooter.pos, v2.add(v2.mul(perp, offset), v2.mul(dir, len)));
+}
+
 /** Half-width of the body rays `hasBodyLineOfSight` also tries, either side of the centre line. */
 const BODY_LOS_OFFSET = 1.5;
 
