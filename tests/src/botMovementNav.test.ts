@@ -2343,3 +2343,26 @@ test("No open-ground nav node sits inside a building footprint on the real local
     }
     expect(openInside).toBe(0);
 });
+
+// Priority while healing: never sit in the enemy's line. A healing bot that's exposed first re-picks
+// its cover in place, and only runs off if it's still exposed on the next tick.
+test("A healing bot exposed to the enemy re-picks its cover before running off", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(15, 0)); // clear line, 15 units out
+    const nav = buildNavGraph(game);
+    const state = new BotMovementState();
+    state.coverPos = v2.copy(bot.pos);
+    state.settledAtCover = true;
+    state.distAtSettle = 15;
+    state.threatAtSettle = v2.copy(threat);
+    state.coverRecheck = 99;
+    bot.actionType = GameConfig.Action.UseItem;
+
+    updateMovement(bot, state, "heal", threat, 15, 0.05, nav, true, undefined, true);
+    expect(state.coverRecheck).toBe(0);
+    expect(bot.touchMoveActive).toBe(false);
+
+    updateMovement(bot, state, "heal", threat, 15, 0.05, nav, true, undefined, true);
+    expect(bot.touchMoveActive).toBe(true); // still exposed after the re-pick: run off
+});

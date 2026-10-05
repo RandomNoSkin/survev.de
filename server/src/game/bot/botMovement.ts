@@ -389,6 +389,9 @@ export class BotMovementState {
     /** Where the threat was when `settledAtCover` last latched - see the sideways-shift check
      *  in `retreatToCover`. */
     threatAtSettle?: Vec2;
+    /** Set once a healing bot has re-picked its cover in place because the enemy has a line on
+     *  it - see `retreatToCover`. Cleared as soon as it's no longer exposed. */
+    exposedRecheckPending = false;
     /** Seconds since `settledAtCover` last became true - see `retreatToCover`'s "settled
      *  too long" check/`SETTLED_MAX_S`. Reset alongside `distAtSettle`. */
     settledForS = 0;
@@ -1447,6 +1450,18 @@ function retreatToCover(
         state.coverRecheck = 0;
         state.path = [];
         return v2.create(0, 0);
+    }
+    // Mid-heal and in the enemy's line: running off across open ground is what hands them free
+    // shots. Re-pick cover in place first (next tick, against where they are now); only if the bot
+    // is still exposed then does it retreat below.
+    if (!holdAndPeek && healing && stillExposed && nav) {
+        if (!state.exposedRecheckPending) {
+            state.exposedRecheckPending = true;
+            state.coverRecheck = 0;
+            return v2.create(0, 0);
+        }
+    } else {
+        state.exposedRecheckPending = false;
     }
     if (!holdAndPeek && stillExposed && (threatClosingIn || threatShifted)) {
         state.settledAtCover = false;
