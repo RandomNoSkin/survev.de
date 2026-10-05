@@ -229,6 +229,9 @@ const IDLE_GOAL_REACHED_DIST = 10;
  *  `BotMovementState.headingToIdleGoal`. Wide enough that ordinary wander drift right
  *  around the reached radius doesn't immediately flip back either. */
 const IDLE_GOAL_RESUME_DIST = IDLE_GOAL_REACHED_DIST + 8;
+/** How long an idle bot leaves its idle goal alone after a route to it cut through a
+ *  building's interior - see `idleRouteCrossesInterior` in `updateMovement`. */
+const IDLE_INTERIOR_ROUTE_COOLDOWN_S = 6;
 /** How far around a raw straight-line movement goal to look for a non-`interior` node to
  *  redirect to instead - see `preferNonInteriorGoal`. Wide enough to actually find a
  *  nearby hull/open node from just inside a building, not so wide the goal drags
@@ -282,6 +285,12 @@ export class BotMovementState {
      *  since those two point in essentially unrelated directions, cancels out net
      *  progress and reads as the bot freezing in place short of its destination. */
     headingToIdleGoal = true;
+    /** Seconds before an idle bot may head for its idle goal again after one route was
+     *  dropped for cutting through a building's interior - see `IDLE_INTERIOR_ROUTE_COOLDOWN_S`. */
+    idleGoalCooldown = 0;
+    /** Whether this heading toward the idle goal has already had its route checked for
+     *  building interiors - see `idleRouteCrossesInterior`. */
+    idleRouteChecked = false;
     /** Which of close/retreat/hold the bot is committed to - see `pickRangeMode`. */
     rangeMode: RangeMode = "hold";
     /** Seconds spent in `close` mode without the target actually being visible - see
@@ -1113,6 +1122,13 @@ function updatePeekCycle(
  *  matchup can actually reach and hold for the brief window a bandage needs. */
 const SAFE_HEAL_DIST = 16;
 
+/** How far a critically hurt bot will walk to reach its cover before healing in place
+ *  instead. Real matches showed bots at 13-19 HP walk 17-25 units across open ground to a
+ *  cover point (healing only once on it) and die on the way, or while healing short of it,
+ *  to an enemy that closed in unseen. A walk this short is still worth it; a longer one
+ *  isn't, as long as nothing can currently see the bot. */
+const CRITICAL_COVER_WALK_MAX = 8;
+
 /** Same idea as `SAFE_HEAL_DIST`, but for retreating to reload instead of to heal - a
  *  shorter distance, since being out of ammo is more urgent to resolve (there's nothing
  *  to fight back with in the meantime) and reloading is generally quicker than healing
@@ -1435,8 +1451,13 @@ export function isSafeToHeal(
     state: BotMovementState,
     engageDist: number,
     sustainedLost: boolean,
+    critical = false,
+    enemyVisible = false,
 ): boolean {
     if (sustainedLost) return true;
+    // Too far to walk to cover while critical and unseen - heal here, see CRITICAL_COVER_WALK_MAX.
+    if (state.coverPos && critical && !enemyVisible
+        && v2.distance(bot.pos, state.coverPos) > CRITICAL_COVER_WALK_MAX) return true;
     if (state.coverPos) return v2.distance(bot.pos, state.coverPos) <= COVER_REACHED_DIST;
     return engageDist >= SAFE_HEAL_DIST;
 }
@@ -1597,6 +1618,18 @@ export function preferNonInteriorGoal(nav: NavGraph, rawGoal: Vec2, layer: numbe
     return rawGoal;
 }
 
+/** Whether the nav route from an open-ground bot to `goal` steps through any building
+ *  interior. A bot already inside a building may leave it either way, so it never counts. */
+function idleRouteCrossesInterior(nav: NavGraph, bot: Player, goal: Vec2): boolean {
+    const layer = util.toGroundLayer(bot.layer);
+    const from = nav.nearest(bot.pos, layer);
+    if (from < 0 || nav.kind[from] === "interior") return false;
+    const to = nav.nearest(goal, layer);
+    if (to < 0 || to === from) return false;
+    const route = findPath(nav, [from], new Set([to]), goal, layer, MAX_PATH_EXPANSIONS);
+    return !!route && route.some((id) => nav.kind[id] === "interior");
+}
+
 /** A random heading for idle wander that, tried first, doesn't walk straight into a
  *  building - "high scope preferen, möglichst nicht in buildings laufen". Unlike
  *  `preferNonInteriorGoal` (steers a *destination* that already happens to sit on an
@@ -1739,14 +1772,29 @@ export function updateMovement(
             ? preferNonInteriorGoal(nav, idleGoal, util.toGroundLayer(bot.layer))
             : idleGoal;
 
+        state.idleGoalCooldown = Math.max(0, state.idleGoalCooldown - dt);
         if (!effectiveIdleGoal) {
             state.headingToIdleGoal = false;
         } else {
             const distToGoal = v2.distance(bot.pos, effectiveIdleGoal);
             if (state.headingToIdleGoal) {
-                if (distToGoal <= IDLE_GOAL_REACHED_DIST) state.headingToIdleGoal = false;
-            } else if (distToGoal > IDLE_GOAL_RESUME_DIST) {
+                if (distToGoal <= IDLE_GOAL_REACHED_DIST) {
+                    state.headingToIdleGoal = false;
+                    state.idleRouteChecked = false;
+                } else if (!state.idleRouteChecked) {
+                    // With no threat, a route that cuts through a building's interior from open
+                    // ground isn't worth it - the real match had the bot idle inside one while the
+                    // enemy walked up. Checked once per heading (the bot starts out already
+                    // heading, so the transition below never sees it). Drop it for a while if so.
+                    state.idleRouteChecked = true;
+                    if (nav && idleRouteCrossesInterior(nav, bot, effectiveIdleGoal)) {
+                        state.headingToIdleGoal = false;
+                        state.idleGoalCooldown = IDLE_INTERIOR_ROUTE_COOLDOWN_S;
+                    }
+                }
+            } else if (distToGoal > IDLE_GOAL_RESUME_DIST && state.idleGoalCooldown <= 0) {
                 state.headingToIdleGoal = true;
+                state.idleRouteChecked = false;
             }
         }
         const headingToGoal = effectiveIdleGoal && state.headingToIdleGoal;
@@ -1763,18 +1811,27 @@ export function updateMovement(
             move = state.wanderDir;
         }
     } else if (directive === "heal" || directive === "flee") {
-        move = retreatToCover(
-            bot,
-            state,
-            nav,
-            threatPos,
-            dt,
-            false,
-            recentlyVisible,
-            SAFE_HEAL_DIST,
-            aggression,
-            critical,
-        );
+        // Already healing in place (see `isSafeToHeal`): don't keep walking to the distant
+        // cover underneath it.
+        const healingInPlace = bot.actionType === GameConfig.Action.UseItem
+            && critical
+            && !targetVisible
+            && !!state.coverPos
+            && v2.distance(bot.pos, state.coverPos) > CRITICAL_COVER_WALK_MAX;
+        move = healingInPlace
+            ? v2.create(0, 0)
+            : retreatToCover(
+                bot,
+                state,
+                nav,
+                threatPos,
+                dt,
+                false,
+                recentlyVisible,
+                SAFE_HEAL_DIST,
+                aggression,
+                critical,
+            );
     } else if (directive === "reload") {
         move = retreatToCover(
             bot,

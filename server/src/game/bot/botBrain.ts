@@ -425,6 +425,8 @@ export class BotBrain {
                 this.movement,
                 engageDist,
                 this.sustainedlyLost(bot) || this.desperateHeal,
+                bot.health / GameConfig.player.health < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT,
+                !!this.target,
             )
         ) {
             updateHeal(

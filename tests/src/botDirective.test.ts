@@ -1118,3 +1118,25 @@ test("A non-critical bot waits out a quiet stretch after a hit before starting a
     bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// Regression: a critically hurt bot with no enemy in sight used to walk the whole way to a
+// cover point before healing at all - `isSafeToHeal` only let a heal start once it was on
+// the cover itself. Real matches showed it walk 17-25 units over open ground at 13-19 HP,
+// then get killed on the way or while healing short of the cover. A cover that far away
+// is not worth the walk when nothing can see it - heal where it stands instead.
+test("A critical bot with no enemy in sight heals where it stands when its cover is a long walk away", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.health = 12; // critical for expert
+    bot.invManager.give("bandage", 5);
+    const movement = (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement;
+    movement.coverPos = v2.create(70, 50); // 20 units away - well past the short walk
+    movement.coverRecheck = 99;
+    // Seen by the enemy a moment ago (not sustained-lost), so only the cover distance is in question.
+    (bot.botBrain as unknown as { lastKnownEnemyTimeMs: number }).lastKnownEnemyTimeMs = game.now - 1000;
+    (bot.botBrain as unknown as { lastKnownEnemyPos: Vec2 }).lastKnownEnemyPos = v2.create(20, 50); // 30 units back the way it came
+
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});

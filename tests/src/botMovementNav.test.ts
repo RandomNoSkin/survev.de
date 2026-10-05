@@ -2169,3 +2169,38 @@ test("util.sameLayer sanity used by tryOpenNearbyDoor treats ground and ground+s
     expect(util.sameLayer(0, 2)).toBeTruthy();
     expect(util.sameLayer(0, 1)).toBeFalsy();
 });
+
+// Regression: an idle bot (no threat, no sighting) headed for the map centre along a route
+// that cut through a building's interior - the real match had it walk into a building it
+// had no reason to be in, then idle there while the enemy walked up. With no threat, the
+// route to the idle goal must not go through interior nodes from open ground; the bot
+// should wander instead, and not resume that same route straight away.
+test("An idle bot does not route to its idle goal through a building's interior", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    // A wall blocks the straight line, so the only route is the one through the building.
+    const wall = game.map.genObstacle("crate_01", v2.create(60, 50));
+    const nav = new NavGraph([wall]);
+    const a = nav.addNode(v2.create(50, 50), 0, "open");
+    const interior = nav.addNode(v2.create(60, 44), 0, "interior");
+    const goal = nav.addNode(v2.create(70, 50), 0, "open");
+    nav.link(a, interior, 10);
+    nav.link(interior, goal, 10);
+    const state = new BotMovementState();
+
+    updateMovement(
+        bot,
+        state,
+        "idle",
+        undefined,
+        Infinity,
+        0.05,
+        nav,
+        false,
+        undefined,
+        false,
+        v2.create(70, 50),
+    );
+    expect(state.headingToIdleGoal).toBe(false);
+    expect(state.idleGoalCooldown).toBeGreaterThan(0);
+});
