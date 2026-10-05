@@ -1811,27 +1811,18 @@ export function updateMovement(
             move = state.wanderDir;
         }
     } else if (directive === "heal" || directive === "flee") {
-        // Already healing in place (see `isSafeToHeal`): don't keep walking to the distant
-        // cover underneath it.
-        const healingInPlace = bot.actionType === GameConfig.Action.UseItem
-            && critical
-            && !targetVisible
-            && !!state.coverPos
-            && v2.distance(bot.pos, state.coverPos) > CRITICAL_COVER_WALK_MAX;
-        move = healingInPlace
-            ? v2.create(0, 0)
-            : retreatToCover(
-                bot,
-                state,
-                nav,
-                threatPos,
-                dt,
-                false,
-                recentlyVisible,
-                SAFE_HEAL_DIST,
-                aggression,
-                critical,
-            );
+        move = retreatToCover(
+            bot,
+            state,
+            nav,
+            threatPos,
+            dt,
+            false,
+            recentlyVisible,
+            SAFE_HEAL_DIST,
+            aggression,
+            critical,
+        );
     } else if (directive === "reload") {
         move = retreatToCover(
             bot,

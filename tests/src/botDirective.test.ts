@@ -1140,3 +1140,27 @@ test("A critical bot with no enemy in sight heals where it stands when its cover
     bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// Regression from a real match: after starting a heal far from its cover, a critical bot
+// froze in the open - the cover was 8.06 units off, just past the walk limit, so it healed
+// standing still and got shot from 14 units while doing so. A heal must keep walking the
+// bot to its cover, not hold it where it is.
+test("A critical bot healing with its cover still a walk away keeps walking to it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.health = 12;
+    bot.invManager.give("bandage", 5);
+    (bot.botBrain as unknown as { lastKnownEnemyPos: Vec2 }).lastKnownEnemyPos = v2.create(20, 50);
+    (bot.botBrain as unknown as { lastKnownEnemyTimeMs: number }).lastKnownEnemyTimeMs = game.now - 1000;
+    const movement = (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement;
+    movement.coverPos = v2.create(70, 50);
+    movement.coverRecheck = 99;
+
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+    // Next tick the heal is already running - that's when the freeze would apply.
+    bot.botBrain!.update(0.05);
+    expect(bot.touchMoveActive).toBe(true);
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5);
+});
