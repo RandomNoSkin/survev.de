@@ -230,6 +230,9 @@ export class BotBrain {
     /** Wall-clock ms (`game.now`) this bot last took damage - see `onDamaged` and the
      *  heal-abort check in `update()`. */
     private lastHitTakenTime = -Infinity;
+    /** Whether the aim was on target with the shot ready on the previous tick - see
+     *  `openShotReady` in `update()`. */
+    private lastCanFire = false;
     /** Set for a short window after an aborted heal. No longer a hard block on
      *  re-starting while critical (see `pickDirective`'s own doc comment on why that was
      *  a real bug) - genuine safety (`canHealNow`) always governs that. Still suppresses
@@ -376,7 +379,14 @@ export class BotBrain {
             const exposedUnarmed = bot.weaponManager.curWeapIdx === WeaponSlot.Melee
                 && hasGun
                 && !!this.target;
-            if ((justHit && enemyRefireReady) || grenadeThreat || exposedUnarmed) {
+            // A clear, ready shot at a visible enemy is worth more than finishing the heal:
+            // healing blocks the trigger, so a loaded gun with the aim already on target and a
+            // bullet line to them gets the shot instead. `lastCanFire` is last tick's aim -
+            // this check runs before this tick's aim update.
+            const openShotReady = this.lastCanFire && !!this.target
+                && hasLineOfSight(bot.game, bot.pos, this.target.pos, bot.layer)
+                && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
+            if ((justHit && enemyRefireReady) || grenadeThreat || exposedUnarmed || openShotReady) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -424,6 +434,7 @@ export class BotBrain {
         }
 
         const aimResult = updateAim(bot, this.aim, this.tier, aimTarget, dt);
+        this.lastCanFire = aimResult.canFire;
 
         // Before `updateThrowable`, not after: a covering grenade and a just-becoming-
         // safe heal can both turn eligible on the exact same tick - a bot forced to

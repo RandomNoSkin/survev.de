@@ -1295,3 +1295,29 @@ test("A bot below 70 HP pushes a visible enemy with less health even when it cou
 
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
 });
+
+// Real match: the bot kept healing with the enemy in an open line, its aim already on it, and a
+// loaded Mosin in hand - healing blocks the shot, so it wasted a clear hit and then took one.
+// With a clear bullet line and a ready aim, the heal is worth giving up for the shot.
+test("A bot mid-heal with an open, aimed shot on a visible enemy takes the shot instead", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    target.health = 100;
+    bot.health = 30;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+
+    // Let the aim settle (reaction time) before the heal starts.
+    for (let i = 0; i < 12; i++) {
+        game.now += 60;
+        bot.botBrain!.update(0.05);
+    }
+    bot.actionType = GameConfig.Action.UseItem;
+    game.now += 60;
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+});
