@@ -1422,6 +1422,17 @@ function retreatToCover(
     // breaking off for - running while healing with the enemy merely closing in is what gets
     // the bot caught out in the open.
     const healing = bot.actionType === GameConfig.Action.UseItem;
+    // Mid-heal, an enemy pushing closer *and able to see the bot* changes which cover holds -
+    // waiting in place for them to walk round it is how a healing bot got finished off. Moving
+    // doesn't cancel the heal, so give up this spot and move with the threat; next tick cover is
+    // picked against where they are now. An enemy that can't see the bot still doesn't make it run.
+    if (!holdAndPeek && healing && threatClosingIn && stillExposed) {
+        state.settledAtCover = false;
+        state.distAtSettle = undefined;
+        state.settledForS = 0;
+        state.coverRecheck = 0;
+        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+    }
     if (!holdAndPeek && settledTooLong && !healing) {
         return retreatDirection(bot, state, nav, threatPos, dt, aggression);
     }

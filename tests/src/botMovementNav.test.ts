@@ -2264,3 +2264,24 @@ test("An idle bot walks to its idle goal around a building when a way around exi
     expect(state.headingToIdleGoal).toBe(true);
     expect(state.path).not.toContain(interior);
 });
+
+// Real match: the bot healed in cover while the user walked up on it from 28 to 22 units, and
+// just sat there - the "threat closing in" reaction was suppressed the whole time it was healing.
+// Moving doesn't cancel a heal, so a healing bot whose enemy pushes closer should give up its
+// settled spot and move, rather than wait in place for the enemy to come round.
+test("A healing bot in cover that sees the enemy push closer gives up its spot instead of waiting", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(20, 0)); // closer than it was when the bot settled
+    const state = new BotMovementState();
+    state.coverPos = v2.copy(bot.pos);
+    state.settledAtCover = true;
+    state.distAtSettle = 30;
+    state.coverRecheck = 99;
+    bot.actionType = GameConfig.Action.UseItem;
+
+    updateMovement(bot, state, "heal", threat, 20, 0.05, undefined, true, undefined, true);
+
+    expect(state.settledAtCover).toBe(false);
+    expect(bot.touchMoveActive).toBe(true);
+});
