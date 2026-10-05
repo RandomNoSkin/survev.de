@@ -116,6 +116,22 @@ export function buildNavGraph(game: Game, maxNodes = DEFAULT_MAX_NODES): NavGrap
         }
     }
 
+    // Open-field lattice points that happen to fall inside a building's footprint (the
+    // lattice never checks containment) are interior too - otherwise routes and cover treat
+    // them as open ground and walk straight through the building.
+    for (let id = 0; id < graph.kind.length; id++) {
+        if (graph.kind[id] !== "open") continue;
+        const pos = graph.pos(id);
+        const layer = graph.layer[id];
+        for (const b of game.map.buildings) {
+            if (util.toGroundLayer(b.layer) !== layer) continue;
+            if (buildingContainsPoint(b, pos)) {
+                graph.kind[id] = "interior";
+                break;
+            }
+        }
+    }
+
     // --- 5. Door node pairs -------------------------------------------------------
     for (const o of game.map.obstacles) {
         if (full()) break;

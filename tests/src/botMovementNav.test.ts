@@ -13,7 +13,7 @@ import {
 } from "../../server/src/game/bot/botMovement.ts";
 import { findPath } from "../../server/src/game/bot/nav/navAStar.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
-import { isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
+import { buildingContainsPoint, isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
 import { NavGraph } from "../../server/src/game/bot/nav/navGraph.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { math } from "../../shared/utils/math.ts";
@@ -2326,4 +2326,20 @@ test("A settled bot whose threat shifts round it re-picks cover instead of walki
     expect(state.settledAtCover).toBe(false);
     expect(state.coverRecheck).toBe(0); // cover is re-picked next tick against where the threat is now
     expect(bot.touchMoveActive).toBe(false); // and not walked away across open ground meanwhile
+});
+
+// Real match: an idle bot walked straight through a building - the route to the map centre ran
+// over open-ground nodes that sat inside the building's footprint, since the open lattice never
+// checked building containment. Every node inside a building should count as interior.
+test("No open-ground nav node sits inside a building footprint on the real local map", () => {
+    const game = createGame(TeamMode.Solo, "local");
+    const nav = buildNavGraph(game);
+    let openInside = 0;
+    for (let id = 0; id < nav.kind.length; id++) {
+        if (nav.kind[id] !== "open") continue;
+        const pos = nav.pos(id);
+        const onLayer = game.map.buildings.filter((bld) => util.toGroundLayer(bld.layer) === nav.layer[id]);
+        if (onLayer.some((bld) => buildingContainsPoint(bld, pos))) openInside++;
+    }
+    expect(openInside).toBe(0);
 });
