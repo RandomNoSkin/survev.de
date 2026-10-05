@@ -1231,3 +1231,22 @@ test("A hit from an enemy the bot cannot see does not abort a heal", () => {
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// Seen but shielded: the enemy is in the bot's screen, behind a crate, with a gun ready. A
+// bullet can't get through the crate, so the hit shouldn't abort the heal.
+test("A hit from an enemy seen behind a crate does not abort a heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    game.map.genObstacle("crate_01", v2.create(60, 50));
+    armEnemy(target, "spas12", 8, 0);
+    bot.health = 20;
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.botBrain!.update(0.05);
+    bot.damage({ amount: 5, damageType: GameConfig.DamageType.Player, dir: v2.create(-1, 0), source: target });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});

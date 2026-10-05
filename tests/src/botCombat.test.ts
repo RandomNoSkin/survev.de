@@ -12,6 +12,7 @@ import {
     updateWeaponSelection,
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
+import { findVisibleTarget } from "../../server/src/game/bot/botPerception.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import * as net from "../../shared/net/net.ts";
 import { v2 } from "../../shared/utils/v2.ts";
@@ -1018,4 +1019,23 @@ test("updateThrowable throws at a target that's likely healing behind cover, sus
     expect(throwState.active).toBe(true);
     expect(bot.dirNew.x).toBeCloseTo(1, 5);
     expect(bot.dirNew.y).toBeCloseTo(0, 5);
+});
+
+// The game sends every player inside the screen rectangle with no line-of-sight check, so a
+// human sees an enemy standing behind a crate. The bot must see it too - but a bullet still
+// has to get through, so it must not fire at it through the crate.
+test("A bot sees an enemy behind a crate inside its view, but does not fire through the crate", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    game.map.genObstacle("crate_01", v2.create(60, 50));
+    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
+    bot.dirNew = v2.create(1, 0);
+
+    expect(findVisibleTarget(bot)).toBe(enemy);
+
+    const fire = new BotFireState();
+    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 20, /* canFire */ true, 0.05);
+    expect(bot.shootStart).toBe(false);
+    expect(bot.shootHold).toBe(false);
 });

@@ -12,6 +12,7 @@ import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 import type { BotTierDef } from "./botDefs.ts";
+import { hasLineOfSight } from "./botPerception.ts";
 
 /** Fire-mode-specific trigger state, persisted across ticks by the brain.
  *  `burstTimer < 0` is the "not engaged yet" sentinel: a fresh engagement must start by
@@ -370,7 +371,10 @@ export function updateFiring(
     const cur = wm.curWeapIdx;
     const gunDef = gunDefOf(wm.activeWeapon);
 
-    if (!targetPos || !gunDef || !canFire || bot.actionType !== GameConfig.Action.None) {
+    // Seeing a target doesn't mean a bullet reaches it - cover in between still stops the
+    // shot, so don't waste the trigger on it (see `findVisibleTarget`).
+    const shotClear = !!targetPos && hasLineOfSight(bot.game, bot.pos, targetPos, bot.layer);
+    if (!targetPos || !gunDef || !canFire || !shotClear || bot.actionType !== GameConfig.Action.None) {
         bot.shootHold = false;
         fire.firing = true;
         fire.burstTimer = -1; // next engagement starts by firing, see BotFireState

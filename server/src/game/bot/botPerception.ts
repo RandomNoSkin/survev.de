@@ -11,9 +11,6 @@ import type { Game } from "../game.ts";
 import type { Obstacle } from "../objects/obstacle.ts";
 import type { Player } from "../objects/player.ts";
 
-/** Nearest N candidates get an actual line-of-sight raycast per think. Bounds the
- *  per-bot perception cost regardless of how many enemies are nearby. */
-const MAX_LOS_CHECKS = 4;
 
 /** A live grenade landing within this many units is worth actually reacting to - past
  *  the real blast radius of a frag (rad.max 12 in `explosionsDefs.ts`) with margin, not
@@ -163,9 +160,11 @@ function candidateEnemies(bot: Player, range: number): Player[] {
     return players;
 }
 
-/** Nearest living enemy the bot can currently see, or undefined. */
+/** Nearest living enemy inside the bot's screen, or undefined. Seeing and shooting are
+ *  different things: the server sends every player in the screen rectangle, so a human sees
+ *  an enemy behind a crate just as well. Whether a bullet can actually get through is checked
+ *  separately, when firing (see `updateFiring`) and when weighing a hit (see `enemyCanHitSoon`). */
 export function findVisibleTarget(bot: Player): Player | undefined {
-    const game = bot.game;
     const half = viewHalfExtentsFor(bot);
     // Coarse pre-filter radius for the spatial query below - the rectangle's own
     // half-diagonal, so no candidate the rectangle could actually contain gets missed.
@@ -190,10 +189,5 @@ export function findVisibleTarget(bot: Player): Player | undefined {
         ranked.push({ player: other, distSqr });
     }
     ranked.sort((a, b) => a.distSqr - b.distSqr);
-
-    for (let i = 0; i < ranked.length && i < MAX_LOS_CHECKS; i++) {
-        const candidate = ranked[i].player;
-        if (hasLineOfSight(game, bot.pos, candidate.pos, bot.layer)) return candidate;
-    }
-    return undefined;
+    return ranked[0]?.player;
 }
