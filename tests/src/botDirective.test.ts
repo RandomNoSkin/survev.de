@@ -1456,3 +1456,29 @@ test("A bot mid-heal does not break off to shoot an enemy too far away to push i
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// Breaking a heal to shoot only makes sense when the shot is near-certain to land. A target that is
+// moving is not - the bot keeps its heal and takes cover rather than gamble it on a miss.
+test("A bot mid-heal does not break off to shoot a moving target", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) });
+    target.health = 100;
+    bot.health = 30;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    for (let i = 0; i < 12; i++) {
+        game.now += 60;
+        bot.botBrain!.update(0.05);
+    }
+    (bot.botBrain as unknown as { aim: { vel: Vec2 } }).aim.vel = v2.create(6, 0); // running sideways
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 3;
+    bot.action.time = 0;
+    game.now += 60;
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});

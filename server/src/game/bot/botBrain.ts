@@ -112,6 +112,9 @@ const CLOSE_FIGHT_DIST = 12;
 const OPEN_SHOT_PUSH_DIST = 14;
 /** A heal with at most this much time left is finished, never broken off for a shot. */
 const HEAL_FINISH_GRACE_S = 1.0;
+/** Slower than this (units/s, from the aim's own velocity estimate) and a target counts as moving
+ *  enough to dodge a shot - see `openShotReady` in `update()`. */
+const SURE_SHOT_MAX_TARGET_SPEED = 1.5;
 /** Health fraction (of max) above which a bot fights on regardless of how the enemy's
  *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
  *  healing takes priority again unless the enemy has less health to push into. */
@@ -399,7 +402,10 @@ export class BotBrain {
             const healLeftS = bot.action.duration - bot.action.time;
             const enemyCanPush = !!this.target
                 && v2.distance(bot.pos, this.target.pos) < OPEN_SHOT_PUSH_DIST;
-            const openShotReady = this.lastCanFire && enemyCanPush
+            // Only a near-certain hit is worth a heal: a standing target, on aim, in close range.
+            // A moving one can dodge the shot, and then the heal is simply lost.
+            const targetStanding = v2.length(this.aim.vel) < SURE_SHOT_MAX_TARGET_SPEED;
+            const openShotReady = this.lastCanFire && enemyCanPush && targetStanding
                 && healLeftS > HEAL_FINISH_GRACE_S
                 && hasBodyLineOfSight(bot.game, bot.pos, this.target!.pos, bot.layer)
                 && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
