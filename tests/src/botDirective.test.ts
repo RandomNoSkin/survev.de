@@ -18,6 +18,17 @@ import { createGame } from "./gameTestHelpers.ts";
  * `findCover`/`updatePeekCycle` (covered by `botMovementNav.test.ts`).
  */
 
+/** Gives `enemy` a gun in its primary slot, loaded with `ammo`, and `cooldown` seconds
+ *  until it can fire again. */
+function armEnemy(enemy: { weaponManager: { weapons: { type?: string; ammo?: number; cooldown: number }[]; setCurWeapIndex(i: number): void } }, type: string, ammo: number, cooldown: number): void {
+    const primary = enemy.weaponManager.weapons[WeaponSlot.Primary];
+    primary.type = type;
+    primary.ammo = ammo;
+    enemy.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    // After the switch - switching can reset the cooldown.
+    primary.cooldown = cooldown;
+}
+
 function makeBrainedBot(pos: ReturnType<typeof v2.create>, game: ReturnType<typeof createGame>) {
     const bot = game.playerBarn.addTestPlayer({ pos });
     bot.botDifficulty = "expert";
@@ -655,7 +666,8 @@ test("A heal still aborts when the bot is in real one-shot danger", () => {
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
-    bot.health = 20; // well under ONE_SHOT_RISK_HEALTH_FRAC (35%) after this hit
+    armEnemy(target, "spas12", 8, 0); // ready to fire again straight away
+    bot.health = 20;
 
     bot.actionType = GameConfig.Action.UseItem;
     bot.action.duration = 2.5;
@@ -1163,4 +1175,41 @@ test("A critical bot healing with its cover still a walk away keeps walking to i
     bot.botBrain!.update(0.05);
     expect(bot.touchMoveActive).toBe(true);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5);
+});
+
+// A hit only aborts a heal when the enemy can hit again right away. An enemy still reloading
+// after one shot can't, so the bot should finish its heal with the HP it has.
+test("A hit from an enemy that is reloading does not abort a heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    armEnemy(target, "mosin", 3, 0);
+    target.actionType = GameConfig.Action.Reload;
+    bot.health = 20;
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.botBrain!.update(0.05);
+    bot.damage({ amount: 5, damageType: GameConfig.DamageType.Player, dir: v2.create(-1, 0), source: target });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// Same idea for a slow bolt: a mosin still on its cooldown past the refire window can't follow
+// up straight away.
+test("A hit from an enemy whose gun is still on a long cooldown does not abort a heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    armEnemy(target, "mosin", 3, 1.5);
+    bot.health = 20;
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.botBrain!.update(0.05);
+    bot.damage({ amount: 5, damageType: GameConfig.DamageType.Player, dir: v2.create(-1, 0), source: target });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });

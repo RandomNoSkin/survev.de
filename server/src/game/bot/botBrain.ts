@@ -29,15 +29,11 @@ export type BotState = "idle" | "engage";
  *  see the abort check itself) - see that same comment for why an enemy-proximity one
  *  was removed. */
 const ABORT_HEAL_REACT_MS = 350;
-/** Health fraction at/below which a single unlucky hit (a shotgun blast up close, a
- *  sniper headshot) can plausibly still kill outright - worth bailing out of a heal
- *  for. Above it, tanking the hit and finishing the item is worth more than throwing
- *  the whole thing away and re-exposing itself all over again re-starting one later -
- *  "er cancelt immer noch relativ oft mid heal anstatt kurz voll durchzuziehen".
- *  Deliberately not also gated on how much of the heal is left: re-starting from
- *  scratch after an abort costs strictly more total exposure than just tanking one hit
- *  and continuing, regardless of whether the abort happens early or late. */
-const ONE_SHOT_RISK_HEALTH_FRAC = 0.35;
+/** A hit only aborts a heal if the enemy's gun comes back ready within this many seconds -
+ *  otherwise they need a real pause (a reload, a slow bolt, a cooldown) before they can
+ *  hit again, and the bot is better off finishing the heal with its HP lead than throwing
+ *  it away and starting over. See `enemyCanHitSoon`. */
+const ENEMY_REFIRE_WINDOW_S = 1.0;
 /** After an abort, open some distance before the desperate-gamble override
  *  (`DESPERATE_HEAL_S`) is willing to kick in - see `healAbortCooldown`'s own doc
  *  comment for why this stops short of blocking a *genuinely* safe re-heal outright. */
@@ -175,6 +171,21 @@ const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
  * game tick so motion stays smooth between thinks, exactly like a human whose last
  * InputMsg keeps applying between two network ticks.
  */
+/** Whether a hit taken now can be followed by another shot soon - see
+ *  `ENEMY_REFIRE_WINDOW_S`. A reloading enemy, an empty or non-gun weapon, or a gun still
+ *  on cooldown past that window can't. With no visible enemy at all there's nothing to
+ *  judge by, so assume the worst and treat it as able to fire again. */
+function enemyCanHitSoon(enemy: Player | undefined): boolean {
+    if (!enemy) return true;
+    if (enemy.actionType === GameConfig.Action.Reload || enemy.actionType === GameConfig.Action.ReloadAlt) {
+        return false;
+    }
+    const wm = enemy.weaponManager;
+    const weapon = wm.weapons[wm.curWeapIdx];
+    if (!weapon || (weapon.ammo ?? 0) <= 0) return false;
+    return weapon.cooldown <= ENEMY_REFIRE_WINDOW_S;
+}
+
 export class BotBrain {
     readonly tier: BotTierDef;
 
@@ -335,10 +346,10 @@ export class BotBrain {
         // later than a human would.
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
-            // Not in real danger of dying to a follow-up hit - tank this one and keep
-            // going instead of throwing the whole heal away. See `ONE_SHOT_RISK_HEALTH_FRAC`.
-            const healthFrac = bot.health / GameConfig.player.health;
-            const pushThroughHit = healthFrac > ONE_SHOT_RISK_HEALTH_FRAC;
+            // Abort only when the enemy can hit again right away. A single hit followed by
+            // a real pause (reload, slow bolt) is better finished in the heal - see
+            // `enemyCanHitSoon`.
+            const enemyRefireReady = enemyCanHitSoon(this.target);
             // The one real exception to "no plain proximity check" above: unarmed on
             // melee *with an actual gun to switch back to* (from preferring melee
             // while fleeing/healing unseen - see `updateWeaponSelection`'s
@@ -356,7 +367,7 @@ export class BotBrain {
             const exposedUnarmed = bot.weaponManager.curWeapIdx === WeaponSlot.Melee
                 && hasGun
                 && !!this.target;
-            if ((justHit && !pushThroughHit) || grenadeThreat || exposedUnarmed) {
+            if ((justHit && enemyRefireReady) || grenadeThreat || exposedUnarmed) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -646,7 +657,7 @@ export class BotBrain {
 
         // Deliberately *not* also gated on `this.healAbortCooldown > 0` here, even though
         // an abort is what sets it - a real match loss showed the bot take a near-fatal
-        // hit mid-heal (correctly aborting - `ONE_SHOT_RISK_HEALTH_FRAC`), lose the
+        // hit mid-heal (correctly aborting - `enemyCanHitSoon`), lose the
         // enemy's sight within ~150ms, and then just keep fleeing anyway for another
         // second-plus purely because the cooldown hadn't expired yet - genuinely safe to
         // heal again (`canHealNow` already true) the whole time it was forced to wait.
