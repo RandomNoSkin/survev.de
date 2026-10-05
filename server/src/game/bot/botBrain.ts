@@ -117,6 +117,10 @@ const HEAL_FINISH_GRACE_S = 1.0;
 const SURE_SHOT_MAX_TARGET_SPEED = 1.5;
 /** A hit costing less than this (HP) is a chip; with cover this close, a chip doesn't break a heal. */
 const CHIP_HIT_HEALTH_LOSS = 10;
+/** Above the fight floor, a push needs the bot to have hurt its target this recently, or the
+ *  target to be within finishing range (`PUSH_FINISH_FRAC`). See `pickDirective`. */
+const RECENT_DAMAGE_DEALT_MS = 2000;
+const PUSH_FINISH_FRAC = 0.3;
 const CHIP_HIT_COVER_DIST = 4;
 /** Health fraction (of max) above which a bot fights on regardless of how the enemy's
  *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
@@ -247,6 +251,11 @@ export class BotBrain {
     /** Whether the aim was on target with the shot ready on the previous tick - see
      *  `openShotReady` in `update()`. */
     private lastCanFire = false;
+    /** The target and its health on the last think, and when the bot last hurt its target - see
+     *  the push rules in `pickDirective`. */
+    private lastDamageTarget: Player | undefined;
+    private lastTargetHealth = 0;
+    private lastEnemyDamageMs = -Infinity;
     /** Health seen on the previous tick, and how much the most recent hit cost - see `update()`. */
     private lastHealthSeen = -1;
     private hitLossAtLastHit = 0;
@@ -769,7 +778,12 @@ export class BotBrain {
             const pushAdvantage = knownEnemyFrac <= healthFrac - PUSH_HEALTH_ADVANTAGE_FRAC;
             const hurtAndAhead = healthFrac < FIGHT_FLOOR_FRAC
                 && knownEnemyFrac < healthFrac - HEALTH_DEFICIT_MARGIN;
-            if (pushAdvantage || hurtAndAhead) return "push";
+            // Above the fight floor a push needs a reason: the enemy is in finishing range, or we
+            // have been hurting them. Otherwise, keep fighting.
+            const pushWorthIt = healthFrac < FIGHT_FLOOR_FRAC
+                || knownEnemyFrac <= PUSH_FINISH_FRAC
+                || bot.game.now - this.lastEnemyDamageMs < RECENT_DAMAGE_DEALT_MS;
+            if ((pushAdvantage && pushWorthIt) || hurtAndAhead) return "push";
         }
         if (low && !critical && knownEnemyFrac !== undefined) {
             if (knownEnemyFrac < healthFrac && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC) {
@@ -980,6 +994,15 @@ export class BotBrain {
 
     private think(): void {
         this.target = findVisibleTarget(this.player);
+        // Track whether the bot is actually landing damage on its target - above the fight floor
+        // that's the only reason to push someone who is merely behind on health.
+        if (this.target) {
+            if (this.target === this.lastDamageTarget && this.target.health < this.lastTargetHealth) {
+                this.lastEnemyDamageMs = this.player.game.now;
+            }
+            this.lastDamageTarget = this.target;
+            this.lastTargetHealth = this.target.health;
+        }
         if (this.target && (hasBodyLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)
             || hasBodyLineOfSight(this.player.game, muzzlePos(this.target), this.player.pos, this.player.layer))) {
             this.lastClearLineMs = this.player.game.now;

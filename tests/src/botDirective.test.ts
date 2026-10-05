@@ -1267,13 +1267,13 @@ test("A bot above 70 HP holds ground against a visible enemy that is ahead on he
 });
 
 // Push when the enemy is at least 20 HP behind, even above 70 HP.
-test("A bot above 70 HP pushes a visible enemy that is at least 20 HP down", () => {
+test("A bot above 70 HP pushes a visible enemy that is at least 20 HP down and nearly dead", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 80;
-    target.health = 55;
+    target.health = 25; // within finishing range - a push worth making at this health
 
     bot.botBrain!.update(0.05);
 
@@ -1504,4 +1504,36 @@ test("A small hit does not abort a heal when cover is a step away", () => {
     bot.botBrain!.update(0.05);
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// Above 70 HP a bot only pushes an enemy that's merely behind on health if it has actually been
+// dealing damage. Without that, it holds and fights rather than charging in.
+test("A bot above 70 HP does not push an enemy that is only behind on health and not yet hurt", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 80;
+    target.health = 55; // 25 behind, but never hit by the bot
+    bot.botBrain!.update(0.05);
+
+    const directive = (bot.botBrain as unknown as {
+        pickDirective(b: unknown, threat: unknown, dt: number, grenade: unknown): string;
+    }).pickDirective(bot, target.pos, 0.05, undefined);
+    expect(directive).not.toBe("push");
+});
+
+test("A bot above 70 HP pushes an enemy it has just been dealing damage to", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 80;
+    target.health = 70;
+    bot.botBrain!.update(0.05); // sees the enemy at full standing
+    target.health = 55; // the bot lands damage
+    game.now += 100;
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
 });
