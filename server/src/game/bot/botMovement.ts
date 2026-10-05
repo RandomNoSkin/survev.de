@@ -1654,6 +1654,38 @@ function pickWanderDir(bot: Player, nav: NavGraph | undefined): Vec2 {
     return first; // every attempt landed in a building - wander has to go somewhere
 }
 
+/** Inset from the map edge the bot's own retreat logic keeps its goals and steering off. */
+const BORDER_INSET = 2;
+/** How close to an edge counts as being against it, for `keepOffBorder`. */
+const AGAINST_BORDER_DIST = 4;
+
+/** Removes any component of `dir` that would push the bot further out through a map edge
+ *  it's already against. If nothing is left (fleeing straight into a corner), steers toward
+ *  the map centre instead. Without this, a retreat away from a threat pinned a bot against
+ *  the right-hand border for several seconds in a real match. */
+function keepOffBorder(bot: Player, dir: Vec2): Vec2 {
+    const { width, height } = bot.game.map;
+    let x = dir.x;
+    let y = dir.y;
+    if (bot.pos.x >= width - AGAINST_BORDER_DIST && x > 0) x = 0;
+    if (bot.pos.x <= AGAINST_BORDER_DIST && x < 0) x = 0;
+    if (bot.pos.y >= height - AGAINST_BORDER_DIST && y > 0) y = 0;
+    if (bot.pos.y <= AGAINST_BORDER_DIST && y < 0) y = 0;
+    if (x === dir.x && y === dir.y) return dir;
+    const kept = v2.create(x, y);
+    if (v2.length(kept) > 0.01) return v2.normalizeSafe(kept);
+    return v2.normalizeSafe(v2.sub(v2.create(width / 2, height / 2), bot.pos));
+}
+
+/** Clamps a point to just inside the map, so a retreat goal can't sit past the edge. */
+function clampToMap(bot: Player, p: Vec2): Vec2 {
+    const { width, height } = bot.game.map;
+    return v2.create(
+        math.clamp(p.x, BORDER_INSET, width - BORDER_INSET),
+        math.clamp(p.y, BORDER_INSET, height - BORDER_INSET),
+    );
+}
+
 /** Direction to retreat in, routed through the nav graph instead of a raw straight
  *  line - see `RETREAT_LOOKAHEAD`. Without `nav`, falls back to the plain "away from
  *  the threat" direction, same as before (worse around buildings, never broken). */
@@ -1665,7 +1697,7 @@ function retreatDirection(
     dt: number,
     aggression: number | undefined,
 ): Vec2 {
-    const away = v2.normalizeSafe(v2.sub(bot.pos, threatPos));
+    const away = keepOffBorder(bot, v2.normalizeSafe(v2.sub(bot.pos, threatPos)));
     if (!nav) return away;
 
     state.retreatRecheck -= dt;
@@ -1675,12 +1707,12 @@ function retreatDirection(
         || v2.distance(bot.pos, state.retreatGoal) < RETREAT_GOAL_REACHED_DIST
     ) {
         state.retreatRecheck = RETREAT_RECOMPUTE_INTERVAL * retreatRecomputeMult(aggression);
-        const rawGoal = v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD));
+        const rawGoal = clampToMap(bot, v2.add(bot.pos, v2.mul(away, RETREAT_LOOKAHEAD)));
         state.retreatGoal = preferNonInteriorGoal(nav, rawGoal, util.toGroundLayer(bot.layer));
     }
 
     const pathDir = followPath(bot, state, nav, state.retreatGoal, dt);
-    return pathDir ?? away;
+    return keepOffBorder(bot, pathDir ?? away);
 }
 
 /** Rerolls the lateral strafe cycle - sign, hold duration, *and* how hard it blends in

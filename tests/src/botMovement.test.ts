@@ -165,8 +165,9 @@ test("Range mode has hysteresis: it does not flicker once committed to closing i
 
 test("Range mode has hysteresis: it does not flicker once committed to backing off", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const threat = v2.create(100, 0);
+    // Centre of the map: backing off from a corner is correctly refused (see `keepOffBorder`).
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(100, 0));
 
     const state = new BotMovementState();
     const xSigns: number[] = [];
@@ -256,8 +257,8 @@ test("push still closes to near-melee range for a short-range weapon", () => {
 // fallback 25, band 4.5, so the hold band is [20, 29.5].
 test("engageHold's no-cover hold pulls back inward once drifted past the outer edge", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const threat = v2.create(35, 0); // past the 29.5 outer edge
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(35, 0)); // past the 29.5 outer edge
 
     const state = new BotMovementState();
     state.rangeMode = "hold"; // simulates the one-tick lag right past the edge
@@ -271,8 +272,8 @@ test("engageHold's no-cover hold pulls back inward once drifted past the outer e
 
 test("engageHold's no-cover hold pulls back outward once drifted past the inner edge", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    const threat = v2.create(15, 0); // inside the 20-unit inner edge
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(15, 0)); // inside the 20-unit inner edge
 
     const state = new BotMovementState();
     state.rangeMode = "hold";

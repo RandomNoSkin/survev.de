@@ -2204,3 +2204,18 @@ test("An idle bot does not route to its idle goal through a building's interior"
     expect(state.headingToIdleGoal).toBe(false);
     expect(state.idleGoalCooldown).toBeGreaterThan(0);
 });
+
+// Real match: a fleeing bot ran into the right-hand map border, and its away-from-threat
+// direction kept pushing straight into the wall for several seconds while it slid along it,
+// never getting out from under fire. Against a wall, the retreat has to stop pushing outward.
+test("A fleeing bot against the map border does not keep pushing into the wall", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const w = game.map.width;
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(w - 3, w / 2) });
+    const threat = v2.create(w - 30, w / 2); // the enemy is to the left, so "away" is +x
+    const state = new BotMovementState();
+
+    updateMovement(bot, state, "flee", threat, 27, 0.05, undefined, true, undefined, true);
+
+    expect(bot.touchMoveDir.x).toBeLessThan(0.2); // not pushing further into the right-hand wall
+});
