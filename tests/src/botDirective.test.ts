@@ -1213,3 +1213,21 @@ test("A hit from an enemy whose gun is still on a long cooldown does not abort a
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// No visible enemy means no clear line of fire right now - the bot should finish the heal
+// behind whatever is between them, not abort it for a hit it can't even see coming.
+test("A hit from an enemy the bot cannot see does not abort a heal", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const hidden = game.playerBarn.addTestPlayer({ pos: v2.create(500, 500) }); // far out of view
+    armEnemy(hidden, "spas12", 8, 0);
+    bot.health = 20;
+
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.botBrain!.update(0.05);
+    bot.damage({ amount: 5, damageType: GameConfig.DamageType.Player, dir: v2.create(-1, 0), source: hidden });
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});

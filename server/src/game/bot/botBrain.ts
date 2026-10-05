@@ -173,10 +173,11 @@ const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
  */
 /** Whether a hit taken now can be followed by another shot soon - see
  *  `ENEMY_REFIRE_WINDOW_S`. A reloading enemy, an empty or non-gun weapon, or a gun still
- *  on cooldown past that window can't. With no visible enemy at all there's nothing to
- *  judge by, so assume the worst and treat it as able to fire again. */
+ *  on cooldown past that window can't. No visible enemy means no clear line of fire right
+ *  now (`this.target` is only set while the bot can see it), so there's nothing to abort
+ *  for - the bot keeps healing behind whatever is between them. */
 function enemyCanHitSoon(enemy: Player | undefined): boolean {
-    if (!enemy) return true;
+    if (!enemy) return false;
     if (enemy.actionType === GameConfig.Action.Reload || enemy.actionType === GameConfig.Action.ReloadAlt) {
         return false;
     }
