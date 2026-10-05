@@ -107,6 +107,11 @@ const HEALTH_DEFICIT_MARGIN = 0.05;
 /** Closer than this, a visible enemy with a clear line and a loaded gun gets fought rather
  *  than fled from, even below the fight floor - see `closeShotFight` in `pickDirective`. */
 const CLOSE_FIGHT_DIST = 12;
+/** Within this distance an enemy can push a healing bot effectively, so a clear open shot may
+ *  break the heal off - see `openShotReady` in `update()`. */
+const OPEN_SHOT_PUSH_DIST = 14;
+/** A heal with at most this much time left is finished, never broken off for a shot. */
+const HEAL_FINISH_GRACE_S = 1.0;
 /** Health fraction (of max) above which a bot fights on regardless of how the enemy's
  *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
  *  healing takes priority again unless the enemy has less health to push into. */
@@ -389,8 +394,14 @@ export class BotBrain {
             // healing blocks the trigger, so a loaded gun with the aim already on target and a
             // bullet line to them gets the shot instead. `lastCanFire` is last tick's aim -
             // this check runs before this tick's aim update.
-            const openShotReady = this.lastCanFire && !!this.target
-                && hasBodyLineOfSight(bot.game, bot.pos, this.target.pos, bot.layer)
+            // Only worth it when the enemy would otherwise push effectively (close), and never
+            // with the heal nearly done - see `OPEN_SHOT_PUSH_DIST` / `HEAL_FINISH_GRACE_S`.
+            const healLeftS = bot.action.duration - bot.action.time;
+            const enemyCanPush = !!this.target
+                && v2.distance(bot.pos, this.target.pos) < OPEN_SHOT_PUSH_DIST;
+            const openShotReady = this.lastCanFire && enemyCanPush
+                && healLeftS > HEAL_FINISH_GRACE_S
+                && hasBodyLineOfSight(bot.game, bot.pos, this.target!.pos, bot.layer)
                 && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
             if ((justHit && enemyRefireReady) || grenadeThreat || exposedUnarmed || openShotReady) {
                 bot.cancelAction();

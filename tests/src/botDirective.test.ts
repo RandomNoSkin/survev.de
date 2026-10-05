@@ -1303,7 +1303,7 @@ test("A bot mid-heal with an open, aimed shot on a visible enemy takes the shot 
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) });
     target.health = 100;
     bot.health = 30;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
@@ -1316,6 +1316,8 @@ test("A bot mid-heal with an open, aimed shot on a visible enemy takes the shot 
         bot.botBrain!.update(0.05);
     }
     bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 3; // plenty of heal left to finish
+    bot.action.time = 0;
     game.now += 60;
     bot.botBrain!.update(0.05);
 
@@ -1405,4 +1407,52 @@ test("A bot below 70 HP still flees a healthier enemy that is far away", () => {
     bot.botBrain!.update(0.05);
 
     expect(bot.touchMoveDir.x).toBeLessThan(0.3); // not charging in from far off
+});
+
+// Shooting out of a heal is only worth it when the enemy would otherwise push effectively, and
+// never with the heal nearly done - a 0.1 s bandage left is not a heal worth throwing away.
+test("A bot mid-heal does not give up a nearly finished heal to take an open shot", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) });
+    target.health = 100;
+    bot.health = 30;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    for (let i = 0; i < 12; i++) {
+        game.now += 60;
+        bot.botBrain!.update(0.05);
+    }
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 3;
+    bot.action.time = 2.6; // 0.4 s left
+    game.now += 60;
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+test("A bot mid-heal does not break off to shoot an enemy too far away to push it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // 25 units
+    target.health = 100;
+    bot.health = 30;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    for (let i = 0; i < 12; i++) {
+        game.now += 60;
+        bot.botBrain!.update(0.05);
+    }
+    bot.actionType = GameConfig.Action.UseItem;
+    bot.action.duration = 3;
+    bot.action.time = 0;
+    game.now += 60;
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
