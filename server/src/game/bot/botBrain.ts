@@ -104,6 +104,9 @@ const ENEMY_LOW_HEALTH_FRAC = 0.4;
  *  the other by a sliver - the exact tick-to-tick flapping already fixed elsewhere in
  *  this file (cover stickiness, range-mode hysteresis) for the same underlying reason. */
 const HEALTH_DEFICIT_MARGIN = 0.05;
+/** Closer than this, a visible enemy with a clear line and a loaded gun gets fought rather
+ *  than fled from, even below the fight floor - see `closeShotFight` in `pickDirective`. */
+const CLOSE_FIGHT_DIST = 12;
 /** Health fraction (of max) above which a bot fights on regardless of how the enemy's
  *  health compares, instead of healing or running from it - see `pickDirective`. Below it,
  *  healing takes priority again unless the enemy has less health to push into. */
@@ -743,8 +746,14 @@ export class BotBrain {
         // Except against a visible enemy that isn't ahead on health: real matches showed
         // the bot fleeing from such fights for 40-60% of its visible time while still
         // having a clean shot, so it fought back at range instead of running.
+        // Too close to outrun, with a loaded gun on target and a clear line: running hands
+        // the enemy free shots, so fight it out instead - even when it's ahead on health.
+        const enemyDist = this.target ? v2.distance(this.player.pos, this.target.pos) : Infinity;
+        const closeShotFight = !critical && enemyDist < CLOSE_FIGHT_DIST && this.lastCanFire
+            && this.enemySightBlocksHeal(bot)
+            && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
         const holdInsteadOfFlee = !!this.target && !critical
-            && !(knownEnemyFrac !== undefined && knownEnemyFrac - healthFrac > HEALTH_DEFICIT_MARGIN);
+            && (closeShotFight || !(knownEnemyFrac !== undefined && knownEnemyFrac - healthFrac > HEALTH_DEFICIT_MARGIN));
         if (low && noHealItem) return holdInsteadOfFlee ? "engageHold" : this.fleeOrFight();
         // Has a bandage but can't safely use it yet (almost always: the enemy can
         // still see it) - disengage to break line of sight rather than fight on hurt

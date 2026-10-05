@@ -1360,3 +1360,49 @@ test("A bot can heal with an enemy in view behind a crate, since it has no clear
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// Real match: below 70 HP with a healthier enemy 9 units away and a clear shot, the bot fled and
+// gave free hits. Too close to outrun, with a loaded gun on target, it should fight.
+function warmAim(bot: { botBrain?: { update(dt: number): void } }, game: ReturnType<typeof createGame>): void {
+    for (let i = 0; i < 12; i++) {
+        game.now += 60;
+        bot.botBrain!.update(0.05);
+    }
+}
+
+test("A bot below 70 HP fights a healthier enemy that is close with a clear shot instead of fleeing", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(59, 50) }); // 9 units, open line
+    target.health = 100;
+    bot.health = 56;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    warmAim(bot, game);
+
+    bot.botBrain!.update(0.05);
+    // Fights (holds the engagement), rather than the flee the old rule gave.
+    const directive = (bot.botBrain as unknown as {
+        pickDirective(b: unknown, threat: unknown, dt: number, grenade: unknown): string;
+    }).pickDirective(bot, target.pos, 0.05, undefined);
+    expect(directive).toBe("engageHold");
+});
+
+test("A bot below 70 HP still flees a healthier enemy that is far away", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // 25 units
+    target.health = 100;
+    bot.health = 56;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    warmAim(bot, game);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.touchMoveDir.x).toBeLessThan(0.3); // not charging in from far off
+});
