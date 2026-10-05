@@ -1939,7 +1939,8 @@ export function updateMovement(
                 state.wanderTimer = util.random(1, 2.5);
                 state.wanderDir = pickWanderDir(bot, nav);
             }
-            move = state.wanderDir;
+            // Same map-border rule as the retreats: a wander heading never pushes straight into an edge.
+            move = keepOffBorder(bot, state.wanderDir);
         }
     } else if (directive === "heal" || directive === "flee") {
         move = retreatToCover(

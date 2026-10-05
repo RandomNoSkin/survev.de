@@ -2366,3 +2366,17 @@ test("A healing bot exposed to the enemy re-picks its cover before running off",
     updateMovement(bot, state, "heal", threat, 15, 0.05, nav, true, undefined, true);
     expect(bot.touchMoveActive).toBe(true); // still exposed after the re-pick: run off
 });
+
+// Real match: an idle bot wandered straight into the right-hand map border and stayed pinned there.
+// Wander headings ignored the border, unlike retreats. An idle wander must not push outward either.
+test("An idle wander pinned against the map border does not keep pushing into it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width - 1, game.map.height / 2) });
+    const state = new BotMovementState();
+    state.wanderDir = v2.create(1, 0); // straight into the wall
+    state.wanderTimer = 99;
+
+    updateMovement(bot, state, "idle", undefined, Infinity, 0.05, undefined, false, undefined, false, undefined);
+
+    expect(bot.touchMoveDir.x).toBeLessThan(0.2);
+});
