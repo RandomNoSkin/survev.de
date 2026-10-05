@@ -233,6 +233,9 @@ export class BotBrain {
     /** Whether the aim was on target with the shot ready on the previous tick - see
      *  `openShotReady` in `update()`. */
     private lastCanFire = false;
+    /** `game.now` the enemy last had a clear bullet line to the bot - what blocks a heal (see
+     *  `enemySightBlocksHeal`). Seeing an enemy in the screen isn't enough. */
+    private lastClearLineMs = -Infinity;
     /** Set for a short window after an aborted heal. No longer a hard block on
      *  re-starting while critical (see `pickDirective`'s own doc comment on why that was
      *  a real bug) - genuine safety (`canHealNow`) always governs that. Still suppresses
@@ -899,7 +902,7 @@ export class BotBrain {
      *  and out of view, so the heal/flee choice built on it flipped every tick and the bot
      *  never actually started a bandage. */
     private enemySightBlocksHeal(bot: Player): boolean {
-        return !!this.target || bot.game.now - this.lastKnownEnemyTimeMs < RECENTLY_VISIBLE_MS;
+        return bot.game.now - this.lastClearLineMs < RECENTLY_VISIBLE_MS;
     }
 
     /** Keeps a retreat (heal/flee) going for RETREAT_HOLD_MS after it was last chosen,
@@ -933,6 +936,9 @@ export class BotBrain {
 
     private think(): void {
         this.target = findVisibleTarget(this.player);
+        if (this.target && hasLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)) {
+            this.lastClearLineMs = this.player.game.now;
+        }
         this.state = this.target ? "engage" : "idle";
         if (this.target) {
             this.lastKnownEnemyPos = v2.copy(this.target.pos);

@@ -1342,3 +1342,21 @@ test("A critical bot a few units short of its cover starts healing instead of wa
 
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
+
+// Real match: the bot fled from an enemy 25-35 units away for 15 seconds, never healing, because
+// the enemy was in its screen - seeing it blocked every heal. Only an enemy with a clear bullet
+// line (cover is what makes a heal unsafe) should stop the bot from healing.
+test("A bot can heal with an enemy in view behind a crate, since it has no clear shot", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
+    target.health = 100;
+    game.map.genObstacle("crate_01", v2.create(65, 50)); // between them, blocking the shot
+    bot.health = 50;
+    bot.invManager.give("bandage", 5);
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
