@@ -1573,3 +1573,20 @@ test("A critical bot in a clear line of fire does not start a desperate heal in 
 
     expect(bot.actionType).toBe(GameConfig.Action.None);
 });
+
+// Reloading with a loaded gun and an enemy in a clear line: shooting cancels the reload anyway, so the
+// bot should cancel it and take the shot, not stand reloading while it's being fired at.
+test("A bot reloading with ammo left cancels the reload when it has a clear line on an enemy", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    target.health = 100;
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 3;
+    bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
+    bot.actionType = GameConfig.Action.Reload;
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+});

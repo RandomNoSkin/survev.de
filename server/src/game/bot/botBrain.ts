@@ -401,6 +401,15 @@ export class BotBrain {
         }
         this.lastHealthSeen = healthNow;
 
+        // Reloading with a loaded gun while a visible enemy has a clear line: a reload only holds the
+        // bot back from firing, and shooting cancels it anyway - so cancel it and take the shot.
+        const reloadingWithAmmo = bot.actionType === GameConfig.Action.Reload
+            || bot.actionType === GameConfig.Action.ReloadAlt;
+        if (reloadingWithAmmo && this.target && this.enemySightBlocksHeal(bot)
+            && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0) {
+            bot.cancelAction();
+        }
+
         if (bot.actionType === GameConfig.Action.UseItem) {
             const justHit = bot.game.now - this.lastHitTakenTime < ABORT_HEAL_REACT_MS;
             // Abort only when the enemy can hit again right away. A single hit followed by
