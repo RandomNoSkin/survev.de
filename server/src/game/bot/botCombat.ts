@@ -269,10 +269,12 @@ export function updateWeaponSelection(
             const alt = slots.find((i) => i !== cur && hasAmmo(bot, i));
             if (alt !== undefined) {
                 wm.setCurWeapIndex(alt);
-            } else if (wm.weapons[WeaponSlot.Melee].type) {
+            } else if (wm.weapons[WeaponSlot.Melee].type && !recentContact) {
                 // No usable second gun - park on melee just long enough to shed the
-                // slowdown. Melee doesn't track "ammo", so this bypasses `switchTo`'s
-                // ammo check on purpose.
+                // slowdown, but only when nothing is watching. With an enemy in contact the
+                // bot would be standing on fists at range, a free kill (a real match had it
+                // do exactly that at 36-42 units). Melee doesn't track "ammo", so this
+                // bypasses `switchTo`'s ammo check on purpose.
                 wm.setCurWeapIndex(WeaponSlot.Melee);
             }
             // Either way, this was purely to dodge the slowdown, not a commitment to

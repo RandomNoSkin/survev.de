@@ -1157,3 +1157,21 @@ test("A bot aims at the visible edge of a target grazed behind cover, and can fi
     updateFiring(bot, BOT_TIERS.expert, fire, aimAt, 20, /* canFire */ true, 0.05);
     expect(bot.shootStart || bot.shootHold).toBe(true);
 });
+
+// Real match: a bot with no usable second gun parked on its fists to shed the shot slowdown while an
+// enemy was in contact at 36-42 units - standing unarmed at range, a free kill. Parking on melee to dodge
+// the slowdown is only for when nothing is watching.
+test("With no second gun and an enemy in contact, the slowdown is taken rather than parking on fists", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 0; // no usable second gun
+    bot.weaponManager.weapons[WeaponSlot.Primary].cooldown = 0.9;
+    bot.shotSlowdownTimer = 0.9;
+    const fire = new BotFireState();
+    fire.firedSinceSwitch = true;
+
+    updateWeaponSelection(bot, BOT_TIERS.hard, fire, 36, false, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
+});
