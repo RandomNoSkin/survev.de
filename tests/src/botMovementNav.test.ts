@@ -22,6 +22,8 @@ import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { buildingContainsPoint, isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
 import { NavGraph } from "../../server/src/game/bot/nav/navGraph.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
+import { coldet } from "../../shared/utils/coldet.ts";
+import { collider } from "../../shared/utils/collider.ts";
 import { math } from "../../shared/utils/math.ts";
 import { util } from "../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
@@ -2510,4 +2512,37 @@ test("A bot closing on cover with that cover between it and the far side steers 
 
     expect(bot.touchMoveActive).toBe(true);
     expect(isDirClear(bot, v2.normalizeSafe(bot.touchMoveDir), 3, undefined)).toBe(true);
+});
+
+// Regression from a real match: the bot died stalled against a rock it was hiding behind, instead
+// of walking around it to the far side. Steps the bot along its own chosen direction for a few
+// seconds, with no collision resolution, so any tick that points into the rock shows up as the bot
+// overlapping it.
+test("A bot fleeing to cover behind a rock walks around the rock and never pushes into it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const center = v2.create(132, 132);
+    const rock = game.map.genObstacle("stone_04", center, 0, 0, 1);
+    const rockRad = rock.collider.type === collider.Type.Circle
+        ? rock.collider.rad
+        : v2.distance(rock.collider.min, rock.collider.max) / 2;
+    const graph = buildNavGraph(game);
+    const threatPos = v2.add(rock.pos, v2.create(0, -25));
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.add(rock.pos, v2.create(0, -(rockRad + 1.5))) });
+    const state = new BotMovementState();
+    state.coverObstacle = rock;
+    state.coverPos = v2.add(rock.pos, v2.create(0, rockRad + 2.75));
+    state.coverRecheck = 99;
+
+    let overlapped = false;
+    let closestToCover = Infinity;
+    for (let tick = 0; tick < 80; tick++) {
+        updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 0.1, graph);
+        if (bot.touchMoveActive) bot.pos = v2.add(bot.pos, v2.mul(bot.touchMoveDir, 2.5 * 0.1));
+        if (coldet.test(collider.createCircle(bot.pos, 0.5), rock.collider)) overlapped = true;
+        closestToCover = Math.min(closestToCover, v2.distance(bot.pos, state.coverPos!));
+    }
+
+    expect(overlapped).toBe(false);
+    expect(closestToCover).toBeLessThan(2);
 });
