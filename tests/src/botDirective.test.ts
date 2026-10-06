@@ -1555,3 +1555,21 @@ test("A bot below 70 HP with a bandage does not push an enemy with less health, 
     }).pickDirective(bot, target.pos, 0.05, undefined);
     expect(directive).not.toBe("push");
 });
+
+// Real match: after a long stretch critical and unable to heal, the desperate-heal override started a
+// bandage in the open at 34 HP, with the enemy in a clear line 22 units away. Desperation is for an
+// enemy that won't let up while out of sight - not a reason to heal under a live shot line.
+test("A critical bot in a clear line of fire does not start a desperate heal in the open", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(72, 50) }); // open line, 22 units
+    target.health = 100;
+    bot.health = 30;
+    bot.invManager.give("bandage", 5);
+    (bot.botBrain as unknown as { criticalUnsafeElapsedS: number }).criticalUnsafeElapsedS = 5;
+
+    bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+});

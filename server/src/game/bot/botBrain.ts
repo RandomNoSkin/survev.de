@@ -747,7 +747,12 @@ export class BotBrain {
         // net still cancels it the instant an actual hit lands. `desperateHeal` also
         // makes `update()`'s own `isSafeToHeal` gate wave the item through - directive
         // alone doesn't reach the actual bandage, see the field's own doc comment.
-        this.desperateHeal = critical && this.criticalUnsafeElapsedS > DESPERATE_HEAL_S;
+        // Not under a live shot line from further than a close fight: desperation is for a close enemy
+        // that won't let up, not for healing in the open under long-range fire.
+        const farUnderLineOfFire = this.enemySightBlocksHeal(bot)
+            && (!this.target || v2.distance(bot.pos, this.target.pos) > CLOSE_FIGHT_DIST);
+        this.desperateHeal = critical && this.criticalUnsafeElapsedS > DESPERATE_HEAL_S
+            && !farUnderLineOfFire;
         if (this.desperateHeal) return "heal";
 
         // Even hurt myself (but not `critical` - survival above still takes priority
