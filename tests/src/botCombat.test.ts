@@ -265,40 +265,19 @@ test("A bot re-equips its gun the moment fleeing ends", () => {
 // leaves you at half speed for up to 1.75s. Switching cancels that instantly, so a
 // quickswitch tier does it regardless of range fit or whether it's a "free" switch -
 // being able to move is worth more than the marginal DPS a costed switch gives up.
-// Quickswitching sheds the shot slowdown, but only to a gun that fits the range at least about as well.
-// Otherwise a mosin/spas pair at mid range swapped back and forth on nearly every shot (14 switches in
-// 12 real seconds), each costing a switch delay.
-test("Quickswitch doesn't swap to a gun that fits this range much worse just to shed the slowdown", () => {
+test("Quickswitch tech: switches away to shed the shot slowdown, regardless of range", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
-    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
-    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 5;
     bot.weaponManager.weapons[WeaponSlot.Secondary].cooldown = 0;
     bot.weaponManager.weapons[WeaponSlot.Primary].cooldown = 0.9; // just fired
-    bot.shotSlowdownTimer = 0.9;
+    bot.shotSlowdownTimer = 0.9; // ...and is slowed for exactly as long
 
-    // Long range: the mosin is the gun that fits, the spas a poor fit - keep the mosin.
-    const fire = new BotFireState();
-    fire.firedSinceSwitch = true;
-    updateWeaponSelection(bot, BOT_TIERS.hard, fire, 40);
-    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Primary);
-});
-
-test("Quickswitch does swap to the other gun when that gun fits this range better", () => {
-    const game = createGame(TeamMode.Solo, "test_normal");
-    const bot = game.playerBarn.addTestPlayer({});
-    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
-    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
-    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 5;
-    bot.weaponManager.weapons[WeaponSlot.Secondary].cooldown = 0;
-    bot.weaponManager.weapons[WeaponSlot.Primary].cooldown = 0.9;
-    bot.shotSlowdownTimer = 0.9;
-
-    // Point-blank: the spas is the gun that fits, the mosin a poor fit - switch to the spas.
-    const fire = new BotFireState();
-    fire.firedSinceSwitch = true;
-    updateWeaponSelection(bot, BOT_TIERS.hard, fire, 4);
+    // Point-blank - the mosin is a poor range fit here, and the switch isn't free
+    // (freeSwitchTimer at its 0 default) - neither matters, avoiding the slowdown does.
+    updateWeaponSelection(bot, BOT_TIERS.hard, new BotFireState(), 6);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary);
 });
 
@@ -327,8 +306,7 @@ test("A slowdown-driven quickswitch does not require firing before switching bac
     bot.shotSlowdownTimer = 0.9;
     const fire = new BotFireState();
 
-    // At 18 the mosin is the gun that fits, so the swap to it is worth it even under the range rule.
-    updateWeaponSelection(bot, BOT_TIERS.hard, fire, 18);
+    updateWeaponSelection(bot, BOT_TIERS.hard, fire, 6);
     expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary);
     expect(fire.firedSinceSwitch).toBe(true);
 });
