@@ -1298,7 +1298,18 @@ function retreatToCover(
         state.peeking = false;
     }
     state.coverRecheck -= dt;
-    if (nav && (!state.coverPos || state.coverRecheck <= 0)) {
+    // Keep the held cover while it still hides the bot: a closer candidate showing up on a re-pick
+    // isn't a reason to switch, and switching every recompute walked the bot in circles. Only a cover
+    // the threat can now see is re-picked.
+    const heldStillHidden = !holdAndPeek && !!nav && !!state.coverPos && !!state.coverObstacle
+        && !state.coverObstacle.dead && state.coverObstacle.collidable
+        && isBodyHidden(bot, nav.navObstacles, threatPos, state.coverPos, util.toGroundLayer(bot.layer))
+        && v2.distance(state.coverPos, threatPos) >= minCoverDist;
+    if (heldStillHidden && state.coverRecheck <= 0) {
+        state.coverRecheck = COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression);
+        state.coverMissStreak = 0; // the held cover is valid again, so any earlier miss is over
+    }
+    if (nav && (!state.coverPos || (state.coverRecheck <= 0 && !heldStillHidden))) {
         state.coverRecheck = COVER_RECOMPUTE_INTERVAL * coverRecomputeMult(aggression);
         const found = findCover(
             bot,

@@ -2467,3 +2467,24 @@ test("A bot that has just been hit sidesteps across the enemy's line when not se
     updateMovement(bot, state, "engageHold", threat, 30, 0.05, undefined, true, undefined, true);
     expect(Math.abs(bot.touchMoveDir.y)).toBeGreaterThan(0.8);
 });
+
+// Cover stickiness: a retreat that already has a hidden cover point keeps it, even when a closer one
+// shows up on a re-pick - switching covers every recompute is what made the bot walk in circles.
+test("A fleeing bot keeps its hidden cover point on a re-pick instead of switching to a closer one", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const threat = v2.create(30, 50);
+    game.map.genObstacle("crate_01", v2.create(60, 50), 0, 0, 1); // A: the cover it settles behind
+    const state = new BotMovementState();
+    updateMovement(bot, state, "flee", threat, 20, 0.05, buildNavGraph(game), true, undefined, true);
+    const held = v2.copy(state.coverPos!);
+    expect(state.coverObstacle).toBeDefined();
+
+    game.map.genObstacle("crate_01", v2.create(52, 56), 0, 0, 1); // B: nearer to the bot, also hidden
+    const nav = buildNavGraph(game);
+    state.coverRecheck = 0;
+    updateMovement(bot, state, "flee", threat, 20, 0.05, nav, true, undefined, true);
+
+    expect(v2.distance(state.coverPos!, held)).toBeLessThan(0.5);
+});
