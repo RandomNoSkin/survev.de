@@ -19,7 +19,13 @@ import {
 } from "./botCombat.ts";
 import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
-import { BotMovementState, type CombatDirective, isSafeToHeal, updateMovement } from "./botMovement.ts";
+import {
+    BotMovementState,
+    type CombatDirective,
+    DODGE_DURATION_S,
+    isSafeToHeal,
+    updateMovement,
+} from "./botMovement.ts";
 import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasBodyLineOfSight, muzzlePos } from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
@@ -244,6 +250,8 @@ export class BotBrain {
     /** Wall-clock ms (`game.now`) this bot last took damage - see `onDamaged` and the
      *  heal-abort check in `update()`. */
     private lastHitTakenTime = -Infinity;
+    /** The hit time the last dodge was started for, so each hit starts one dodge at most. */
+    private lastDodgeHitTime = -Infinity;
     /** Whether the aim was on target with the shot ready on the previous tick - see
      *  `openShotReady` in `update()`. */
     private lastCanFire = false;
@@ -445,6 +453,12 @@ export class BotBrain {
         const recentlyVisible = !this.target
             && bot.game.now - this.lastKnownEnemyTimeMs < RECENTLY_VISIBLE_MS;
 
+        // A fresh hit starts a sidestep across the enemy's line (see `updateMovement`).
+        if (this.lastHitTakenTime > this.lastDodgeHitTime) {
+            this.lastDodgeHitTime = this.lastHitTakenTime;
+            this.movement.dodgeTimer = DODGE_DURATION_S;
+            this.movement.dodgeSign = Math.random() < 0.5 ? 1 : -1;
+        }
         updateMovement(
             bot,
             this.movement,

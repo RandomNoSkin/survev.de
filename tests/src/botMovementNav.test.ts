@@ -2454,3 +2454,16 @@ test("A bot retreating shakes side to side rather than running in a straight lin
     }
     expect(signs.has(1) && signs.has(-1)).toBe(true);
 });
+
+// Dodge: right after taking a hit, a bot that isn't settled in cover sidesteps sharply across the
+// enemy's line for a moment, instead of carrying on at its normal pace.
+test("A bot that has just been hit sidesteps across the enemy's line when not settled in cover", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(30, 0));
+    const state = new BotMovementState();
+    state.dodgeTimer = 0.4;
+    state.dodgeSign = 1;
+    updateMovement(bot, state, "engageHold", threat, 30, 0.05, undefined, true, undefined, true);
+    expect(Math.abs(bot.touchMoveDir.y)).toBeGreaterThan(0.8);
+});

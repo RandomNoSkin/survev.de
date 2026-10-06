@@ -278,6 +278,9 @@ export class BotMovementState {
     /** Which way the retreat shake currently leans (+1/-1) and how long until it flips. See `shakeRetreat`. */
     shakeSign: 1 | -1 = 1;
     shakeTimer = 0;
+    /** A dodge in progress: seconds left, and which side to step to. Started by the brain on a hit. */
+    dodgeTimer = 0;
+    dodgeSign: 1 | -1 = 1;
     /** How strongly the current strafe cycle blends in, as a fraction of full speed -
      *  see `rollStrafeCycle`. Rerolled alongside `strafeSign`/`strafeTimer` so the
      *  side-to-side movement varies in punch, not just direction and timing. */
@@ -641,6 +644,13 @@ function nearLiveExplosive(objs: GameObject[], pos: Vec2, layer: number): boolea
  *  of it, so the bot's actual resting position can land that much closer to the threat
  *  than the ideal point - the hidden guarantee has to hold for that worst case too, not
  *  only for standing exactly on the computed spot. */
+/** How long a dodge after a hit lasts, and how hard it steps across the enemy's line. */
+export const DODGE_DURATION_S = 0.4;
+const DODGE_STRENGTH = 1;
+
+/** Within this distance of its cover point a retreating bot stops weaving and steadies up. */
+const SHAKE_CLEAR_OF_COVER_DIST = 6;
+
 /** How hard a retreating bot weaves sideways, as a fraction of its forward move. */
 const SHAKE_AMPLITUDE = 0.6;
 
@@ -2240,12 +2250,25 @@ export function updateMovement(
             : undefined;
     }
 
+    if (state.dodgeTimer > 0 && threatPos) {
+        state.dodgeTimer -= dt;
+        // Only in the open, with no cover to get to: mid-approach or settled, a sidestep just hands the
+        // enemy a fresh line on a spot the bot was working to hold.
+        if (!state.settledAtCover && !state.coverPos) {
+            const toThreat = v2.normalizeSafe(v2.sub(threatPos, bot.pos), v2.create(1, 0));
+            const side = v2.mul(v2.perp(toThreat), state.dodgeSign * DODGE_STRENGTH);
+            move = v2.add(v2.mul(move, 0.3), side);
+        }
+    }
     if (v2.length(move) < 0.01) {
         bot.touchMoveActive = false;
         return;
     }
     move = v2.normalizeSafe(move);
-    if (directive === "flee" || directive === "heal") move = shakeRetreat(state, move, dt);
+    // Weave while running, but not into a settled or nearly-reached cover spot - holding there needs
+    // a steady approach, not a sideways lean.
+    const nearCover = state.coverPos !== undefined && v2.distance(bot.pos, state.coverPos) <= SHAKE_CLEAR_OF_COVER_DIST;
+    if ((directive === "flee" || directive === "heal") && !nearCover) move = shakeRetreat(state, move, dt);
 
     if (!isDirClear(bot, move, PROBE_DIST, state.coverObstacle)) {
         // Prefer whichever side the bot was already deflecting toward, so it commits
