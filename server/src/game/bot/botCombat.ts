@@ -537,6 +537,7 @@ export function shouldHeal(
     positionSafe: boolean,
     desperate = false,
     enemyHealthFrac?: number,
+    closeInLine = false,
 ): boolean {
     // A reload doesn't block a heal - the game's own `useHealingItem` only refuses
     // while another item, a revive, or a modify is in progress. Blocking here kept the
@@ -547,7 +548,9 @@ export function shouldHeal(
     const healthFrac = bot.health / GameConfig.player.health;
     const healThreshold = effectiveHealThreshold(tier, healthFrac, enemyHealthFrac);
     if (healthFrac >= healThreshold) return false;
-    if (!desperate && hasVisibleEnemy && healthFrac > 0.25) return false;
+    // Low HP heals past a visible enemy - unless that enemy is close with a clear line, where a heal
+    // is just a free shot for them.
+    if (!desperate && hasVisibleEnemy && (healthFrac > 0.25 || closeInLine)) return false;
 
     return pickHealItem(bot, healthFrac, positionSafe, healThreshold, hasVisibleEnemy) !== undefined;
 }
@@ -560,8 +563,9 @@ export function updateHeal(
     positionSafe: boolean,
     desperate = false,
     enemyHealthFrac?: number,
+    closeInLine = false,
 ): void {
-    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate, enemyHealthFrac)) return;
+    if (!shouldHeal(bot, tier, hasVisibleEnemy, positionSafe, desperate, enemyHealthFrac, closeInLine)) return;
     const healthFrac = bot.health / GameConfig.player.health;
     const healThreshold = effectiveHealThreshold(tier, healthFrac, enemyHealthFrac);
     const item = pickHealItem(bot, healthFrac, positionSafe, healThreshold, hasVisibleEnemy);

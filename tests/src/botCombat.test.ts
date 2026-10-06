@@ -1118,3 +1118,16 @@ test("Below 70 HP the heal threshold is the fight floor, not just the tier's own
     );
     expect(effectiveHealThreshold(BOT_TIERS.expert, 0.8)).toBe(BOT_TIERS.expert.healThreshold);
 });
+
+// Below 25% HP a bot normally heals even with a visible enemy. Not when that enemy has a clear line
+// and is close: a heal there is just a free shot for them.
+test("A bot at low HP does not heal into a close enemy's clear line", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    bot.invManager.give("bandage", 5);
+    bot.health = 23; // 23%: under the 25% bypass for a visible enemy
+    expect(shouldHeal(bot, BOT_TIERS.expert, /* hasVisibleEnemy */ true, /* positionSafe */ true)).toBe(true);
+    expect(
+        shouldHeal(bot, BOT_TIERS.expert, /* hasVisibleEnemy */ true, /* positionSafe */ true, false, undefined, /* closeInLine */ true),
+    ).toBe(false);
+});

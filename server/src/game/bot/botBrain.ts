@@ -508,6 +508,7 @@ export class BotBrain {
                 this.positionSafeForHeal(bot),
                 this.desperateHeal,
                 this.target ? this.target.health / GameConfig.player.health : undefined,
+                this.enemyCloseInLine(bot),
             );
         }
 
@@ -707,7 +708,7 @@ export class BotBrain {
         ) === undefined;
         const canHealNow = !noHealItem
             && this.healQuietEnough(bot)
-            && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac);
+            && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac, this.enemyCloseInLine(bot));
 
         // See `DESPERATE_HEAL_S`: tracks how long `critical` has gone on with an item
         // on hand that `shouldHeal` won't yet allow - an equally fast pursuer can hold
@@ -957,6 +958,13 @@ export class BotBrain {
      *  after the last sighting - a raw per-tick target read flickers as the enemy ducks in
      *  and out of view, so the heal/flee choice built on it flipped every tick and the bot
      *  never actually started a bandage. */
+    /** A close enemy with a clear line to the bot - a heal here is a free shot for them, so even
+     *  a low-HP bot doesn't heal into it (see `shouldHeal`). */
+    private enemyCloseInLine(bot: Player): boolean {
+        return this.enemySightBlocksHeal(bot) && !!this.target
+            && v2.distance(bot.pos, this.target.pos) < CLOSE_FIGHT_DIST;
+    }
+
     private enemySightBlocksHeal(bot: Player): boolean {
         return bot.game.now - this.lastClearLineMs < RECENTLY_VISIBLE_MS;
     }
