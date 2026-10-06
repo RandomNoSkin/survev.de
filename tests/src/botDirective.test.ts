@@ -1506,21 +1506,21 @@ test("A small hit does not abort a heal when cover is a step away", () => {
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
 
-// Above 70 HP a bot only pushes an enemy that's merely behind on health if it has actually been
-// dealing damage. Without that, it holds and fights rather than charging in.
-test("A bot above 70 HP does not push an enemy that is only behind on health and not yet hurt", () => {
+// Above 70 HP a bot pushes an enemy that's 20 HP or more behind on health - it doesn't need to have
+// hurt them first. That's the more aggressive play the bot is meant to make.
+test("A bot above 70 HP pushes an enemy that is 20 HP or more behind, even if not yet hurt", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 80;
-    target.health = 55; // 25 behind, but never hit by the bot
+    target.health = 55; // 25 behind, never hit by the bot
     bot.botBrain!.update(0.05);
 
     const directive = (bot.botBrain as unknown as {
         pickDirective(b: unknown, threat: unknown, dt: number, grenade: unknown): string;
     }).pickDirective(bot, target.pos, 0.05, undefined);
-    expect(directive).not.toBe("push");
+    expect(directive).toBe("push");
 });
 
 test("A bot above 70 HP pushes an enemy it has just been dealing damage to", () => {
