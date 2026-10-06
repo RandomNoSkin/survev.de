@@ -8,6 +8,7 @@ import {
     followPath,
     isDirClear,
     preferNonInteriorGoal,
+    RETREAT_COVER_SEARCH_RAD,
     tryOpenNearbyDoor,
     updateMovement,
 } from "../../server/src/game/bot/botMovement.ts";
@@ -2379,4 +2380,17 @@ test("An idle wander pinned against the map border does not keep pushing into it
     updateMovement(bot, state, "idle", undefined, Infinity, 0.05, undefined, false, undefined, false, undefined);
 
     expect(bot.touchMoveDir.x).toBeLessThan(0.2);
+});
+
+// The bot knows the whole map, so a retreat to heal can look further for a good spot than the usual
+// 50-unit search - only when nothing closer works (nearest candidates still win).
+test("A retreat to heal can find cover further off than the usual search radius", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const threat = v2.create(30, 50); // west of the bot
+    game.map.genObstacle("crate_01", v2.create(115, 50)); // 65 units east: hides the bot from the threat
+    const obstacles = buildNavGraph(game).navObstacles;
+
+    expect(findCover(bot, obstacles, threat, 0)).toBeUndefined();
+    expect(findCover(bot, obstacles, threat, 0, undefined, undefined, undefined, false, RETREAT_COVER_SEARCH_RAD)).toBeDefined();
 });

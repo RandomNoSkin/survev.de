@@ -84,6 +84,10 @@ const STUCK_NODE_BLACKLIST_S = 5;
  *  directive-specific radius - a wider net never hurts `engageHold`/`push` either, it
  *  just costs one grid query over a bigger (but still cheap, single-bot) area. */
 const COVER_SEARCH_RAD = 50;
+/** How far a retreat to heal or flee looks for cover. The bot knows the whole map, so it can plan a
+ *  walk to a good spot further off - but the nearest workable candidate still wins, so this only
+ *  reaches past the usual radius when nothing closer works. */
+export const RETREAT_COVER_SEARCH_RAD = 110;
 // Distance a cover spot sits past the obstacle's own edge, from the obstacle's center.
 // Needs to clear not just a player's collision radius (1) but also the slop
 // `COVER_REACHED_DIST` allows when "arriving" - the bot's actual resting position can
@@ -954,9 +958,10 @@ export function findCover(
     avoidInterior?: NavGraph,
     approachBaseline?: number,
     noInteriorFallback = false,
+    searchRad = COVER_SEARCH_RAD,
 ): { obstacle: Obstacle; pos: Vec2 } | undefined {
     const layer = util.toGroundLayer(bot.layer);
-    const aabb = collider.createAabbExtents(bot.pos, v2.create(COVER_SEARCH_RAD, COVER_SEARCH_RAD));
+    const aabb = collider.createAabbExtents(bot.pos, v2.create(searchRad, searchRad));
     const objs = bot.game.grid.intersectCollider(aabb);
     const minDistSqr = minDistFromThreat * minDistFromThreat;
 
@@ -1246,6 +1251,7 @@ function retreatToCover(
             holdAndPeek ? undefined : nav,
             holdAndPeek ? undefined : priorSafeDist,
             !holdAndPeek && critical,
+            holdAndPeek ? COVER_SEARCH_RAD : RETREAT_COVER_SEARCH_RAD,
         );
         if (
             !found
