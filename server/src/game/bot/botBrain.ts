@@ -632,6 +632,10 @@ export class BotBrain {
                 shootStart: bot.shootStart,
                 shootHold: bot.shootHold,
                 stuck: this.movement.stuck,
+                // Quickswitch inputs: a switch back to the other gun needs the slowdown window still open and
+                // the current gun to have fired (see `updateWeaponSelection`).
+                slowdown: Math.round(bot.shotSlowdownTimer * 100) / 100,
+                firedSinceSwitch: this.fire.firedSinceSwitch,
                 move: bot.touchMoveActive ? v2.copy(bot.touchMoveDir) : null,
                 pathLen: this.movement.path.length,
                 pullTarget: this.movement.pullTarget ?? null,
