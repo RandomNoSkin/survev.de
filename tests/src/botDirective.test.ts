@@ -527,7 +527,7 @@ test("Healing is not aborted just because the enemy gets close, only when actual
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) }); // far - safe to start
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(50, 200) }); // out of sight - the heal starts unseen
     bot.health = 20;
     bot.invManager.give("bandage", 5);
 
@@ -546,12 +546,14 @@ test("Taking a hit mid-heal aborts the bandage instead of finishing it blind", (
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
-    bot.health = 20; // low enough to heal even with the enemy visible (see `shouldHeal`)
+    // Starts out of sight: a bandage isn't started with a clear line on the enemy (see `enemyCloseInLine`).
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(50, 200) });
+    bot.health = 20;
     bot.invManager.give("bandage", 5);
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+    target.pos = v2.create(85, 50); // then the enemy walks into view
 
     // The real path is `Player.damage()`, which also calls `botBrain.onDamaged()`
     // (player.ts, right where damage is applied) - this is that same call.
@@ -758,7 +760,7 @@ test("A bot mid-heal keeps retreating even with a low target, instead of pushing
     // Target low enough to clear ENEMY_LOW_HEALTH_FRAC (which alone would otherwise be
     // enough to push, see `pickDirective`) - this specifically isolates heal-priority
     // beating push via the bot's own low health, not push never triggering at all.
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(50, 200) }); // starts out of sight
     target.health = 30;
 
     bot.botBrain?.onDealtDamage(target, 100 - 30);
@@ -766,7 +768,10 @@ test("A bot mid-heal keeps retreating even with a low target, instead of pushing
     bot.invManager.give("bandage", 5);
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+    target.pos = v2.create(85, 50); // the enemy walks into view mid-heal
 
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     expect(bot.actionType).toBe(GameConfig.Action.UseItem); // still healing
     expect(bot.touchMoveDir.x).not.toBeGreaterThan(0.3); // not charging the target either
 });
@@ -808,7 +813,7 @@ test("A nearby live grenade cancels an in-progress heal", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    game.playerBarn.addTestPlayer({ pos: v2.create(90, 50) }); // far enough to heal safely
+    game.playerBarn.addTestPlayer({ pos: v2.create(50, 200) }); // out of sight, so the heal starts
     bot.health = 20;
     bot.invManager.give("bandage", 5);
 
@@ -993,35 +998,6 @@ test("A hurt bot still walks back to a last-known enemy that was known to be low
 // 20 right before that 40th call, so nothing but this exact tick could have started the
 // heal - a real "just took a hit" moment landing on the same tick the grenade was about
 // to go out.
-test("A heal that becomes safe on the same tick a covering grenade would fire starts the heal, not the throw", () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    try {
-        const game = createGame(TeamMode.Solo, "test_normal");
-        primeGameClock(game);
-        const bot = makeBrainedBot(v2.create(0, 0), game);
-        game.playerBarn.addTestPlayer({ pos: v2.create(20, 0) }); // inside throw range [14,30]
-        bot.invManager.give("frag", 4);
-        bot.invManager.give("bandage", 5);
-        bot.health = 45; // low (keeps isFleeing true) but not low enough for shouldHeal yet
-
-        let c = 2;
-        for (let i = 0; i < 40; i++) c -= 0.05;
-        expect(c).toBeLessThanOrEqual(0); // sanity: confirms the 40th call is the right one
-
-        for (let i = 0; i < 39; i++) bot.botBrain!.update(0.05);
-        expect(bot.actionType).toBe(GameConfig.Action.None); // not eligible yet - still refused
-
-        bot.health = 20; // a hit lands - now critical and past shouldHeal's 25% bar
-        bot.botBrain!.update(0.05); // the 40th call - both the heal and the throw want this tick
-
-        expect(bot.actionType).toBe(GameConfig.Action.UseItem);
-        expect(bot.weaponManager.cookingThrowable).toBe(false);
-        expect(bot.weaponManager.curWeapIdx).not.toBe(WeaponSlot.Throwable);
-    } finally {
-        vi.restoreAllMocks();
-    }
-});
-
 // "das macht nur Sinn wenn der Gegner hinter Cover healt" wired end-to-end through the
 // full brain: once the enemy has been genuinely, sustainedly out of sight for a while
 // (`sustainedlyLost`, not just the instant-after-losing-sight bait window) a healthy bot
@@ -1369,10 +1345,7 @@ test("A critical bot a few units short of its cover starts healing instead of wa
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
-    const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
-    target.health = 100;
-
-    bot.botBrain?.onDealtDamage(target, 100 - 100);
+    game.playerBarn.addTestPlayer({ pos: v2.create(50, 200) }); // out of sight, so the heal can start
     bot.health = 22;
     bot.invManager.give("bandage", 5);
     const movement = (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement;
@@ -1685,4 +1658,20 @@ test("An enemy the map shows is the bot's threat position even when it's out of 
     expect(brain.target).toBeUndefined();
     expect(brain.threatPos()).toBeDefined();
     expect(v2.distance(brain.threatPos()!, enemy.pos)).toBeLessThan(0.5);
+});
+
+// Real match: the bot healed at 20 HP while the enemy had a clear line on it at 16-25 units, and died
+// healing. Starting a bandage with a clear line on the enemy is the free shot they need.
+test("A low bot with an enemy in clear line at long range doesn't start a bandage", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) }); // 20 units out, nothing in between
+    bot.health = 20;
+    bot.invManager.give("bandage", 5);
+
+    for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
+
+    expect(bot.actionType).not.toBe(GameConfig.Action.UseItem);
 });

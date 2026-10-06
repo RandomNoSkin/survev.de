@@ -548,6 +548,7 @@ export class BotBrain {
         // never the other way around.
         if (
             directive === "heal"
+            && !grenadeThreat
             && this.healQuietEnough(bot)
             && isSafeToHeal(
                 bot,
@@ -764,7 +765,9 @@ export class BotBrain {
             healThreshold,
             this.enemySightBlocksHeal(bot),
         ) === undefined;
-        const canHealNow = !noHealItem
+        // A live grenade nearby blocks starting a heal too, not only the critical-bot case below: cancelling a
+        // heal for one and restarting it on the same spot just gets the bot caught by the blast.
+        const canHealNow = !noHealItem && !grenadeThreat
             && this.healQuietEnough(bot)
             && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac, this.enemyCloseInLine(bot));
 
@@ -1035,8 +1038,11 @@ export class BotBrain {
     /** A close enemy with a clear line to the bot - a heal here is a free shot for them, so even
      *  a low-HP bot doesn't heal into it (see `shouldHeal`). */
     private enemyCloseInLine(bot: Player): boolean {
-        return this.enemySightBlocksHeal(bot) && !!this.target
-            && v2.distance(bot.pos, this.target.pos) < CLOSE_FIGHT_DIST;
+        if (!this.enemySightBlocksHeal(bot) || !this.target) return false;
+        if (v2.distance(bot.pos, this.target.pos) < CLOSE_FIGHT_DIST) return true;
+        // Long range: a clear line stops a bot from *starting* a heal (a real match died starting one at 16-25
+        // units with the enemy in view), but a heal already under way is finished - "finish heal once started".
+        return bot.actionType !== GameConfig.Action.UseItem;
     }
 
     private enemySightBlocksHeal(bot: Player): boolean {
