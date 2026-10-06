@@ -1007,6 +1007,9 @@ export class BotBrain {
      *  enough for that. */
     private threatPos(): Vec2 | undefined {
         if (this.target) return this.target.pos;
+        // An enemy the map shows is current information (their indicator tracks them), better than any memory.
+        const revealed = findMapRevealedEnemy(this.player);
+        if (revealed) return revealed;
         if (this.lastKnownEnemyPos) {
             const ageMs = this.player.game.now - this.lastKnownEnemyTimeMs;
             if (ageMs <= this.tier.memory * 1000) return this.lastKnownEnemyPos;

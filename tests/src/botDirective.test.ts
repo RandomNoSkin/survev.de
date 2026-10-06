@@ -1668,3 +1668,21 @@ test("The bot's read of an enemy's health comes from its own hits, not the enemy
     bot.botBrain?.onDealtDamage(target, 70);
     expect(brain.knownEnemyHealthFrac(bot)).toBeCloseTo(0.3);
 });
+
+// Solo arena: both players carry the "indicator" role, so an enemy the bot can't see is still on the map.
+// The bot should treat that position as where the enemy is, not fall back to idling blind.
+test("An enemy the map shows is the bot's threat position even when it's out of sight", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(180, 180) }); // far outside the bot's view
+    enemy.mapIndicator = game.mapIndicatorBarn.allocIndicator("indicator", true);
+    enemy.mapIndicator!.updatePosition(enemy.pos);
+
+    bot.botBrain!.update(0.05);
+    const brain = bot.botBrain as unknown as { threatPos(): Vec2 | undefined; target?: unknown };
+
+    expect(brain.target).toBeUndefined();
+    expect(brain.threatPos()).toBeDefined();
+    expect(v2.distance(brain.threatPos()!, enemy.pos)).toBeLessThan(0.5);
+});

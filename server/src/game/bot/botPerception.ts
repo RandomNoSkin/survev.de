@@ -50,7 +50,7 @@ export function findMapRevealedEnemy(bot: Player): Vec2 | undefined {
     let best: Vec2 | undefined;
     let bestDist = Infinity;
     for (const p of bot.game.playerBarn.livingPlayers) {
-        if (p === bot || p.dead || p.group === bot.group) continue;
+        if (p === bot || p.dead || p.teamId === bot.teamId) continue;
         if (!p.mapIndicator || p.mapIndicator.dead) continue;
         const dist = v2.distance(bot.pos, p.pos);
         if (dist < bestDist) {

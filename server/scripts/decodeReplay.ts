@@ -155,6 +155,18 @@ for (const frame of frames) {
             // Obstacles (walls, containers, crates, trees, rocks, ...) only ever arrive as full
             // objects, the first time the recorded player sees them: that is the real map geometry
             // for this match, including the exact type/orientation/scale a container had.
+            // Map indicators (role icons on the minimap that every client sees, e.g. the "indicator" role).
+            for (const ind of upd.mapIndicators) {
+                out.push(JSON.stringify({
+                    kind: "mapIndicator",
+                    t: clockMs,
+                    id: ind.id,
+                    type: ind.type,
+                    dead: ind.dead,
+                    pos: { x: +ind.pos.x.toFixed(1), y: +ind.pos.y.toFixed(1) },
+                }));
+            }
+
             for (const p of upd.fullObjects) {
                 if (p.__type !== ObjectType.Obstacle) continue;
                 // biome-ignore lint: one-off script, union types don't narrow per object type here.
