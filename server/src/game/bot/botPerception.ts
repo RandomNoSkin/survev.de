@@ -43,6 +43,24 @@ const GUNSHOT_HEARING_RADIUS = 100;
  *  produces a rough "something fired over there" position for movement/awareness - never
  *  a precise-enough fix to aim or fire at, which would be hearing through walls in a way
  *  no real player can. */
+/** Where the closest enemy the map shows is - an enemy with a role map indicator (the "hunted"
+ *  leader and similar), whose indicator every client sees and which tracks their position. A human
+ *  reading the map has exactly this information, so it is fair for the bot to use it too. */
+export function findMapRevealedEnemy(bot: Player): Vec2 | undefined {
+    let best: Vec2 | undefined;
+    let bestDist = Infinity;
+    for (const p of bot.game.playerBarn.livingPlayers) {
+        if (p === bot || p.dead || p.group === bot.group) continue;
+        if (!p.mapIndicator || p.mapIndicator.dead) continue;
+        const dist = v2.distance(bot.pos, p.pos);
+        if (dist < bestDist) {
+            bestDist = dist;
+            best = v2.copy(p.mapIndicator.pos);
+        }
+    }
+    return best;
+}
+
 export function findGunshotHint(bot: Player): Vec2 | undefined {
     const game = bot.game;
     const mates = bot.group?.livingPlayers;

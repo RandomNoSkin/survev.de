@@ -20,7 +20,7 @@ import {
 } from "./botCombat.ts";
 import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
-import { pickStance } from "./botStance.ts";
+import { pickStance, pickStanceFacing } from "./botStance.ts";
 import {
     BotMovementState,
     type CombatDirective,
@@ -32,6 +32,7 @@ import {
     clearAimPoint,
     findGrenadeThreat,
     findGunshotHint,
+    findMapRevealedEnemy,
     findVisibleTarget,
     hasBodyLineOfSight,
     muzzlePos,
@@ -936,8 +937,13 @@ export class BotBrain {
         }
         const nav = this.barn.navGraph;
         if (nav) {
+            const layer = util.toGroundLayer(bot.layer);
+            // An enemy the map shows is current information: hold a spot with cover facing them.
+            const revealed = findMapRevealedEnemy(bot);
             if (!this.stanceGoal || bot.game.now - this.stanceGoalMs > STANCE_REPICK_MS) {
-                this.stanceGoal = pickStance(nav, bot.pos, util.toGroundLayer(bot.layer));
+                this.stanceGoal = revealed
+                    ? pickStanceFacing(nav, bot.pos, layer, revealed)
+                    : pickStance(nav, bot.pos, layer);
                 this.stanceGoalMs = bot.game.now;
             }
             return this.stanceGoal;

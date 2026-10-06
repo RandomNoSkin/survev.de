@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { coverFraction, enemyCoverAround, pickStance } from "../../server/src/game/bot/botStance.ts";
+import { coverFraction, coverTowards, enemyCoverAround, pickStance, pickStanceFacing } from "../../server/src/game/bot/botStance.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { TeamMode } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
@@ -48,4 +48,16 @@ test("Cover an enemy would stand behind counts against a stance", () => {
     const graphWithEnemyCover = buildNavGraph(game);
 
     expect(enemyCoverAround(graphWithEnemyCover, center, 0)).toBeGreaterThan(before);
+});
+
+test("With an enemy known, the stance picked has cover on the line to them", () => {
+    const game = openArena();
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(3, 0)), 0, 0, 1);
+    const enemy = v2.add(center, v2.create(12, 0));
+    const graph = buildNavGraph(game);
+
+    const picked = pickStanceFacing(graph, center, 0, enemy);
+
+    expect(coverTowards(graph, picked, enemy, 0)).toBe(1);
 });
