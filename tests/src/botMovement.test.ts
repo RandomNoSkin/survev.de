@@ -324,3 +324,20 @@ test("isSafeToHeal still requires distance or cover without a sustained break in
 
     expect(isSafeToHeal(bot, state, 3, /* sustainedLost */ false)).toBe(false);
 });
+
+// Real feedback: a bot pushing a healthy enemy who sat in cover at 8-12 units with a long-range
+// weapon just peeked in and out there, never closing in - it held at its push-hold distance even while
+// it clearly had the advantage. With a clear health advantage it should close the last few units.
+test("push closes to near-melee range with a long-range weapon when it has a clear health advantage", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    const threat = v2.create(7.5, 0);
+    bot.weaponManager.weapons[0].type = "mosin";
+    bot.weaponManager.weapons[0].ammo = 5;
+    bot.weaponManager.setCurWeapIndex(0);
+
+    const state = new BotMovementState();
+    updateMovement(bot, state, "push", threat, 7.5, 0.05, undefined, false, undefined, true, undefined, false, true);
+
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // closing in toward the threat, +x here
+});

@@ -489,6 +489,11 @@ export class BotBrain {
             this.movement.dodgeTimer = DODGE_DURATION_S;
             this.movement.dodgeSign = Math.random() < 0.5 ? 1 : -1;
         }
+        // The same health edge `pickDirective` pushes on (`PUSH_HEALTH_ADVANTAGE_FRAC`): a push with that edge
+        // closes in rather than holding back at its weapon's distance.
+        const knownEnemyFrac = this.knownEnemyHealthFrac(bot);
+        const clearAdvantage = directive === "push" && knownEnemyFrac !== undefined
+            && knownEnemyFrac <= bot.health / GameConfig.player.health - PUSH_HEALTH_ADVANTAGE_FRAC;
         updateMovement(
             bot,
             this.movement,
@@ -502,6 +507,7 @@ export class BotBrain {
             !!this.target,
             this.idleGoal(bot),
             this.critical,
+            clearAdvantage,
         );
 
         // A live grenade landing nearby overrides whatever movement the directive above

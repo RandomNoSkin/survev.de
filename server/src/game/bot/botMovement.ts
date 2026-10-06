@@ -1965,6 +1965,7 @@ export function updateMovement(
     targetVisible = true,
     idleGoal?: Vec2,
     critical = false,
+    clearAdvantage = false,
 ): void {
     let move = v2.create(0, 0);
     const aggression = tier?.aggression;
@@ -2059,7 +2060,11 @@ export function updateMovement(
             false,
         );
     } else if (directive === "push") {
-        const pushHoldDist = Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
+        // With a clear health advantage the bot closes all the way to near-melee range instead of holding at
+        // its weapon's push-hold distance: holding back is only right when it doesn't have the edge.
+        const pushHoldDist = clearAdvantage
+            ? PUSH_MIN_DIST
+            : Math.max(PUSH_MIN_DIST, currentSweetSpot(bot) * PUSH_SWEET_SPOT_FRAC);
 
         state.strafeTimer -= dt;
         if (state.strafeTimer <= 0) rollStrafeCycle(state, aggression);
