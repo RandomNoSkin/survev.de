@@ -26,7 +26,14 @@ import {
     isSafeToHeal,
     updateMovement,
 } from "./botMovement.ts";
-import { findGrenadeThreat, findGunshotHint, findVisibleTarget, hasBodyLineOfSight, muzzlePos } from "./botPerception.ts";
+import {
+    clearAimPoint,
+    findGrenadeThreat,
+    findGunshotHint,
+    findVisibleTarget,
+    hasBodyLineOfSight,
+    muzzlePos,
+} from "./botPerception.ts";
 
 export type BotState = "idle" | "engage";
 
@@ -351,7 +358,10 @@ export class BotBrain {
         // `threatPos`/`engageDist` just below, the broader "am I in a fight" read
         // movement and heal/push/flee decisions use instead, which tolerates a target
         // that's ducked behind cover a moment ago with no distance/LOS guarantee at all).
-        const aimTarget: AimTarget | undefined = this.target ?? this.offscreenAimTarget(bot);
+        // A visible target is aimed at its open point (see `clearAimPoint`), so shots don't meet cover.
+        const aimTarget: AimTarget | undefined = this.target
+            ? { __id: this.target.__id, pos: clearAimPoint(bot.game, muzzlePos(bot), this.target.pos, bot.layer) }
+            : this.offscreenAimTarget(bot);
         const dist = aimTarget ? v2.distance(bot.pos, aimTarget.pos) : Infinity;
         const threatPos = this.threatPos();
         const engageDist = threatPos ? v2.distance(bot.pos, threatPos) : Infinity;

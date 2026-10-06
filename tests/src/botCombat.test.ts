@@ -14,7 +14,7 @@ import {
     updateWeaponSelection,
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
-import { findVisibleTarget, hasBodyLineOfSight, hasLineOfSight, muzzlePos } from "../../server/src/game/bot/botPerception.ts";
+import { clearAimPoint, findVisibleTarget, hasBodyLineOfSight, hasLineOfSight, muzzlePos } from "../../server/src/game/bot/botPerception.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import * as net from "../../shared/net/net.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
@@ -1132,25 +1132,28 @@ test("A bot at low HP does not heal into a close enemy's clear line", () => {
     ).toBe(false);
 });
 
-// Fire only at what the shot can actually hit: a target whose centre is behind cover but whose edge
-// is still in view is half-hidden, and a bullet aimed at it mostly meets the cover.
-test("A bot does not fire at a target only its edge shows over cover", () => {
+
+// A target whose centre is behind cover but whose edge is in view: the bot aims at that visible edge,
+// so the bullet goes past the cover's corner and hits the body, instead of meeting the cover.
+test("A bot aims at the visible edge of a target grazed behind cover, and can fire at it", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     game.map.genObstacle("crate_01", v2.create(60, 50), 0, 0, 1);
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
-    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
-    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
+    equipActive(bot, WeaponSlot.Primary, "m870", 5);
     bot.dirNew = v2.create(1, 0);
 
     let grazed: Vec2 | undefined;
-    for (let dy = -6; dy <= 6 && !grazed; dy += 0.25) {
+    for (let dy = -12; dy <= 12 && !grazed; dy += 0.25) {
         const to = v2.create(70, 50 + dy);
-        if (!hasLineOfSight(game, bot.pos, to, 0) && hasBodyLineOfSight(game, bot.pos, to, 0)) grazed = to;
+        // Centre blocked from the muzzle, but an edge of it open: the same test `clearAimPoint` makes.
+        if (!hasLineOfSight(game, muzzlePos(bot), to, 0) && clearAimPoint(game, muzzlePos(bot), to, 0) !== to) grazed = to;
     }
     expect(grazed).toBeDefined();
-    enemy.pos = v2.copy(grazed!);
 
+    // From the muzzle, where the shot actually starts.
+    const aimAt = clearAimPoint(game, muzzlePos(bot), grazed!, 0);
+    expect(hasLineOfSight(game, muzzlePos(bot), aimAt, 0)).toBe(true);
     const fire = new BotFireState();
-    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 20, /* canFire */ true, 0.05);
-    expect(bot.shootStart || bot.shootHold).toBe(false);
+    updateFiring(bot, BOT_TIERS.expert, fire, aimAt, 20, /* canFire */ true, 0.05);
+    expect(bot.shootStart || bot.shootHold).toBe(true);
 });

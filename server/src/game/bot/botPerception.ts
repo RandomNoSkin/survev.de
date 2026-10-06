@@ -135,6 +135,23 @@ export function muzzlePos(shooter: Player): Vec2 {
     return v2.add(shooter.pos, v2.add(v2.mul(perp, offset), v2.mul(dir, len)));
 }
 
+/**
+ * Where a shot at a visible target should be aimed: its centre if that line is clear from the shooter
+ * (muzzle), otherwise the visible edge on whichever side is open. Aiming at a blocked centre sends
+ * the bullet into the cover, so a grazed target is shot at its open edge instead.
+ */
+export function clearAimPoint(game: Game, from: Vec2, target: Vec2, layer: number): Vec2 {
+    if (hasLineOfSight(game, from, target, layer)) return target;
+    const dist = v2.distance(from, target);
+    if (dist < 0.01) return target;
+    const perp = v2.create(-(target.y - from.y) / dist, (target.x - from.x) / dist);
+    for (const side of [1, -1]) {
+        const edge = v2.add(target, v2.mul(perp, side * BODY_LOS_OFFSET));
+        if (hasLineOfSight(game, from, edge, layer)) return edge;
+    }
+    return target;
+}
+
 /** Half-width of the body rays `hasBodyLineOfSight` also tries, either side of the centre line. */
 const BODY_LOS_OFFSET = 1.5;
 
