@@ -61,3 +61,14 @@ test("With an enemy known, the stance picked has cover on the line to them", () 
 
     expect(coverTowards(graph, picked, enemy, 0)).toBe(1);
 });
+
+// Real feedback: at the start of a round the idle bot wandered on the spot, because the spots it could
+// reach within its short search found no cover - so it never headed for the cover a bit further off.
+test("A stance search wide enough finds cover further off than the default radius", () => {
+    const game = openArena();
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(30, 0)), 0, 0, 1);
+    const graph = buildNavGraph(game);
+
+    expect(coverFraction(graph, pickStance(graph, center, 0, 40), 0)).toBeGreaterThan(0);
+});

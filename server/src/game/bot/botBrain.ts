@@ -205,6 +205,10 @@ const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
 /** How often an idle bot re-picks its stance - see `idleGoal`. */
 const STANCE_REPICK_MS = 5000;
 
+/** How far an idle bot looks for cover to hold - wide enough that a round opens with it heading to real
+ *  cover, not wandering on the spot when none is within its short fight-time search. */
+const STANCE_IDLE_SEARCH_RAD = 40;
+
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
  * part, a grid query plus up to 4 raycasts - while movement, aim and firing run every
@@ -952,7 +956,7 @@ export class BotBrain {
             if (!this.stanceGoal || bot.game.now - this.stanceGoalMs > STANCE_REPICK_MS) {
                 this.stanceGoal = revealed
                     ? pickStanceFacing(nav, bot.pos, layer, revealed)
-                    : pickStance(nav, bot.pos, layer);
+                    : pickStance(nav, bot.pos, layer, STANCE_IDLE_SEARCH_RAD);
                 this.stanceGoalMs = bot.game.now;
             }
             return this.stanceGoal;

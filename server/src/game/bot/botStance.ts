@@ -20,7 +20,7 @@ const ENEMY_COVER_WEIGHT = 0.5;
 const INTERIOR_PENALTY = 0.25;
 /** Each unit of walking to a spot costs this much, so the bot doesn't wander across the map for a
  *  marginally better corner. */
-const DISTANCE_PENALTY_PER_UNIT = 0.01;
+const DISTANCE_PENALTY_PER_UNIT = 0.005;
 
 /** Fraction of directions around `pos` blocked by solid cover within `STANCE_REACH`. A spot with a
  *  wall on every side scores 1, an open field 0. */
@@ -93,10 +93,10 @@ export function pickStanceFacing(nav: NavGraph, from: Vec2, layer: number, enemy
 /** The best spot within `STANCE_SEARCH_RAD` of `from` to hold: the best `stanceScore`, a small
  *  penalty for walking there and for a building interior. Returns `from` itself when nothing
  *  nearby is any better. */
-export function pickStance(nav: NavGraph, from: Vec2, layer: number): Vec2 {
+export function pickStance(nav: NavGraph, from: Vec2, layer: number, searchRad = STANCE_SEARCH_RAD): Vec2 {
     let best = from;
     let bestScore = stanceScore(nav, from, layer);
-    for (const id of nav.nearby(from, layer, STANCE_SEARCH_RAD, 64)) {
+    for (const id of nav.nearby(from, layer, searchRad, 64)) {
         const pos = nav.pos(id);
         const interior = nav.kind[id] === "interior" ? INTERIOR_PENALTY : 0;
         const score = stanceScore(nav, pos, layer)
