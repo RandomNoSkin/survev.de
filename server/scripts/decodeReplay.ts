@@ -152,6 +152,25 @@ for (const frame of frames) {
                 }));
             }
 
+            // Obstacles (walls, containers, crates, trees, rocks, ...) only ever arrive as full
+            // objects, the first time the recorded player sees them: that is the real map geometry
+            // for this match, including the exact type/orientation/scale a container had.
+            for (const p of upd.fullObjects) {
+                if (p.__type !== ObjectType.Obstacle) continue;
+                // biome-ignore lint: one-off script, union types don't narrow per object type here.
+                const data = p as any;
+                out.push(JSON.stringify({
+                    kind: "obstacle",
+                    t: clockMs,
+                    id: p.__id,
+                    type: data.type,
+                    pos: { x: +data.pos.x.toFixed(2), y: +data.pos.y.toFixed(2) },
+                    ori: data.ori,
+                    scale: +(data.scale ?? 1).toFixed(3),
+                    dead: data.dead ?? null,
+                }));
+            }
+
             for (const p of [...upd.fullObjects, ...upd.partObjects]) {
                 if (p.__type !== ObjectType.Player) continue;
                 // `deserializePart` always fills pos/dir regardless of full-vs-part;
