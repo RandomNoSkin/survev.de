@@ -1,4 +1,5 @@
 import { GameConfig, WeaponSlot } from "../../../../shared/gameConfig.ts";
+import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 import type { GameObject } from "../objects/gameObject.ts";
 import type { Player } from "../objects/player.ts";
@@ -19,6 +20,7 @@ import {
 } from "./botCombat.ts";
 import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
+import { pickStance } from "./botStance.ts";
 import {
     BotMovementState,
     type CombatDirective,
@@ -199,6 +201,9 @@ const GUNSHOT_MEMORY_MS = 3000;
  *  cold trail and just heads for the map's center instead - see `idleGoal`. */
 const IDLE_LAST_KNOWN_MEMORY_MS = 15000;
 
+/** How often an idle bot re-picks its stance - see `idleGoal`. */
+const STANCE_REPICK_MS = 5000;
+
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
  * part, a grid query plus up to 4 raycasts - while movement, aim and firing run every
@@ -243,6 +248,11 @@ export class BotBrain {
      *  any more than position can, so this is just as much a *last known* snapshot, not
      *  a live read. */
     private lastKnownEnemyHealthFrac = 1;
+
+    /** Where an idle bot with nothing to chase holds - the best cover near where it stands (see
+     *  `pickStance`), re-picked every `STANCE_REPICK_MS` rather than every think. */
+    private stanceGoal: Vec2 | undefined;
+    private stanceGoalMs = -Infinity;
 
     /** Where a nearby hostile gunshot was last heard, and when - "checken in welche
      *  Richtung der Gegner sein könnte anhand von Schüssen": gives `threatPos` something
@@ -923,6 +933,14 @@ export class BotBrain {
             const worthChecking = healthFrac >= 0.99
                 || this.lastKnownEnemyHealthFrac < ENEMY_LOW_HEALTH_FRAC;
             if (ageMs <= IDLE_LAST_KNOWN_MEMORY_MS && worthChecking) return this.lastKnownEnemyPos;
+        }
+        const nav = this.barn.navGraph;
+        if (nav) {
+            if (!this.stanceGoal || bot.game.now - this.stanceGoalMs > STANCE_REPICK_MS) {
+                this.stanceGoal = pickStance(nav, bot.pos, util.toGroundLayer(bot.layer));
+                this.stanceGoalMs = bot.game.now;
+            }
+            return this.stanceGoal;
         }
         return v2.create(bot.game.map.width / 2, bot.game.map.height / 2);
     }
