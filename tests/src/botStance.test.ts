@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { coverFraction, pickStance } from "../../server/src/game/bot/botStance.ts";
+import { coverFraction, enemyCoverAround, pickStance } from "../../server/src/game/bot/botStance.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { TeamMode } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
@@ -34,4 +34,18 @@ test("With nothing to hide behind nearby, the stance stays where the bot already
     const graph = buildNavGraph(game);
 
     expect(v2.distance(pickStance(graph, center, 0), center)).toBeLessThan(0.01);
+});
+
+test("Cover an enemy would stand behind counts against a stance", () => {
+    const game = openArena();
+    const center = v2.create(132, 132);
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(2, 0)), 0, 0, 1);
+    const graphOpen = buildNavGraph(game);
+    const before = enemyCoverAround(graphOpen, center, 0);
+
+    // A crate just beyond where an enemy standing 6 units east of the bot would be.
+    game.map.genObstacle("crate_01", v2.add(center, v2.create(7, 0)), 0, 0, 1);
+    const graphWithEnemyCover = buildNavGraph(game);
+
+    expect(enemyCoverAround(graphWithEnemyCover, center, 0)).toBeGreaterThan(before);
 });
