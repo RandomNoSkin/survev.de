@@ -1675,3 +1675,20 @@ test("A low bot with an enemy in clear line at long range doesn't start a bandag
 
     expect(bot.actionType).not.toBe(GameConfig.Action.UseItem);
 });
+
+// The estimate can't read the enemy's real health, and enemies heal unseen: so the bot never assumes an
+// enemy is dead from its own hits alone, and forgets its earlier hits after a while without any.
+test("The bot never assumes an enemy is dead from its own hits, and forgets them once it has been a while", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+
+    bot.botBrain!.update(0.05);
+    const brain = bot.botBrain as unknown as { knownEnemyHealthFrac(b: Player): number | undefined };
+    bot.botBrain?.onDealtDamage(target, 150); // more damage than the enemy's whole health bar
+    expect(brain.knownEnemyHealthFrac(bot)).toBeGreaterThanOrEqual(0.2);
+
+    game.now += 9000; // long enough with no hits that the enemy has healed back up as far as the bot can tell
+    expect(brain.knownEnemyHealthFrac(bot)).toBeCloseTo(1);
+});

@@ -209,6 +209,11 @@ const STANCE_REPICK_MS = 5000;
  *  cover, not wandering on the spot when none is within its short fight-time search. */
 const STANCE_IDLE_SEARCH_RAD = 40;
 
+/** How long without a hit before the bot stops counting its earlier damage on an enemy - see `enemyHealthEstimate`. */
+const ENEMY_HEAL_FORGET_MS = 8000;
+/** The lowest health fraction the bot will ever assume an enemy is at from its own hits alone. */
+const ENEMY_ESTIMATE_FLOOR = 0.2;
+
 /**
  * Drives one bot. Perception (`think`) is throttled to `tier.thinkHz` - the expensive
  * part, a grid query plus up to 4 raycasts - while movement, aim and firing run every
@@ -256,6 +261,7 @@ export class BotBrain {
     /** Which enemy `enemyDealtDamage` counts damage on, and how much this bot's shots have landed on it. */
     private enemyEstTargetId = -1;
     private enemyDealtDamage = 0;
+    private enemyLastHitMs = -Infinity;
 
     /** Where an idle bot with nothing to chase holds - the best cover near where it stands (see
      *  `pickStance`), re-picked every `STANCE_REPICK_MS` rather than every think. */
@@ -607,6 +613,7 @@ export class BotBrain {
         // happens to spot an enemy - see the melee-stuck case in
         // `updateWeaponSelection`. It also no-ops entirely while mid-action (healing,
         // reviving, ...), since switching would otherwise cancel that action.
+
         updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !this.sustainedlyLost(bot));
         updateReload(bot, !!this.target);
         // Only ever at a target the bot can see: a predicted offscreen spot is nothing it can hit.
@@ -1076,7 +1083,14 @@ export class BotBrain {
      *  read. Enemy healing isn't visible to the bot, so this can only overestimate how much they have left. */
     private enemyHealthEstimate(enemyId: number): number {
         if (enemyId !== this.enemyEstTargetId) return 1;
-        return Math.max(0, 1 - this.enemyDealtDamage / GameConfig.player.health);
+        // The enemy heals unseen, so damage the bot dealt long ago counts for less and less: after
+        // ENEMY_HEAL_FORGET_MS without a hit it's gone entirely. The estimate never drops below
+        // ENEMY_ESTIMATE_FLOOR either - a real match had the bot push on an estimate of zero against a
+        // healed-up enemy and take a point-blank shotgun blast.
+        const sinceHit = this.player.game.now - this.enemyLastHitMs;
+        const remaining = 1 - Math.min(1, Math.max(0, sinceHit / ENEMY_HEAL_FORGET_MS));
+        const dealt = this.enemyDealtDamage * remaining;
+        return Math.max(ENEMY_ESTIMATE_FLOOR, 1 - dealt / GameConfig.player.health);
     }
 
     /** Called by `Player.damage` whenever this bot's shot lands on `victim` - see `enemyHealthEstimate`. */
@@ -1086,6 +1100,7 @@ export class BotBrain {
             this.enemyDealtDamage = 0;
         }
         this.enemyDealtDamage += amount;
+        this.enemyLastHitMs = victim.game.now;
     }
 
     private knownEnemyHealthFrac(bot: Player): number | undefined {
