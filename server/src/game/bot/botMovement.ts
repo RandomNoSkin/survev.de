@@ -652,14 +652,14 @@ const DODGE_STRENGTH = 1;
 const SHAKE_AMPLITUDE = 0.6;
 
 /**
- * Weaves a retreat side to side: the sideways lean flips every half to a second and a half, so a
- * running bot is harder to aim at than one that runs dead straight.
+ * Weaves a bot side to side: the lean flips every 0.15 to 0.45 seconds, quick enough to read as a
+ * shake rather than ordinary strafing, so a moving bot is harder to aim at.
  */
 function shakeRetreat(state: BotMovementState, move: Vec2, toThreat: Vec2, dt: number): Vec2 {
     state.shakeTimer -= dt;
     if (state.shakeTimer <= 0) {
         state.shakeSign = Math.random() < 0.5 ? 1 : -1;
-        state.shakeTimer = util.random(0.5, 1.5);
+        state.shakeTimer = util.random(0.15, 0.45);
     }
     return v2.add(move, v2.mul(v2.perp(toThreat), state.shakeSign * SHAKE_AMPLITUDE));
 }

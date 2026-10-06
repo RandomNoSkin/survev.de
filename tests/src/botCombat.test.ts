@@ -1131,3 +1131,26 @@ test("A bot at low HP does not heal into a close enemy's clear line", () => {
         shouldHeal(bot, BOT_TIERS.expert, /* hasVisibleEnemy */ true, /* positionSafe */ true, false, undefined, /* closeInLine */ true),
     ).toBe(false);
 });
+
+// Fire only at what the shot can actually hit: a target whose centre is behind cover but whose edge
+// is still in view is half-hidden, and a bullet aimed at it mostly meets the cover.
+test("A bot does not fire at a target only its edge shows over cover", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.map.genObstacle("crate_01", v2.create(60, 50), 0, 0, 1);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
+    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
+    bot.dirNew = v2.create(1, 0);
+
+    let grazed: Vec2 | undefined;
+    for (let dy = -6; dy <= 6 && !grazed; dy += 0.25) {
+        const to = v2.create(70, 50 + dy);
+        if (!hasLineOfSight(game, bot.pos, to, 0) && hasBodyLineOfSight(game, bot.pos, to, 0)) grazed = to;
+    }
+    expect(grazed).toBeDefined();
+    enemy.pos = v2.copy(grazed!);
+
+    const fire = new BotFireState();
+    updateFiring(bot, BOT_TIERS.expert, fire, enemy.pos, 20, /* canFire */ true, 0.05);
+    expect(bot.shootStart || bot.shootHold).toBe(false);
+});
