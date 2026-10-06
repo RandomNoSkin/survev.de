@@ -267,13 +267,21 @@ export function updateWeaponSelection(
         const burstInFlight = curDef?.fireMode === "auto" || curDef?.fireMode === "burst";
         if (!burstInFlight) {
             const alt = slots.find((i) => i !== cur && hasAmmo(bot, i));
-            if (alt !== undefined) {
+            // A second gun that fits this range clearly worse than the one in hand isn't worth swapping to just
+            // to shed the slowdown: that swap-back-and-forth between mosin and spas at mid range was the bot
+            // switching on nearly every shot. Keep firing and take the slowdown instead.
+            const altFits = alt !== undefined
+                && scoreWeaponForRange(wm.weapons[alt].type, dist) >= scoreWeaponForRange(wm.weapons[cur].type, dist) - WEAPON_RANGE_SWITCH_MARGIN;
+            if (altFits) {
                 wm.setCurWeapIndex(alt);
-            } else if (wm.weapons[WeaponSlot.Melee].type) {
+            } else if (alt === undefined && wm.weapons[WeaponSlot.Melee].type) {
                 // No usable second gun - park on melee just long enough to shed the
                 // slowdown. Melee doesn't track "ammo", so this bypasses `switchTo`'s
                 // ammo check on purpose.
                 wm.setCurWeapIndex(WeaponSlot.Melee);
+            } else {
+                // Second gun doesn't fit this range - fall through and keep the current gun.
+                return;
             }
             // Either way, this was purely to dodge the slowdown, not a commitment to
             // actually fight with whatever we landed on - free to reconsider next tick.
