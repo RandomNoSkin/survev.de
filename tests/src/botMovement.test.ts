@@ -17,8 +17,9 @@ test("updateMovement opens distance instead of chasing on the `flee` directive",
     updateMovement(bot, state, "flee", threat, 10, 0.05);
 
     expect(bot.touchMoveActive).toBe(true);
-    // Moving away means a strongly negative x component (the threat is due +x of the bot).
-    expect(bot.touchMoveDir.x).toBeLessThan(-0.9);
+    // Moving away means a strongly negative x component (the threat is due +x of the bot). The
+    // retreat shake leans it sideways by up to ~0.6, so the bar is a little looser than straight back.
+    expect(bot.touchMoveDir.x).toBeLessThan(-0.7);
 });
 
 // "wenn retreat nicht geht muss er halt wenigstens schießen" - BotBrain.fleeOrFight

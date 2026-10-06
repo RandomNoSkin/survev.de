@@ -275,6 +275,9 @@ const PUSH_SWEET_SPOT_FRAC = 0.45;
 export class BotMovementState {
     strafeSign: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
     strafeTimer = util.random(0.6, 1.6);
+    /** Which way the retreat shake currently leans (+1/-1) and how long until it flips. See `shakeRetreat`. */
+    shakeSign: 1 | -1 = 1;
+    shakeTimer = 0;
     /** How strongly the current strafe cycle blends in, as a fraction of full speed -
      *  see `rollStrafeCycle`. Rerolled alongside `strafeSign`/`strafeTimer` so the
      *  side-to-side movement varies in punch, not just direction and timing. */
@@ -638,6 +641,22 @@ function nearLiveExplosive(objs: GameObject[], pos: Vec2, layer: number): boolea
  *  of it, so the bot's actual resting position can land that much closer to the threat
  *  than the ideal point - the hidden guarantee has to hold for that worst case too, not
  *  only for standing exactly on the computed spot. */
+/** How hard a retreating bot weaves sideways, as a fraction of its forward move. */
+const SHAKE_AMPLITUDE = 0.6;
+
+/**
+ * Weaves a retreat side to side: the sideways lean flips every half to a second and a half, so a
+ * running bot is harder to aim at than one that runs dead straight.
+ */
+function shakeRetreat(state: BotMovementState, move: Vec2, dt: number): Vec2 {
+    state.shakeTimer -= dt;
+    if (state.shakeTimer <= 0) {
+        state.shakeSign = Math.random() < 0.5 ? 1 : -1;
+        state.shakeTimer = util.random(0.5, 1.5);
+    }
+    return v2.normalizeSafe(v2.add(move, v2.mul(v2.perp(move), state.shakeSign * SHAKE_AMPLITUDE)));
+}
+
 /** How far one retreat step looks ahead when checking whether it lands hidden. */
 const HIDDEN_STEP_DIST = 2;
 
@@ -2226,6 +2245,7 @@ export function updateMovement(
         return;
     }
     move = v2.normalizeSafe(move);
+    if (directive === "flee" || directive === "heal") move = shakeRetreat(state, move, dt);
 
     if (!isDirClear(bot, move, PROBE_DIST, state.coverObstacle)) {
         // Prefer whichever side the bot was already deflecting toward, so it commits

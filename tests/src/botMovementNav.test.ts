@@ -2439,3 +2439,18 @@ test("A retreat step out of a crate's shadow is replaced by one that stays hidde
     const landing = v2.add(bot.pos, v2.mul(step, 2));
     expect(isBodyHidden(bot, obstacles, threat, landing, 0)).toBe(true);
 });
+
+// Shake: a retreating bot weaves left and right instead of running in a dead-straight line, so it's
+// harder to aim at while it moves. Over a few seconds the sideways component must flip both ways.
+test("A bot retreating shakes side to side rather than running in a straight line", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(game.map.width / 2, game.map.height / 2) });
+    const threat = v2.add(bot.pos, v2.create(20, 0));
+    const state = new BotMovementState();
+    const signs = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+        updateMovement(bot, state, "flee", threat, 20, 0.05, undefined, true, undefined, true);
+        if (Math.abs(bot.touchMoveDir.y) > 0.1) signs.add(Math.sign(bot.touchMoveDir.y));
+    }
+    expect(signs.has(1) && signs.has(-1)).toBe(true);
+});

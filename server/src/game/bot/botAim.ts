@@ -140,7 +140,9 @@ export function updateAim(
         const dist = v2.distance(bot.pos, target.pos);
         const movingFactor = 1 + 0.5 * Math.min(v2.length(aim.vel) / GameConfig.player.moveSpeed, 1);
         const distFactor = 1 + dist / 120;
-        const selfMoveFactor = bot.touchMoveActive && bot.touchMoveLen ? 1.35 : 0.85;
+        // Moving no longer costs extra aim: the bot's shooting while it weaves was worse than a
+        // standing one, which a real match showed as a low hit rate on its shots.
+        const selfMoveFactor = 0.85;
         const sigmaDeg = math.clamp(
             tier.aimErrorDeg * movingFactor * distFactor * selfMoveFactor,
             tier.aimErrorDeg * 0.3,
