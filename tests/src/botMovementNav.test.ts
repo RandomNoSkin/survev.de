@@ -1,9 +1,12 @@
 import { expect, test } from "vitest";
+import type { Obstacle } from "../../server/src/game/objects/obstacle.ts";
+import type { Player } from "../../server/src/game/objects/player.ts";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
 import {
     BotMovementState,
+    filterByReachability,
     findCover,
     followPath,
     isDirClear,
@@ -2386,11 +2389,32 @@ test("An idle wander pinned against the map border does not keep pushing into it
 // 50-unit search - only when nothing closer works (nearest candidates still win).
 test("A retreat to heal can find cover further off than the usual search radius", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
+    // Clear the map's own random scatter, and pin the crate's size, so the result is deterministic.
+    for (const o of game.map.obstacles) o.dead = true;
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
     const threat = v2.create(30, 50); // west of the bot
-    game.map.genObstacle("crate_01", v2.create(115, 50)); // 65 units east: hides the bot from the threat
+    game.map.genObstacle("crate_01", v2.create(115, 50), 0, 0, 1); // 65 units east: hides the bot from the threat
     const obstacles = buildNavGraph(game).navObstacles;
 
     expect(findCover(bot, obstacles, threat, 0)).toBeUndefined();
     expect(findCover(bot, obstacles, threat, 0, undefined, undefined, undefined, false, RETREAT_COVER_SEARCH_RAD)).toBeDefined();
+});
+
+// Route awareness, on a hand-built straight-line nav graph so nothing depends on the random test map.
+// The three nearest covers are all ones the enemy reaches about as fast as the bot; a safe one sits
+// further back. A short shortlist never sees it, a retreat's wider shortlist does.
+test("Reachability looks past the nearest covers the enemy reaches as fast, to a safe one further back", () => {
+    const nav = new NavGraph([]);
+    const ids: number[] = [];
+    for (let x = 0; x <= 100; x++) ids.push(nav.addNode(v2.create(x, 50), 0, "open"));
+    for (let x = 1; x <= 100; x++) nav.link(ids[x - 1], ids[x], 1);
+    const bot = { pos: v2.create(50, 50) } as unknown as Player;
+    const threat = v2.create(40, 50);
+    const cover = (x: number) => ({ obstacle: {} as Obstacle, pos: v2.create(x, 50), distSqr: (x - 50) ** 2 });
+    const candidates = [cover(44), cover(45), cover(46), cover(80)];
+
+    const narrow = filterByReachability(nav, bot, threat, 0, undefined, candidates, false, 3);
+    expect(narrow[0].pos.x).not.toBe(80);
+    const wide = filterByReachability(nav, bot, threat, 0, undefined, candidates, false, 8);
+    expect(wide[0].pos.x).toBe(80);
 });

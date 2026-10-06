@@ -693,6 +693,9 @@ const COVER_APPROACH_MARGIN = 3;
  *  candidate that could actually have won; it only skips spending a search budget on ones
  *  `pickFrom` would have passed over regardless. */
 const REACHABILITY_CANDIDATES = 3;
+/** How many candidates a retreat checks for reachability - wider than the usual 3, so a safe spot
+ *  further back is still found when the nearest few are all ones the enemy reaches as fast. */
+const RETREAT_REACHABILITY_CANDIDATES = 8;
 /** Expansion budget for each reachability probe - well under `MAX_PATH_EXPANSIONS`
  *  (the bot's own real movement path): this only needs a *relative* comparison between a
  *  handful of nearby candidates on an arena-scale graph, not a guaranteed solve of a
@@ -812,7 +815,7 @@ function pathCostEstimate(nav: NavGraph, from: Vec2, to: Vec2, layer: number): n
     return v2.distance(from, to);
 }
 
-type CoverCandidate = { obstacle: Obstacle; pos: Vec2; distSqr: number };
+export type CoverCandidate = { obstacle: Obstacle; pos: Vec2; distSqr: number };
 
 /** Drops any of `candidates`' nearest-to-bot entries (see `REACHABILITY_CANDIDATES`) the
  *  enemy could reach about as fast as the bot, or faster - see `REACHABILITY_MARGIN`.
@@ -831,7 +834,7 @@ type CoverCandidate = { obstacle: Obstacle; pos: Vec2; distSqr: number };
  *  ever actually unseat it. Returns the single nearest candidate, unfiltered, if
  *  literally nothing clears the bar - the same "something beats nothing" fallback
  *  `findCover` already relies on for its interior-candidates pool. */
-function filterByReachability(
+export function filterByReachability(
     nav: NavGraph,
     bot: Player,
     threatPos: Vec2,
@@ -839,10 +842,11 @@ function filterByReachability(
     preferred: Obstacle | undefined,
     candidates: CoverCandidate[],
     rankByWalk = false,
+    shortlistSize = REACHABILITY_CANDIDATES,
 ): CoverCandidate[] {
     if (!candidates.length) return candidates;
     const sorted = [...candidates].sort((a, b) => a.distSqr - b.distSqr);
-    const shortlist = sorted.slice(0, REACHABILITY_CANDIDATES);
+    const shortlist = sorted.slice(0, shortlistSize);
     if (preferred) {
         const preferredEntry = candidates.find((c) => c.obstacle === preferred);
         if (preferredEntry && !shortlist.includes(preferredEntry)) shortlist.push(preferredEntry);
@@ -1027,8 +1031,11 @@ export function findCover(
     // Reachability only while genuinely fleeing, not mid-fight `holdAndPeek` cover -
     // `avoidInterior` is exactly that signal already (see this function's own doc
     // comment), reused here rather than adding a second near-duplicate flag.
+    // A retreat (a wider search than usual) checks more candidates and ranks them by real walk.
+    const routeAware = searchRad > COVER_SEARCH_RAD;
+    const shortlistSize = routeAware ? RETREAT_REACHABILITY_CANDIDATES : REACHABILITY_CANDIDATES;
     const openPool = avoidInterior
-        ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, openCandidates, noInteriorFallback)
+        ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, openCandidates, noInteriorFallback || routeAware, shortlistSize)
         : openCandidates;
     const picked = openPool.length
         ? pickFrom(openPool)
@@ -1043,7 +1050,8 @@ export function findCover(
                     layer,
                     preferred,
                     interiorCandidates,
-                    noInteriorFallback,
+                    noInteriorFallback || routeAware,
+                    shortlistSize,
                 )
                 : interiorCandidates,
         );
