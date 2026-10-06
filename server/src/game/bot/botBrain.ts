@@ -249,6 +249,9 @@ export class BotBrain {
      *  any more than position can, so this is just as much a *last known* snapshot, not
      *  a live read. */
     private lastKnownEnemyHealthFrac = 1;
+    /** Which enemy `enemyDealtDamage` counts damage on, and how much this bot's shots have landed on it. */
+    private enemyEstTargetId = -1;
+    private enemyDealtDamage = 0;
 
     /** Where an idle bot with nothing to chase holds - the best cover near where it stands (see
      *  `pickStance`), re-picked every `STANCE_REPICK_MS` rather than every think. */
@@ -557,7 +560,7 @@ export class BotBrain {
                 this.enemySightBlocksHeal(bot),
                 this.positionSafeForHeal(bot),
                 this.desperateHeal,
-                this.target ? this.target.health / GameConfig.player.health : undefined,
+                this.target ? this.enemyHealthEstimate(this.target.__id) : undefined,
                 this.enemyCloseInLine(bot),
             );
         }
@@ -743,7 +746,7 @@ export class BotBrain {
         // it keeps fighting instead of healing or running, and only a clear health advantage
         // (`PUSH_HEALTH_ADVANTAGE_FRAC`) sends it forward - see the push checks below.
         const enemyHealthFrac = this.target && healthFrac < FIGHT_FLOOR_FRAC
-            ? this.target.health / GameConfig.player.health
+            ? this.enemyHealthEstimate(this.target.__id)
             : undefined;
         const behindOnHealth = healthFrac < 1
             && enemyHealthFrac !== undefined
@@ -1055,8 +1058,25 @@ export class BotBrain {
 
     /** The enemy's health fraction right now if visible, else the last sighting's while
      *  it's still inside `threatPos`'s own memory window - `undefined` once that's stale. */
+    /** The enemy's health as the bot can know it: full health minus the damage this bot's own shots have
+     *  landed on them (what a human reads off their hitmarkers). Not their real health - that's never
+     *  read. Enemy healing isn't visible to the bot, so this can only overestimate how much they have left. */
+    private enemyHealthEstimate(enemyId: number): number {
+        if (enemyId !== this.enemyEstTargetId) return 1;
+        return Math.max(0, 1 - this.enemyDealtDamage / GameConfig.player.health);
+    }
+
+    /** Called by `Player.damage` whenever this bot's shot lands on `victim` - see `enemyHealthEstimate`. */
+    onDealtDamage(victim: Player, amount: number): void {
+        if (victim.__id !== this.enemyEstTargetId) {
+            this.enemyEstTargetId = victim.__id;
+            this.enemyDealtDamage = 0;
+        }
+        this.enemyDealtDamage += amount;
+    }
+
     private knownEnemyHealthFrac(bot: Player): number | undefined {
-        if (this.target) return this.target.health / GameConfig.player.health;
+        if (this.target) return this.enemyHealthEstimate(this.target.__id);
         if (this.lastKnownEnemyHealthFrac === undefined) return undefined;
         if (bot.game.now - this.lastKnownEnemyTimeMs > this.tier.memory * 1000) return undefined;
         return this.lastKnownEnemyHealthFrac;
@@ -1072,7 +1092,7 @@ export class BotBrain {
         if (this.target) {
             this.lastKnownEnemyPos = v2.copy(this.target.pos);
             this.lastKnownEnemyTimeMs = this.player.game.now;
-            this.lastKnownEnemyHealthFrac = this.target.health / GameConfig.player.health;
+            this.lastKnownEnemyHealthFrac = this.enemyHealthEstimate(this.target.__id);
         }
     }
 }

@@ -1,3 +1,4 @@
+import type { Player } from "../../server/src/game/objects/player.ts";
 import { expect, test, vi } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
@@ -64,6 +65,8 @@ test("A visible target dropping below the low-health threshold triggers an immed
 
     // Health alone drives `push` now, not a hit streak - no `bulletHits` involved.
     target.health = 30;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
     bot.botBrain!.update(0.05);
     const pushing = v2.copy(bot.touchMoveDir);
 
@@ -92,20 +95,25 @@ test("Landing several hits on a healthy target does not trigger a push", () => {
 // With no more momentum/decay involved, `push` is purely reactive to the target's
 // current health - it should drop right back to holding the instant the target
 // recovers, not linger from whatever used to keep momentum alive for a while.
-test("Push reverts to holding once the target's health recovers above the threshold", () => {
+// The bot can't see the enemy heal, so an unseen recovery doesn't end the push: it keeps pressing the
+// health it last knew of, which is all a human would have too.
+test("Push keeps going when the target heals out of the bot's sight", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     primeGameClock(game);
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     target.health = 30;
 
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
+
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing
 
-    target.health = 100; // no longer worth finishing
+    target.health = 100; // healed, but the bot has no way to see it
+
     bot.botBrain!.update(0.05);
 
-    expect(Math.abs(bot.touchMoveDir.x)).toBeLessThan(0.3); // back to holding
+    expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // still pushing on the health it last knew
 });
 
 // Regression: a bot only needs to clear the `low` bar (75% of `tier.healThreshold`, not
@@ -120,6 +128,8 @@ test("A bot pushes once it's cleared 'low', without needing to be fully healed",
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     target.health = 30; // low enough to justify a push
+
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
     bot.health = 60; // expert: low bar is 56.25% - cleared, even though healThreshold is 75%
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
@@ -139,6 +149,8 @@ test("A low enemy still gets pushed the instant a heal ends, without waiting out
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     target.health = 30; // low enough to justify pushing through the grace window
+
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
     bot.health = 80; // comfortably clear of "low"
 
     bot.actionType = GameConfig.Action.UseItem;
@@ -161,6 +173,8 @@ test("A bot still retreats for a grace window right after a heal ends when the e
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     target.health = 70; // not low, and not more than the bot's own health either - isolates
+
+    bot.botBrain?.onDealtDamage(target, 100 - 70);
     // this from `behindOnHealth` ("wenn nicht full und der Gegner mehr hp hat dann sollte
     // heilen Prio sein"), which is a separate, legitimate reason to keep retreating this
     // test deliberately avoids triggering.
@@ -189,6 +203,8 @@ test("A bot retreats to heal when not full and a visible enemy has meaningfully 
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 60; // below FIGHT_FLOOR_FRAC (70%) - above it the bot fights on instead
     target.health = 100; // ahead by well more than HEALTH_DEFICIT_MARGIN
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.invManager.give("bandage", 5);
 
     bot.botBrain!.update(0.05);
@@ -229,6 +245,8 @@ test("A bot holds ground against a visible equal-health enemy instead of fleeing
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 50; // low for expert (below 56%), not critical
     target.health = 50; // not ahead on health
+
+    bot.botBrain?.onDealtDamage(target, 100 - 50);
     bot.invManager.give("bandage", 5);
 
     bot.botBrain!.update(0.05);
@@ -247,6 +265,8 @@ test("A bot pushes a recently-seen low enemy even once it's out of sight", () =>
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 52; // low by the tier's own bar, not critical
     target.health = 18; // well under ENEMY_LOW_HEALTH_FRAC
+
+    bot.botBrain?.onDealtDamage(target, 100 - 18);
     bot.invManager.give("bandage", 5);
 
     bot.botBrain!.update(0.05); // sees the enemy, records its health
@@ -263,6 +283,8 @@ test("A bot back up to tier.healThreshold pushes a low target normally", () => {
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     target.health = 30;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
     bot.health = 80; // expert healThreshold is 75% - comfortably cleared
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
@@ -344,6 +366,8 @@ test("Low health still pushes an enemy who's even lower, instead of retreating t
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 40; // low (< 56.25% for expert) but not critical (< 37.5%)
     target.health = 15; // worse off than the bot, and under ENEMY_LOW_HEALTH_FRAC (40%)
+
+    bot.botBrain?.onDealtDamage(target, 100 - 15);
     bot.invManager.give("bandage", 5); // has a heal item on hand - still shouldn't retreat to use it
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
@@ -364,6 +388,8 @@ test("Low health doesn't push an enemy who isn't clearly worse off, and doesn't 
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 40;
     target.health = 45; // hurt too, but not worse off than the bot - not a finish
+
+    bot.botBrain?.onDealtDamage(target, 100 - 45);
     bot.invManager.give("bandage", 5);
 
     for (let i = 0; i < 10; i++) bot.botBrain!.update(0.05);
@@ -734,6 +760,8 @@ test("A bot mid-heal keeps retreating even with a low target, instead of pushing
     // beating push via the bot's own low health, not push never triggering at all.
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(85, 50) });
     target.health = 30;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
     bot.health = 20;
     bot.invManager.give("bandage", 5);
 
@@ -936,6 +964,7 @@ test("A hurt bot still walks back to a last-known enemy that was known to be low
     const bot = makeBrainedBot(v2.create(10, 10), game);
     const enemy = game.playerBarn.addTestPlayer({ pos: v2.create(30, 10) });
     enemy.health = 30; // low enough to clear ENEMY_LOW_HEALTH_FRAC (0.4)
+    bot.botBrain?.onDealtDamage(enemy, 100 - 30);
 
     bot.botBrain!.update(0.05); // spots the enemy while it's already low
     bot.health = 60;
@@ -1259,6 +1288,8 @@ test("A bot above 70 HP holds ground against a visible enemy that is ahead on he
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 75;
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.invManager.give("bandage", 5);
 
     bot.botBrain!.update(0.05);
@@ -1275,6 +1306,8 @@ test("A bot above 70 HP pushes a visible enemy that is at least 20 HP down and n
     bot.health = 80;
     target.health = 25; // within finishing range - a push worth making at this health
 
+    bot.botBrain?.onDealtDamage(target, 100 - 25);
+
     bot.botBrain!.update(0.05);
 
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.3); // closing in on the target (+x)
@@ -1289,6 +1322,8 @@ test("A bot below 70 HP with a heal in hand does not push a visible enemy with l
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 60;
     target.health = 50;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 50);
     bot.invManager.give("bandage", 5);
 
     bot.botBrain!.update(0.05);
@@ -1305,6 +1340,8 @@ test("A bot mid-heal with an open, aimed shot on a visible enemy takes the shot 
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) });
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 30;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
@@ -1334,6 +1371,8 @@ test("A critical bot a few units short of its cover starts healing instead of wa
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 22;
     bot.invManager.give("bandage", 5);
     const movement = (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement;
@@ -1354,6 +1393,8 @@ test("A bot can heal with an enemy in view behind a crate, since it has no clear
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     game.map.genObstacle("crate_01", v2.create(65, 50)); // between them, blocking the shot
     bot.health = 50;
     bot.invManager.give("bandage", 5);
@@ -1378,6 +1419,8 @@ test("A bot below 70 HP fights a healthier enemy that is close with a clear shot
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(59, 50) }); // 9 units, open line
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 56;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
@@ -1398,6 +1441,8 @@ test("A bot below 70 HP still flees a healthier enemy that is far away", () => {
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // 25 units
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 56;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
@@ -1417,6 +1462,8 @@ test("A bot mid-heal does not give up a nearly finished heal to take an open sho
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) });
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 30;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
@@ -1440,6 +1487,8 @@ test("A bot mid-heal does not break off to shoot an enemy too far away to push i
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) }); // 25 units
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 30;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
@@ -1465,6 +1514,8 @@ test("A bot mid-heal does not break off to shoot a moving target", () => {
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) });
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 30;
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
@@ -1515,6 +1566,8 @@ test("A bot above 70 HP pushes an enemy that is 20 HP or more behind, even if no
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 80;
     target.health = 55; // 25 behind, never hit by the bot
+
+    bot.botBrain?.onDealtDamage(target, 100 - 55);
     bot.botBrain!.update(0.05);
 
     const directive = (bot.botBrain as unknown as {
@@ -1530,8 +1583,12 @@ test("A bot above 70 HP pushes an enemy it has just been dealing damage to", () 
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
     bot.health = 80;
     target.health = 70;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 70);
     bot.botBrain!.update(0.05); // sees the enemy at full standing
     target.health = 55; // the bot lands damage
+
+    bot.botBrain?.onDealtDamage(target, 100 - 55);
     game.now += 100;
     bot.botBrain!.update(0.05);
 
@@ -1546,6 +1603,8 @@ test("A bot below 70 HP with a bandage does not push an enemy with less health, 
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
     target.health = 30;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 30);
     bot.health = 51;
     bot.invManager.give("bandage", 5);
     bot.botBrain!.update(0.05);
@@ -1565,6 +1624,8 @@ test("A critical bot in a clear line of fire does not start a desperate heal in 
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(72, 50) }); // open line, 22 units
     target.health = 100;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.health = 30;
     bot.invManager.give("bandage", 5);
     (bot.botBrain as unknown as { criticalUnsafeElapsedS: number }).criticalUnsafeElapsedS = 5;
@@ -1582,6 +1643,7 @@ test("A bot reloading with ammo left cancels the reload when it has a clear line
     const bot = makeBrainedBot(v2.create(50, 50), game);
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) });
     target.health = 100;
+    bot.botBrain?.onDealtDamage(target, 100 - 100);
     bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
     bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 3;
     bot.weaponManager.setCurWeapIndex(WeaponSlot.Primary);
@@ -1589,4 +1651,20 @@ test("A bot reloading with ammo left cancels the reload when it has a clear line
     bot.botBrain!.update(0.05);
 
     expect(bot.actionType).toBe(GameConfig.Action.None);
+});
+
+// The bot must not read the enemy's real health: it only counts the damage its own shots have landed.
+test("The bot's read of an enemy's health comes from its own hits, not the enemy's real health", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    target.health = 10; // nearly dead, but the bot hasn't hit them
+
+    bot.botBrain!.update(0.05);
+    const brain = bot.botBrain as unknown as { knownEnemyHealthFrac(b: Player): number | undefined };
+    expect(brain.knownEnemyHealthFrac(bot)).toBe(1);
+
+    bot.botBrain?.onDealtDamage(target, 70);
+    expect(brain.knownEnemyHealthFrac(bot)).toBeCloseTo(0.3);
 });

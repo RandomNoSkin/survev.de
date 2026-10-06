@@ -3924,6 +3924,8 @@ export class Player extends BaseGameObject {
             if (playerSource.groupId !== this.groupId) {
                 playerSource.damageDealt += finalDamage;
                 playerSource.lastDamageDealtTime = Date.now();
+                // A bot counts its own landed damage the same way a human reads it off their hitmarkers.
+                playerSource.botBrain?.onDealtDamage(this, finalDamage);
 
                 // Impact score: credit a "save" when this shot lands on an enemy who
                 // recently damaged one of playerSource's teammates (peeling them off a
