@@ -565,7 +565,8 @@ export class BotBrain {
         // reviving, ...), since switching would otherwise cancel that action.
         updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !this.sustainedlyLost(bot));
         updateReload(bot, !!this.target);
-        updateFiring(bot, this.tier, this.fire, aimTarget?.pos, dist, aimResult.canFire, dt);
+        // Only ever at a target the bot can see: a predicted offscreen spot is nothing it can hit.
+        updateFiring(bot, this.tier, this.fire, this.target ? aimTarget?.pos : undefined, dist, aimResult.canFire, dt);
 
         if (didThink) {
             logBotTick(bot, {
