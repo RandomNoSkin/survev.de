@@ -638,7 +638,31 @@ function nearLiveExplosive(objs: GameObject[], pos: Vec2, layer: number): boolea
  *  of it, so the bot's actual resting position can land that much closer to the threat
  *  than the ideal point - the hidden guarantee has to hold for that worst case too, not
  *  only for standing exactly on the computed spot. */
-function isBodyHidden(
+/** How far one retreat step looks ahead when checking whether it lands hidden. */
+const HIDDEN_STEP_DIST = 2;
+
+/**
+ * Picks the step direction for a retreat so the bot stays out of the enemy's line where it can.
+ * The planned direction wins if the step lands hidden; otherwise the sideways steps, then the step
+ * back the way it came. If none lands hidden, the planned direction stands - nothing is worse than
+ * a step that stays exposed, so this only ever improves on it.
+ */
+export function hiddenStepDirection(
+    bot: Player,
+    navObstacles: Obstacle[],
+    threatPos: Vec2,
+    layer: number,
+    dir: Vec2,
+): Vec2 {
+    const side = v2.perp(dir);
+    for (const cand of [dir, side, v2.neg(side), v2.neg(dir)]) {
+        const landing = v2.add(bot.pos, v2.mul(cand, HIDDEN_STEP_DIST));
+        if (isBodyHidden(bot, navObstacles, threatPos, landing, layer)) return cand;
+    }
+    return dir;
+}
+
+export function isBodyHidden(
     bot: Player,
     navObstacles: Obstacle[],
     threatPos: Vec2,
@@ -1482,23 +1506,23 @@ function retreatToCover(
         state.distAtSettle = undefined;
         state.settledForS = 0;
         state.coverRecheck = 0;
-        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+        return keepRetreatHidden(bot, state, nav, threatPos, dt, aggression);
     }
     if (!holdAndPeek && settledTooLong && !healing) {
-        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+        return keepRetreatHidden(bot, state, nav, threatPos, dt, aggression);
     }
     if (
         !holdAndPeek
         && (stillExposed || (threatClosingIn && !healing))
         && v2.distance(bot.pos, threatPos) < minCoverDist * RETREAT_SETTLE_MULT
     ) {
-        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+        return keepRetreatHidden(bot, state, nav, threatPos, dt, aggression);
     }
     // Still in a clear line of fire at any range: the close-range rule above doesn't cover a
     // bot healing out in the open 30 units from the enemy, which stood still and got shot.
     // Moving doesn't cancel the heal, so keep retreating while exposed.
     if (!holdAndPeek && stillExposed) {
-        return retreatDirection(bot, state, nav, threatPos, dt, aggression);
+        return keepRetreatHidden(bot, state, nav, threatPos, dt, aggression);
     }
     state.path = [];
     return v2.create(0, 0);
@@ -1790,6 +1814,20 @@ function clampToMap(bot: Player, p: Vec2): Vec2 {
         math.clamp(p.x, BORDER_INSET, width - BORDER_INSET),
         math.clamp(p.y, BORDER_INSET, height - BORDER_INSET),
     );
+}
+
+/** A settled retreat step, nudged so it stays out of the enemy's line where it can (see `hiddenStepDirection`). */
+function keepRetreatHidden(
+    bot: Player,
+    state: BotMovementState,
+    nav: NavGraph | undefined,
+    threatPos: Vec2,
+    dt: number,
+    aggression: number | undefined,
+): Vec2 {
+    const dir = retreatDirection(bot, state, nav, threatPos, dt, aggression);
+    if (!nav) return dir;
+    return hiddenStepDirection(bot, nav.navObstacles, threatPos, util.toGroundLayer(bot.layer), dir);
 }
 
 /** Direction to retreat in, routed through the nav graph instead of a raw straight

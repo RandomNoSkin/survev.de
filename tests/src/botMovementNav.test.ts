@@ -9,6 +9,8 @@ import {
     filterByReachability,
     findCover,
     followPath,
+    hiddenStepDirection,
+    isBodyHidden,
     isDirClear,
     preferNonInteriorGoal,
     RETREAT_COVER_SEARCH_RAD,
@@ -2417,4 +2419,23 @@ test("Reachability looks past the nearest covers the enemy reaches as fast, to a
     expect(narrow[0].pos.x).not.toBe(80);
     const wide = filterByReachability(nav, bot, threat, 0, undefined, candidates, false, 8);
     expect(wide[0].pos.x).toBe(80);
+});
+
+// Defence: a retreat step should keep the bot out of the enemy's line where it can, not walk it
+// back into the open. Here the planned step east leaves a crate's shadow; a sideways step stays in it.
+test("A retreat step out of a crate's shadow is replaced by one that stays hidden", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    game.map.genObstacle("crate_01", v2.create(60, 50), 0, 0, 1);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(62, 53) }); // just outside the shadow
+    const threat = v2.create(30, 50);
+    const obstacles = buildNavGraph(game).navObstacles;
+
+    // The planned step east really does leave the shadow...
+    expect(isBodyHidden(bot, obstacles, threat, v2.add(bot.pos, v2.create(2, 0)), 0)).toBe(false);
+
+    // ...and the chosen one doesn't.
+    const step = hiddenStepDirection(bot, obstacles, threat, 0, v2.create(1, 0));
+    const landing = v2.add(bot.pos, v2.mul(step, 2));
+    expect(isBodyHidden(bot, obstacles, threat, landing, 0)).toBe(true);
 });
