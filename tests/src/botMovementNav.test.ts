@@ -2488,3 +2488,26 @@ test("A fleeing bot keeps its hidden cover point on a re-pick instead of switchi
 
     expect(v2.distance(state.coverPos!, held)).toBeLessThan(0.5);
 });
+
+// Regression from a real match: the bot stood next to a nearly dead barrel it was hiding behind,
+// its straight-line approach to the far side of that barrel ran straight into it, and the stall
+// lasted until the enemy finished it off. The cover obstacle was ignored by steering at 5-6
+// units out, where the straight line really does cross it - only the last couple of units graze.
+test("A bot closing on cover with that cover between it and the far side steers around it, not into it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const center = v2.create(132, 132);
+    const barrel = game.map.genObstacle("barrel_01", v2.add(center, v2.create(0, 2)), 0, 0, 1);
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.copy(center) });
+    const threatPos = v2.sub(center, v2.create(0, 25));
+    const state = new BotMovementState();
+    state.coverObstacle = barrel;
+    state.coverPos = v2.add(barrel.pos, v2.create(0, 3.5));
+    state.coverRecheck = 99;
+
+    updateMovement(bot, state, "flee", threatPos, 25, 0.1, graph);
+
+    expect(bot.touchMoveActive).toBe(true);
+    expect(isDirClear(bot, v2.normalizeSafe(bot.touchMoveDir), 3, undefined)).toBe(true);
+});

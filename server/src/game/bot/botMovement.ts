@@ -107,13 +107,14 @@ const COVER_RECOMPUTE_INTERVAL = 0.4;
 // enough slop, by itself, to walk the bot's exposed edge right back into view.
 const COVER_REACHED_DIST = 0.75;
 
-/** How close the bot has to already be to `coverPos` before `followPath` is allowed to
- *  ignore the cover obstacle itself as a blocker - see `followPath`'s own doc comment on
- *  `ignore`. Well past `COVER_BUFFER` (2.75, how far the point sits off the obstacle's own
- *  edge): close enough that the straight line to it is genuinely just grazing that edge by
- *  design, not a sign the obstacle's bulk is still sitting *between* the bot and a point
- *  on its far side - that longer-range case still needs real routing around it. */
-const COVER_APPROACH_IGNORE_DIST = 6;
+/** How close the bot has to already be to `coverPos` before `followPath` and the steering probe
+ *  are allowed to ignore the cover obstacle itself as a blocker - see `followPath`'s own doc
+ *  comment on `ignore`. Only as close as `COVER_BUFFER` (how far the point sits off the
+ *  obstacle's own edge): inside that, the straight line to it is genuinely just grazing that
+ *  edge by design. Any farther and the obstacle's bulk can still sit *between* the bot and the
+ *  point on its far side - a real match had a bot at 5-6 units ignoring a barrel it had to go
+ *  around, pushing into it until the enemy finished it off. That case needs real routing. */
+const COVER_APPROACH_IGNORE_DIST = 3;
 
 /** Max turn rate (rad/s) for the raw-steering direction while closing the last stretch
  *  to `coverPos` - see `retreatToCover`'s approach branch. A real match capture showed a
@@ -2283,7 +2284,12 @@ export function updateMovement(
     }
     move = v2.normalizeSafe(move);
 
-    if (!isDirClear(bot, move, PROBE_DIST, state.coverObstacle)) {
+    // Same rule as the approach's own `followPath` above: a bot still well short of its cover point
+    // has to steer around the cover obstacle, not straight through it.
+    const approachingCover = !!state.coverPos && !state.settledAtCover
+        && v2.distance(bot.pos, state.coverPos) >= COVER_APPROACH_IGNORE_DIST;
+    const probeIgnore = approachingCover ? undefined : state.coverObstacle;
+    if (!isDirClear(bot, move, PROBE_DIST, probeIgnore)) {
         // Prefer whichever side the bot was already deflecting toward, so it commits
         // to going around an obstacle instead of re-picking a side independently every
         // tick (which, right at an obstacle's edge, can flip left/right each tick and
@@ -2297,12 +2303,12 @@ export function updateMovement(
         for (const angle of angles) {
             const preferred = v2.rotate(move, state.deflectSign * angle);
             const other = v2.rotate(move, -state.deflectSign * angle);
-            if (isDirClear(bot, preferred, PROBE_DIST, state.coverObstacle)) {
+            if (isDirClear(bot, preferred, PROBE_DIST, probeIgnore)) {
                 move = preferred;
                 deflected = true;
                 break;
             }
-            if (isDirClear(bot, other, PROBE_DIST, state.coverObstacle)) {
+            if (isDirClear(bot, other, PROBE_DIST, probeIgnore)) {
                 // Use the other side for *this tick only* - flipping `deflectSign`
                 // itself here was the bug (see above): right at a concave corner,
                 // whichever side reads as clear can toggle from one tick to the next
