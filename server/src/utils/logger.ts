@@ -2,9 +2,27 @@ import { Logger } from "../../../shared/utils/logger.ts";
 import { Config } from "../config.ts";
 import { gameLogger } from "./betterLogger.ts";
 
+/** How long the webhook fetch is allowed to hang before giving up. Discord itself is
+ *  usually sub-second; this only guards against the whole connect taking the undici
+ *  default of 10s per call when the endpoint is unreachable. */
+const WEBHOOK_FETCH_TIMEOUT_MS = 5000;
+
+/** After this many consecutive webhook failures, stop trying for `WEBHOOK_COOLDOWN_MS`
+ *  instead of re-attempting (and re-timing-out) on every single subsequent error log.
+ *  Without this, an outage reaching discord.com (seen in prod: ConnectTimeoutError to
+ *  discord.com:443) turns every server error into another hung 10s fetch, piling up
+ *  concurrently on the resource-constrained prod box for as long as the outage lasts. */
+const WEBHOOK_FAILURE_THRESHOLD = 3;
+const WEBHOOK_COOLDOWN_MS = 5 * 60 * 1000;
+
+let consecutiveWebhookFailures = 0;
+let webhookCircuitOpenUntil = 0;
+
 export async function logErrorToWebhook(from: "server" | "client", ...messages: any[]) {
     const url = from === "server" ? Config.errorLoggingWebhook : Config.clientErrorLoggingWebhook;
     if (!url) return;
+
+    if (Date.now() < webhookCircuitOpenUntil) return;
 
     try {
         const msg = messages
@@ -37,10 +55,21 @@ export async function logErrorToWebhook(from: "server" | "client", ...messages: 
                     },
                 ],
             }),
+            signal: AbortSignal.timeout(WEBHOOK_FETCH_TIMEOUT_MS),
         });
+        consecutiveWebhookFailures = 0;
     } catch (err) {
         // dont use defaultLogger.error here to not log it recursively :)
         console.error("Failed to log error to webhook", err);
+
+        consecutiveWebhookFailures++;
+        if (consecutiveWebhookFailures >= WEBHOOK_FAILURE_THRESHOLD) {
+            webhookCircuitOpenUntil = Date.now() + WEBHOOK_COOLDOWN_MS;
+            consecutiveWebhookFailures = 0;
+            console.error(
+                `Webhook error logging disabled for ${WEBHOOK_COOLDOWN_MS / 1000}s after ${WEBHOOK_FAILURE_THRESHOLD} consecutive failures`,
+            );
+        }
     }
 }
 
