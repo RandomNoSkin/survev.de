@@ -34,7 +34,7 @@ export function getConfig(isProduction: boolean, dir: string) {
         modes: [
             { mapName: "local", teamMode: TeamMode.Solo, enabled: true },
             { mapName: "two_vs_two", teamMode: TeamMode.Duo, enabled: true },
-            { mapName: "comp", teamMode: TeamMode.Squad, enabled: true },
+            { mapName: "scrims", teamMode: TeamMode.Squad, enabled: true },
         ],
         clientTheme: "main",
         passType: "pass_survivr1",

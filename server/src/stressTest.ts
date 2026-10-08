@@ -15,7 +15,7 @@ import { Config } from "./config.ts";
 const config = {
     address: Config.gameServer.apiServerUrl,
     region: Config.gameServer.thisRegion,
-    gameModeIdx: 0,
+    gameModeIdx: 2,
     botCount: 79,
     joinDelay: 100,
 };

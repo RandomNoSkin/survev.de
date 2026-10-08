@@ -39,7 +39,7 @@ function extractWrapperRaster(txt: string): Buffer | null {
  * Loads a sprite as a node-canvas image, working around the old-librsvg `data:` URI bug.
  *
  * SVGs that embed a base64 raster but ALSO carry vector content (typically a `<clip-path>`
- * shaping the raster — e.g. player-base-outfitGalaxy/Diamond/Damascussteel) can't take the
+ * shaping the raster — e.g. player-base-outfitGalaxy/Diamond/DamascusSteel) can't take the
  * pure-wrapper shortcut, and node-canvas' librsvg blanks the raster on the prod box. For those
  * we rasterize with sharp, which bundles its own modern librsvg (independent of the system one),
  * then feed node-canvas the resulting PNG — so clip + transforms are preserved and it renders on
