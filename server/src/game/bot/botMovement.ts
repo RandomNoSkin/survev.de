@@ -69,6 +69,15 @@ const PULL_TARGET_PROGRESS_MIN = 2.5;
  *  `BotMovementState.stuck` (the "give up and fight" signal) actually goes true - see
  *  its own doc comment for why this needs real confidence, not a single bad window. */
 const STUCK_STREAK_FOR_FIGHT = 3;
+/** How long the final move has to have spent reversing almost every tick before counting as
+ *  dithering - see `BotMovementState.ditherElapsedS`. Deliberately a small fraction of
+ *  `STUCK_CHECK_INTERVAL * STUCK_STREAK_FOR_FIGHT` (the slower detector's own ~3s bar): this
+ *  exists specifically to catch the failure *well* before that one would, not to duplicate it. */
+const DITHER_REVERSAL_S = 0.3;
+/** How close to exactly opposite two consecutive move directions have to be to count as a
+ *  reversal for `ditherElapsedS` - matches the real match captures this is for (consecutive
+ *  headings 150-180 degrees apart), comfortably past a merely sharp turn. */
+const DITHER_REVERSAL_DOT = -0.5;
 /** How long a waypoint node stays blacklisted (see `BotMovementState.blacklistedNodes`)
  *  after the bot got stuck failing to make progress toward it - long enough that a
  *  repath genuinely has to route around the dead end instead of just re-discovering the
@@ -366,6 +375,24 @@ export class BotMovementState {
      *  briefly inefficient" into "give up and fight while still low", which is a much
      *  more expensive mistake than one extra second of retreating that wasn't needed. */
     stuck = false;
+    /** Seconds the final chosen move direction has spent reversing almost every tick from the
+     *  previous one - see `DITHER_REVERSAL_S`. A real match had a bot pinned in a one-unit gap
+     *  between a stone and a tree on the way to its cover, its move flipping between two
+     *  near-opposite headings every single tick, for 1.2+ real seconds at 9-11 HP - net zero
+     *  progress, no peeking, no dodging, just standing there taking hits ("er hat einfach
+     *  getankt"). The displacement-based `stuck`/`stuckStreak` above never caught it: the back-
+     *  and-forth canceled out within each 1-second window, under `STUCK_MOVE_THRESHOLD`. This is
+     *  a much faster, independent signal of the exact same failure mode, read by
+     *  `BotBrain.fleeOrFight` the same way `stuck` is - give up retreating and fight back instead,
+     *  long before the slower detector would ever trip. Doesn't touch `stuck`/`stuckStreak`
+     *  themselves or their path-repair side effects (blacklisting, `deflectSign` flips) - this is
+     *  purely a faster trigger for the same "give up and fight" read, not a replacement. */
+    ditherElapsedS = 0;
+    /** True once `ditherElapsedS` passes `DITHER_REVERSAL_S` - read by `BotBrain.fleeOrFight`
+     *  exactly like `stuck` is, just far sooner. */
+    dithering = false;
+    /** The final move direction chosen last tick, for `ditherElapsedS`'s reversal check. */
+    lastMoveDir?: Vec2;
 
     /** The path node currently being string-pulled toward - see `followPath`. Node id,
      *  not an index into `path`, so it survives waypoints being shifted off the front. */
@@ -1086,7 +1113,16 @@ export function findCover(
     const routeAware = searchRad > COVER_SEARCH_RAD;
     const shortlistSize = routeAware ? RETREAT_REACHABILITY_CANDIDATES : REACHABILITY_CANDIDATES;
     const openPool = avoidInterior
-        ? filterByReachability(avoidInterior, bot, threatPos, layer, preferred, openCandidates, noInteriorFallback || routeAware, shortlistSize)
+        ? filterByReachability(
+            avoidInterior,
+            bot,
+            threatPos,
+            layer,
+            preferred,
+            openCandidates,
+            noInteriorFallback || routeAware,
+            shortlistSize,
+        )
         : openCandidates;
     const picked = openPool.length
         ? pickFrom(openPool)
@@ -1592,8 +1628,10 @@ export function isSafeToHeal(
 ): boolean {
     if (sustainedLost) return true;
     // Too far to walk to cover while critical and unseen - heal here, see CRITICAL_COVER_WALK_MAX.
-    if (state.coverPos && critical && !enemyVisible
-        && v2.distance(bot.pos, state.coverPos) > CRITICAL_COVER_WALK_MAX) return true;
+    if (
+        state.coverPos && critical && !enemyVisible
+        && v2.distance(bot.pos, state.coverPos) > CRITICAL_COVER_WALK_MAX
+    ) return true;
     // Within `HEAL_START_COVER_DIST` counts as in the cover - a bot always stops a few units
     // short of the exact point, and demanding the exact spot made it re-pick cover instead.
     if (state.coverPos) return v2.distance(bot.pos, state.coverPos) <= HEAL_START_COVER_DIST;
@@ -1675,8 +1713,8 @@ export function followPath(
         const excluded = avoidInterior
             ? new Set([...state.blacklistedNodes.keys(), ...interiorNodes(graph)])
             : state.blacklistedNodes.size
-                ? new Set(state.blacklistedNodes.keys())
-                : undefined;
+            ? new Set(state.blacklistedNodes.keys())
+            : undefined;
         state.path = startNodes.length && goalNodes.size
             ? findPath(graph, startNodes, goalNodes, goal, layer, MAX_PATH_EXPANSIONS, excluded) ?? []
             : [];
@@ -2332,6 +2370,23 @@ export function updateMovement(
             }
         }
         if (!deflected) move = v2.neg(move); // fully boxed in - back off rather than push into it
+    }
+
+    // See `BotMovementState.ditherElapsedS`'s own doc comment: a much faster, independent read on
+    // the exact same "retreat isn't going anywhere" failure the slower, displacement-based `stuck`
+    // above exists for - only tracked for an actual retreat (flee/heal), not every directive's own,
+    // often deliberately zig-zagging movement (strafing, dodging, shaking).
+    if (directive === "flee" || directive === "heal") {
+        const reversed = !!state.lastMoveDir && v2.dot(move, state.lastMoveDir) < DITHER_REVERSAL_DOT;
+        state.ditherElapsedS = reversed
+            ? state.ditherElapsedS + dt
+            : Math.max(0, state.ditherElapsedS - dt);
+        state.dithering = state.ditherElapsedS > DITHER_REVERSAL_S;
+        state.lastMoveDir = v2.copy(move);
+    } else {
+        state.ditherElapsedS = 0;
+        state.dithering = false;
+        state.lastMoveDir = undefined;
     }
 
     bot.touchMoveActive = true;

@@ -1,6 +1,4 @@
 import { expect, test } from "vitest";
-import type { Obstacle } from "../../server/src/game/objects/obstacle.ts";
-import type { Player } from "../../server/src/game/objects/player.ts";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
@@ -21,6 +19,8 @@ import { findPath } from "../../server/src/game/bot/nav/navAStar.ts";
 import { buildNavGraph } from "../../server/src/game/bot/nav/navBuilder.ts";
 import { buildingContainsPoint, isWalkClear, pointClear } from "../../server/src/game/bot/nav/navGeom.ts";
 import { NavGraph } from "../../server/src/game/bot/nav/navGraph.ts";
+import type { Obstacle } from "../../server/src/game/objects/obstacle.ts";
+import type { Player } from "../../server/src/game/objects/player.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { coldet } from "../../shared/utils/coldet.ts";
 import { collider } from "../../shared/utils/collider.ts";
@@ -2401,7 +2401,8 @@ test("A retreat to heal can find cover further off than the usual search radius"
     const obstacles = buildNavGraph(game).navObstacles;
 
     expect(findCover(bot, obstacles, threat, 0)).toBeUndefined();
-    expect(findCover(bot, obstacles, threat, 0, undefined, undefined, undefined, false, RETREAT_COVER_SEARCH_RAD)).toBeDefined();
+    expect(findCover(bot, obstacles, threat, 0, undefined, undefined, undefined, false, RETREAT_COVER_SEARCH_RAD))
+        .toBeDefined();
 });
 
 // Route awareness, on a hand-built straight-line nav graph so nothing depends on the random test map.
@@ -2545,4 +2546,171 @@ test("A bot fleeing to cover behind a rock walks around the rock and never pushe
 
     expect(overlapped).toBe(false);
     expect(closestToCover).toBeLessThan(2);
+});
+
+// Real geometry from a decoded match (the recorded player saw these walls, see decodeReplay's
+// "obstacle" records): a container open on one side, the bot fleeing in through the gap toward
+// cover on the far side of its west wall. Without the fix it stalled inside and was killed there.
+test("A bot fleeing past a container open on one side never routes into it", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const walls = [
+        game.map.genObstacle("container_wall_top", v2.create(105.28, 185.67), 0, 1, 1),
+        game.map.genObstacle("container_wall_side", v2.create(111.13, 188.03), 0, 1, 1),
+        game.map.genObstacle("container_wall_side", v2.create(111.13, 183.33), 0, 1, 1),
+        game.map.genObstacle("stone_01", v2.create(98.83, 180.05), 0, 0, 1.196),
+        game.map.genObstacle("tree_01", v2.create(111.83, 194.94), 0, 0, 0.805),
+    ];
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(120, 182) });
+    const threatPos = v2.create(120, 158);
+    const state = new BotMovementState();
+    state.coverObstacle = walls[0];
+    state.coverPos = v2.create(106, 189);
+    state.coverRecheck = 99;
+
+    let overlapped = false;
+    let enteredContainer = false;
+    let closestToCover = Infinity;
+    for (let tick = 0; tick < 400; tick++) {
+        updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 0.1, graph);
+        if (bot.touchMoveActive) bot.pos = v2.add(bot.pos, v2.mul(bot.touchMoveDir, 2.5 * 0.1));
+        const body = collider.createCircle(bot.pos, 0.5);
+        if (walls.some((w) => coldet.test(body, w.collider))) overlapped = true;
+        // The container footprint from the same match (its map shape, decoded alongside the walls).
+        if (bot.pos.x > 105.5 && bot.pos.x < 116.5 && bot.pos.y > 183.2 && bot.pos.y < 188.2) enteredContainer = true;
+        closestToCover = Math.min(closestToCover, v2.distance(bot.pos, state.coverPos!));
+    }
+
+    expect(overlapped).toBe(false);
+    expect(enteredContainer).toBe(false);
+    expect(closestToCover).toBeLessThan(2);
+});
+
+// Real geometry from the latest match (decoded "obstacle" records): the bot healed at (99,180) with its
+// cover at (104,186), squeezed between a tree and a stone. Its movement flipped direction every tick
+// (the path alternated between waypoints on either side of the tree) and it stood there until the enemy
+// finished it off.
+test("A bot squeezed between a tree and a stone on its way to cover doesn't dither in place", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const tree = game.map.genObstacle("tree_01", v2.create(102.35, 182.57), 0, 0, 0.954);
+    const stone = game.map.genObstacle("stone_01", v2.create(97.91, 186.49), 0, 0, 1.131);
+    const others = [
+        game.map.genObstacle("stone_01", v2.create(93.72, 171.39), 0, 0, 1.01),
+        game.map.genObstacle("stone_01", v2.create(108.02, 174.53), 0, 0, 1.01),
+        game.map.genObstacle("tree_01", v2.create(111.97, 183.36), 0, 0, 0.991),
+    ];
+    const walls = [tree, stone, ...others];
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(99, 180) });
+    const threatPos = v2.create(110, 160);
+    const state = new BotMovementState();
+    state.coverObstacle = stone;
+    state.coverPos = v2.create(104, 186);
+    state.coverRecheck = 99;
+
+    let overlapped = false;
+    let reversals = 0;
+    let prevMove: Vec2 | undefined;
+    let closestToCover = Infinity;
+    for (let tick = 0; tick < 60; tick++) {
+        updateMovement(
+            bot,
+            state,
+            "heal",
+            threatPos,
+            v2.distance(bot.pos, threatPos),
+            0.1,
+            graph,
+            false,
+            undefined,
+            true,
+        );
+        const move = bot.touchMoveActive ? v2.normalizeSafe(bot.touchMoveDir) : undefined;
+        if (move && prevMove && v2.dot(move, prevMove) < -0.5) reversals++;
+        if (move) prevMove = move;
+        if (move) bot.pos = v2.add(bot.pos, v2.mul(move, 2.5 * 0.1));
+        const body = collider.createCircle(bot.pos, 0.5);
+        if (walls.some((w) => coldet.test(body, w.collider))) overlapped = true;
+        closestToCover = Math.min(closestToCover, v2.distance(bot.pos, state.coverPos!));
+    }
+
+    expect(overlapped).toBe(false);
+    expect(reversals).toBeLessThanOrEqual(3);
+    expect(closestToCover).toBeLessThan(2);
+});
+
+// Real geometry from the newest match (decoded "obstacle" records): the bot stood just outside a container's
+// east wall, 4 units south of the gap its cover sat in. Without a path (path 0) it steered straight at the cover,
+// was refused by the wall every tick, and dithered sideways until the enemy finished it off.
+test("A bot outside a container's wall, cover in its gap, doesn't dither against the wall", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const walls = [
+        game.map.genObstacle("container_wall_top", v2.create(109.58, 193.07), 0, 1, 1),
+        game.map.genObstacle("container_wall_side", v2.create(115.42, 190.72), 0, 1, 1),
+        game.map.genObstacle("container_wall_side", v2.create(115.42, 195.41), 0, 1, 1),
+    ];
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(115, 198) });
+    const threatPos = v2.create(100, 205);
+    const state = new BotMovementState();
+    state.coverObstacle = walls[2];
+    state.coverPos = v2.create(115, 194);
+    state.coverRecheck = 99;
+
+    let overlapped = false;
+    let reversals = 0;
+    let prevMove: Vec2 | undefined;
+    let closestToCover = Infinity;
+    for (let tick = 0; tick < 80; tick++) {
+        updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 0.1, graph);
+        const move = bot.touchMoveActive ? v2.normalizeSafe(bot.touchMoveDir) : undefined;
+        if (move && prevMove && v2.dot(move, prevMove) < -0.5) reversals++;
+        if (move) prevMove = move;
+        if (move) bot.pos = v2.add(bot.pos, v2.mul(move, 2.5 * 0.1));
+        const body = collider.createCircle(bot.pos, 0.5);
+        if (walls.some((w) => coldet.test(body, w.collider))) overlapped = true;
+        closestToCover = Math.min(closestToCover, v2.distance(bot.pos, state.coverPos!));
+    }
+
+    expect(overlapped).toBe(false);
+    expect(reversals).toBeLessThanOrEqual(3);
+    expect(closestToCover).toBeLessThan(2);
+});
+
+// Same real geometry and setup as the test above, which documents that the steering itself still
+// dithers against the container wall (the root cause is still open). This is the fast-reaction
+// mitigation around it: `dithering` should flip true within a fraction of a second of the move
+// actually flipping back and forth, not the 3+ seconds `stuck` needs - fast enough that
+// `BotBrain.fleeOrFight` gives up on the retreat and fights back long before a real enemy finishes
+// the bot off, the way it did in both real matches this dithering bug has now caused a death in.
+test("A bot dithering against the container wall is flagged `dithering` well before `stuck` ever would be", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const walls = [
+        game.map.genObstacle("container_wall_top", v2.create(109.58, 193.07), 0, 1, 1),
+        game.map.genObstacle("container_wall_side", v2.create(115.42, 190.72), 0, 1, 1),
+        game.map.genObstacle("container_wall_side", v2.create(115.42, 195.41), 0, 1, 1),
+    ];
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(115, 198) });
+    const threatPos = v2.create(100, 205);
+    const state = new BotMovementState();
+    state.coverObstacle = walls[2];
+    state.coverPos = v2.create(115, 194);
+    state.coverRecheck = 99;
+
+    let ditheringAtTick = -1;
+    for (let tick = 0; tick < 80 && ditheringAtTick < 0; tick++) {
+        updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 0.1, graph);
+        if (bot.touchMoveActive) bot.pos = v2.add(bot.pos, v2.mul(bot.touchMoveDir, 2.5 * 0.1));
+        if (state.dithering) ditheringAtTick = tick;
+    }
+
+    expect(ditheringAtTick).toBeGreaterThanOrEqual(0); // actually catches the real dithering
+    // `STUCK_CHECK_INTERVAL` is 1s of game time, at 0.1s per tick here - well past this tick count,
+    // `stuck` (the slower detector) genuinely hasn't had a real chance to trip yet.
+    expect(ditheringAtTick).toBeLessThan(10);
 });

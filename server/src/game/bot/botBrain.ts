@@ -658,6 +658,7 @@ export class BotBrain {
                 shootStart: bot.shootStart,
                 shootHold: bot.shootHold,
                 stuck: this.movement.stuck,
+                dithering: this.movement.dithering,
                 // Quickswitch inputs: a switch back to the other gun needs the slowdown window still open and
                 // the current gun to have fired (see `updateWeaponSelection`).
                 slowdown: Math.round(bot.shotSlowdownTimer * 100) / 100,
@@ -979,16 +980,19 @@ export class BotBrain {
         return !this.target && bot.game.now - this.lastKnownEnemyTimeMs > SUSTAINED_LOST_MS;
     }
 
-    /** `flee`, unless last tick's retreat demonstrably wasn't going anywhere
-     *  (`this.movement.stuck` - see its own doc comment on `BotMovementState`), in which
-     *  case fight back instead - "wenn retreat nicht geht, muss er halt wenigstens
+    /** `flee`, unless last tick's retreat demonstrably wasn't going anywhere - either the slower,
+     *  displacement-based `this.movement.stuck`, or the much faster `this.movement.dithering`
+     *  (see its own doc comment: a real match stood pinned between a stone and a tree, flipping
+     *  move direction almost every tick for 1.2+ seconds at 9-11 HP, genuinely taking no action -
+     *  `stuck`'s 3-second bar never caught it, the back-and-forth canceled out within each window).
+     *  Either way: fight back instead - "wenn retreat nicht geht, muss er halt wenigstens
      *  schießen". Running from a cornered/boxed-in spot is worse than useless: it wastes
      *  the reaction time an actual fight would have used, for a retreat that was never
      *  going to create separation anyway. `engageHold`, not `push` - still hurt, so
      *  holding range from cover and shooting back is the right compromise, not charging
      *  in on top of it. */
     private fleeOrFight(): CombatDirective {
-        return this.movement.stuck ? "engageHold" : "flee";
+        return (this.movement.stuck || this.movement.dithering) ? "engageHold" : "flee";
     }
 
     /** Where a bot with nothing combat-related to react to should actually head, instead
