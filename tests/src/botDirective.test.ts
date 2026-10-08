@@ -451,6 +451,31 @@ test("Low health still pushes an enemy who's even lower, instead of retreating t
     expect(bot.touchMoveDir.x).toBeGreaterThan(0.5); // pushing to finish, not retreating
 });
 
+// Real match: the bot pushed at 41 HP (just finished its own heal) off a `knownEnemyFrac`
+// read from a hit landed ~4 real seconds earlier - stale enough that the actual enemy had
+// since healed back up unseen, and won the fight back. "mit 41hp nach nem heal und gegner
+// heal auch nicht pushen sollen" - a bot that's hurt itself can't afford to gamble on a
+// read this old, even though `enemyHealthEstimate` itself hasn't fully decayed back to
+// "unknown" yet (that takes the much longer `ENEMY_HEAL_FORGET_MS`).
+test("A hurt bot does not push on a stale enemy-health read", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 41; // hurt, below FIGHT_FLOOR_FRAC (70%) - the risky case
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 5;
+
+    bot.botBrain?.onDealtDamage(target, 150); // heavy cumulative damage from earlier in a long fight
+    game.now += 4000; // 4s since that hit - long enough to have healed back up unseen
+    bot.botBrain!.update(0.05);
+
+    const directive = (bot.botBrain as unknown as {
+        pickDirective(b: unknown, threat: unknown, dt: number, grenade: unknown): string;
+    }).pickDirective(bot, target.pos, 0.05, undefined);
+    expect(directive).not.toBe("push");
+});
+
 // The mirror case: an enemy who's *also* low but not actually worse off than the bot
 // itself (or not low enough to count as a finishable target) must not be treated as a
 // finish - the bot should not push blind. Since a visible enemy that isn't ahead on health

@@ -155,6 +155,16 @@ const CHIP_HIT_COVER_DIST = 4;
 /** How far ahead on health (as a fraction of max) the bot has to be before it pushes a
  *  visible or recently seen enemy outright, at any health - see `pickDirective`. */
 const PUSH_HEALTH_ADVANTAGE_FRAC = 0.2;
+/** How recently the bot has to have actually landed a hit for `knownEnemyFrac` to be
+ *  trusted enough to push *while the bot is also hurt* (below `FIGHT_FLOOR_FRAC`) - see
+ *  `pickDirective`'s `enemyReadFresh`. `enemyHealthEstimate` only decays back to "unknown"
+ *  over the much longer `ENEMY_HEAL_FORGET_MS`, so a hit from several seconds ago can still
+ *  read as "they're low" long after the enemy could have healed back up unseen. Real match:
+ *  pushed at 41 HP (just finished its own heal) off a read from a hit ~4s old, while the
+ *  actual enemy used exactly that gap to heal back to full and win the fight back - "mit
+ *  41hp nach nem heal und gegner heal auch nicht pushen sollen". A bot at full health can
+ *  afford to gamble on a stale read; one that's already hurt itself can't. */
+const PUSH_WHILE_HURT_FRESH_MS = 2000;
 /** How long a chosen retreat (heal/flee) holds against an immediate drop to holding ground -
  *  see `stickyRetreat`. */
 const RETREAT_HOLD_MS = 500;
@@ -899,13 +909,17 @@ export class BotBrain {
         // An enemy in finishing range is still pressed, even with a heal in hand.
         const healFirst = healthFrac < FIGHT_FLOOR_FRAC && !noHealItem
             && !(knownEnemyFrac !== undefined && knownEnemyFrac <= HEAL_FIRST_FINISH_FRAC);
+        // Only gates the *self-hurt* push cases below (`hurtAndAhead`, the `low` branch) -
+        // see `PUSH_WHILE_HURT_FRESH_MS`'s own doc comment. `pushAdvantage` is unaffected:
+        // a bot at full health can afford to be wrong about a stale read.
+        const enemyReadFresh = bot.game.now - this.enemyLastHitMs < PUSH_WHILE_HURT_FRESH_MS;
         if (!critical && !healFirst && !bothGunsDry && knownEnemyFrac !== undefined) {
             const pushAdvantage = knownEnemyFrac <= healthFrac - PUSH_HEALTH_ADVANTAGE_FRAC;
-            const hurtAndAhead = healthFrac < FIGHT_FLOOR_FRAC
+            const hurtAndAhead = healthFrac < FIGHT_FLOOR_FRAC && enemyReadFresh
                 && knownEnemyFrac < healthFrac - HEALTH_DEFICIT_MARGIN;
             if (pushAdvantage || hurtAndAhead) return "push";
         }
-        if (low && !critical && !healFirst && !bothGunsDry && knownEnemyFrac !== undefined) {
+        if (low && !critical && !healFirst && !bothGunsDry && enemyReadFresh && knownEnemyFrac !== undefined) {
             if (knownEnemyFrac < healthFrac && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC) {
                 return "push";
             }
