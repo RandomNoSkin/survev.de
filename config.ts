@@ -83,7 +83,7 @@ export function getConfig(isProduction: boolean, dir: string) {
         },
         recording: {
             enabled: true,
-            recordBots: false,
+            recordBots: true,
             dir: "recordings",
             maxGameMb: 80,
             maxConcurrentTracks: 40,

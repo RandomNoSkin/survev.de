@@ -77,3 +77,4 @@ server/recordings/*
 logs/
 tests/logs/
 dist-archive/
+server/bot-debug.jsonl
