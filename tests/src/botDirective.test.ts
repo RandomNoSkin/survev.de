@@ -1,8 +1,8 @@
-import type { Player } from "../../server/src/game/objects/player.ts";
 import { expect, test, vi } from "vitest";
 import { Config } from "../../server/src/config.ts";
 import { BotBrain } from "../../server/src/game/bot/botBrain.ts";
 import type { CombatDirective } from "../../server/src/game/bot/botMovement.ts";
+import type { Player } from "../../server/src/game/objects/player.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
@@ -21,7 +21,17 @@ import { createGame } from "./gameTestHelpers.ts";
 
 /** Gives `enemy` a gun in its primary slot, loaded with `ammo`, and `cooldown` seconds
  *  until it can fire again. */
-function armEnemy(enemy: { weaponManager: { weapons: { type?: string; ammo?: number; cooldown: number }[]; setCurWeapIndex(i: number): void } }, type: string, ammo: number, cooldown: number): void {
+function armEnemy(
+    enemy: {
+        weaponManager: {
+            weapons: { type?: string; ammo?: number; cooldown: number }[];
+            setCurWeapIndex(i: number): void;
+        };
+    },
+    type: string,
+    ammo: number,
+    cooldown: number,
+): void {
     const primary = enemy.weaponManager.weapons[WeaponSlot.Primary];
     primary.type = type;
     primary.ammo = ammo;
@@ -350,6 +360,71 @@ test("Critical health past DESPERATE_HEAL_S heals despite a visible, close enemy
 
     // Past it: gambles on the bandage right here.
     for (let i = 0; i < 15; i++) bot.botBrain!.update(0.05); // +0.75s, past 1.2s total
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// Regression, from a decoded real match: a bot stayed `low` (never quite `critical`) for 9 real
+// seconds against a pursuer that kept just enough of a recently-clear line to block every heal
+// attempt - it just fled the whole time, taking chip damage, and died still holding an unused
+// bandage. `DESPERATE_HEAL_S`'s own escape valve only covers `critical`; `low` needs the same
+// idea at its own, longer threshold (more HP buffer to spend waiting first).
+test("Low health past DESPERATE_HEAL_LOW_S heals despite a visible, close enemy", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    game.playerBarn.addTestPlayer({ pos: v2.create(60, 50) }); // close - never lets up
+    bot.health = 45; // low for expert (< 56.25%), but not critical (< 37.5%)
+    bot.invManager.give("bandage", 5);
+
+    // Under the desperate threshold: still refuses, fleeing instead.
+    for (let i = 0; i < 40; i++) bot.botBrain!.update(0.05); // 2.0s, under DESPERATE_HEAL_LOW_S
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+
+    // Past it: gambles on the bandage right here, same as the critical case.
+    for (let i = 0; i < 20; i++) bot.botBrain!.update(0.05); // +1.0s, past 2.5s total
+    expect(bot.actionType).toBe(GameConfig.Action.UseItem);
+});
+
+// Real match: a genuine ~2.2s break in sight produced only a single 70ms tick of actually healing
+// before the old 1200ms-sticky "recently had a clear line" reasserted itself and sent the bot
+// straight back to fleeing - `RECENTLY_VISIBLE_MS` was tuned for a different job (re-peeking
+// sooner), not this. A dedicated, shorter `CLEAR_LINE_MEMORY_MS` lets a heal start well inside a
+// real break, not just right at the very end of it.
+test("A clear line only blocks starting a heal for CLEAR_LINE_MEMORY_MS after it actually broke, not the longer RECENTLY_VISIBLE_MS", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true; // deterministic: no stray obstacle in the line
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(70, 50) }); // 20 units - long range
+    bot.health = 20; // <= shouldHeal's own 25% bar, isolating the clear-line memory from any other gate
+    bot.invManager.give("bandage", 5);
+
+    // One tick with a genuinely clear line, to set the "last had a clear line" timestamp.
+    bot.botBrain!.update(0.05);
+    expect(bot.actionType).toBe(GameConfig.Action.None); // still blocked - the line is clear right now
+
+    // The line breaks for real (a crate goes up between them, at the midpoint) - visible, but no
+    // clear shot any more. Pinned orientation/scale: `genObstacle` picks randomly when omitted.
+    game.map.genObstacle("crate_01", v2.create(60, 50), 0, 0, 1);
+
+    // `game.now` (the clock `lastClearLineMs`/`enemySightBlocksHeal` actually read) only moves when
+    // advanced explicitly here - a test harness driving the brain via `update(dt)` directly doesn't
+    // walk real wall-clock time forward on its own (see `primeGameClock`'s own doc comment).
+
+    // Well under 500ms since the break: still the old, correct behaviour - blocked.
+    for (let i = 0; i < 5; i++) {
+        game.now += 50;
+        bot.botBrain!.update(0.05); // 0.25s since the break
+    }
+    expect(bot.actionType).toBe(GameConfig.Action.None);
+
+    // Past CLEAR_LINE_MEMORY_MS (500ms) but nowhere near RECENTLY_VISIBLE_MS (1200ms) or even
+    // DESPERATE_HEAL_S (1.2s, so the critical-gamble escape valve isn't what's firing either):
+    // starts on its own, the line having genuinely been forgotten.
+    for (let i = 0; i < 9; i++) {
+        game.now += 50;
+        bot.botBrain!.update(0.05); // +0.45s, 0.7s total since the break
+    }
     expect(bot.actionType).toBe(GameConfig.Action.UseItem);
 });
 
@@ -1516,7 +1591,10 @@ test("A small hit does not abort a heal when cover is a step away", () => {
     const target = game.playerBarn.addTestPlayer({ pos: v2.create(80, 50) });
     armEnemy(target, "spas12", 8, 0);
     bot.health = 27;
-    (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement.coverPos = v2.create(52, 50);
+    (bot.botBrain as unknown as { movement: { coverPos?: Vec2; coverRecheck: number } }).movement.coverPos = v2.create(
+        52,
+        50,
+    );
     (bot.botBrain as unknown as { movement: { coverRecheck: number } }).movement.coverRecheck = 99;
 
     bot.botBrain!.update(0.05);

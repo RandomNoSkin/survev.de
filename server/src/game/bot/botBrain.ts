@@ -106,6 +106,19 @@ const LOW_HEALTH_FRAC_MULT = 0.75;
  *  one-tick blip, short enough to actually get a real shot at completing before a fast
  *  fight resolves either way. */
 const DESPERATE_HEAL_S = 1.2;
+/** How long not-yet-critical ("low") can go unable to safely heal before gambling on a bandage
+ *  right here anyway - the same idea as `DESPERATE_HEAL_S`, just for the less urgent tier, so it
+ *  waits longer first (more HP buffer to spend waiting). Without this, a bot that's `low` but
+ *  never reaches `critical` can flee indefinitely against a pursuer who keeps *just enough* of a
+ *  recently-clear line to block every heal attempt - a real match had it flee for 9 real seconds
+ *  straight, taking chip damage the whole time, and die still holding an unused bandage. */
+const DESPERATE_HEAL_LOW_S = 2.5;
+/** How long a clear line to the bot is still held against it for *starting* a heal, after the
+ *  line itself actually broke - see `enemySightBlocksHeal`. Its own constant, not
+ *  `RECENTLY_VISIBLE_MS` (tuned for a different job, re-peeking sooner): a real match showed a
+ *  ~2.2s genuine break in sight produce only a single 70ms tick of actually healing before the
+ *  still-sticky old line reasserted itself and sent the bot straight back to fleeing. */
+const CLEAR_LINE_MEMORY_MS = 500;
 /** How hurt the *target* has to be, as a fraction of max health, before `push` is
  *  willing to charge across open ground for it - see `pickDirective`. Pushing into a
  *  still-healthy enemy in the open is exactly the "dumb push" complaint: landing a
@@ -315,6 +328,8 @@ export class BotBrain {
      *  test harness that calls `update(dt)` directly. See `DESPERATE_HEAL_S`/
      *  `pickDirective`. */
     private criticalUnsafeElapsedS = 0;
+    /** Same tracking, one tier down - see `DESPERATE_HEAL_LOW_S`. */
+    private lowUnsafeElapsedS = 0;
     /** Set by `pickDirective` for the same tick it returns a desperate "heal" - read
      *  back in `update()`'s own `isSafeToHeal` gate, which would otherwise still block
      *  the actual bandage on the exact distance/cover requirement this whole escape
@@ -810,6 +825,15 @@ export class BotBrain {
         } else {
             this.criticalUnsafeElapsedS = 0;
         }
+        // Same idea, one tier down: `low` (not yet `critical`) stuck unable to safely heal for a
+        // while - see `DESPERATE_HEAL_LOW_S`. Without this a bot that never quite reaches `critical`
+        // (chip damage, a pursuer who never lands the one big hit) can flee indefinitely against an
+        // opponent that keeps just enough of a recently-clear line to block every heal attempt.
+        if (low && !critical && !noHealItem && !canHealNow && this.healAbortCooldown <= 0) {
+            this.lowUnsafeElapsedS += dt;
+        } else {
+            this.lowUnsafeElapsedS = 0;
+        }
 
         // Deliberately *not* also gated on `this.healAbortCooldown > 0` here, even though
         // an abort is what sets it - a real match loss showed the bot take a near-fatal
@@ -843,8 +867,12 @@ export class BotBrain {
         // that won't let up, not for healing in the open under long-range fire.
         const farUnderLineOfFire = this.enemySightBlocksHeal(bot)
             && (!this.target || v2.distance(bot.pos, this.target.pos) > CLOSE_FIGHT_DIST);
-        this.desperateHeal = critical && this.criticalUnsafeElapsedS > DESPERATE_HEAL_S
-            && !farUnderLineOfFire;
+        const criticalDesperate = critical && this.criticalUnsafeElapsedS > DESPERATE_HEAL_S;
+        // No earlier bail guarantees `noHealItem`/`grenadeThreat` are already false here the way the
+        // `critical` early-return above does - check them explicitly for the `low` gamble too.
+        const lowDesperate = low && !critical && !noHealItem && !grenadeThreat
+            && this.lowUnsafeElapsedS > DESPERATE_HEAL_LOW_S;
+        this.desperateHeal = (criticalDesperate || lowDesperate) && !farUnderLineOfFire;
         if (this.desperateHeal) return "heal";
 
         // Even hurt myself (but not `critical` - survival above still takes priority
@@ -1077,7 +1105,7 @@ export class BotBrain {
     }
 
     private enemySightBlocksHeal(bot: Player): boolean {
-        return bot.game.now - this.lastClearLineMs < RECENTLY_VISIBLE_MS;
+        return bot.game.now - this.lastClearLineMs < CLEAR_LINE_MEMORY_MS;
     }
 
     /** Keeps a retreat (heal/flee) going for RETREAT_HOLD_MS after it was last chosen,
