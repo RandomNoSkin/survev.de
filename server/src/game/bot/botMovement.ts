@@ -1371,6 +1371,22 @@ function retreatToCover(
             // if this recompute never happened, rather than treating one blip the same
             // as a genuine loss.
             state.coverMissStreak++;
+        } else if (
+            // Past the grace period with nothing fresh found: before dropping cover entirely, check
+            // whether the obstacle already held is still genuinely hiding the bot, `minCoverDist`
+            // aside - a real match had this exact spot dropped (not even switched to something else,
+            // just abandoned) purely because an actively chasing threat had closed within
+            // `minCoverDist` of it, with the exact same obstacle still just as able to hide the bot.
+            // 24 cover-target changes in one match, settled at cover only 29.5% of the time it had
+            // one, 7 of 8 big hits landed while still "en route" to a target that kept sliding away
+            // before arrival. A threat the bot has genuinely lost its hiding from either way still
+            // loses the cover here (that fails `isBodyHidden` too, same as before) - only raw
+            // proximity to an otherwise still-hidden spot no longer does.
+            !found && state.coverObstacle && !state.coverObstacle.dead && state.coverObstacle.collidable
+            && !!state.coverPos
+            && isBodyHidden(bot, nav.navObstacles, threatPos, state.coverPos, util.toGroundLayer(bot.layer))
+        ) {
+            state.coverMissStreak = 0; // still genuinely hidden - the miss was purely about distance
         } else {
             state.coverMissStreak = 0;
             // Only treat this as a genuinely new spot - not just the periodic recompute

@@ -881,13 +881,19 @@ test("Fleeing tolerates a single findCover miss on still-alive cover instead of 
     expect(state.settledAtCover).toBe(true);
     expect(state.coverPos).toEqual(settledCover);
 
-    // A second miss in a row, past the grace period, is a genuine loss - the bot un-
-    // settles and looks elsewhere rather than holding a spot that's stopped working.
+    // A second miss in a row, past the grace period - the spot is still just as genuinely hidden
+    // as it ever was, `minCoverDist` aside, so it's kept rather than dropped (reversed by a later
+    // real match capture: a *sustained* close chase, not a brief flicker, kept exhausting this exact
+    // grace period over and over, dropping an otherwise still-hidden cover point entirely every
+    // couple of recomputes - 24 cover-target changes in one real match, settled only 29.5% of the
+    // time it had a target at all. See `retreatToCover`'s own doc comment on the fallback this is
+    // testing).
     state.coverRecheck = 0;
     updateMovement(bot, state, "flee", threatNear, v2.distance(pos, threatNear), 0.1, graph);
     state.coverRecheck = 0;
     updateMovement(bot, state, "flee", threatNear, v2.distance(pos, threatNear), 0.1, graph);
-    expect(state.settledAtCover).toBe(false);
+    expect(state.settledAtCover).toBe(true);
+    expect(state.coverPos).toEqual(settledCover);
 });
 
 // "der Bot rennt, beginnt zu healen, und retreated weiter bis zu einer sicheren
@@ -2713,4 +2719,77 @@ test("A bot dithering against the container wall is flagged `dithering` well bef
     // `STUCK_CHECK_INTERVAL` is 1s of game time, at 0.1s per tick here - well past this tick count,
     // `stuck` (the slower detector) genuinely hasn't had a real chance to trip yet.
     expect(ditheringAtTick).toBeLessThan(10);
+});
+
+// Real geometry from a third real match (decoded "obstacle" records): the bot fled toward cover
+// squeezed between a stone and a tree flanking the direct line to it. Its move flipped between two
+// near-opposite headings every tick for 1.2+ real seconds at 9-11 HP, pinned a unit either side of
+// (87,37), until the enemy finished it off - "er bewegt sich nicht ... er hat einfach getankt".
+test("A bot fleeing to cover squeezed between a stone and a tree doesn't dither in the gap", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const stone = game.map.genObstacle("stone_01", v2.create(87.74, 41.2), 0, 0, 1.159);
+    const tree = game.map.genObstacle("tree_01", v2.create(91.14, 38.45), 0, 0, 0.879);
+    const graph = buildNavGraph(game);
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(88, 37) });
+    const threatPos = v2.create(60, 30);
+    const state = new BotMovementState();
+    state.coverObstacle = stone;
+    state.coverPos = v2.create(92, 42);
+    state.coverRecheck = 99;
+
+    let overlapped = false;
+    let reversals = 0;
+    let prevMove: Vec2 | undefined;
+    let closestToCover = Infinity;
+    for (let tick = 0; tick < 80; tick++) {
+        updateMovement(bot, state, "flee", threatPos, v2.distance(bot.pos, threatPos), 0.1, graph);
+        const move = bot.touchMoveActive ? v2.normalizeSafe(bot.touchMoveDir) : undefined;
+        if (move && prevMove && v2.dot(move, prevMove) < -0.5) reversals++;
+        if (move) prevMove = move;
+        if (move) bot.pos = v2.add(bot.pos, v2.mul(move, 2.5 * 0.1));
+        const body = collider.createCircle(bot.pos, 0.5);
+        if ([stone, tree].some((o) => coldet.test(body, o.collider))) overlapped = true;
+        closestToCover = Math.min(closestToCover, v2.distance(bot.pos, state.coverPos!));
+    }
+
+    expect(overlapped).toBe(false);
+    expect(reversals).toBeLessThanOrEqual(3);
+    expect(closestToCover).toBeLessThan(2);
+});
+
+// Real match: against an actively chasing enemy, the bot's held cover point was dropped entirely
+// (not even switched to something else, just abandoned - `COVER_MISS_GRACE` is 1, so two consecutive
+// recomputes with the threat too close is all it takes) purely because the chaser's own position had
+// closed within `minCoverDist` of it, with the exact same obstacle still just as able to hide the bot.
+// 24 cover-target changes in one match, settled at cover only 29.5% of the time it had one, and 7 of 8
+// big hits landed while still "en route" to a target that kept sliding away before arrival.
+// `heldStillHidden`'s own doc comment says "only a cover the threat can now see is re-picked" - but the
+// code also re-picked on raw distance alone, contradicting that. A still-hidden point shouldn't be
+// thrown away just because the chaser got closer.
+test("A fleeing bot keeps its hidden cover point even once the chasing threat has closed within minCoverDist", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    for (const o of game.map.obstacles) o.dead = true;
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(50, 50) });
+    game.map.genObstacle("crate_01", v2.create(62, 50), 0, 0, 1); // cover, between the bot and the chaser's path
+    const nav = buildNavGraph(game);
+    const state = new BotMovementState();
+
+    // Far away at first - well past SAFE_HEAL_DIST (16) from where the cover point will land.
+    updateMovement(bot, state, "flee", v2.create(0, 50), 50, 0.05, nav, true, undefined, true);
+    const heldObstacle = state.coverObstacle;
+    const heldPos = v2.copy(state.coverPos!);
+    expect(heldObstacle).toBeDefined();
+
+    // The chaser closes in, tick by tick, staying on the same (west) side of the crate the whole
+    // time - the cover point stays genuinely hidden from it throughout, well past the two
+    // consecutive recomputes `COVER_MISS_GRACE` tolerates before giving up on it.
+    for (const threatX of [30, 40, 48, 55, 56, 57]) {
+        state.coverRecheck = 0; // force the recompute this same tick would otherwise wait out
+        const threat = v2.create(threatX, 50);
+        updateMovement(bot, state, "flee", threat, v2.distance(bot.pos, threat), 0.05, nav, true, undefined, true);
+    }
+
+    expect(state.coverObstacle).toBe(heldObstacle);
+    expect(v2.distance(state.coverPos!, heldPos)).toBeLessThan(0.5);
 });
