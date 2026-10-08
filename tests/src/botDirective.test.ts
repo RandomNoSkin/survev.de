@@ -1189,6 +1189,32 @@ test("A chosen retreat holds against an immediate drop to holding ground while s
     expect(brain.stickyRetreat("engageHold", bot)).toBe("engageHold");
 });
 
+// Regression from a real match: pinned fleeing in a one-unit gap against a stone, the bot's
+// move direction flipped every tick - `fleeOrFight`'s own escape valve correctly noticed
+// (`dithering`) and tried to return `engageHold`, but every *other* tick in between still
+// read `dithering` false (it rides a leaky integrator right around its own threshold) and
+// so kept raw-returning "flee" - which refreshed the hold window above just enough to keep
+// smothering the escape valve's `engageHold` right back into "flee" every time it got
+// through. The bot stood there taking damage, flee-dithering uselessly, for 2+ real seconds
+// before `stuck` (the much slower detector) finally forced a break. The hold exists for
+// sight-flicker between heal/flee/engageHold - it must never apply to the one case where
+// retreating has already been shown, this very tick, to not be working at all.
+test("The dithering/stuck escape valve is never smothered by the retreat hold", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    bot.health = 40;
+    const brain = bot.botBrain as unknown as {
+        stickyRetreat: (d: CombatDirective, b: typeof bot) => CombatDirective;
+        movement: { dithering: boolean; stuck: boolean };
+    };
+
+    expect(brain.stickyRetreat("flee", bot)).toBe("flee");
+    game.now += 100; // still well inside RETREAT_HOLD_MS - the hold would normally still apply
+    brain.movement.dithering = true;
+    expect(brain.stickyRetreat("engageHold", bot)).toBe("engageHold");
+});
+
 // Regression from a real match: the bot started heals 1-2 seconds after a hit, got hit again
 // mid-bandage, and never finished one. A non-critical bot waits out a quiet stretch first;
 // the enemy can't see it here, so the only thing holding the heal back is the recent hit.

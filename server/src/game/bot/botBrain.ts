@@ -1124,6 +1124,16 @@ export class BotBrain {
             this.lastRetreatMs = bot.game.now;
             return directive;
         }
+        // `fleeOrFight`'s own escape valve, already in `directive` as `engageHold` by the time
+        // this runs - a retreat that's demonstrably going nowhere *this very tick* must never get
+        // smothered back into "keep retreating" below. A real match had the bot pinned fleeing in
+        // a one-unit gap, dithering every tick - the escape valve kept firing, but `dithering`
+        // itself flickers false in between (a leaky integrator right around its own threshold),
+        // and every one of those false ticks raw-returned "flee" and refreshed the hold window
+        // just enough to swallow the next `engageHold` right back into "flee" - 2+ real seconds
+        // flee-dithering against a stone, taking full damage, before the much slower `stuck`
+        // finally forced a break.
+        if (this.movement.stuck || this.movement.dithering) return directive;
         const recent = bot.game.now - this.lastRetreatMs < RETREAT_HOLD_MS;
         const stillHurt = bot.health / GameConfig.player.health < this.tier.healThreshold;
         if (directive === "engageHold" && this.lastRetreat && recent && stillHurt) {
