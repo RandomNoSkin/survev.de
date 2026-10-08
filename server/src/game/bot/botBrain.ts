@@ -20,7 +20,6 @@ import {
 } from "./botCombat.ts";
 import { logBotTick } from "./botDebugLog.ts";
 import { BOT_TIERS, type BotDifficulty, type BotTierDef } from "./botDefs.ts";
-import { pickStance, pickStanceFacing } from "./botStance.ts";
 import {
     BotMovementState,
     type CombatDirective,
@@ -35,8 +34,10 @@ import {
     findMapRevealedEnemy,
     findVisibleTarget,
     hasBodyLineOfSight,
+    hasLineOfSight,
     muzzlePos,
 } from "./botPerception.ts";
+import { pickStance, pickStanceFacing } from "./botStance.ts";
 
 export type BotState = "idle" | "engage";
 
@@ -429,8 +430,10 @@ export class BotBrain {
         // bot back from firing, and shooting cancels it anyway - so cancel it and take the shot.
         const reloadingWithAmmo = bot.actionType === GameConfig.Action.Reload
             || bot.actionType === GameConfig.Action.ReloadAlt;
-        if (reloadingWithAmmo && this.target && this.enemySightBlocksHeal(bot)
-            && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0) {
+        if (
+            reloadingWithAmmo && this.target && this.enemySightBlocksHeal(bot)
+            && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0
+        ) {
             bot.cancelAction();
         }
 
@@ -478,7 +481,9 @@ export class BotBrain {
             const chipWithCoverNear = this.hitLossAtLastHit < CHIP_HIT_HEALTH_LOSS
                 && !!this.movement.coverPos
                 && v2.distance(bot.pos, this.movement.coverPos) <= CHIP_HIT_COVER_DIST;
-            if ((justHit && enemyRefireReady && !chipWithCoverNear) || grenadeThreat || exposedUnarmed || openShotReady) {
+            if (
+                (justHit && enemyRefireReady && !chipWithCoverNear) || grenadeThreat || exposedUnarmed || openShotReady
+            ) {
                 bot.cancelAction();
                 this.healAbortCooldown = HEAL_ABORT_COOLDOWN_S;
             }
@@ -615,7 +620,13 @@ export class BotBrain {
         // reviving, ...), since switching would otherwise cancel that action.
 
         updateWeaponSelection(bot, this.tier, this.fire, dist, isFleeing, !this.sustainedlyLost(bot));
-        updateReload(bot, !!this.target);
+        // A ready shot right now, not just a visible enemy - "freie Schussbahn", the same centre-to-centre
+        // line `updateFiring` itself requires to actually pull the trigger. Merely being seen doesn't hold
+        // off a reload any more (see `updateReload`'s own doc comment).
+        const clearShotReady = aimResult.canFire && !!this.target
+            && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0
+            && hasLineOfSight(bot.game, muzzlePos(bot), this.target.pos, bot.layer);
+        updateReload(bot, clearShotReady);
         // Only ever at a target the bot can see: a predicted offscreen spot is nothing it can hit.
         updateFiring(bot, this.tier, this.fire, this.target ? aimTarget?.pos : undefined, dist, aimResult.canFire, dt);
 
@@ -780,7 +791,15 @@ export class BotBrain {
         // heal for one and restarting it on the same spot just gets the bot caught by the blast.
         const canHealNow = !noHealItem && !grenadeThreat
             && this.healQuietEnough(bot)
-            && shouldHeal(bot, this.tier, this.enemySightBlocksHeal(bot), positionSafe, false, enemyHealthFrac, this.enemyCloseInLine(bot));
+            && shouldHeal(
+                bot,
+                this.tier,
+                this.enemySightBlocksHeal(bot),
+                positionSafe,
+                false,
+                enemyHealthFrac,
+                this.enemyCloseInLine(bot),
+            );
 
         // See `DESPERATE_HEAL_S`: tracks how long `critical` has gone on with an item
         // on hand that `shouldHeal` won't yet allow - an equally fast pursuer can hold
@@ -871,7 +890,8 @@ export class BotBrain {
             && this.enemySightBlocksHeal(bot)
             && (bot.weaponManager.weapons[bot.weaponManager.curWeapIdx]?.ammo ?? 0) > 0;
         const holdInsteadOfFlee = !!this.target && !critical
-            && (closeShotFight || !(knownEnemyFrac !== undefined && knownEnemyFrac - healthFrac > HEALTH_DEFICIT_MARGIN));
+            && (closeShotFight
+                || !(knownEnemyFrac !== undefined && knownEnemyFrac - healthFrac > HEALTH_DEFICIT_MARGIN));
         if (low && noHealItem) return holdInsteadOfFlee ? "engageHold" : this.fleeOrFight();
         // Has a bandage but can't safely use it yet (almost always: the enemy can
         // still see it) - disengage to break line of sight rather than fight on hurt
@@ -1116,8 +1136,10 @@ export class BotBrain {
 
     private think(): void {
         this.target = findVisibleTarget(this.player);
-        if (this.target && (hasBodyLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)
-            || hasBodyLineOfSight(this.player.game, muzzlePos(this.target), this.player.pos, this.player.layer))) {
+        if (
+            this.target && (hasBodyLineOfSight(this.player.game, this.player.pos, this.target.pos, this.player.layer)
+                || hasBodyLineOfSight(this.player.game, muzzlePos(this.target), this.player.pos, this.player.layer))
+        ) {
             this.lastClearLineMs = this.player.game.now;
         }
         this.state = this.target ? "engage" : "idle";

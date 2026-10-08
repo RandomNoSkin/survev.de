@@ -266,19 +266,25 @@ export function updateWeaponSelection(
         const curDef = gunDefOf(wm.weapons[cur].type);
         const burstInFlight = curDef?.fireMode === "auto" || curDef?.fireMode === "burst";
         if (!burstInFlight) {
-            const alt = slots.find((i) => i !== cur && hasAmmo(bot, i));
+            // Prefer a loaded second gun (something to actually shoot with), but an empty one still
+            // sheds the slowdown just by switching to it (`setCurWeapIndex` cancels it unconditionally)
+            // and its own reload starts automatically - "auch wenn die andere Waffe leer ist muss er
+            // switchen". A real match stood there slowed down with a loaded alternative sitting unused
+            // in the other slot because this used to require ammo in it.
+            const alt = slots.find((i) => i !== cur && hasAmmo(bot, i)) ?? slots.find((i) => i !== cur);
             if (alt !== undefined) {
                 wm.setCurWeapIndex(alt);
             } else if (wm.weapons[WeaponSlot.Melee].type && !recentContact) {
-                // No usable second gun - park on melee just long enough to shed the
+                // No second gun slot at all - park on melee just long enough to shed the
                 // slowdown, but only when nothing is watching. With an enemy in contact the
                 // bot would be standing on fists at range, a free kill (a real match had it
                 // do exactly that at 36-42 units). Melee doesn't track "ammo", so this
                 // bypasses `switchTo`'s ammo check on purpose.
                 wm.setCurWeapIndex(WeaponSlot.Melee);
             }
-            // Either way, this was purely to dodge the slowdown, not a commitment to
-            // actually fight with whatever we landed on - free to reconsider next tick.
+            // Either way (loaded, empty, or melee), this was purely to dodge the slowdown, not a
+            // commitment to actually fight with whatever we landed on - free to switch away again
+            // next tick without having fired it first, same as melee-parking already was.
             fire.firedSinceSwitch = true;
             return;
         }
@@ -294,6 +300,15 @@ export function updateWeaponSelection(
 /** Same effect as a human pressing the reload key: just requests one, the weapon
  *  manager owns the actual timing/animation.
  *
+ *  Reloads every second it possibly can - "der bot darf in jeder sekunde nachladen in der
+ *  er kann". The only reason not to is a ready shot right now (`clearShotReady`): shooting
+ *  beats reloading, and shooting cancels a reload anyway, so there's nothing to gain from
+ *  topping off instead of firing back mid-exchange. Nothing else holds it off any more - a
+ *  real match had the bot stand there unarmed for 14+ seconds rather than reload while merely
+ *  seen, which is strictly worse than reloading in view. Healing cancels an in-progress
+ *  reload separately (see `updateHeal`) - "nachladen nur für freie Schussbahn oder Heilen
+ *  canceln".
+ *
  *  Single-loader guns (shell-by-shell reload - `maxReload < maxClip`, a pump/bolt gun's
  *  tube or chamber, as opposed to swapping a whole magazine) top off whenever it's safe
  *  to, not just once fully dry - "soll single reload guns wie spas und mosin immer
@@ -302,28 +317,20 @@ export function updateWeaponSelection(
  *  to run completely dry. A magazine gun still only reloads once empty: swapping a mag
  *  that's merely down a few rounds burns the *entire* magazine's worth of downtime for
  *  no reason a single-loader (down one shell costs one shell's worth of downtime) never
- *  has. Gated on no currently visible target so this never chooses to top off instead
- *  of firing back mid-exchange - there's nothing to gain from one extra shell while
- *  already able to shoot. */
-export function updateReload(bot: Player, hasVisibleTarget: boolean): void {
+ *  has. */
+export function updateReload(bot: Player, clearShotReady: boolean): void {
     const wm = bot.weaponManager;
     const cur = wm.curWeapIdx;
     if (cur !== WeaponSlot.Primary && cur !== WeaponSlot.Secondary) return;
     const weapon = wm.weapons[cur];
     if (!weapon.type || wm.scheduledReload) return;
     if (weapon.ammo <= 0) {
-        // Not in view of the enemy: a reload there holds the bot out in the open with nothing to
-        // shoot back with. The reload directive retreats to cover for it instead. But if the *other*
-        // slot is empty too, there's no alternative to switch to either way - a real match ran both
-        // guns dry while the enemy kept a clear line the whole fight, and under the old rule the bot
-        // never reloaded at all, just fled/healed unarmed until it died. Reloading blind beats staying
-        // unarmed on purpose when staying armed was never actually on the table.
-        const other = cur === WeaponSlot.Primary ? WeaponSlot.Secondary : WeaponSlot.Primary;
-        const otherEmpty = !wm.weapons[other].type || wm.weapons[other].ammo <= 0;
-        if (!hasVisibleTarget || otherEmpty) wm.scheduledReload = true;
+        // Dry, and `updateWeaponSelection` already moved to a loaded alternative above if one
+        // existed - so there is no shot to take with this gun regardless of `clearShotReady`.
+        wm.scheduledReload = true;
         return;
     }
-    if (hasVisibleTarget) return;
+    if (clearShotReady) return;
     const def = GameObjectDefs.typeToDefSafe(weapon.type) as GunDef;
     const stats = wm.getAmmoStats(def);
     if (stats.maxReload < stats.maxClip && weapon.ammo < stats.maxClip) {

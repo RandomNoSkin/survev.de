@@ -14,7 +14,13 @@ import {
     updateWeaponSelection,
 } from "../../server/src/game/bot/botCombat.ts";
 import { BOT_TIERS } from "../../server/src/game/bot/botDefs.ts";
-import { clearAimPoint, findVisibleTarget, hasBodyLineOfSight, hasLineOfSight, muzzlePos } from "../../server/src/game/bot/botPerception.ts";
+import {
+    clearAimPoint,
+    findVisibleTarget,
+    hasBodyLineOfSight,
+    hasLineOfSight,
+    muzzlePos,
+} from "../../server/src/game/bot/botPerception.ts";
 import { GameConfig, TeamMode, WeaponSlot } from "../../shared/gameConfig.ts";
 import * as net from "../../shared/net/net.ts";
 import { v2, type Vec2 } from "../../shared/utils/v2.ts";
@@ -1095,37 +1101,21 @@ test("An enemy's muzzle can have a line to the bot when its centre doesn't", () 
     expect(found).toBe(true);
 });
 
-// An empty gun is not reloaded in view of the enemy *while a loaded alternative exists*: the reload
-// would hold the bot out in the open with nothing to shoot back with when it could just switch guns
-// instead. It reloads once out of sight (and retreats to cover for it).
-test("An empty gun is not reloaded while an enemy is in view, with a loaded gun to fall back on", () => {
+// A gun that's run dry reloads immediately, visible enemy or ready shot or not - there is nothing to
+// shoot with it either way. Switching off an empty gun onto a loaded alternative, if one exists, is
+// `updateWeaponSelection`'s job and happens before this ever runs - by the time `updateReload` sees an
+// empty current gun, that chance has already been taken. A real match had the bot run both guns dry
+// while the enemy kept a clear line on it the whole fight, and under the old "don't reload while
+// visible" rule it never reloaded at all - it just fled/healed unarmed for 14+ real seconds until it
+// died ("der bot darf in jeder sekunde nachladen in der er kann").
+test("An empty gun reloads immediately, regardless of a visible enemy or a ready shot", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
     equipActive(bot, WeaponSlot.Primary, "mosin", 0);
-    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
-    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 5; // a loaded alternative - no need to reload blind
-    bot.weaponManager.scheduledReload = false; // equipping an empty gun schedules one on its own
+    bot.weaponManager.scheduledReload = false; // equipping an empty gun schedules one on its own - reset
+    // to isolate what *this* call to updateReload itself does.
 
-    updateReload(bot, /* hasVisibleTarget */ true);
-    expect(bot.weaponManager.scheduledReload).toBe(false);
-
-    updateReload(bot, /* hasVisibleTarget */ false);
-    expect(bot.weaponManager.scheduledReload).toBe(true);
-});
-
-// Real match: the bot ran both guns dry while the enemy kept a clear line on it the whole fight, and
-// with the "don't reload while visible" rule applying to both slots, it never reloaded at all - it just
-// fled/healed unarmed for 14+ real seconds until it died. With nothing left to shoot with either way,
-// reloading is strictly better than standing there empty, so it starts even while the enemy is in view.
-test("Both guns empty reloads even with the enemy in view - there's nothing else to shoot with", () => {
-    const game = createGame(TeamMode.Solo, "test_normal");
-    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
-    equipActive(bot, WeaponSlot.Primary, "mosin", 0);
-    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
-    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 0; // also empty
-    bot.weaponManager.scheduledReload = false;
-
-    updateReload(bot, /* hasVisibleTarget */ true);
+    updateReload(bot, /* clearShotReady */ true);
     expect(bot.weaponManager.scheduledReload).toBe(true);
 });
 
@@ -1147,10 +1137,17 @@ test("A bot at low HP does not heal into a close enemy's clear line", () => {
     bot.health = 23; // 23%: under the 25% bypass for a visible enemy
     expect(shouldHeal(bot, BOT_TIERS.expert, /* hasVisibleEnemy */ true, /* positionSafe */ true)).toBe(true);
     expect(
-        shouldHeal(bot, BOT_TIERS.expert, /* hasVisibleEnemy */ true, /* positionSafe */ true, false, undefined, /* closeInLine */ true),
+        shouldHeal(
+            bot,
+            BOT_TIERS.expert,
+            /* hasVisibleEnemy */ true,
+            /* positionSafe */ true,
+            false,
+            undefined,
+            /* closeInLine */ true,
+        ),
     ).toBe(false);
 });
-
 
 // A target whose centre is behind cover but whose edge is in view: the bot aims at that visible edge,
 // so the bullet goes past the cover's corner and hits the body, instead of meeting the cover.
@@ -1165,7 +1162,9 @@ test("A bot aims at the visible edge of a target grazed behind cover, and can fi
     for (let dy = -12; dy <= 12 && !grazed; dy += 0.25) {
         const to = v2.create(70, 50 + dy);
         // Centre blocked from the muzzle, but an edge of it open: the same test `clearAimPoint` makes.
-        if (!hasLineOfSight(game, muzzlePos(bot), to, 0) && clearAimPoint(game, muzzlePos(bot), to, 0) !== to) grazed = to;
+        if (!hasLineOfSight(game, muzzlePos(bot), to, 0) && clearAimPoint(game, muzzlePos(bot), to, 0) !== to) {
+            grazed = to;
+        }
     }
     expect(grazed).toBeDefined();
 
@@ -1180,12 +1179,33 @@ test("A bot aims at the visible edge of a target grazed behind cover, and can fi
 // Real match: a bot with no usable second gun parked on its fists to shed the shot slowdown while an
 // enemy was in contact at 36-42 units - standing unarmed at range, a free kill. Parking on melee to dodge
 // the slowdown is only for when nothing is watching.
-test("With no second gun and an enemy in contact, the slowdown is taken rather than parking on fists", () => {
+// With a second gun slot at all - even one that's empty - quickswitching to it still sheds the
+// slowdown (switching cancels it unconditionally) and its own reload starts automatically, which
+// beats both standing slowed down on the mosin and parking on fists at range (a free kill in a real
+// match - see the sibling test below). Only with no second gun slot at all does melee-parking apply.
+test("With an empty second gun and an enemy in contact, the bot switches to it rather than taking the slowdown or drawing fists", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({});
     equipActive(bot, WeaponSlot.Primary, "mosin", 5);
     bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
-    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 0; // no usable second gun
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 0; // empty, but still a second gun to switch to
+    bot.weaponManager.weapons[WeaponSlot.Primary].cooldown = 0.9;
+    bot.shotSlowdownTimer = 0.9;
+    const fire = new BotFireState();
+    fire.firedSinceSwitch = true;
+
+    updateWeaponSelection(bot, BOT_TIERS.hard, fire, 36, false, true);
+    expect(bot.weaponManager.curWeapIdx).toBe(WeaponSlot.Secondary);
+    expect(bot.shotSlowdownTimer).toBe(0);
+});
+
+// Real match: a bot with *no second gun slot at all* parked on its fists to shed the shot slowdown
+// while an enemy was in contact at 36-42 units - standing unarmed at range, a free kill. Parking on
+// melee to dodge the slowdown is only for when nothing is watching.
+test("With no second gun slot and an enemy in contact, the slowdown is taken rather than parking on fists", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({});
+    equipActive(bot, WeaponSlot.Primary, "mosin", 5);
     bot.weaponManager.weapons[WeaponSlot.Primary].cooldown = 0.9;
     bot.shotSlowdownTimer = 0.9;
     const fire = new BotFireState();
