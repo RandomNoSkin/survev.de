@@ -1692,6 +1692,33 @@ test("A bot below 70 HP with a bandage does not push an enemy with less health, 
     expect(directive).not.toBe("push");
 });
 
+// Real match: the bot finished healing with both guns completely dry (one gun's reload had
+// been interrupted by the heal starting, the other was already empty) and no target in sight
+// - and pushed anyway, charging blind at an estimated enemy position with nothing to shoot.
+// "er hat iwie auf 41hp geheilt und dann wieder gefighted" while the real enemy, left alone,
+// healed back up from near death to full. A push with nothing to shoot with is worse than
+// useless; it must fall through to reloading/holding instead.
+test("A bot with both guns completely dry does not push, even against a much weaker enemy", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    primeGameClock(game);
+    const bot = makeBrainedBot(v2.create(50, 50), game);
+    const target = game.playerBarn.addTestPlayer({ pos: v2.create(75, 50) });
+    bot.health = 80;
+    target.health = 55; // 25 behind - would otherwise trigger an immediate push
+    bot.weaponManager.weapons[WeaponSlot.Primary].type = "mosin";
+    bot.weaponManager.weapons[WeaponSlot.Primary].ammo = 0;
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 0;
+
+    bot.botBrain?.onDealtDamage(target, 100 - 55);
+    bot.botBrain!.update(0.05);
+
+    const directive = (bot.botBrain as unknown as {
+        pickDirective(b: unknown, threat: unknown, dt: number, grenade: unknown): string;
+    }).pickDirective(bot, target.pos, 0.05, undefined);
+    expect(directive).not.toBe("push");
+});
+
 // Real match: after a long stretch critical and unable to heal, the desperate-heal override started a
 // bandage in the open at 34 HP, with the enemy in a clear line 22 units away. Desperation is for an
 // enemy that won't let up while out of sight - not a reason to heal under a live shot line.

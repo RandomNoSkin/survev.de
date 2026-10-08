@@ -766,6 +766,9 @@ export class BotBrain {
         const healthFrac = bot.health / GameConfig.player.health;
         const critical = healthFrac < this.tier.healThreshold * PANIC_HEALTH_FRAC_MULT;
         this.critical = critical;
+        // Pushing blind with nothing to shoot is worse than useless - see `bothGunsDry`'s
+        // own doc comment for the real match this gates below.
+        const bothGunsDry = this.bothGunsDry(bot);
         if (bot.actionType === GameConfig.Action.UseItem) return "heal";
         if (!threatPos) {
             const canHeal = healthFrac < this.tier.healThreshold
@@ -896,13 +899,13 @@ export class BotBrain {
         // An enemy in finishing range is still pressed, even with a heal in hand.
         const healFirst = healthFrac < FIGHT_FLOOR_FRAC && !noHealItem
             && !(knownEnemyFrac !== undefined && knownEnemyFrac <= HEAL_FIRST_FINISH_FRAC);
-        if (!critical && !healFirst && knownEnemyFrac !== undefined) {
+        if (!critical && !healFirst && !bothGunsDry && knownEnemyFrac !== undefined) {
             const pushAdvantage = knownEnemyFrac <= healthFrac - PUSH_HEALTH_ADVANTAGE_FRAC;
             const hurtAndAhead = healthFrac < FIGHT_FLOOR_FRAC
                 && knownEnemyFrac < healthFrac - HEALTH_DEFICIT_MARGIN;
             if (pushAdvantage || hurtAndAhead) return "push";
         }
-        if (low && !critical && !healFirst && knownEnemyFrac !== undefined) {
+        if (low && !critical && !healFirst && !bothGunsDry && knownEnemyFrac !== undefined) {
             if (knownEnemyFrac < healthFrac && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC) {
                 return "push";
             }
@@ -948,7 +951,7 @@ export class BotBrain {
         // Heal first below the floor: out of sight, not standing in the open waiting to push.
         if (healFirst && !canHealNow) return this.fleeOrFight();
         const enemyLow = knownEnemyFrac !== undefined && knownEnemyFrac < ENEMY_LOW_HEALTH_FRAC;
-        if (!low && enemyLow && !healFirst) return "push";
+        if (!low && enemyLow && !healFirst && !bothGunsDry) return "push";
 
         if (canHealNow) return "heal";
         // Just finished healing (or an abort just ended) - keep retreating for a short
@@ -960,17 +963,25 @@ export class BotBrain {
         return "engageHold";
     }
 
-    /** Every gun (that's actually equipped) is dry, and worth retreating over right
-     *  now - see the `reload` directive and `RELOAD_RETREAT_DANGER_MS`. Reloading in
-     *  place (which happens regardless, via `updateReload`) is the right call whenever
-     *  nothing is actually shooting at the bot; retreating is only "considering whether
-     *  it makes sense" if it's actually under fire while it does it. */
-    private needsReload(bot: Player): boolean {
+    /** Every gun (that's actually equipped) is completely dry - shared by `needsReload`
+     *  and the push checks in `pickDirective` (pushing blind with nothing to shoot is
+     *  worse than useless - a real match finished a heal with both guns empty, one
+     *  gun's reload having been interrupted by the heal itself, and pushed anyway). */
+    private bothGunsDry(bot: Player): boolean {
         const wm = bot.weaponManager;
         const slots = [WeaponSlot.Primary, WeaponSlot.Secondary].filter(
             (i) => wm.weapons[i].type,
         );
-        if (!slots.length || !slots.every((i) => wm.weapons[i].ammo <= 0)) return false;
+        return slots.length > 0 && slots.every((i) => wm.weapons[i].ammo <= 0);
+    }
+
+    /** Dry, and worth retreating over right now - see the `reload` directive and
+     *  `RELOAD_RETREAT_DANGER_MS`. Reloading in place (which happens regardless, via
+     *  `updateReload`) is the right call whenever nothing is actually shooting at the
+     *  bot; retreating is only "considering whether it makes sense" if it's actually
+     *  under fire while it does it. */
+    private needsReload(bot: Player): boolean {
+        if (!this.bothGunsDry(bot)) return false;
         return bot.game.now - this.lastHitTakenTime < RELOAD_RETREAT_DANGER_MS;
     }
 
