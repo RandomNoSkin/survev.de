@@ -313,8 +313,14 @@ export function updateReload(bot: Player, hasVisibleTarget: boolean): void {
     if (!weapon.type || wm.scheduledReload) return;
     if (weapon.ammo <= 0) {
         // Not in view of the enemy: a reload there holds the bot out in the open with nothing to
-        // shoot back with. The reload directive retreats to cover for it instead.
-        if (!hasVisibleTarget) wm.scheduledReload = true;
+        // shoot back with. The reload directive retreats to cover for it instead. But if the *other*
+        // slot is empty too, there's no alternative to switch to either way - a real match ran both
+        // guns dry while the enemy kept a clear line the whole fight, and under the old rule the bot
+        // never reloaded at all, just fled/healed unarmed until it died. Reloading blind beats staying
+        // unarmed on purpose when staying armed was never actually on the table.
+        const other = cur === WeaponSlot.Primary ? WeaponSlot.Secondary : WeaponSlot.Primary;
+        const otherEmpty = !wm.weapons[other].type || wm.weapons[other].ammo <= 0;
+        if (!hasVisibleTarget || otherEmpty) wm.scheduledReload = true;
         return;
     }
     if (hasVisibleTarget) return;

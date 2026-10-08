@@ -1095,18 +1095,37 @@ test("An enemy's muzzle can have a line to the bot when its centre doesn't", () 
     expect(found).toBe(true);
 });
 
-// An empty gun is not reloaded in view of the enemy: the reload would hold the bot out in the open
-// with nothing to shoot back with. It reloads once out of sight (and retreats to cover for it).
-test("An empty gun is not reloaded while an enemy is in view", () => {
+// An empty gun is not reloaded in view of the enemy *while a loaded alternative exists*: the reload
+// would hold the bot out in the open with nothing to shoot back with when it could just switch guns
+// instead. It reloads once out of sight (and retreats to cover for it).
+test("An empty gun is not reloaded while an enemy is in view, with a loaded gun to fall back on", () => {
     const game = createGame(TeamMode.Solo, "test_normal");
     const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
     equipActive(bot, WeaponSlot.Primary, "mosin", 0);
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 5; // a loaded alternative - no need to reload blind
     bot.weaponManager.scheduledReload = false; // equipping an empty gun schedules one on its own
 
     updateReload(bot, /* hasVisibleTarget */ true);
     expect(bot.weaponManager.scheduledReload).toBe(false);
 
     updateReload(bot, /* hasVisibleTarget */ false);
+    expect(bot.weaponManager.scheduledReload).toBe(true);
+});
+
+// Real match: the bot ran both guns dry while the enemy kept a clear line on it the whole fight, and
+// with the "don't reload while visible" rule applying to both slots, it never reloaded at all - it just
+// fled/healed unarmed for 14+ real seconds until it died. With nothing left to shoot with either way,
+// reloading is strictly better than standing there empty, so it starts even while the enemy is in view.
+test("Both guns empty reloads even with the enemy in view - there's nothing else to shoot with", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    const bot = game.playerBarn.addTestPlayer({ pos: v2.create(0, 0) });
+    equipActive(bot, WeaponSlot.Primary, "mosin", 0);
+    bot.weaponManager.weapons[WeaponSlot.Secondary].type = "spas12";
+    bot.weaponManager.weapons[WeaponSlot.Secondary].ammo = 0; // also empty
+    bot.weaponManager.scheduledReload = false;
+
+    updateReload(bot, /* hasVisibleTarget */ true);
     expect(bot.weaponManager.scheduledReload).toBe(true);
 });
 
