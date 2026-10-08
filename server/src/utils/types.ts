@@ -87,7 +87,11 @@ export interface GameData {
     isPrivate: boolean;
     /** Private lobby "Public Spectating" toggle; when false, hidden from `/api/game_infos`. Default true. */
     publicSpectating: boolean;
+    /** Living players including bots - what the in-game HUD counter shows. */
     aliveCount: number;
+    /** Living players excluding bots. Region population and load balancing use this so
+     *  a bot-filled game never looks busier than it is. */
+    humanAliveCount: number;
     startedTime: number;
     stopped: boolean;
 }

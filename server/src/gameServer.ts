@@ -1138,6 +1138,13 @@ app.ws<GameSocketData>("/play", {
         }
 
         gameWsRateLimit.ipConnected(ip);
+        // From here on, every return path must either reach a completed res.upgrade()
+        // (whose close() handler balances this with ipDisconnected) or explicitly call
+        // ipDisconnected itself - otherwise an aborted handshake (e.g. the client
+        // cancelling while the checkIp() await below is slow/stalled) leaks a permanent
+        // phantom connection against this IP's maxConnections cap, eventually 429-ing
+        // every future join attempt even with zero real connections open.
+        let upgraded = false;
 
         const socketId = randomUUID();
         let disconnectReason = "";
@@ -1151,12 +1158,16 @@ app.ws<GameSocketData>("/play", {
             disconnectReason = "behind_proxy";
         }
 
-        if (res.aborted) return;
+        if (res.aborted) {
+            gameWsRateLimit.ipDisconnected(ip);
+            return;
+        }
         // res.cork can throw "HttpResponse must not be accessed after onAborted" if the
         // client aborts during the await above; that would crash the whole server.
         try {
             res.cork(() => {
                 if (res.aborted) return;
+                upgraded = true;
                 res.upgrade(
                     {
                         gameId,
@@ -1175,6 +1186,7 @@ app.ws<GameSocketData>("/play", {
         } catch (err) {
             server.logger.warn("WS /play upgrade failed:", err);
         }
+        if (!upgraded) gameWsRateLimit.ipDisconnected(ip);
     },
 
     open(socket: WebSocket<GameSocketData>) {
@@ -1257,6 +1269,10 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
         }
 
         gameWsRateLimit.ipConnected(ip);
+        // See the matching comment in the /play upgrade handler above - every return
+        // path from here must either complete res.upgrade() or call ipDisconnected
+        // itself, or an aborted handshake leaks a permanent phantom connection.
+        let upgraded = false;
 
         const socketId = randomUUID();
         let disconnectReason = "";
@@ -1268,7 +1284,10 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
             disconnectReason = "behind_proxy";
         }
 
-        if (res.aborted) return;
+        if (res.aborted) {
+            gameWsRateLimit.ipDisconnected(ip);
+            return;
+        }
 
         // res.cork can throw "HttpResponse must not be accessed after onAborted" if the
         // client aborts during the await above; that would crash the whole server.
@@ -1276,6 +1295,7 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
             res.cork(() => {
                 if (res.aborted) return;
 
+                upgraded = true;
                 res.upgrade(
                     {
                         gameId,
@@ -1295,6 +1315,7 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
         } catch (err) {
             server.logger.warn("WS /spectate upgrade failed:", err);
         }
+        if (!upgraded) gameWsRateLimit.ipDisconnected(ip);
     },
 
     open(socket) {

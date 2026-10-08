@@ -464,11 +464,18 @@ export class GameRecorder {
         }
     }
 
-    /** Lazily creates the per-game recording directory (shared by tracks + POV files). */
+    /** Lazily creates the per-game recording directory (shared by tracks + POV files).
+     *  Games recorded with `recordBots: true` (the bot-dev-test config, never on in
+     *  prod) go under a `<dir>-bot-test/` sibling directory instead of the normal
+     *  recordings tree - keeps bot-analysis matches easy to find for feeding to Claude,
+     *  and keeps them fully out of `listRecordings()`/retention/the dashboard Replays
+     *  tab, which all walk `recordingsRoot()` assuming every direct child is a date
+     *  folder (a `bot-test` child there would just silently read as an empty day). */
     private ensureDir(): void {
         if (this.dirReady) return;
         const day = new Date(this.startTs).toISOString().slice(0, 10);
-        this.dir = path.join(recordingsRoot(), day, this.game.id);
+        const root = Config.recording.recordBots ? `${recordingsRoot()}-bot-test` : recordingsRoot();
+        this.dir = path.join(root, day, this.game.id);
         fs.mkdirSync(this.dir, { recursive: true });
         this.dirReady = true;
     }

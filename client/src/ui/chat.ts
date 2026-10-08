@@ -1,10 +1,9 @@
 import $ from "jquery";
-import { Game } from "../game";
 import * as net from "../../../shared/net/net";
+import { Game } from "../game";
 import { InputHandler, Key } from "../input";
 
-export class ChatUi{
-
+export class ChatUi {
     chatInput = $("#ui-chat-wrapper");
     input = document.getElementById("ui-chat-input") as HTMLInputElement;
     button = document.getElementById("ui-chat-send");
@@ -27,9 +26,8 @@ export class ChatUi{
 
     constructor(
         game: Game,
-        input: InputHandler
-    ){
-
+        input: InputHandler,
+    ) {
         this.game = game;
         this.inputHandler = input;
         // Button click
@@ -58,10 +56,10 @@ export class ChatUi{
         this.input.addEventListener("keydown", (e) => {
             stopUnlessEnterOrEscape(e);
 
-            if (e.key == "Enter" ) {
+            if (e.key == "Enter") {
                 this.sendChatMessage();
             }
-            if(e.key == "Tab"){
+            if (e.key == "Tab") {
                 e.preventDefault();
                 this.switchChat();
                 this.input.focus();
@@ -69,36 +67,42 @@ export class ChatUi{
             // Escape itself is left to the window-level listener below, now that it's
             // actually allowed to bubble there.
         });
-            // Close the chat when tapping/clicking outside of it. Must ignore
-            // taps inside the chat wrapper or on the chat button, otherwise on
-            // mobile focusing the input (or hitting send) would close it instantly.
-            const closeIfOutside = (e: Event) => {
-                const target = e.target as Node | null;
-                if (target && this.chatInput[0]?.contains(target)) return;
-                if (target && this.chatButton?.contains(target)) return;
+        // Close the chat when tapping/clicking outside of it. Must ignore
+        // taps inside the chat wrapper or on the chat button, otherwise on
+        // mobile focusing the input (or hitting send) would close it instantly.
+        const closeIfOutside = (e: Event) => {
+            const target = e.target as Node | null;
+            if (target && this.chatInput[0]?.contains(target)) return;
+            if (target && this.chatButton?.contains(target)) return;
+            this.leaveChat();
+        };
+        window.addEventListener("mousedown", closeIfOutside);
+        // Escape is deliberately NOT handled here (only "<", a mobile/alternate
+        // close key) - it's now handled solely by game.ts's per-frame
+        // keyPressed(Key.Escape) check, which decides between leaveChat() and
+        // toggleEscMenu() based on whether chat is open AT THE TIME IT POLLS.
+        // Also reacting to the same keydown here, synchronously and earlier, would
+        // close chat first and let game.ts's later poll see it as already-closed -
+        // wrongly opening the pause menu right after Escape closed chat.
+        window.addEventListener("keydown", (e) => {
+            if (e.key == "<") {
                 this.leaveChat();
-            };
-            window.addEventListener("mousedown", closeIfOutside);
-            // Escape is deliberately NOT handled here (only "<", a mobile/alternate
-            // close key) - it's now handled solely by game.ts's per-frame
-            // keyPressed(Key.Escape) check, which decides between leaveChat() and
-            // toggleEscMenu() based on whether chat is open AT THE TIME IT POLLS.
-            // Also reacting to the same keydown here, synchronously and earlier, would
-            // close chat first and let game.ts's later poll see it as already-closed -
-            // wrongly opening the pause menu right after Escape closed chat.
-            window.addEventListener("keydown", (e) => {
-                if(e.key == "<"){
-                    this.leaveChat();
-                }
-            });
-            this.input.placeholder = "[ALL]";
+            }
+        });
+        this.input.placeholder = "[ALL]";
     }
 
     sendChatMessage() {
         const text = this.input.value.trim();
         if (!text) return;
-        if(this.clientSideChatSlowdown >0) {
-
+        // Slash commands are for admins/devs (the server independently gates who can
+        // actually run one - see Chat.handleChatMessage's isAdmin/allowEditMsg check),
+        // so they skip the public-chat anti-spam throttle below. Without this,
+        // rapid-fire testing of e.g. "/spawnbot hard" right after "/spawnbot" hits the
+        // same 3s cooldown as flooding public chat and just silently drops the second
+        // command - "the command does nothing" is that cooldown, not a real failure.
+        const isCommand = text.startsWith("/");
+        if (!isCommand && this.clientSideChatSlowdown > 0) {
             const txt = this.game.m_ui2Manager.getAdminChatMessage("ADMIN", "chat-cooldown");
 
             this.game.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
@@ -116,9 +120,9 @@ export class ChatUi{
         this.game.m_sendMessage(net.MsgType.KillFeed, msg);
 
         this.input.value = "";
-        this.clientSideChatSlowdown = 3;
+        if (!isCommand) this.clientSideChatSlowdown = 3;
 
-        //this.input.focus();
+        // this.input.focus();
         this.leaveChat();
         this.suppressPendingEnterPress();
     }
@@ -139,8 +143,7 @@ export class ChatUi{
         });
     }
 
-
-    joinChat(){
+    joinChat() {
         if (performance.now() - this.lastCloseTime < ChatUi.REOPEN_COOLDOWN_MS) return;
         this.chatInput.css("display", "block");
         this.inputHandler.isTyping = true;
@@ -151,7 +154,7 @@ export class ChatUi{
         this.game.m_ui2Manager.chatOpen = true;
     }
 
-    leaveChat(){
+    leaveChat() {
         this.lastCloseTime = performance.now();
         this.chatInput.css("display", "none");
         this.inputHandler.isTyping = false;
@@ -163,17 +166,17 @@ export class ChatUi{
         this.input.blur();
     }
 
-    switchChat(){
+    switchChat() {
         const currentChat = this.chatType;
-        switch(currentChat){
-            case(0):{
-                this.chatType = 1
+        switch (currentChat) {
+            case (0): {
+                this.chatType = 1;
                 this.input.placeholder = "[TEAM]";
                 this.input.focus();
                 break;
             }
-            case(1):{
-                this.chatType = 0
+            case (1): {
+                this.chatType = 0;
                 this.input.placeholder = "[ALL]";
                 this.input.focus();
                 break;
@@ -189,17 +192,15 @@ export class ChatUi{
     };
 
     chatIsEnabled(): boolean {
-
         const style = window.getComputedStyle(this.chatInput[0]);
-            if(style.display !== "none"){
-                return true;
-            }
+        if (style.display !== "none") {
+            return true;
+        }
 
         return false;
     }
 
-
-    handleAdminCmds(cmd: string, admin: string, content: string, args: string[]){
+    handleAdminCmds(cmd: string, admin: string, content: string, args: string[]) {
         const handler = this.adminCommands[cmd];
 
         if (!handler) return;
@@ -207,15 +208,16 @@ export class ChatUi{
         handler(admin, content, args);
     }
 
-    sendAnnouncementMsg(admin: string, content: string, args: string[]){
+    sendAnnouncementMsg(admin: string, content: string, args: string[]) {
         const msg = `[${admin}]: ${content}`;
         const color = args[0];
         const time = Number(args[1]);
         this.game.m_uiManager.displayAnnouncement(msg, color, time);
     }
 
-    update(dt: number){
-        if(this.clientSideChatSlowdown>0)
-        this.clientSideChatSlowdown -= dt;
+    update(dt: number) {
+        if (this.clientSideChatSlowdown > 0) {
+            this.clientSideChatSlowdown -= dt;
+        }
     }
 }

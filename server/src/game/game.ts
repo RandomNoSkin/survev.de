@@ -24,6 +24,7 @@ import {
     type ServerGameConfig,
     type UpdateDataMsg,
 } from "../utils/types";
+import { BotBarn } from "./bot/botBarn.ts";
 import { GameModeManager } from "./gameModeManager";
 import { Grid } from "./grid";
 import { GameMap } from "./map";
@@ -107,6 +108,27 @@ export class Game {
     }
 
     /**
+     * Living players excluding bots. `aliveCount` stays bot-inclusive on purpose - the
+     * in-game HUD counter should show what a player actually has to fight - but region
+     * population, load balancing and lobby lifetime must only ever count humans.
+     */
+    get humanAliveCount(): number {
+        return this.playerBarn.livingPlayers.filter((p) => !p.bot).length;
+    }
+
+    /** Players that still hold a real socket. Bots never do. */
+    get connectedHumanCount(): number {
+        return this.playerBarn.players.filter((p) => !p.bot && !p.disconnected).length;
+    }
+
+    /**
+     * Set the moment any bot joins, and never cleared. Bot matches are excluded from
+     * match-data saving entirely (no XP, no leaderboard, no impact score) so nobody can
+     * farm wins against `easy` bots.
+     */
+    hadBots = false;
+
+    /**
      * All msgs created this tick that will be sent to all players
      * cached in a single stream
      */
@@ -127,6 +149,9 @@ export class Game {
 
     map: GameMap;
     gas: Gas;
+
+    /** Server-side AI players. Inert unless `Config.bots.enabled`. */
+    botBarn: BotBarn;
 
     /** Records each real player's outgoing byte stream to disk for replays. */
     recorder: GameRecorder;
@@ -210,6 +235,8 @@ export class Game {
 
         this.gas = new Gas(this);
 
+        this.botBarn = new BotBarn(this);
+
         this.recorder = new GameRecorder(this);
 
         this.modeManager = new GameModeManager(this);
@@ -254,7 +281,9 @@ export class Game {
         // The socket-close path reaps a game the instant its last player leaves; this also
         // catches lobbies that were created but never joined (players.length stays 0, so no
         // socket-close ever fires) and any game everyone left without a clean disconnect.
-        if (this.playerBarn.players.some((p) => !p.disconnected)) {
+        // Bots are never `disconnected`, so they must not count here or a bot-only
+        // game would keep itself alive forever.
+        if (this.connectedHumanCount > 0) {
             this.emptyTime = 0;
         } else {
             this.emptyTime += dt;
@@ -302,6 +331,13 @@ export class Game {
         //
         this.profiler.addSample("gas");
         this.gas.update(dt);
+        this.profiler.endSample();
+
+        // Before `players` on purpose: intents written here are consumed by
+        // `playerBarn.update` in the same tick, exactly as a real InputMsg that arrived
+        // between two ticks would be.
+        this.profiler.addSample("bots");
+        this.botBarn.update(dt);
         this.profiler.endSample();
 
         this.profiler.addSample("players");
@@ -723,17 +759,15 @@ export class Game {
             });
         }
 
-        // Stop the game once nobody is left to play it. `aliveCount === 0` covers the
-        // normal case; the every-disconnected check also reaps "zombie" games whose
-        // players are technically still alive but all disconnected (no connected player
-        // remains), which the `b90628e2 "Removing game Stoppings"` change stopped doing
-        // and which would otherwise keep running — and accumulating planes/state — forever.
-        if (
-            !this.stopped &&
-            (this.aliveCount === 0 ||
-                (this.playerBarn.players.length > 0 &&
-                    this.playerBarn.players.every((p) => p.disconnected)))
-        ) {
+        // Stop the game once nobody is left to play it. `connectedHumanCount === 0`
+        // covers both the normal case and the "zombie" game whose players are
+        // technically still alive but all disconnected (which the
+        // `b90628e2 "Removing game Stoppings"` change stopped reaping, leaving games
+        // running — and accumulating planes/state — forever).
+        //
+        // It must be humans only: bots are alive and never `disconnected`, so counting
+        // them would keep a game alive after the last real player left.
+        if (!this.stopped && this.connectedHumanCount === 0) {
             this.stop();
         }
     }
@@ -961,6 +995,7 @@ export class Game {
             isPrivate: this.isPrivate,
             publicSpectating: this.publicSpectating,
             aliveCount: this.aliveCount,
+            humanAliveCount: this.humanAliveCount,
             startedTime: this.startedTime,
             stopped: this.stopped,
         });
@@ -972,7 +1007,9 @@ export class Game {
         this.allowJoin = false;
         this.recorder.stopAll();
         for (const player of this.playerBarn.players) {
-            if (!player.disconnected) {
+            // Bots hold a throwaway socketId that was never registered with the socket
+            // owner. In multi-process mode this would send a pointless IPC close.
+            if (!player.disconnected && !player.bot) {
                 this.closeSocket(player.socketId);
             }
         }
@@ -985,6 +1022,18 @@ export class Game {
     }
 
     private async _saveGameToDatabase() {
+        // Matches that contained bots are never persisted: no match data, no XP, no
+        // leaderboard, no impact score. Otherwise anyone could farm wins against `easy`
+        // bots, and the impact-score team totals (which are accumulated during the match
+        // by code that knows nothing about bots) would be skewed.
+        //
+        // The in-game rank is unaffected - `getPlayersSortedByRank` still ranks bots, so
+        // losing a 1v1 to a bot correctly shows the bot as #1 and you as #2.
+        if (this.hadBots) {
+            this.logger.info("Skipping match save: game contained bots");
+            return;
+        }
+
         const players = this.modeManager.getPlayersSortedByRank();
         /**
          * teamTotal is for total teams that started the match, i hope?

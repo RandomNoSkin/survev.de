@@ -591,6 +591,14 @@ export type AckGiftsResponse = { success: boolean };
 export type RoleTag = "admin" | "mod" | "premium" | null;
 export const zRoleTag = z.enum(["admin", "mod", "premium"]).nullable();
 
+/**
+ * The name tag actually rendered next to a player in game. A superset of `RoleTag`:
+ * "bot" is not an account role - the server sets it on AI players so the client shows a
+ * `[BOT]` prefix - so it must never appear in account-sourced values (join tokens, team
+ * menu, database rows), which keep using the narrower `RoleTag`.
+ */
+export type DisplayRoleTag = RoleTag | "bot";
+
 export type Friend = { slug: string; username: string; roleTag: RoleTag };
 
 /** A live game a friend is currently in (region + gameId, to spectate). */

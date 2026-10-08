@@ -1863,7 +1863,10 @@ export class UiManager2 {
         return `${killerTxt} knocked ${youTxt} out`;
     }
 
-    getJoinedText(name: string, roleTag: "admin" | "mod" | "premium" | null = null){
+    getJoinedText(
+        name: string,
+        roleTag: "admin" | "mod" | "premium" | "bot" | null = null,
+    ){
         const joinTxt = this.localization.translate("game-joined");
         return `${helpers.formatUsername(name, roleTag)} ${joinTxt}`;
     }

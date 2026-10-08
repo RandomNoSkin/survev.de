@@ -378,34 +378,41 @@ export class ApiServer {
             return this.livePlayersCache.map;
         }
         const map = new Map<string, { region: string; gameId: string }>();
-        for (const regionId in this.regions) {
-            const region = this.regions[regionId];
-            try {
-                const infos = await region.collectGameInfos();
-                const games: any[] = (Array.isArray(infos?.data) ? infos.data : []).filter(
-                    (g: any) => g?.id && !g.stopped,
-                );
-                const lists = await Promise.all(
-                    games.map((g) =>
-                        region
-                            .getDashboardGamePlayers(g.id)
-                            .then((players) => ({ gameId: g.id, players }))
-                            .catch(() => ({ gameId: g.id, players: [] as any[] }))
-                    ),
-                );
-                for (const { gameId, players } of lists) {
-                    for (const p of players) {
-                        // Only actual participants — not spectators (a friend watching
-                        // someone else) or players who've already disconnected.
-                        if (p?.userId && !p.isSpectator && !p.disconnected) {
-                            map.set(p.userId, { region: regionId, gameId });
+        // Regions are fetched concurrently, not one at a time: a down/slow region can
+        // take up to REGION_FETCH_TIMEOUT_MS to time out, and this feeds the friends
+        // list so it's called often - serializing it across regions means one bad
+        // region delays every other region behind it in iteration order, and several
+        // down at once (seen in prod: scrims/asia/asia_arena/asia_scrims all timing
+        // out in the same burst) would otherwise stack their timeouts.
+        await Promise.all(
+            Object.entries(this.regions).map(async ([regionId, region]) => {
+                try {
+                    const infos = await region.collectGameInfos();
+                    const games: any[] = (Array.isArray(infos?.data) ? infos.data : []).filter(
+                        (g: any) => g?.id && !g.stopped,
+                    );
+                    const lists = await Promise.all(
+                        games.map((g) =>
+                            region
+                                .getDashboardGamePlayers(g.id)
+                                .then((players) => ({ gameId: g.id, players }))
+                                .catch(() => ({ gameId: g.id, players: [] as any[] }))
+                        ),
+                    );
+                    for (const { gameId, players } of lists) {
+                        for (const p of players) {
+                            // Only actual participants — not spectators (a friend watching
+                            // someone else) or players who've already disconnected.
+                            if (p?.userId && !p.isSpectator && !p.disconnected) {
+                                map.set(p.userId, { region: regionId, gameId });
+                            }
                         }
                     }
+                } catch {
+                    // region offline — skip
                 }
-            } catch {
-                // region offline — skip
-            }
-        }
+            }),
+        );
         this.livePlayersCache = { at: now, map };
         return map;
     }

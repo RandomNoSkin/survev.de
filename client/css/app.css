@@ -6181,6 +6181,14 @@ a:active {
   font-weight: 700;
   text-shadow: 0 0 6px rgba(242, 214, 59, 0.55);
 }
+/* Not an account role - set by the server on AI players so they are always clearly
+ * identifiable as bots. Deliberately a cool grey-green so it reads as "machine"
+ * rather than as a rank. */
+.username-bot-tag {
+  color: #7ddba6;
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(125, 219, 166, 0.55);
+}
 
 /* ---- Player marketplace (rendered inside the shop modal's Market tab) ---- */
 /* The sell dialog floats above everything (loadout modal is z-index 4). */

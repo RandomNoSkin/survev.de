@@ -1,11 +1,11 @@
-import type { RoleTag } from "../types/user";
+import type { DisplayRoleTag } from "../types/user";
 import type { AbstractMsg, BitStream } from "./net";
 import { decodeRoleTag, encodeRoleTag } from "./roleTagCodec";
 
 export class JoinFeedMsg implements AbstractMsg {
     name: string = "";
-    /** The [ADMIN]/[MOD]/[PREM] tag for `name` (single-join case only, not group1/group2). */
-    roleTag: RoleTag = null;
+    /** The [ADMIN]/[MOD]/[PREM]/[BOT] tag for `name` (single-join case only, not group1/group2). */
+    roleTag: DisplayRoleTag = null;
     group1: string[] = [];
     group2: string[] = [];
 

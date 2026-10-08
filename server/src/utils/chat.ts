@@ -10,6 +10,7 @@ import { hashIp, getActiveChatBan } from "../api/routes/private/ModerationRouter
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { db } from "../api/db";
 import { chatLogsTable, usersTable } from "../api/db/schema";
+import { parseBotDifficulty } from "../game/bot/botDefs.ts";
 
 export const KillFeedChannel = -1; // sentinel channel value for kill events in chatLogsTable
 export const DownFeedChannel = -2; // sentinel channel value for knock/down events in chatLogsTable
@@ -281,6 +282,34 @@ export class Chat{
             msg.args.push("3000");
             this.game.broadcastMsg(net.MsgType.KillFeed, msg);
         },
+        // /spawnbot [difficulty] [count]  e.g. "/spawnbot hard 2"
+        spawnbot: (args) => {
+            if (!Config.bots.enabled) {
+                this.sendCmdFeedback("Bots are disabled (Config.bots.enabled)", "#ff4444");
+                return;
+            }
+
+            const difficulty =
+                parseBotDifficulty(args[0]) ?? Config.bots.defaultDifficulty;
+            const requested = Math.max(1, Math.min(Number(args[1]) || 1, 8));
+
+            const spawned = this.game.botBarn.spawn(requested, difficulty);
+
+            if (!spawned.length) {
+                this.sendCmdFeedback(
+                    `Could not spawn a bot (limit ${Config.bots.maxBotsPerGame} reached?)`,
+                    "#ff4444",
+                );
+                return;
+            }
+
+            this.sendCmdFeedback(
+                `Spawned ${spawned.length} ${difficulty} bot${spawned.length > 1 ? "s" : ""}: ${spawned
+                    .map((p) => p.name)
+                    .join(", ")}`,
+                "#7ddba6",
+            );
+        },
         ban: async (args) => {
             const playerName = args[0];
             const days = Number(args[1]) || 7;
@@ -398,6 +427,20 @@ export class Chat{
 
         handler(args);
 
+    }
+
+    /** Free-text command result shown only to the admin who ran the command. The
+     *  AdminMsg path expects i18n keys, so command output goes through the announce
+     *  CmdMsg instead, which carries literal text. */
+    private sendCmdFeedback(content: string, color = "#ffffff", time = 4000){
+        const msg = new net.KillFeedMsg;
+        msg.type = net.KillFeedMsgType.CmdMsg;
+        msg.player = this.player.name;
+        msg.cmd = "announce";
+        msg.string = content;
+        msg.args.push(color);
+        msg.args.push(time.toString());
+        this.player.sendMsg(net.MsgType.KillFeed, msg);
     }
 
     sendAnnouncementMsg(content: string, color?: string, time?: number){
