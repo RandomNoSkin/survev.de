@@ -6,7 +6,7 @@
    version="1.1"
    id="svg6"
    sodipodi:docname="map-moonshine-jug-01.svg"
-   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -20,14 +20,14 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="4.5265957"
-     inkscape:cx="74.448884"
-     inkscape:cy="44.293772"
-     inkscape:window-width="1920"
-     inkscape:window-height="1111"
-     inkscape:window-x="-9"
-     inkscape:window-y="-9"
-     inkscape:window-maximized="1"
+     inkscape:zoom="9.0531914"
+     inkscape:cx="52.301998"
+     inkscape:cy="74.172739"
+     inkscape:window-width="1470"
+     inkscape:window-height="895"
+     inkscape:window-x="0"
+     inkscape:window-y="33"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg6" />
   <defs
      id="defs2">
@@ -54,19 +54,13 @@
      cx="14.33424"
      cy="12.763435"
      r="7.2071519" />
-  <circle
-     style="fill:#482913;fill-opacity:1;stroke:#6e3913;stroke-width:0.793756;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4.1;stroke-dasharray:none;stroke-opacity:1"
-     id="path4-2"
-     cx="14.33424"
-     cy="12.763435"
-     r="2.7125907" />
   <rect
-     style="fill:#9d511a;fill-opacity:1;stroke:#6e3913;stroke-width:0.890687;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4.1;stroke-dasharray:none;stroke-opacity:1"
+     style="fill:#9d511a;fill-opacity:1;stroke:#6e3913;stroke-width:0.793755;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4.1;stroke-dasharray:none;stroke-opacity:1"
      id="rect388"
-     width="2.1403451"
-     height="4.2943373"
+     width="2.1403456"
+     height="5.2880087"
      x="13.266322"
-     y="15.936351"
+     y="14.942679"
      ry="0.52477634" />
   <path
      sodipodi:nodetypes="cc"
@@ -74,4 +68,10 @@
      id="path1083"
      d="m 15.429965,8.3148732 c 1.699848,0 3.691952,2.2551338 3.691952,4.1011098"
      style="fill:none;stroke:#efefef;stroke-width:0.885704;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:0.212121" />
+  <circle
+     style="fill:#482913;fill-opacity:1;stroke:#6e3913;stroke-width:0.793756;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4.1;stroke-dasharray:none;stroke-opacity:1"
+     id="path4-2"
+     cx="14.33424"
+     cy="12.763435"
+     r="2.7125907" />
 </svg>

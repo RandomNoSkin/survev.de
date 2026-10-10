@@ -364,14 +364,14 @@ export const BaseDefs: Record<string, GunDef> = {
         particle: { shellScale: 1, shellOffset: 0.4 },
         sound: {
             shoot: "p90_01",
-            reload: "p90_reload_01", //3.5s
+            reload: "p90_reload_01", // 3.5s
             pickup: "gun_pickup_01",
             empty: "empty_fire_01",
             deploy: "vector_switch_01",
         },
     },
     vector45: { 
-        name: "Vector45",
+        name: "Vector 45",
         type: "gun",
         quality: 1,
         fireMode: "burst",
@@ -386,7 +386,7 @@ export const BaseDefs: Record<string, GunDef> = {
         fireDelay: 0.17,
         burstDelay: 0.016,
         switchDelay: 0.75,
-        barrelLength: 2.8,
+        barrelLength: 2.5,
         barrelOffset: 0,
         recoilTime: 1e10,
         moveSpread: 4.5,
@@ -406,7 +406,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-vector45-01.img",
-            scale: { x: 0.16, y: 0.12 },
+            scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
             leftHandOffset: { x: 7, y: 0 },
             recoil: 0.89,
@@ -1508,9 +1508,9 @@ export const BaseDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-m134-01.img",
-            scale: { x: 0.72, y: 0.72 },
+            scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
-            leftHandOffset: { x: 12.5, y: 0 },
+            leftHandOffset: { x: 13.5, y: -5 },
             recoil: 1.33,
         },
         particle: {
@@ -2407,7 +2407,7 @@ export const BaseDefs: Record<string, GunDef> = {
         reloadTime: 3,
         fireDelay: 0.25,
         switchDelay: 0.15,
-        barrelLength: 3,
+        barrelLength: 4,
         barrelOffset: 0,
         recoilTime: 1e10,
         moveSpread: 9,
@@ -2429,7 +2429,7 @@ export const BaseDefs: Record<string, GunDef> = {
             sprite: "gun-origin-01.img",
             scale: { x: 0.58, y: 0.58 },
             tint: 0xffffff,
-            leftHandOffset: { x: 12, y: -14 },
+            leftHandOffset: { x: 16, y: -15 },
             recoil: 1.33,
         },
         particle: { shellScale: 1, shellOffset: 0.45 },
@@ -4037,7 +4037,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1,
         bulletCount: 1,
         bulletType: "bullet_potato",
-        //projType: "hv_grenade",
+        projType: "hv_grenade",
         projectileUsesAimDistance: true,
         noSplinter: true,
         headshotMult: 1,
@@ -4739,10 +4739,10 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-vss-modified-01.img",
-            //scale: { x: 0.5, y: 0.5 },
+            scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
-            //leftHandOffset: { x: 9, y: 0 },
-            //recoil: 1.33,
+            leftHandOffset: { x: 9, y: 0 },
+            recoil: 1,
         },
     }),
     modified_m1014: defineGunSkin("m1014", {
@@ -4780,7 +4780,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
         },
         worldImg: {
             sprite: "gun-origin-modified-01.img",
-            scale: { x: 0.65, y: 0.55 },
+            scale: { x: 0.58, y: 0.58 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4922,8 +4922,8 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
             border: "loot-circle-outer-modified-01.img",
         },
         worldImg: {
-            sprite: "gun-m416-modified-01.img",
-            scale: { x: 0.65, y: 0.5 },
+            sprite: "gun-hk416-modified-01.img",
+            scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
             //recoil: 1.33,
@@ -4952,7 +4952,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
             border: "loot-circle-outer-modified-01.img",
         },
         worldImg: {
-            sprite: "gun-m416-modified-01.img",
+            sprite: "gun-hk416-modified-01.img",
             scale: { x: 0.65, y: 0.5 },
             tint: 0xffffff,
             //leftHandOffset: { x: 9, y: 0 },
