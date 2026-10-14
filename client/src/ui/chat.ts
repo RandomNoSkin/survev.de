@@ -8,6 +8,10 @@ export class ChatUi {
     input = document.getElementById("ui-chat-input") as HTMLInputElement;
     button = document.getElementById("ui-chat-send");
     chatButton = document.getElementById("ui-chat-button");
+    highlightWrapper = document.getElementById("ui-chat-highlight")!;
+    highlightColor = document.getElementById("ui-chat-highlight-color") as HTMLInputElement;
+    highlightToggle = document.getElementById("ui-chat-highlight-toggle")!;
+    highlightOn = false;
     game: Game;
     inputHandler: InputHandler;
     chatShown = false;
@@ -90,6 +94,37 @@ export class ChatUi {
             }
         });
         this.input.placeholder = "[ALL]";
+
+        try {
+            const saved = localStorage.getItem("chatHighlight");
+            if (saved && /^#[0-9a-fA-F]{6}$/.test(saved)) {
+                this.highlightColor.value = saved;
+                this.highlightOn = true;
+            }
+        } catch {}
+        this.highlightToggle.classList.toggle("active", this.highlightOn);
+        this.highlightToggle.addEventListener("click", () => {
+            this.highlightOn = !this.highlightOn;
+            this.highlightToggle.classList.toggle("active", this.highlightOn);
+            this.saveHighlight();
+            this.input.focus();
+        });
+        this.highlightColor.addEventListener("input", () => {
+            this.highlightOn = true;
+            this.highlightToggle.classList.add("active");
+            this.highlightToggle.style.color = this.highlightColor.value;
+            this.saveHighlight();
+        });
+        this.highlightColor.addEventListener("change", () => this.input.focus());
+        this.highlightToggle.style.color = this.highlightOn ? this.highlightColor.value : "";
+    }
+
+    private saveHighlight() {
+        this.highlightToggle.style.color = this.highlightOn ? this.highlightColor.value : "";
+        try {
+            if (this.highlightOn) localStorage.setItem("chatHighlight", this.highlightColor.value);
+            else localStorage.removeItem("chatHighlight");
+        } catch {}
     }
 
     sendChatMessage() {
@@ -102,7 +137,7 @@ export class ChatUi {
         // same 3s cooldown as flooding public chat and just silently drops the second
         // command - "the command does nothing" is that cooldown, not a real failure.
         const isCommand = text.startsWith("/");
-        if (!isCommand && this.clientSideChatSlowdown > 0) {
+        if (!isCommand && !this.game.m_isAdmin && this.clientSideChatSlowdown > 0) {
             const txt = this.game.m_ui2Manager.getAdminChatMessage("ADMIN", "chat-cooldown");
 
             this.game.m_ui2Manager.addChatMessage(txt, "#ff0000", "#000000");
@@ -116,6 +151,7 @@ export class ChatUi {
         msg.player = this.game.m_activePlayer.nameText.text;
         msg.chatType = this.chatType;
         msg.type = net.KillFeedMsgType.ChatMsg;
+        if (this.game.m_isAdmin && this.highlightOn) msg.color = this.highlightColor.value;
 
         this.game.m_sendMessage(net.MsgType.KillFeed, msg);
 
@@ -146,6 +182,7 @@ export class ChatUi {
     joinChat() {
         if (performance.now() - this.lastCloseTime < ChatUi.REOPEN_COOLDOWN_MS) return;
         this.chatInput.css("display", "block");
+        this.highlightWrapper.style.display = this.game.m_isAdmin ? "" : "none";
         this.inputHandler.isTyping = true;
         this.input.focus();
         // Brings back chat messages that already faded out, and keeps them (and any
@@ -158,7 +195,8 @@ export class ChatUi {
         this.lastCloseTime = performance.now();
         this.chatInput.css("display", "none");
         this.inputHandler.isTyping = false;
-        this.game.m_ui2Manager.chatOpen = false;
+        // the outside-click listener fires in the menus too, before any game UI exists
+        if (this.game.m_ui2Manager) this.game.m_ui2Manager.chatOpen = false;
         // Explicit blur, not just relying on the input becoming non-rendered - without
         // this the input can keep keyboard focus after Escape hides it, which would
         // otherwise route the player's next few keystrokes (WASD, etc.) into the

@@ -22,6 +22,8 @@ import { ajaxRequest } from "../../ajax.ts";
 import { api } from "../../api.ts";
 import { device } from "../../device.ts";
 import { helpers } from "../../helpers.ts";
+import { STATS_MONTH_RE, statsMonthOptionsHtml } from "../../../../shared/statsPeriods.ts";
+import { ProfileStatsView } from "./profileStatsView";
 import type { App } from "./app.ts";
 import {
     DEFAULT_UNLOCKED,
@@ -294,10 +296,14 @@ export class PlayerView {
         let mapId = params.get("mapId") || ALL_MAPS;
         if (!PLAYER_MAP_IDS.includes(Number(mapId))) mapId = ALL_MAPS;
         const gameId = params.get("gameId") || "";
+        // a calendar month "YYYY-MM" - wins over the interval
+        const monthParam = params.get("month") || "";
+        const month = STATS_MONTH_RE.test(monthParam) ? monthParam : undefined;
 
         return {
             slug,
             interval,
+            month,
             mapId,
             gameId,
         };
@@ -311,7 +317,7 @@ export class PlayerView {
         const interval = getUrlParams.interval as UserStatsRequest["interval"];
         const mapId = getUrlParams.mapId;
 
-        this.loadUserStats(slug, interval, mapId);
+        this.loadUserStats(slug, interval, mapId, getUrlParams.month);
         this.loadMatchHistory(slug, 0, 7);
 
         this.render();
@@ -320,14 +326,16 @@ export class PlayerView {
         slug: string,
         interval: UserStatsRequest["interval"],
         mapIdFilter: string,
+        month?: string,
     ) {
         const args: UserStatsRequest = {
             slug: slug,
             interval: interval,
             mapIdFilter: mapIdFilter,
+            month,
         };
 
-        const cacheKey = `${interval}${mapIdFilter}`;
+        const cacheKey = `${interval}${mapIdFilter}${month ?? ""}`;
         if (this.userStatsCache[cacheKey]) {
             const { error, data } = this.userStatsCache[cacheKey];
             this.userStats.data = data;
@@ -443,11 +451,13 @@ export class PlayerView {
         const slug = this.getUrlParams().slug;
         const time = $("#player-time").val();
         const mapId = $("#player-map-id").val();
+        const month = $("#player-month").val() as string | undefined;
 
         let searchP = new URLSearchParams();
         searchP.set("slug", slug);
         searchP.set("time", time as string);
         searchP.set("mapId", mapId as string);
+        if (month) searchP.set("month", month);
 
         const selectedGame = this.games.find((g) => g.expanded);
         if (selectedGame) {
@@ -465,6 +475,7 @@ export class PlayerView {
             params.slug,
             params.interval as LeaderboardRequest["interval"],
             params.mapId,
+            params.month,
         );
     }
 
@@ -480,7 +491,7 @@ export class PlayerView {
                 found?: boolean;
                 private?: boolean;
                 username?: string;
-                roleTag?: "admin" | "mod" | "premium" | null;
+                roleTag?: "owner" | "admin" | "mod" | "premium" | null;
                 slug?: string;
                 loadout?: Record<string, string | string[]>;
                 items?: OwnedItem[];
@@ -503,7 +514,7 @@ export class PlayerView {
     }
 
     /** Shown instead of the collection when the player marked their loadout private. */
-    showLoadoutPrivate(username: string, roleTag: "admin" | "mod" | "premium" | null = null) {
+    showLoadoutPrivate(username: string, roleTag: "owner" | "admin" | "mod" | "premium" | null = null) {
         $(".loadout-modal-overlay").remove();
         const $modal = $(
             `<div class="loadout-modal-overlay">` +
@@ -526,7 +537,7 @@ export class PlayerView {
 
     renderLoadoutModal(
         username: string,
-        roleTag: "admin" | "mod" | "premium" | null,
+        roleTag: "owner" | "admin" | "mod" | "premium" | null,
         slug: string,
         loadout: Record<string, string | string[]>,
         items: OwnedItem[],
@@ -816,6 +827,18 @@ export class PlayerView {
         if (timeSelector) {
             timeSelector.val(params.interval);
             timeSelector.on("change", () => {
+                // picking an interval clears the calendar month
+                this.el.find("#player-month").val("");
+                this.onChangedParams();
+            });
+        }
+
+        // a month replaces the interval (which is greyed out then)
+        const monthSelector = this.el.find("#player-month");
+        if (monthSelector.length) {
+            monthSelector.html(statsMonthOptionsHtml(params.month, "Any month"));
+            timeSelector.toggleClass("player-opt-overridden", !!params.month);
+            monthSelector.on("change", () => {
                 this.onChangedParams();
             });
         }
@@ -962,6 +985,37 @@ export class PlayerView {
             }
         }
 
+        this.applyExtraTab(params.slug);
         this.app.localization.localizeIndex();
+    }
+
+    /** Left column of the profile: "Matches" (history) or "Stats" (extended, Premium). */
+    extraTab: "matches" | "stats" = "matches";
+    profileStats = new ProfileStatsView(() => this.renderProfileStats());
+
+    private applyExtraTab(slug: string) {
+        const stats = this.extraTab === "stats";
+        this.el.find("#match-history").css("display", stats ? "none" : "");
+        this.el.find("#profile-stats").css("display", stats ? "" : "none");
+        this.el.find(".selector-extra[data-extra-tab]").each((_, el) => {
+            $(el).find(".selected-extra").css("display", $(el).attr("data-extra-tab") === this.extraTab ? "" : "none");
+        });
+        this.el.find(".selector-extra[data-extra-tab]").css("cursor", "pointer").off("click.extra").on("click.extra", (e) => {
+            const tab = $(e.currentTarget).attr("data-extra-tab") as "matches" | "stats";
+            if (tab === this.extraTab) return;
+            this.extraTab = tab;
+            this.applyExtraTab(slug);
+        });
+        if (stats) {
+            if (!this.profileStats.loaded) this.profileStats.load(slug);
+            this.renderProfileStats();
+        }
+    }
+
+    private renderProfileStats() {
+        const root = this.el.find("#profile-stats");
+        if (!root.length) return;
+        root.html(this.profileStats.html());
+        this.profileStats.bind(root);
     }
 }

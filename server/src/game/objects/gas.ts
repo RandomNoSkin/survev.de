@@ -2,6 +2,7 @@ import { GameConfig, GasMode } from "../../../../shared/gameConfig.ts";
 import { math } from "../../../../shared/utils/math.ts";
 import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
+import type { CustomMapConfig } from "../../../../shared/defs/customMap.ts";
 import type { Game } from "../game.ts";
 
 interface StageData {
@@ -161,6 +162,31 @@ const GasStages: StageData[] = [
     },
 ];
 
+/**
+ * The zone a custom map asks for: off (one inactive stage bigger than the map), or the
+ * stock stages sped up / hurting more, thinned out to `circles` circles that still
+ * end fully closed.
+ */
+function buildStages(gas: CustomMapConfig["gas"] | undefined): StageData[] {
+    if (!gas) return GasStages;
+    if (!gas.enabled) return [{ mode: GasMode.Inactive, duration: 0, rad: 2, damage: 0 }];
+    const [inactive, ...rest] = GasStages;
+    const pairs: StageData[][] = [];
+    for (let i = 0; i + 1 < rest.length; i += 2) pairs.push([rest[i], rest[i + 1]]);
+    const n = Math.max(1, Math.min(gas.circles, pairs.length));
+    const picked = n >= pairs.length
+        ? pairs
+        : Array.from({ length: n }, (_, i) => pairs[n === 1 ? pairs.length - 1 : Math.round((i * (pairs.length - 1)) / (n - 1))]);
+    return [
+        inactive,
+        ...picked.flat().map((stage) => ({
+            ...stage,
+            duration: stage.duration / gas.speed,
+            damage: stage.damage * gas.damage,
+        })),
+    ];
+}
+
 export class Gas {
     /**
      * Current gas mode
@@ -259,8 +285,11 @@ export class Gas {
 
     mapSize: number;
 
+    private stages: StageData[];
+
     constructor(readonly game: Game) {
         const map = game.map;
+        this.stages = buildStages(map.customMap?.gas);
         this.mapSize = (map.width + map.height) / 2;
         this.posOld = v2.create(map.width / 2, map.height / 2);
         this.posNew = v2.copy(this.posOld);
@@ -387,7 +416,7 @@ export class Gas {
     }
 
     private _getStageData() {
-        return GasStages[this.stage];
+        return this.stages[this.stage];
     }
 
     isInGas(pos: Vec2) {

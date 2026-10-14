@@ -56,7 +56,7 @@ export const dashboardHtml = `<!DOCTYPE html>
       --red:      #aa1a1a; --red-t: #ff4444;   --red-dim: #1e0808;
       --yellow-t: #ffcc44;
     }
-    html, body { height: 100vh; overflow: hidden; }
+    html, body { height: 100vh; height: 100dvh; overflow: hidden; }
     body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column; }
 
     /* ── Top bar ── */
@@ -71,18 +71,66 @@ export const dashboardHtml = `<!DOCTYPE html>
     #live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-t); display: inline-block; margin-right: 4px; box-shadow: 0 0 5px var(--green-t); }
     #live-dot.off { background: var(--text-muted); box-shadow: none; }
 
-    /* ── Tabs ── */
-    #tabs { display: flex; gap: 2px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .tab-btn {
-      padding: 10px 20px; cursor: pointer; border: none; background: none;
-      color: var(--text-dim); font-size: 13px; font-weight: 500; font-family: inherit;
-      border-bottom: 2px solid transparent; transition: color .15s, border-color .15s;
+    /* ── Layout: sidebar navigation + content ── */
+    #shell { display: flex; flex: 1; min-height: 0; }
+    #tabs {
+      width: 214px; flex-shrink: 0; overflow-y: auto; padding: 14px 10px 20px;
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 2px;
     }
-    .tab-btn:hover { color: var(--text); }
-    .tab-btn.active { color: var(--blue-t); border-bottom-color: var(--blue-t); }
+    .nav-group {
+      font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--text-muted); padding: 14px 10px 6px;
+    }
+    .nav-group:first-child { padding-top: 2px; }
+    .tab-btn {
+      display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+      padding: 8px 10px; cursor: pointer; border: none; background: none; border-radius: 6px;
+      color: var(--text-dim); font-size: 13px; font-weight: 500; font-family: inherit;
+      border-left: 2px solid transparent; transition: color .15s, background .15s;
+    }
+    .tab-btn .nav-icon { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+    .tab-btn .nav-count {
+      margin-left: auto; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 9px;
+      background: var(--surface3); color: var(--text-dim);
+    }
+    .tab-btn .nav-count:empty { display: none; }
+    .tab-btn .nav-count.hot { background: var(--red-dim, #3a1520); color: var(--red-t, #ff6b6b); }
+    .tab-btn:hover { color: var(--text); background: var(--surface2); }
+    .tab-btn.active { color: var(--blue-t); background: var(--blue-dim); border-left-color: var(--blue-t); }
 
     /* ── Main area ── */
-    #main { flex: 1; min-height: 0; position: relative; }
+    #main { flex: 1; min-width: 0; min-height: 0; position: relative; }
+    .pane-title { font-size: 18px; font-weight: 700; color: #fff; }
+    .pane-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px !important; }
+
+    /* ── Overview ── */
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+    .kpi {
+      background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 12px 14px;
+      cursor: pointer; transition: border-color .15s;
+    }
+    .kpi:hover { border-color: var(--blue); }
+    .kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .6px; }
+    .kpi-value { font-size: 26px; font-weight: 700; color: #fff; margin-top: 4px; }
+    .kpi-hint { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 14px; }
+    .ov-card { background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; overflow: hidden; }
+    .ov-card-head {
+      display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border);
+      font-weight: 600; color: var(--text);
+    }
+    .ov-card-head a { margin-left: auto; font-size: 11px; color: var(--blue-t); cursor: pointer; font-weight: 500; }
+    .ov-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .ov-row:last-child { border-bottom: none; }
+    .ov-row .muted { color: var(--text-muted); }
+    .ov-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Live game cards ── */
+    .gc-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .gc-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--surface3); color: var(--text-dim); }
+    .gc-tag.private { background: #2d2440; color: #c9a8ff; }
+    .gc-tag.hidden { background: #3a2a14; color: #ffc46b; }
     .tab-pane { display: none; position: absolute; inset: 0; overflow-y: auto; padding: 20px 24px; }
     .tab-pane.active { display: block; }
     .tab-pane > * + * { margin-top: 14px; }
@@ -246,37 +294,145 @@ export const dashboardHtml = `<!DOCTYPE html>
     /* ── Toast ── */
     #toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface3); border: 1px solid var(--border2); border-radius: 6px; padding: 8px 14px; font-size: 12px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
     #toast.show { opacity: 1; }
+
+    /* ── Phone / small tablet ── */
+    #nav-toggle, #nav-backdrop, #topbar-tab { display: none; }
+    @media (max-width: 820px) {
+      body { font-size: 14px; }
+      #topbar { gap: 10px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
+      #topbar-title { display: none; }
+      #topbar-tab { display: block; font-size: 15px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+      #topbar-user { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+      #live-label { display: none; }
+      #nav-toggle {
+        display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+        width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--border2);
+        background: var(--surface2); color: var(--text); font-size: 18px; cursor: pointer; position: relative;
+      }
+      #nav-toggle .nav-toggle-dot { position: absolute; top: 5px; right: 5px; font-size: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--red-t); }
+      #nav-toggle .nav-toggle-dot:empty { display: none; }
+
+      /* the sidebar becomes a drawer */
+      #tabs {
+        position: fixed; top: 0; bottom: 0; left: 0; z-index: 90; width: min(280px, 84vw);
+        transform: translateX(-102%); transition: transform .2s ease; box-shadow: 4px 0 24px #000a;
+        padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom));
+      }
+      body.nav-open #tabs { transform: none; }
+      #nav-backdrop { position: fixed; inset: 0; z-index: 89; background: #0009; }
+      body.nav-open #nav-backdrop { display: block; }
+      .tab-btn { padding: 12px 12px; font-size: 15px; }
+      .tab-btn .nav-count { font-size: 11px; }
+
+      .tab-pane { padding: 14px 12px calc(28px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+      .pane-title { font-size: 17px; }
+
+      /* bigger touch targets; 16px inputs keep iOS from zooming in */
+      .btn { padding: 8px 12px; font-size: 13px; }
+      .btn-sm { padding: 6px 10px; font-size: 12px; }
+      input, select, textarea { font-size: 16px !important; }
+      .toolbar { gap: 8px; }
+      .toolbar input[type=text], .toolbar select { flex: 1 1 100%; min-width: 0; max-width: none !important; width: 100% !important; }
+      .sub-tabs { flex-wrap: wrap; }
+      .toolbar input[type=date], .toolbar input[type=datetime-local], .toolbar input[type=number] { flex: 1 1 120px; min-width: 0; width: auto !important; }
+      .toolbar label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 100%; }
+      .sub-tab-btn, .xp-sub-btn { padding: 8px 14px; font-size: 13px; }
+
+      /* wide tables scroll sideways instead of squashing the page */
+      .data-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+      .data-table td, .data-table th { padding: 9px 10px; }
+      .data-table td[style*="max-width"] { white-space: normal; min-width: 180px; }
+
+      .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .kpi-value { font-size: 22px; }
+      .ov-row { flex-wrap: wrap; }
+      .game-card { flex: 1 1 100%; min-width: 0; }
+      .game-cards { padding: 10px; }
+      #announce-input, #msg-input { min-width: 0; flex: 1 1 100%; }
+
+      .chat-msg { flex-wrap: wrap; gap: 4px 10px; }
+      .chat-msg .t, .chat-msg .nm, .chat-msg .ch { min-width: 0; }
+      .chat-msg .mg { flex: 1 1 100%; }
+
+      .kv-row { flex-wrap: wrap; }
+      .kv-val { word-break: break-all; }
+
+      /* modals: full width, scrollable */
+      #ban-modal, #ui-modal { align-items: flex-end !important; padding: 0; }
+      #ban-modal > div, #ui-modal > div { width: 100% !important; max-width: 100% !important; max-height: 92dvh; overflow-y: auto; border-radius: 14px 14px 0 0 !important; padding-bottom: calc(20px + env(safe-area-inset-bottom)) !important; }
+      #account-modal { padding: 0 !important; }
+      #account-modal > div { border-radius: 0 !important; min-height: 100%; padding: 14px 12px !important; }
+
+      #toast { left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); text-align: center; }
+    }
   </style>
 </head>
 <body>
 
 <!-- ── Top bar ── -->
 <div id="topbar">
+  <button id="nav-toggle" type="button" aria-label="Menu" onclick="toggleNav()">☰<span class="nav-toggle-dot" id="nav-toggle-dot"></span></button>
   <span id="topbar-title">⬛ Moderation Dashboard</span>
+  <span id="topbar-tab">Overview</span>
   <span id="topbar-live"><span id="live-dot" class="off"></span><span id="live-label" style="font-size:11px;color:var(--text-muted)">Connecting…</span></span>
   <span id="topbar-user" style="margin-left:auto;color:var(--text-dim);font-size:12px;">Loading…</span>
 </div>
 
-<!-- ── Tabs ── -->
-<div id="tabs">
-  <button class="tab-btn active" data-tab="bans">Bans</button>
-  <button class="tab-btn"        data-tab="lookup">IP / Player</button>
-  <button class="tab-btn"        data-tab="servers">Live Servers</button>
-  <button class="tab-btn"        data-tab="accounts">Accounts</button>
-  <button class="tab-btn"        data-tab="chatlog">Chat Log</button>
-  <button class="tab-btn"        data-tab="replays">Replays</button>
-  <button class="tab-btn"        data-tab="xp">XP Gain</button>
-  <button class="tab-btn"        data-tab="games">Games</button>
-  <button class="tab-btn"        data-tab="sus">Sus</button>
-  <button class="tab-btn"        data-tab="leaderboard">Leaderboard</button>
-  <button class="tab-btn"        data-tab="warnings">Warnings</button>
-  <button class="tab-btn"        data-tab="apps">Apps</button>
-</div>
+<div id="shell">
+<!-- ── Navigation (grouped; the groups a moderator can't use hide themselves) ── -->
+<div id="nav-backdrop" onclick="toggleNav(false)"></div>
+<nav id="tabs">
+  <div class="nav-group" data-group="live">Live</div>
+  <button class="tab-btn active" data-tab="overview"><span class="nav-icon">◉</span>Overview</button>
+  <button class="tab-btn" data-tab="servers"><span class="nav-icon">▶</span>Live Games<span class="nav-count" id="nav-count-games"></span></button>
+
+  <div class="nav-group" data-group="moderation">Moderation</div>
+  <button class="tab-btn" data-tab="sus"><span class="nav-icon">⚑</span>Sus Reports<span class="nav-count" id="nav-count-sus"></span></button>
+  <button class="tab-btn" data-tab="bans"><span class="nav-icon">⛔</span>Bans<span class="nav-count" id="nav-count-bans"></span></button>
+  <button class="tab-btn" data-tab="warnings"><span class="nav-icon">⚠</span>Warnings</button>
+  <button class="tab-btn" data-tab="chatlog"><span class="nav-icon">💬</span>Chat Log</button>
+  <button class="tab-btn" data-tab="lookup"><span class="nav-icon">🔍</span>Player / IP Lookup</button>
+
+  <div class="nav-group" data-group="players">Players</div>
+  <button class="tab-btn" data-tab="accounts"><span class="nav-icon">👤</span>Accounts</button>
+  <button class="tab-btn" data-tab="xp"><span class="nav-icon">✦</span>XP Gain</button>
+  <button class="tab-btn" data-tab="leaderboard"><span class="nav-icon">🏆</span>Leaderboard</button>
+
+  <div class="nav-group" data-group="games">Games</div>
+  <button class="tab-btn" data-tab="games"><span class="nav-icon">🎮</span>Game Search</button>
+  <button class="tab-btn" data-tab="replays"><span class="nav-icon">⏵</span>Replays</button>
+
+  <div class="nav-group" data-group="system">System</div>
+  <button class="tab-btn" data-tab="apps"><span class="nav-icon">⚙</span>OAuth Apps</button>
+</nav>
 
 <div id="main">
 
+  <!-- ════════════════ OVERVIEW ════════════════ -->
+  <div id="tab-overview" class="tab-pane active">
+    <div>
+      <div class="pane-title">Overview</div>
+      <div class="pane-sub" id="ov-sub">What's going on right now.</div>
+    </div>
+    <div class="kpi-row" id="ov-kpis"><div class="loading">Loading…</div></div>
+    <div class="ov-grid">
+      <div class="ov-card">
+        <div class="ov-card-head">▶ Busiest live games<a onclick="switchTab('servers')">All live games →</a></div>
+        <div id="ov-games"><div class="loading">Connecting…</div></div>
+      </div>
+      <div class="ov-card">
+        <div class="ov-card-head">⚑ Latest sus reports<a onclick="switchTab('sus')">All reports →</a></div>
+        <div id="ov-sus"><div class="loading">Loading…</div></div>
+      </div>
+      <div class="ov-card" data-admin-only="1">
+        <div class="ov-card-head">⛔ Latest bans<a onclick="switchTab('bans')">All bans →</a></div>
+        <div id="ov-bans"><div class="loading">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ════════════════ TAB 1: BANS ════════════════ -->
-  <div id="tab-bans" class="tab-pane active">
+  <div id="tab-bans" class="tab-pane">
     <div class="toolbar">
       <div class="sub-tabs">
         <button class="sub-tab-btn active" data-sub="ip">IP Bans</button>
@@ -628,6 +784,7 @@ export const dashboardHtml = `<!DOCTYPE html>
     </div>
   </div>
 </div>
+</div><!-- /#shell -->
 
 <!-- ── Toast notification ── -->
 <div id="toast"></div>
@@ -956,6 +1113,7 @@ function esc(s) {
 // ── SSE connection ─────────────────────────────────────────────────────────
 
 function setLiveStatus(connected) {
+  document.getElementById("topbar-live").style.visibility = "";
   document.getElementById('live-dot').className   = connected ? '' : 'off';
   document.getElementById('live-label').textContent = connected ? 'Live' : 'Disconnected';
   document.getElementById('live-label').style.color = connected ? 'var(--green-t)' : 'var(--text-muted)';
@@ -978,11 +1136,13 @@ function connectSSE(region, gameId) {
   evtSource.addEventListener('bans', (e) => {
     bansData = JSON.parse(e.data);
     renderBans();
+    renderOverview();
   });
 
   evtSource.addEventListener('servers', (e) => {
     serverData = JSON.parse(e.data);
     renderServers();
+    renderOverview();
   });
 
   evtSource.addEventListener('players', (e) => {
@@ -1012,25 +1172,46 @@ function connectSSE(region, gameId) {
 
 function closeSSE() {
   if (evtSource) { evtSource.close(); evtSource = null; }
-  setLiveStatus(false);
+  // pages without live data: no indicator instead of a scary "Disconnected"
+  document.getElementById("topbar-live").style.visibility = "hidden";
 }
 
 // ── Tab switching ──────────────────────────────────────────────────────────
+
+/** Phone layout: opens/closes the navigation drawer (no-op look on desktop). */
+function toggleNav(open) {
+  const want = typeof open === 'boolean' ? open : !document.body.classList.contains('nav-open');
+  document.body.classList.toggle('nav-open', want);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleNav(false); });
 
 function switchTab(name) {
   // A deep link (or a stale hash) can name a tab a moderator has no access to. Their
   // pane is hidden and its API 403s, so land them on their default instead of on a
   // blank screen. Purely cosmetic — the server is what actually enforces this.
-  if (isModerator && !MODERATOR_TABS.includes(name)) name = 'replays';
+  if (isModerator && !MODERATOR_TABS.includes(name)) name = 'overview';
 
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  // phone: name the open tab in the top bar and close the drawer
+  const activeBtn = document.querySelector('.tab-btn[data-tab="' + name + '"]');
+  const tabLabel = document.getElementById('topbar-tab');
+  if (activeBtn && tabLabel) {
+    const clone = activeBtn.cloneNode(true);
+    clone.querySelectorAll('.nav-icon, .nav-count').forEach(el => el.remove());
+    tabLabel.textContent = clone.textContent.trim();
+  }
+  toggleNav(false);
   document.querySelectorAll('.tab-pane').forEach(p => {
     const active = p.id === 'tab-' + name;
     p.classList.toggle('active', active);
     p.style.display = active ? 'block' : 'none';
   });
 
-  if (name === 'servers') {
+  if (name === 'overview') {
+    connectSSE(null, null);
+    renderOverview();
+    loadOverviewSus();
+  } else if (name === 'servers') {
     connectSSE(null, null);
   } else if (name === 'bans') {
     connectSSE(null, null);
@@ -1446,7 +1627,7 @@ function renderXpUserDetail(data) {
       <td>\${g.rank}</td>
       <td>\${fmtSecs(g.timeAlive)}</td>
       <td><strong>\${g.xp.toLocaleString()}</strong></td>
-      <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${adminNavLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\'s chat' })}</td>
+      <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${adminNavLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\\'s chat' })}</td>
     </tr>\`;
   }).join('');
   container.innerHTML = \`
@@ -2380,7 +2561,7 @@ function renderSus() {
     container.innerHTML = (susData.length || susSolvedData.length)
       ? '<div class="empty">No flags match.</div>'
       : isModerator
-        ? '<div class="empty">You haven\\'t flagged anything as suspicious yet.</div>'
+        ? '<div class="empty">You haven\\\'t flagged anything as suspicious yet.</div>'
         : '<div class="empty">Nothing is flagged as suspicious.</div>';
     return;
   }
@@ -2447,7 +2628,7 @@ function renderSusSolved(solved, q) {
 function susRowActions(e) {
   const parts = [];
   if (e.scope === 'player') {
-    parts.push('<button class="btn btn-red btn-sm" data-susact="botted" data-susgame="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId) + '" title="Void this player\\'s game — revokes its XP, cosmetics and fries">botted</button>');
+    parts.push('<button class="btn btn-red btn-sm" data-susact="botted" data-susgame="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId) + '" title="Void this player\\\'s game — revokes its XP, cosmetics and fries">botted</button>');
     parts.push('<button class="btn btn-orange btn-sm" data-susact="remove" data-susgame="' + esc(e.gameId) + '" data-sususer="' + esc(e.userId) + '" title="Remove this player from the game — hides it from their stats and the leaderboard and revokes its XP">➖ remove</button>');
     if (e.slug) {
       parts.push('<button class="btn btn-red btn-sm" data-susact="banacc" data-susslug="' + esc(e.slug) + '" data-susreason="' + esc(e.reason || '') + '" title="Ban this account">🔨 ban acc</button>');
@@ -3380,6 +3561,115 @@ function selectServerRegion(regionId) {
   renderServers();
 }
 
+
+/** "12:34" since the match started (game server clock; close enough for a glance). */
+function runtimeText(g) {
+  if (!g.startedAt) return 'waiting';
+  const sec = Math.max(0, Math.floor((Date.now() - g.startedAt) / 1000));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+
+function gamePlayers(g) {
+  return g.humanAliveCount ?? g.aliveCount ?? g.playerCount ?? 0;
+}
+
+/** One live game: mode, map, players, runtime; watch (invisible) for staff, kill for admins. */
+function gameCardHtml(regionId, g) {
+  const isSelected = activeGameId === g.id;
+  const mode = TEAM_MODE_LABEL[g.teamMode] || ('Mode ' + g.teamMode);
+  const tags = [
+    '<span class="gc-tag">' + esc(g.mapName || '?') + '</span>',
+    '<span class="gc-tag">⏱ ' + runtimeText(g) + '</span>',
+    g.isPrivate ? '<span class="gc-tag private">Private lobby</span>' : '',
+    g.isPrivate && g.publicSpectating === false ? '<span class="gc-tag hidden">Hidden from spectators</span>' : '',
+  ].join('');
+  const killBtn = isAdmin
+    ? '<div style="margin-top:4px;"><button class="btn btn-red btn-sm" style="width:100%" onclick="event.stopPropagation();killGame(\\'' + esc(regionId) + '\\',\\'' + esc(g.id) + '\\')">✕ KILL</button></div>'
+    : '';
+  return '<div class="game-card ' + (isSelected ? 'selected' : '') + '" data-region="' + esc(regionId) + '" data-id="' + esc(g.id) + '" onclick="selectGame(\\'' + esc(regionId) + '\\',\\'' + esc(g.id) + '\\')">'
+    + '<div class="gc-id">' + esc(g.id.slice(0, 8)) + '…</div>'
+    + '<div class="gc-mode">' + esc(mode) + '</div>'
+    + '<div class="gc-count">' + gamePlayers(g) + ' players alive</div>'
+    + '<div class="gc-meta">' + tags + '</div>'
+    + '<div style="margin-top:8px;"><button class="btn btn-blue btn-sm" style="width:100%" title="Nobody in the game sees you: no join message, no spectator count, no entry at the end" onclick="event.stopPropagation();spectateGame(\\'' + esc(regionId) + '\\',\\'' + esc(g.id) + '\\')">👁 WATCH (INVISIBLE)</button></div>'
+    + killBtn
+    + '</div>';
+}
+
+let overviewSus = null;
+
+async function loadOverviewSus() {
+  try {
+    const data = await get('/api/sus');
+    overviewSus = data.entries ?? [];
+  } catch { overviewSus = []; }
+  renderOverview();
+}
+
+function setNavCount(id, n, hot) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = n ? String(n) : '';
+  el.classList.toggle('hot', !!hot && n > 0);
+  // phone: a dot on the menu button while something in the drawer needs attention
+  const dot = document.getElementById('nav-toggle-dot');
+  if (dot) dot.textContent = document.querySelector('.nav-count.hot') ? '!' : '';
+}
+
+/** Overview: live numbers, busiest games, latest reports and bans. Re-run on every stream update. */
+function renderOverview() {
+  const regions = (serverData && serverData.regions) || [];
+  const games = regions.flatMap(r => (r.games || []).filter(g => !g.stopped).map(g => ({ regionId: r.regionId, g })));
+  const players = games.reduce((n, x) => n + gamePlayers(x.g), 0);
+  const susOpen = overviewSus ? overviewSus.length : null;
+  const bans = bansData && bansData.ipBans ? bansData : null;
+  const banCount = bans ? (bans.ipBans.length + bans.accountBans.length + bans.chatBans.length) : null;
+
+  setNavCount('nav-count-games', games.length);
+  if (susOpen !== null) setNavCount('nav-count-sus', susOpen, true);
+  if (banCount !== null) setNavCount('nav-count-bans', banCount);
+
+  const kpis = document.getElementById('ov-kpis');
+  if (!kpis || !document.getElementById('tab-overview').classList.contains('active')) return;
+
+  const kpi = (label, value, hint, tab) =>
+    '<div class="kpi" onclick="switchTab(\\'' + tab + '\\')"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div><div class="kpi-hint">' + hint + '</div></div>';
+  kpis.innerHTML = [
+    kpi('Players in game', players, 'humans, alive right now', 'servers'),
+    kpi('Running games', games.length, regions.length + ' region' + (regions.length === 1 ? '' : 's'), 'servers'),
+    kpi('Private lobby games', games.filter(x => x.g.isPrivate).length, 'of the running games', 'servers'),
+    kpi('Open sus reports', susOpen === null ? '…' : susOpen, isModerator ? 'reported by you' : 'waiting for a decision', 'sus'),
+    isAdmin ? kpi('Active bans', banCount === null ? '…' : banCount, bans ? bans.ipBans.length + ' IP · ' + bans.accountBans.length + ' account · ' + bans.chatBans.length + ' chat' : '', 'bans') : '',
+  ].join('');
+
+  const top = [...games].sort((a, b) => gamePlayers(b.g) - gamePlayers(a.g)).slice(0, 6);
+  document.getElementById('ov-games').innerHTML = top.length ? top.map(x => {
+    const mode = TEAM_MODE_LABEL[x.g.teamMode] || ('Mode ' + x.g.teamMode);
+    return '<div class="ov-row"><span class="grow"><b>' + esc(mode) + '</b> <span class="muted">· ' + esc(x.g.mapName || '?') + ' · ' + esc(x.regionId) + (x.g.isPrivate ? ' · private' : '') + '</span></span>'
+      + '<span class="muted">' + gamePlayers(x.g) + ' alive · ' + runtimeText(x.g) + '</span>'
+      + '<button class="btn btn-blue btn-sm" onclick="spectateGame(\\'' + esc(x.regionId) + '\\',\\'' + esc(x.g.id) + '\\')">👁 Watch</button></div>';
+  }).join('') : '<div class="empty">No running games.</div>';
+
+  const sus = overviewSus || [];
+  document.getElementById('ov-sus').innerHTML = overviewSus === null ? '<div class="loading">Loading…</div>' : sus.length ? sus.slice(0, 6).map(e =>
+    '<div class="ov-row"><span class="grow"><b>' + esc(e.username || e.slug || (e.scope === 'game' ? 'Whole game' : '?')) + '</b> <span class="muted">· ' + esc(e.reason || 'no reason') + '</span></span>'
+    + '<span class="muted">' + esc(e.markedByName || e.markedBy || '') + '</span></div>'
+  ).join('') : '<div class="empty">No open reports. 🎉</div>';
+
+  const bansCard = document.querySelector('.ov-card[data-admin-only]');
+  if (bansCard) bansCard.style.display = isAdmin ? '' : 'none';
+  if (isAdmin) {
+    const latest = bans ? [
+      ...bans.accountBans.map(b => ({ who: b.username || b.slug, why: b.banReason, by: b.bannedBy, kind: 'account', at: b.bannedAt || b.createdAt })),
+      ...bans.ipBans.map(b => ({ who: (b.encodedIp || '').slice(0, 10) + '…', why: b.reason, by: b.bannedBy, kind: 'IP', at: b.createdAt })),
+      ...bans.chatBans.map(b => ({ who: (b.encodedIp || b.username || '').slice(0, 10) + '…', why: b.reason, by: b.bannedBy, kind: 'chat', at: b.createdAt })),
+    ].sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0)).slice(0, 6) : [];
+    document.getElementById('ov-bans').innerHTML = !bans ? '<div class="loading">Loading…</div>' : latest.length ? latest.map(b =>
+      '<div class="ov-row"><span class="badge">' + b.kind + '</span><span class="grow"><b>' + esc(b.who || '?') + '</b> <span class="muted">· ' + esc(b.why || 'no reason') + '</span></span><span class="muted">' + esc(b.by || '') + '</span></div>'
+    ).join('') : '<div class="empty">No active bans.</div>';
+  }
+}
+
 function renderServers() {
   const list = document.getElementById('server-list');
   const regions = serverData.regions || [];
@@ -3404,22 +3694,9 @@ function renderServers() {
   // ── Games of the active region ──
   const region = regions.find(r => r.regionId === activeServerRegion);
   const games = (region.games || []).filter(g => !g.stopped);
-  const cardsHtml = games.length ? games.map((g) => {
-    const isSelected = activeGameId === g.id;
-    return \`<div class="game-card \${isSelected ? 'selected' : ''}" data-region="\${esc(region.regionId)}" data-id="\${esc(g.id)}" onclick="selectGame('\${esc(region.regionId)}','\${esc(g.id)}')">
-      <div class="gc-id">\${esc(g.id.slice(0,8))}…</div>
-      <div class="gc-mode">Mode \${esc(String(g.teamMode || '?'))}</div>
-      <div class="gc-count">\${g.playerCount ?? '?'} players</div>
-      <div style="margin-top:6px;">
-        <button class="btn btn-blue btn-sm" style="width:100%" onclick="event.stopPropagation();spectateGame('\${esc(region.regionId)}','\${esc(g.id)}')">👁 SPECTATE</button>
-      </div>
-      <div style="margin-top:4px;">
-        <button class="btn btn-red btn-sm" style="width:100%" onclick="event.stopPropagation();killGame('\${esc(region.regionId)}','\${esc(g.id)}')">✕ KILL</button>
-      </div>
-    </div>\`;
-  }).join('') : '<div class="empty">No running games.</div>';
+  const cardsHtml = games.length ? games.map((g) => gameCardHtml(region.regionId, g)).join('') : '<div class="empty">No running games.</div>';
 
-  const verifyBtn = region.verifiedOnly
+  const verifyBtn = !isAdmin ? '' : region.verifiedOnly
     ? \`<button class="btn btn-red btn-sm" style="margin-left:auto" onclick="setServerVerified('\${esc(region.regionId)}', false)">UNVERIFY SERVER</button>\`
     : \`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="setServerVerified('\${esc(region.regionId)}', true)">VERIFY SERVER</button>\`;
 
@@ -3538,7 +3815,9 @@ function renderPlayers() {
         : p.alive
           ? '<span class="badge badge-alive">ALIVE</span>'
           : '<span class="badge badge-dead">DEAD</span>';
-    const specBadge  = !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
+    const specBadge  = !p.disconnected && p.stealth
+      ? '<span class="badge badge-spec" title="Staff watching from the dashboard - invisible to players">👁 STAFF (INVISIBLE)</span>'
+      : !p.disconnected && p.isSpectator ? '<span class="badge badge-spec">SPECTATOR</span>' : '';
     const adminBadge = p.isAdmin ? '<span class="badge badge-admin">ADMIN</span>'
       : p.isModerator ? '<span class="badge badge-mod">MODERATOR</span>' : '';
     const premiumBadge = p.isPremium ? '<span class="badge badge-premium">⭐ PREMIUM</span>' : '';
@@ -4366,7 +4645,7 @@ document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
  * Games is read-only for them apart from raising a sus flag, and their Sus tab is their
  * own report list — the server scopes and gates both independently.
  */
-const MODERATOR_TABS = ['replays', 'xp', 'games', 'sus'];
+const MODERATOR_TABS = ['overview', 'servers', 'replays', 'xp', 'games', 'sus'];
 
 (async () => {
   try {
@@ -4388,17 +4667,30 @@ const MODERATOR_TABS = ['replays', 'xp', 'games', 'sus'];
     document.querySelectorAll('.tab-btn').forEach(b => {
       if (!MODERATOR_TABS.includes(b.dataset.tab)) b.style.display = 'none';
     });
+    // a group header with nothing left under it goes too
+    document.querySelectorAll('.nav-group').forEach(g => {
+      let el = g.nextElementSibling, any = false;
+      while (el && !el.classList.contains('nav-group')) {
+        if (el.classList.contains('tab-btn') && el.style.display !== 'none') any = true;
+        el = el.nextElementSibling;
+      }
+      if (!any) g.style.display = 'none';
+    });
+    // live announcements to every game are an admin tool
+    const announce = document.getElementById('global-announce-open');
+    if (announce) announce.style.display = 'none';
     document.getElementById('sus-hint').textContent =
       'The games you flagged as suspicious. Open the game or replay to review — solving a report is up to the admins, and their outcome shows up below.';
     // Deep links still work within their tabs; switchTab redirects anything else.
     routeFromHash(location.hash);
     window.addEventListener('hashchange', () => routeFromHash(location.hash));
-    if (!location.hash) switchTab('replays');
+    if (!location.hash) switchTab('overview');
     return;
   }
 
   // Open initial SSE stream (covers both bans tab and basic server info)
   connectSSE(null, null);
+  if (!location.hash) switchTab('overview');
 
   // Deep-link routing: when opened via a nav link in a new tab (Ctrl/middle-click),
   // land straight in the target view. Also react to manual hash changes.

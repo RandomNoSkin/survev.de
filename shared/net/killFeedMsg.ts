@@ -1,5 +1,7 @@
+import type { DisplayRoleTag } from "../types/user";
 import type { AbstractMsg, BitStream } from "./net";
 import { KillFeedMsgType } from "./net";
+import { decodeRoleTag, encodeRoleTag } from "./roleTagCodec";
 
 export class KillFeedMsg implements AbstractMsg {
     player: string = "";
@@ -8,7 +10,9 @@ export class KillFeedMsg implements AbstractMsg {
     type: KillFeedMsgType = KillFeedMsgType.Ping;
     cmd: string = "";
     args: string[] = [];
-    
+    roleTag: DisplayRoleTag = null;
+    /** Admin-chosen chat highlight ("#rrggbb"), empty for the channel default. */
+    color: string = "";
 
     serialize(s: BitStream) {
 
@@ -21,6 +25,8 @@ export class KillFeedMsg implements AbstractMsg {
         for (let i = 0; i < this.args.length; i++) {
             s.writeString(this.args[i]);
         }
+        s.writeUint8(encodeRoleTag(this.roleTag));
+        s.writeString(this.color);
         s.writeBits(0,6)
 
     }
@@ -36,6 +42,8 @@ export class KillFeedMsg implements AbstractMsg {
         for (let i = 0; i < argsLength; i++) {
             this.args.push(s.readString());
         }
+        this.roleTag = decodeRoleTag(s.readUint8());
+        this.color = s.readString();
         s.readBits(6);
     }
 }

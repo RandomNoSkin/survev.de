@@ -1,5 +1,6 @@
 import { styleText } from "util";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
+import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
 import { MapObjectDefs } from "../../../shared/defs/register.ts";
 import type {
     BuildingDef,
@@ -26,7 +27,34 @@ import { Building } from "./objects/building";
 import { Obstacle } from "./objects/obstacle";
 import type { Player } from "./objects/player";
 import { Structure } from "./objects/structure";
+import { applyLobbyRules, CUSTOM_MAP_COLORS, CUSTOM_MAP_LIMITS, type CustomMapConfig, type CustomMapObjectLoot } from "../../../shared/defs/customMap";
+import { applyCustomMap } from "./customMap";
 import { RiverCreator } from "./riverCreator";
+
+/** Custom lobby maps stop placing objects after this long (see GameMap.genDeadline). */
+const CUSTOM_MAP_GEN_BUDGET_MS = 3000;
+/** Placement attempts per object on custom maps (vanilla allows 15000 for important spawns). */
+const CUSTOM_MAP_MAX_ATTEMPTS = 1500;
+
+/** A loot spot rolls each of its pools once; custom map pools roll min..max times. */
+function lootSpawnerRolls<T extends { tier?: string }>(own: T[], custom?: CustomMapObjectLoot[]): Array<{ tier?: string }> {
+    if (!custom) return own;
+    return custom.flatMap((l) => Array.from({ length: util.randomInt(l.min, l.max) }, () => ({ tier: l.tier })));
+}
+
+let boundingCollidersWarm = false;
+/** Computes (and so caches) every map object's bounding collider once per process. */
+function warmBoundingColliders() {
+    if (boundingCollidersWarm) return;
+    boundingCollidersWarm = true;
+    for (const type of Object.keys(RawMapObjectDefs)) {
+        try {
+            mapHelpers.getBoundingCollider(type);
+        } catch {
+            // types without any collision (never placed on their own)
+        }
+    }
+}
 
 // Baked surface-grid cell classification for the static terrain (shore + rivers).
 // `Mixed` = a boundary edge passes through this cell, so the exact polygon test must
@@ -227,6 +255,15 @@ export class GameMap {
     seed!: number;
     msg!: net.MapMsg;
     terrain!: ReturnType<typeof generateTerrain>;
+
+    /** Built from a private lobby's custom map config (see applyCustomMap). */
+    isCustomMap = false;
+    /** The custom map settings in effect (validated, advanced ones dropped when off). */
+    customMap?: CustomMapConfig;
+    /** loot items placed by loot spots during generation (custom maps cap it) */
+    genLootCount = 0;
+    /** performance.now() after which custom map generation stops placing objects; 0 = no limit. */
+    genDeadline = 0;
     riverDescs!: MapRiverData[];
     riverMasks!: Array<{ pos: Vec2; rad: number }>;
     normalRivers!: Array<River & { looped: false }>;
@@ -299,6 +336,23 @@ export class GameMap {
         const mapDef = (this.mapDef = util.cloneDeep(
             MapDefs[game.config.mapName],
         ) as MapDef);
+        const rulesDef = game.config.rulesMapName
+            ? (MapDefs as Record<string, MapDef>)[game.config.rulesMapName]
+            : undefined;
+        if (rulesDef) {
+            applyLobbyRules(mapDef, rulesDef);
+            // pools the rules rely on (airdrop crates, role drops) must exist; the
+            // map's own pools win where both have one
+            mapDef.lootTable = { ...rulesDef.lootTable, ...mapDef.lootTable };
+        }
+        if (game.config.customMap) {
+            this.customMap = applyCustomMap(mapDef, game.config.customMap);
+            this.isCustomMap = true;
+        }
+        // private lobbies size the match themselves (leader's player limit)
+        if (game.config.maxPlayers) {
+            mapDef.gameMode.maxPlayers = game.config.maxPlayers;
+        }
 
         assert(mapDef, `Invalid map name: ${game.config.mapName}`);
 
@@ -342,7 +396,30 @@ export class GameMap {
     }
 
     init(seed?: number) {
-        this.seed = seed ?? util.randomInt(0, 2 ** 32 - 1);
+        const fixedSeed = seed ?? (this.customMap?.seed || undefined);
+        if (fixedSeed === undefined) {
+            this.initMap(util.randomInt(0, 2 ** 32 - 1));
+            return;
+        }
+        // a fixed seed means the same map every match: terrain already follows the
+        // seed, object placement uses Math.random throughout - swap it for the
+        // generation (synchronous, nothing else runs in between)
+        // bounding colliders are computed (with a random pick for random children)
+        // and cached on first use per process - fill the cache first, or only the
+        // first game of a process would draw those extra numbers and differ
+        warmBoundingColliders();
+        const random = Math.random;
+        Math.random = util.seededRand(fixedSeed);
+        try {
+            this.initMap(fixedSeed);
+        } finally {
+            Math.random = random;
+        }
+    }
+
+    private initMap(seed: number) {
+        this.seed = seed;
+        this.genLootCount = 0;
 
         this.obstacles = [];
         this.dynamicObstacles = [];
@@ -356,6 +433,12 @@ export class GameMap {
 
         this.msg = new net.MapMsg();
         this.msg.mapName = this.game.config.mapName;
+        const rulesMapName = this.game.config.rulesMapName;
+        this.msg.rulesMapName = rulesMapName && rulesMapName in MapDefs ? rulesMapName : "";
+        const colors = this.customMap?.colors ?? {};
+        this.msg.colors = CUSTOM_MAP_COLORS.flatMap((key, idx) =>
+            colors[key] !== undefined ? [{ idx, color: colors[key]! }] : [],
+        );
         this.msg.seed = this.seed;
         this.msg.width = this.width;
         this.msg.height = this.height;
@@ -437,6 +520,8 @@ export class GameMap {
         this.buildSurfaceGrid();
         this.timerEnd("Building surface grid");
 
+        // custom maps can ask for a lot: cap generation time instead of stalling the game process
+        if (this.isCustomMap) this.genDeadline = performance.now() + CUSTOM_MAP_GEN_BUDGET_MS;
         this.timerStart();
         this.generateObjects();
         this.timerEnd("Generating all objects");
@@ -1035,6 +1120,13 @@ export class GameMap {
             this.timerEnd("Generating faction bridges");
         }
 
+        // custom map placements go where the player put them, before anything else
+        // can take the spot; blocked (river, lake) -> the nearest free ground around it
+        for (const p of this.customMap?.placements ?? []) {
+            const pos = v2.create(p.x, 1 - p.y);
+            if (!this.genLocationSpawn(p.type, pos, 8)) this.genLocationSpawn(p.type, pos, 40);
+        }
+
         this.timerStart();
         for (const spawn of objsToSpawn.stage1) {
             genSpawn(spawn, true);
@@ -1140,6 +1232,7 @@ export class GameMap {
 
     genFromMapDef(type: string, count: number): void {
         for (let i = 0; i < count; i++) {
+            if (this.genDeadline && performance.now() > this.genDeadline) return;
             const def = MapObjectDefs.typeToDef(type);
 
             if (def.terrain?.waterEdge) {
@@ -1204,7 +1297,9 @@ export class GameMap {
                 return decal;
             }
             case "loot_spawner":
-                for (const tier of def.loot) {
+                for (const tier of lootSpawnerRolls(def.loot, this.customMap?.objectLoot[type])) {
+                    // custom maps can stack thousands of loot spots; cap what they put down
+                    if (this.isCustomMap && ++this.genLootCount > CUSTOM_MAP_LIMITS.maxGenLoot) break;
                     const item = this.game.lootBarn.getLootTable(tier.tier!);
                     if (!item) break;
 
@@ -1255,8 +1350,10 @@ export class GameMap {
         logOnFailure = true,
     ): boolean {
         maxAttempts ??= this.mapDef.mapGen.importantSpawns.includes(type) ? 15000 : 500;
+        if (this.isCustomMap) maxAttempts = Math.min(maxAttempts, CUSTOM_MAP_MAX_ATTEMPTS);
         let attempts = 0;
         while (attempts < maxAttempts) {
+            if (this.genDeadline && performance.now() > this.genDeadline) return false;
             if (cb()) {
                 // if (attempts > 50) console.log(type, attempts);
                 return true;
@@ -1825,7 +1922,7 @@ export class GameMap {
                     () => {
                         attempts++;
 
-                        const placeIdx = Math.floor(Math.random() * this.placeSpawns.length);
+                        const placeIdx = Math.floor(Math.random() * this.placesToSpawn.length);
                         const place = this.placesToSpawn[placeIdx];
 
                         const { ori, scale } = this.getOriAndScale(resolvedType);

@@ -246,12 +246,16 @@ export class SingleThreadGameManager implements GameManager {
         const game = await this.newGame({
             teamMode: body.teamMode,
             mapName: body.mapName as keyof typeof MapDefs,
+            maxPlayers: body.maxPlayers,
+            rulesMapName: body.rulesMapName,
+            weaponStats: body.weaponStats,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
             advancedSettings: body.advancedSettings,
             customLoadout: body.customLoadout,
             customLoadoutEnabled: body.customLoadoutEnabled,
             publicSpectating: body.publicSpectating,
+            customMap: body.customMap,
         });
 
         game.addGroupedJoinTokens(body.teams);

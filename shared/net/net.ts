@@ -20,8 +20,10 @@ export const Constants = {
     PlayerMaxScale: 2,
     MapObjectMinScale: 0.125,
     MapObjectMaxScale: 2.5,
-    MaxPerks: 8,
-    MaxMapIndicators: 16,
+    // every perk can be stacked on one player (custom lobby loadouts); same bit-width rule as below
+    MaxPerks: 127,
+    // ids and the per-update list length share getBits(this) bits, so stay below a power of two
+    MaxMapIndicators: 127,
 };
 
 const getBits = (n: number) => Math.ceil(Math.log2(n));
@@ -302,6 +304,7 @@ export enum MsgType {
     Assist,
     SpectatorAdvanced,
     PickupExtra,
+    AdvancedSpectatorAllowed,
 }
 
 export enum PickupMsgType {
@@ -343,6 +346,7 @@ export { JoinMsg } from "./joinMsg.ts";
 export { KillMsg } from "./killMsg.ts";
 export { AssistMsg } from "./assistMsg.ts";
 export { PickupExtraMsg } from "./pickupExtraMsg.ts";
+export { AdvancedSpectatorAllowedMsg } from "./advancedSpectatorAllowedMsg.ts";
 export { MapMsg } from "./mapMsg.ts";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg.ts";
 export { RoleSelectMsg } from "./roleSelectMsg.ts";

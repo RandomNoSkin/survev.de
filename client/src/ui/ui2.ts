@@ -20,7 +20,7 @@ import {
     Input,
     type InventoryItem,
 } from "../../../shared/gameConfig";
-import { PickupMsgType } from "../../../shared/net/net";
+import { Constants, PickupMsgType } from "../../../shared/net/net";
 import { collider } from "../../../shared/utils/collider";
 import { math } from "../../../shared/utils/math";
 import { util } from "../../../shared/utils/util";
@@ -37,7 +37,10 @@ import type { Localization } from "./localization";
 
 const maxKillFeedLines = 6;
 const touchHoldDuration = 0.75 * 1000;
-const perkUiCount = 4;
+// one HUD slot per perk a player can carry; slots past the 4 in index.html are cloned
+const perkUiCount = Constants.MaxPerks;
+// the shipped row width; more rows stack upwards instead of reaching over the minimap
+const PERKS_PER_ROW = 4;
 
 enum InteractionType {
     None,
@@ -465,6 +468,21 @@ export class UiManager2 {
                 )[0] as HTMLImageElement,
             };
             this.dom.gear.push(L);
+        }
+        // index.html only ships 4 perk slots; build the rest from the last one. Slots
+        // fill right-to-left like the shipped ones and wrap into rows stacked upwards.
+        const perkTemplate = domElemById("ui-perk-3");
+        for (let i = 4; i < perkUiCount; i++) {
+            if (document.getElementById(`ui-perk-${i}`)) continue;
+            const slot = perkTemplate.cloneNode(true) as HTMLElement;
+            slot.id = `ui-perk-${i}`;
+            slot.style.display = "none";
+            const col = i % PERKS_PER_ROW;
+            const row = Math.floor(i / PERKS_PER_ROW);
+            if (col === 0) slot.style.left = "4px";
+            else slot.style.right = `${(col - 1) * 60}px`;
+            slot.style.bottom = `${row * 66}px`;
+            perkTemplate.parentElement!.appendChild(slot);
         }
         for (let i = 0; i < perkUiCount; i++) {
             const perk = domElemById(`ui-perk-${i}`);
@@ -1865,7 +1883,7 @@ export class UiManager2 {
 
     getJoinedText(
         name: string,
-        roleTag: "admin" | "mod" | "premium" | "bot" | null = null,
+        roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
     ){
         const joinTxt = this.localization.translate("game-joined");
         return `${helpers.formatUsername(name, roleTag)} ${joinTxt}`;
@@ -1888,7 +1906,7 @@ export class UiManager2 {
         const itemTxt = this.localization.translate(`game-${item}`);
         const txt = this.localization.translate("pinged-item");
         
-        return `${player} ${txt} ${itemTxt}`;
+        return `${helpers.htmlEscape(player)} ${txt} ${itemTxt}`;
     }
 
     addChatMessage(text: string, color: string, outlineColor: string) {
@@ -1905,7 +1923,15 @@ export class UiManager2 {
     }
 
 
-    getChatMessage(player: string, text:string, chatType?: number){
+    getChatMessage(
+        player: string,
+        text: string,
+        chatType?: number,
+        roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+    ){
+        // the kill feed renders via innerHTML, so both name and text must be escaped
+        const name = helpers.formatUsername(player, roleTag);
+        const body = helpers.htmlEscape(text);
 
         let channel = "";
         switch(chatType){
@@ -1922,8 +1948,8 @@ export class UiManager2 {
                 break;
             }
         }
-        if(channel !== "") return `[${channel}]  [${player}]: ${text}`;
-        return `[${player}]: ${text}`;
+        if(channel !== "") return `[${channel}]  ${name}: ${body}`;
+        return `${name}: ${body}`;
     }
 
     getAdminChatMessage(player: string, text:string){

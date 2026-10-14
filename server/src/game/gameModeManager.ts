@@ -67,7 +67,8 @@ export class GameModeManager {
 
     // used when saving the game match data
     getPlayersSortedByRank(): Array<{ player: Player; rank: number }> {
-        const players = [...this.game.playerBarn.players];
+        // invisible staff spectators get no entry at all (not ranked, not saved)
+        const players = this.game.playerBarn.players.filter((p) => !p.stealth);
 
         switch (this.mode) {
             case GameMode.Solo: {

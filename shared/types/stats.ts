@@ -2,6 +2,14 @@ import { z } from "zod";
 import { MapId, TeamMode } from "../gameConfig.ts";
 import type { ImpactBreakdown } from "../impactScore.ts";
 import type { RoleTag } from "./user.ts";
+import {
+    STATS_COMPARE_RE,
+    STATS_MONTH_RE,
+    STATS_PERIODS,
+    type StatsPeriod,
+    type StatsRange,
+    type StatsSeason,
+} from "../statsPeriods.ts";
 
 //
 // Match History
@@ -100,6 +108,8 @@ const VALID_MAP_IDS = Object.values(MapId)
 
 export const zUserStatsRequest = z.object({
     interval: z.enum(["daily", "weekly", "alltime"]),
+    /** a calendar month "YYYY-MM" - wins over the interval */
+    month: z.string().regex(STATS_MONTH_RE).optional(),
     slug: z.string().min(1),
     mapIdFilter: z.enum([ALL_MAPS, ...VALID_MAP_IDS]),
 });
@@ -240,29 +250,62 @@ export type WeaponStatsResponse = WeaponStatsEntry[];
 // Server Stats (aggregate server-wide activity for the public /stats?view=server page)
 //
 export const zServerStatsRequest = z.object({
-    interval: z.enum(["daily", "weekly", "monthly", "yearly", "alltime"]),
+    period: z.enum(STATS_PERIODS).default("week"),
+    /** with period "season": which one (default the current) */
+    season: z.string().max(40).optional(),
+    /** a calendar month "YYYY-MM" - wins over the period */
+    month: z.string().regex(STATS_MONTH_RE).optional(),
+    /** what to compare with, see applyStatsCompare */
+    compare: z.string().regex(STATS_COMPARE_RE).optional(),
+    teamMode: z.number().int().optional(),
+    region: z.string().max(40).optional(),
+    mapId: z.number().int().optional(),
 });
 
-export type ServerStatsRequest = z.infer<typeof zServerStatsRequest>;
-export type ServerStatsInterval = ServerStatsRequest["interval"];
+export type ServerStatsRequest = z.input<typeof zServerStatsRequest>;
+
+/** One set of activity numbers (a whole window, or one mode / region / map of it). */
+export interface ServerStatsMetrics {
+    /** Distinct games played. */
+    games: number;
+    /** Player-games (one row per player per game). */
+    participations: number;
+    /** Distinct players by encoded IP (includes anonymous). */
+    uniquePlayers: number;
+    /** Distinct logged-in accounts. */
+    registeredPlayers: number;
+    avgPlayersPerGame: number;
+    /** Average match length in seconds (longest survival per game). */
+    avgDurationSec: number;
+    kills: number;
+    killsPerPlayer: number;
+    damagePerPlayer: number;
+}
 
 export interface ServerStatsResponse {
-    interval: ServerStatsInterval;
-    totals: {
-        /** Distinct games played. */
-        games: number;
-        /** Player-games (one row per player per game). */
-        participations: number;
-        /** Distinct players by encoded IP (includes anonymous). */
-        uniquePlayers: number;
-        /** Distinct logged-in accounts. */
-        registeredPlayers: number;
-    };
-    byTeamMode: { teamMode: number; games: number; participations: number }[];
-    byRegion: { region: string; games: number; participations: number }[];
-    byMap: { mapId: number; games: number }[];
+    period: StatsPeriod;
+    /** epoch ms */
+    range: { from: number | null; to: number };
+    prevRange: { from: number; to: number } | null;
+    seasons: StatsSeason[];
+    season?: string;
+    /** the calendar month shown, if one was picked */
+    month?: string;
+    totals: ServerStatsMetrics;
+    /** The window before (same length), for the deltas; null for "all time". */
+    previous: ServerStatsMetrics | null;
+    byTeamMode: (ServerStatsMetrics & { teamMode: number })[];
+    byRegion: (ServerStatsMetrics & { region: string })[];
+    byMap: (ServerStatsMetrics & { mapId: number })[];
+    bucket: StatsRange["bucket"];
     /** Bucketed activity over time (bucket = ISO timestamp). */
     timeseries: { bucket: string; games: number; players: number }[];
+    /** The same for the window before, aligned by index. */
+    prevTimeseries: { bucket: string; games: number; players: number }[];
+    /** Games started per hour of day (UTC). */
+    hourOfDay: { hour: number; games: number }[];
+    /** What the filters can be set to. */
+    options: { teamModes: number[]; regions: string[]; mapIds: number[] };
     /** Current live activity (not cached; sampled from the region heartbeats). */
     live: {
         totalPlayers: number;
@@ -270,4 +313,83 @@ export interface ServerStatsResponse {
         regions: { region: string; playerCount: number; gameCount: number }[];
     };
     generatedAt: number;
+}
+
+//
+// Extended profile stats (Premium accounts' profiles, /stats/?slug=…)
+//
+export const zUserProfileStatsRequest = z.object({
+    slug: z.string().max(60),
+    period: z.enum(STATS_PERIODS).default("alltime"),
+    /** with period "season": which one (default the current) */
+    season: z.string().max(40).optional(),
+    /** a calendar month "YYYY-MM" - wins over the period */
+    month: z.string().regex(STATS_MONTH_RE).optional(),
+    /** what to compare with, see applyStatsCompare */
+    compare: z.string().regex(STATS_COMPARE_RE).optional(),
+    teamMode: z.number().int().optional(),
+});
+
+export type UserProfileStatsRequest = z.input<typeof zUserProfileStatsRequest>;
+
+export interface UserProfileOverview {
+    games: number;
+    wins: number;
+    /** 0-100 */
+    winRate: number;
+    top5: number;
+    kills: number;
+    deaths: number;
+    kd: number;
+    assists: number;
+    avgKills: number;
+    avgDamage: number;
+    totalDamage: number;
+    maxKills: number;
+    maxDamage: number;
+    /** seconds */
+    avgTimeAlive: number;
+    totalTimeAlive: number;
+    revives: number;
+    teammateSaves: number;
+    avgRank: number;
+    /** null when no match in the window had an impact score */
+    avgImpact: number | null;
+    shots: number;
+    hits: number;
+    /** 0-100; null without tracked shots */
+    accuracy: number | null;
+}
+
+export interface UserProfileWeapon {
+    weaponType: string;
+    games: number;
+    kills: number;
+    damage: number;
+    avgDamage: number;
+    maxDamage: number;
+    shots: number;
+    hits: number;
+    accuracy: number | null;
+}
+
+export interface UserProfileStatsResponse {
+    /** false: the account has no Premium - nothing else is sent */
+    premium: boolean;
+    username?: string;
+    period?: StatsPeriod;
+    range?: { from: number | null; to: number };
+    prevRange?: { from: number; to: number } | null;
+    seasons?: StatsSeason[];
+    season?: string;
+    month?: string;
+    overview?: UserProfileOverview;
+    /** the window before, same length (null: nothing to compare with) */
+    previous?: UserProfileOverview | null;
+    byMode?: { teamMode: number; games: number; wins: number; kills: number; kd: number; avgDamage: number; winRate: number }[];
+    byMap?: { mapId: number; games: number; wins: number; kills: number; avgDamage: number; winRate: number }[];
+    /** weapon stats are tracked per day from their introduction on */
+    weapons?: UserProfileWeapon[];
+    bucket?: StatsRange["bucket"];
+    activity?: { bucket: string; games: number; kills: number; wins: number }[];
 }

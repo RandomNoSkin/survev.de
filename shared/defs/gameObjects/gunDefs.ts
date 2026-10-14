@@ -3728,7 +3728,8 @@ export const BaseDefs: Record<string, GunDef> = {
             { bulletType: "bullet_sw500_medium", count: 1 },
             { bulletType: "bullet_sw500_small", count: 1 },
         ],
-        bulletType: "bullet_sw500",
+        // the mix above decides every shot; this is what the rest reads (stats, damage display)
+        bulletType: "bullet_sw500_big",
         headshotMult: 1,
         speed: { equip: 1.2, attack: 0 },
         lootImg: {

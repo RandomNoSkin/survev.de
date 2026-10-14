@@ -395,17 +395,21 @@ function mapOffer(r: {
     status: string;
     fromSlug: string;
     fromUsername: string | null;
+    fromOwner?: boolean | null;
     fromAdmin?: boolean | null;
     fromModerator?: boolean | null;
     fromPremiumUntil?: Date | null;
+    fromShowOwnerPrefix?: boolean | null;
     fromShowAdminPrefix?: boolean | null;
     fromShowModPrefix?: boolean | null;
     fromShowPremiumPrefix?: boolean | null;
     toSlug: string;
     toUsername: string | null;
+    toOwner?: boolean | null;
     toAdmin?: boolean | null;
     toModerator?: boolean | null;
     toPremiumUntil?: Date | null;
+    toShowOwnerPrefix?: boolean | null;
     toShowAdminPrefix?: boolean | null;
     toShowModPrefix?: boolean | null;
     toShowPremiumPrefix?: boolean | null;
@@ -422,9 +426,11 @@ function mapOffer(r: {
         fromSlug: r.fromSlug,
         fromUsername: r.fromUsername ?? "",
         fromRoleTag: resolveRoleTag({
+            owner: r.fromOwner,
             admin: r.fromAdmin,
             moderator: r.fromModerator,
             premiumUntil: r.fromPremiumUntil,
+            showOwnerPrefix: r.fromShowOwnerPrefix,
             showAdminPrefix: r.fromShowAdminPrefix,
             showModPrefix: r.fromShowModPrefix,
             showPremiumPrefix: r.fromShowPremiumPrefix,
@@ -432,9 +438,11 @@ function mapOffer(r: {
         toSlug: r.toSlug,
         toUsername: r.toUsername ?? "",
         toRoleTag: resolveRoleTag({
+            owner: r.toOwner,
             admin: r.toAdmin,
             moderator: r.toModerator,
             premiumUntil: r.toPremiumUntil,
+            showOwnerPrefix: r.toShowOwnerPrefix,
             showAdminPrefix: r.toShowAdminPrefix,
             showModPrefix: r.toShowModPrefix,
             showPremiumPrefix: r.toShowPremiumPrefix,
@@ -463,9 +471,11 @@ export async function getOffersForUser(userId: string): Promise<OfferListRespons
         .select({
             ...base,
             fromUsername: usersTable.username,
+            fromOwner: usersTable.owner,
             fromAdmin: usersTable.admin,
             fromModerator: usersTable.moderator,
             fromPremiumUntil: usersTable.premiumUntil,
+            fromShowOwnerPrefix: usersTable.showOwnerPrefix,
             fromShowAdminPrefix: usersTable.showAdminPrefix,
             fromShowModPrefix: usersTable.showModPrefix,
             fromShowPremiumPrefix: usersTable.showPremiumPrefix,
@@ -484,9 +494,11 @@ export async function getOffersForUser(userId: string): Promise<OfferListRespons
         .select({
             ...base,
             toUsername: usersTable.username,
+            toOwner: usersTable.owner,
             toAdmin: usersTable.admin,
             toModerator: usersTable.moderator,
             toPremiumUntil: usersTable.premiumUntil,
+            toShowOwnerPrefix: usersTable.showOwnerPrefix,
             toShowAdminPrefix: usersTable.showAdminPrefix,
             toShowModPrefix: usersTable.showModPrefix,
             toShowPremiumPrefix: usersTable.showPremiumPrefix,

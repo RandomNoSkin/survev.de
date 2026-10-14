@@ -496,6 +496,11 @@ table.player-stats-overview td {
   font-weight: bold;
 }
 
+/* the interval while a calendar month is picked (the month wins) */
+.player-opt-overridden {
+  opacity: 0.55;
+}
+
 .card-mode {
   border: none;
   border-radius: 0px;
@@ -756,7 +761,7 @@ table.player-stats-overview td {
 
 /*
 .extra-weapons {
-  background-image: url("/img/ui/gun.svg");
+  background-image: url("/img/loot/loot-weapon-ak.svg");
 }
 
 .extra-misc {
@@ -1849,4 +1854,260 @@ td.data-player-status {
   color: #f2d63b;
   font-weight: 700;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Server stats: comparisons and filters */
+.ss-controls {
+  flex-wrap: wrap;
+}
+.ss-range {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  margin: -6px 0 12px;
+}
+.ss-range span {
+  opacity: 0.75;
+}
+.ss-card-prev {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #8a8a8a;
+}
+.ss-delta {
+  font-weight: 700;
+  color: #8a8a8a;
+}
+.ss-delta.up {
+  color: #2e9e4f;
+}
+.ss-delta.down {
+  color: #d64545;
+}
+.ss-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: #8a8a8a;
+  margin-left: 6px;
+}
+.ss-table-wrap {
+  overflow-x: auto;
+}
+.ss-compare td,
+.ss-compare th {
+  white-space: nowrap;
+}
+.ss-row-link {
+  cursor: pointer;
+}
+.ss-row-link:hover td {
+  background: #f4f7fb;
+}
+.ss-share {
+  background: #eef1f5;
+  border-radius: 3px;
+  height: 4px;
+  margin-top: 4px;
+  width: 90px;
+}
+.ss-share span {
+  background: #4a90d9;
+  border-radius: 3px;
+  display: block;
+  height: 4px;
+}
+
+/* Profile: extended stats tab (Premium) */
+.extra-stats {
+  background-image: url("/img/loot/loot-weapon-ak.svg");
+}
+.ps-wrap {
+  color: #2a2a2a;
+}
+.ps-header {
+  background-image: none;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+}
+.ps-premium {
+  margin-left: auto;
+  margin-right: 10px;
+  font-size: 12px;
+  color: #f2d63b;
+  letter-spacing: 1px;
+}
+.ps-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.ps-select {
+  width: auto;
+  display: inline-block;
+  min-width: 140px;
+}
+.ps-hint,
+.ps-updating {
+  color: #fff;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.ps-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ps-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px 10px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.ps-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2c3e50;
+}
+.ps-card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #8a8a8a;
+  margin-top: 2px;
+}
+.ps-card-prev {
+  font-size: 11px;
+  margin-top: 4px;
+  min-height: 14px;
+}
+.ps-delta {
+  font-weight: 700;
+  color: #8a8a8a;
+}
+.ps-delta.up {
+  color: #2e9e4f;
+}
+.ps-delta.down {
+  color: #d64545;
+}
+.ps-box {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  overflow-x: auto;
+}
+.ps-center {
+  text-align: center;
+  color: #8a8a8a;
+}
+.ps-title {
+  font-weight: 700;
+  color: #2c3e50;
+  margin-bottom: 8px;
+}
+.ps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.ps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ps-table th,
+.ps-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #ececec;
+  white-space: nowrap;
+  text-align: right;
+}
+.ps-table th:first-child,
+.ps-table td:first-child {
+  text-align: left;
+}
+.ps-table th {
+  color: #8a8a8a;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.ps-sort {
+  cursor: pointer;
+}
+.ps-sort.active,
+.ps-sort:hover {
+  color: #2c3e50;
+}
+.ps-sort.active::after {
+  content: " ▼";
+}
+.ps-weapon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ps-weapon-icon {
+  width: 28px;
+  height: 28px;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  flex: none;
+}
+.ps-bar {
+  background: #eef1f5;
+  border-radius: 3px;
+  height: 4px;
+  margin-top: 4px;
+  max-width: 160px;
+}
+.ps-bar span {
+  display: block;
+  height: 4px;
+  border-radius: 3px;
+  background: #e8a33d;
+}
+.ps-empty {
+  color: #8a8a8a;
+  text-align: center;
+  padding: 12px;
+}
+.ps-locked {
+  text-align: center;
+  padding: 30px 20px;
+}
+.ps-locked-icon {
+  font-size: 40px;
+  color: #f2b51d;
+}
+.ps-locked-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin: 6px 0;
+}
+.ps-locked-text {
+  color: #6b6b6b;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.ps-legend {
+  font-size: 12px;
+  font-weight: 400;
+  color: #6b6b6b;
+  margin-left: 10px;
+}
+.ps-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin: 0 4px 0 10px;
+  vertical-align: middle;
 }

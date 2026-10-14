@@ -129,6 +129,14 @@ export const SharedAtlas: AtlasDef = {
         "map/map-couch-res-01.svg",
 
         "map/map-crate-01.svg",
+        // crimson airdrop crate: dropped (and inside buildings) on many maps, not just desert
+        "map/map-crate-17.svg",
+        "map/map-crate-res-04.svg",
+        // desert ring case: also on potato and cobalt
+        "map/map-case-ring-02.svg",
+        // sinks are in woods and desert buildings; comp/scrims load both atlases
+        "map/map-sink-01.svg",
+        "map/map-sink-res-01.svg",
         "map/map-crate-02.svg",
         "map/map-crate-02sv.svg",
         "map/map-crate-03.svg",

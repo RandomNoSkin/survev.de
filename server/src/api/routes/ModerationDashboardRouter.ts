@@ -229,6 +229,9 @@ const MODERATOR_ALLOWED_PATHS = new Set([
     // The Games tab, so a report can be written from the game roster. Read-only: the
     // only write it reaches is /moderate, which is sus-only for them (see below).
     "/api/games/search",
+    // Live games, to watch them (invisibly) - the stream leaves bans out for them
+    "/api/events",
+    "/api/servers",
 ]);
 
 /** Dynamic (parameterised) sub-paths a moderator may hit — see MODERATOR_ALLOWED_PATHS. */
@@ -236,6 +239,7 @@ const MODERATOR_ALLOWED_PATTERNS: RegExp[] = [
     /^\/api\/xp-gain\/user\/[^/]+$/,
     /^\/api\/game\/[^/]+\/players$/,
     /^\/api\/game\/[^/]+\/moderate$/,
+    /^\/api\/game\/[^/]+\/[^/]+\/spectate-token$/,
 ];
 
 function moderatorMayAccess(subPath: string): boolean {
@@ -1342,8 +1346,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const regionId = c.req.query("region") ?? "";
         const gameId = c.req.query("gameId") ?? "";
 
+        // bans are admin-only; moderators get the live games and players
+        const isAdmin = !!(c.get("user") as { admin?: boolean } | undefined)?.admin;
+
         return streamSSE(c, async (stream) => {
-            activeSseStreams.add(stream);
+            if (isAdmin) activeSseStreams.add(stream);
 
             // Helper that wraps writeSSE and swallows errors for gone clients
             const push = async (event: string, data: unknown) => {
@@ -1355,7 +1362,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             };
 
             // Send initial snapshots immediately
-            await push("bans", await fetchAllBans());
+            if (isAdmin) await push("bans", await fetchAllBans());
             await push("servers", await fetchServers());
             if (gameId) {
                 const players = await withStaffFlags(
@@ -1464,7 +1471,10 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/game/:region/:id/spectate-token", async (c) => {
         const regionId = c.req.param("region");
         const gameId = c.req.param("id");
-        const data = await server.findGameById(regionId, gameId, true /* admin */);
+        // staff watch invisibly (no join, no spectator count, no end-of-game entry);
+        // in-game admin powers only for actual admins, not moderators
+        const user = c.get("user") as { admin?: boolean } | undefined;
+        const data = await server.findGameById(regionId, gameId, !!user?.admin, true);
         return c.json(data);
     })
     // ─────────────────────────────────────────────────────────────────────────

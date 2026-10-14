@@ -239,6 +239,10 @@ export class Application {
             this.localization,
             this.account,
             this.joinGameAsSpectator.bind(this),
+            (publicId) => {
+                this.teamMenu.leave();
+                this.privateLobbyMenu.connect(false, "", undefined, undefined, true, publicId);
+            },
         );
     }
 

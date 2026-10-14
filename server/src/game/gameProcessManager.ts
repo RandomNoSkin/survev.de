@@ -48,6 +48,7 @@ class GameProcess implements GameData {
     /** Bots excluded - see GameData.humanAliveCount. */
     humanAliveCount = 0;
     startedTime = 0;
+    startedAt = 0;
     stopped = true;
     created = false;
 
@@ -135,6 +136,7 @@ class GameProcess implements GameData {
                     this.aliveCount = msg.aliveCount;
                     this.humanAliveCount = msg.humanAliveCount;
                     this.startedTime = msg.startedTime;
+                    this.startedAt = msg.startedAt;
                     this.stopped = msg.stopped;
                     if (this.stopped) {
                         this.stoppedTime = Date.now();
@@ -231,7 +233,7 @@ class GameProcess implements GameData {
         this.publicSpectating = config.publicSpectating ?? true;
 
         const mapDef = MapDefs[this.mapName as keyof typeof MapDefs] as MapDef;
-        this.avaliableSlots = mapDef.gameMode.maxPlayers;
+        this.avaliableSlots = config.maxPlayers ?? mapDef.gameMode.maxPlayers;
     }
 
     addJoinTokens(tokens: FindGamePrivateBody["playerData"], autoFill: boolean) {
@@ -600,12 +602,16 @@ export class GameProcessManager implements GameManager {
         const game = this.newGame({
             teamMode: body.teamMode,
             mapName: body.mapName as keyof typeof MapDefs,
+            maxPlayers: body.maxPlayers,
+            rulesMapName: body.rulesMapName,
+            weaponStats: body.weaponStats,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
             advancedSettings: body.advancedSettings,
             customLoadout: body.customLoadout,
             customLoadoutEnabled: body.customLoadoutEnabled,
             publicSpectating: body.publicSpectating,
+            customMap: body.customMap,
         });
 
         // Cap reached — no process available to host the private lobby right now.

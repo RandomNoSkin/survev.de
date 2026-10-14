@@ -73,7 +73,7 @@ export class TeamMenu {
         inGame: boolean;
         name: string;
         isLeader: boolean;
-        roleTag: "admin" | "mod" | "premium" | null;
+        roleTag: "owner" | "admin" | "mod" | "premium" | null;
     }> = [];
 
     prevPlayerCount = 0;
@@ -620,7 +620,7 @@ export class TeamMenu {
                     playerId: number;
                     isLeader: boolean;
                     inGame: boolean;
-                    roleTag: "admin" | "mod" | "premium" | null;
+                    roleTag: "owner" | "admin" | "mod" | "premium" | null;
                     self: boolean;
                 } = {
                     name: "",

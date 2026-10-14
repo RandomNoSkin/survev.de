@@ -199,7 +199,13 @@ export const ObjectSerializeFns: {
 } = {
     [ObjectType.Player]: {
         serializedPartialSize: 6,
-        serializedFullSize: 32, // calculating this one is... yeah...
+        // 32 bytes for everything but the perk list, plus room for every perk a
+        // player can carry (game type + droppable flag each); overflowing this
+        // throws inside the game tick and takes the whole game server down
+        // getter: net.ts imports this module, so Constants isn't initialized yet at load time
+        get serializedFullSize() {
+            return 32 + Math.ceil((Constants.MaxPerks * (10 + 1)) / 8);
+        },
         /* STRIP_FROM_PROD_CLIENT:START */
         serializePart: (s, data) => {
             s.writeMapPos(data.pos);

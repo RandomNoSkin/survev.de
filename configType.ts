@@ -67,6 +67,16 @@ export interface ConfigType {
     };
 
     /**
+     * Owner-only control page (roles, server control, system status), served by the API
+     * server on its own port. Always bound to 127.0.0.1 - never proxy it through nginx;
+     * reach it on a remote box via `ssh -L <port>:127.0.0.1:<port>`.
+     */
+    superAdmin: {
+        enabled: boolean;
+        port: number;
+    };
+
+    /**
      * Client dev server.
      */
     vite: {

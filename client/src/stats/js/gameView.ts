@@ -85,11 +85,12 @@ export class GameView {
     /** Cosmetics each player had equipped in this match, keyed by name (see `fetchLoadouts`). */
     private loadouts = new Map<string, string[]>();
     /** Impact score + breakdown per player name, from `/api/match_data` (see `fetchLoadouts`). */
-    private impact = new Map<string, { score: number; breakdown: ImpactBreakdown }>();
+    /** score null: the match wasn't rated for them (see breakdown.unrated) */
+    private impact = new Map<string, { score: number | null; breakdown: ImpactBreakdown }>();
     /** Account slug per player name, null for guests (see `fetchLoadouts`). */
     private slugs = new Map<string, string | null>();
     /** Premium status per player name (see `fetchLoadouts`). */
-    private roleTags = new Map<string, "admin" | "mod" | "premium" | null>();
+    private roleTags = new Map<string, "owner" | "admin" | "mod" | "premium" | null>();
     private meta = new Map<number, PlayerMeta>();
     private paths = new Map<number, PathPoint[]>();
     private deaths = new Map<number, PathPoint>();
@@ -196,7 +197,7 @@ export class GameView {
                 this.loadouts.set(r.username, r.equipped_cosmetics ?? []);
                 this.slugs.set(r.username, r.slug);
                 this.roleTags.set(r.username, r.roleTag);
-                if (r.impact_score !== null && r.impact_breakdown) {
+                if (r.impact_breakdown && (r.impact_score !== null || r.impact_breakdown.unrated)) {
                     this.impact.set(r.username, {
                         score: r.impact_score,
                         breakdown: r.impact_breakdown,
@@ -583,7 +584,14 @@ export class GameView {
                 let impactDetailRow = "";
                 if (anyImpact) {
                     const imp = this.impact.get(p.name);
-                    if (imp) {
+                    if (imp && imp.score === null) {
+                        impact = `<td><span class="gv-impact-score" title="${esc(imp.breakdown.unrated ?? "")}">–</span></td>`;
+                        if (isYou) {
+                            impactDetailRow = `<tr class="gv-stats-you gv-impact-detail-row"><td colspan="${totalCols}">
+                                <div class="gv-impact-detail">${esc(imp.breakdown.unrated ?? "")}</div>
+                            </td></tr>`;
+                        }
+                    } else if (imp) {
                         const b = imp.breakdown;
                         const title = esc(
                             `Combat: ${b.combat.points}/${b.combat.max} (${b.combat.detail}) · Support: ${b.support.points}/${b.support.max} (${b.support.detail})`,

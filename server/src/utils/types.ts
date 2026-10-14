@@ -3,8 +3,10 @@ import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
 import { TeamMode } from "../../../shared/gameConfig";
 import type { FindGameError } from "../../../shared/types/api";
-import { zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
-import { zRoleTag } from "../../../shared/types/user";
+import { PRIVATE_LOBBY_PLAYER_LIMIT_MAX, zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
+import { type CustomMapConfig, validateCustomMap } from "../../../shared/defs/customMap";
+import { type WeaponStats, validateWeaponStats } from "../../../shared/defs/weaponStats";
+import { type DisplayRoleTag, zRoleTag } from "../../../shared/types/user";
 import { loadoutSchema } from "../../../shared/utils/loadout";
 import type { MatchDataTable } from "../api/db/schema";
 
@@ -56,7 +58,16 @@ export interface SaveGameBody {
     weaponStats?: {
         mapId: number;
         teamMode: TeamMode;
-        entries: { weaponType: string; damage: number; kills: number }[];
+        entries: {
+            weaponType: string;
+            damage: number;
+            kills: number;
+            /** bullets fired / hits with it (newer game servers only) */
+            shots?: number;
+            hits?: number;
+            /** the account that used it, for the profile stats (logged-in players only) */
+            userId?: string;
+        }[];
     };
 }
 
@@ -76,6 +87,14 @@ export interface ServerGameConfig {
 
     /** Private lobby "Public Spectating" toggle; when false, this match is hidden from the public spectator menu (`/api/game_infos`). Default true. */
     readonly publicSpectating?: boolean;
+    /** Private lobby custom map: generation overrides on top of a template map (see applyCustomMap). */
+    readonly customMap?: CustomMapConfig;
+    /** Private lobbies: the leader's player limit, overriding the map's `gameMode.maxPlayers`. */
+    readonly maxPlayers?: number;
+    /** Custom maps with the lobby's rules: the lobby mode's map, whose gameMode/gameConfig replace the template's. */
+    readonly rulesMapName?: string;
+    /** Private lobbies: weapon stat changes (Advanced Settings). */
+    readonly weaponStats?: WeaponStats;
 }
 
 export interface GameData {
@@ -93,6 +112,8 @@ export interface GameData {
      *  a bot-filled game never looks busier than it is. */
     humanAliveCount: number;
     startedTime: number;
+    /** Epoch ms (game server clock) of the match start, 0 while not started. */
+    startedAt: number;
     stopped: boolean;
 }
 
@@ -111,6 +132,8 @@ export const zFindGamePrivateBody = z.object({
             roleTag: zRoleTag,
             loadout: loadoutSchema.optional(),
             customLoadout: zCustomLoadoutConfig.optional(),
+            /** Staff watching from the dashboard: an invisible spectator (see Player.stealth). */
+            stealth: z.boolean().optional(),
         }),
     ),
 });
@@ -143,8 +166,19 @@ export const zFindPrivateLobbyGameBody = z.object({
     /** Mirrors `RoomData.customLoadout` — when set, every player spawns with this loadout instead of the map's default items. */
     customLoadout: zCustomLoadoutConfig.optional(),
     customLoadoutEnabled: z.boolean().optional(), // Whether the lobby leader enabled "Custom Loadout" in the private lobby; used to determine whether to apply the custom loadout or the map's default items, and whether to populate `arenaRoles` (see `Game.arenaRoles`)
+    /** Lobby custom map (advanced settings); clamped into the limits by validateCustomMap. */
+    customMap: z
+        .any()
+        .optional()
+        .transform((v) => (v ? validateCustomMap(v) : undefined)),
     /** Mirrors `RoomData.publicSpectating` — when false, the resulting match is hidden from the public spectator menu. */
     publicSpectating: z.boolean().optional(),
+    /** Mirrors `RoomData.maxPlayers` (the leader's player limit); overrides the map's `gameMode.maxPlayers`. */
+    maxPlayers: z.number().int().min(1).max(PRIVATE_LOBBY_PLAYER_LIMIT_MAX).optional(),
+    /** Set by the game server itself (from `customMap.rules`), never taken from the request. */
+    rulesMapName: z.string().optional(),
+    /** Mirrors `RoomData.weaponStats` when enabled; clamped by validateWeaponStats. */
+    weaponStats: z.any().optional().transform((v) => (v ? validateWeaponStats(v) : undefined)),
 });
 
 export type FindPrivateLobbyGameBody = z.infer<typeof zFindPrivateLobbyGameBody>;
@@ -257,10 +291,14 @@ export interface DashboardPlayer {
      * player who died and is now spectating.
      */
     joinedAsSpectator: boolean;
+    /** Staff watching invisibly from the dashboard (see Player.stealth). */
+    stealth?: boolean;
     isAdmin: boolean;
     /** Staff flags, resolved from the accounts DB by the API server (not the game). */
     isModerator?: boolean;
     disconnected: boolean;
+    roleTag: DisplayRoleTag;
+    teamId: number;
 }
 
 export interface GetPlayerDataMsg {

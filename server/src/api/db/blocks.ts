@@ -85,9 +85,11 @@ export async function getBlocked(userId: string): Promise<BlockedUser[]> {
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            owner: usersTable.owner,
             admin: usersTable.admin,
             moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showOwnerPrefix: usersTable.showOwnerPrefix,
             showAdminPrefix: usersTable.showAdminPrefix,
             showModPrefix: usersTable.showModPrefix,
             showPremiumPrefix: usersTable.showPremiumPrefix,

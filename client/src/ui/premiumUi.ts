@@ -35,6 +35,9 @@ function premiumBenefits(): { icon: string; text: string }[] {
             text: `Instant boost of <b>${bonusXp.toLocaleString()} XP</b> (${PREMIUM_BONUS_PASS_LEVELS} Battle Pass levels' worth), every time you buy or extend`,
         },
         { icon: "🎁", text: "Two Premium-only cosmetic offers unlocked in the Deals tab" },
+        { icon: "🗺", text: "<b>Custom maps</b> in your private lobbies: size, buildings, loot pools, zone, airdrops and more" },
+        { icon: "🔫", text: "<b>Custom weapon stats</b> in your private lobbies: damage, fire rate, magazine, reload..." },
+        { icon: "📊", text: "<b>Detailed stats</b> on your profile, visible to everyone: weapon stats, accuracy, K/D, placement, modes and maps, by day, week, month, year or season" },
     ];
 }
 

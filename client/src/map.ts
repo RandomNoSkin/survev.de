@@ -1,4 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
+import { applyLobbyRules, CUSTOM_MAP_COLORS } from "../../shared/defs/customMap.ts";
 import { type MapDef, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import type { BuildingDef, ObstacleDef } from "../../shared/defs/mapObjectsTyping.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";
@@ -205,6 +206,18 @@ export class Map {
             throw new Error(`Failed loading mapDef ${this.mapName}`);
         }
         this.mapDef = util.cloneDeep(mapDef);
+        // custom map with the lobby's rules: same merge as the server's
+        const rulesDef = mapMsg.rulesMapName ? MapDefs[mapMsg.rulesMapName as MapDefKey] : undefined;
+        if (rulesDef) applyLobbyRules(this.mapDef, rulesDef);
+        // custom map colors; lakes follow the map's water and banks
+        const colors = this.mapDef.biome.colors;
+        for (const { idx, color } of mapMsg.colors) {
+            const key = CUSTOM_MAP_COLORS[idx];
+            if (!key) continue;
+            colors[key] = color;
+            if (key === "water" && colors.lakeWater !== undefined) colors.lakeWater = color;
+            if (key === "riverbank" && colors.lakeRiverbank !== undefined) colors.lakeRiverbank = color;
+        }
         this.factionMode = !!this.mapDef.gameMode.factionMode;
         this.potatoMode = !!this.mapDef.gameMode.potatoMode;
         this.perkMode = !!this.mapDef.gameMode.perkMode;

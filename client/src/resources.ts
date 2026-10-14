@@ -2,6 +2,7 @@ import * as PIXI from "pixi.js-legacy";
 import highResAtlasDefs from "virtual-atlases-high";
 import lowResAtlasDefs from "virtual-atlases-low";
 import { type Atlas, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
+import { MapObjectDefs } from "../../shared/defs/register.ts";
 import type { AudioManager } from "./audioManager.ts";
 import type { ConfigManager } from "./config.ts";
 import { device } from "./device.ts";
@@ -13,6 +14,52 @@ const spritesheetDefs = {
     low: lowResAtlasDefs as AtlasDef,
     high: highResAtlasDefs as AtlasDef,
 };
+
+/**
+ * Every "*.img" sprite and every other string (sound names etc.) the map object defs
+ * of `types` reference, following child objects and structure layers.
+ */
+function collectObjectRefs(types: Iterable<string>): { sprites: Set<string>; strings: Set<string> } {
+    const sprites = new Set<string>();
+    const strings = new Set<string>();
+    const seen = new Set<string>();
+    const walk = (value: unknown, depth: number) => {
+        if (depth > 12 || value === null) return;
+        if (typeof value === "string") {
+            if (value.endsWith(".img")) {
+                sprites.add(value);
+                return;
+            }
+            strings.add(value);
+            if (!seen.has(value) && MapObjectDefs.typeToDefSafe(value)) visit(value);
+            return;
+        }
+        if (typeof value !== "object") return;
+        for (const [k, v] of Object.entries(value)) {
+            // random picks are { type: weight } - the types are the keys
+            if (typeof v === "number" && !seen.has(k) && MapObjectDefs.typeToDefSafe(k)) visit(k);
+            walk(v, depth + 1);
+        }
+    };
+    const visit = (type: string) => {
+        seen.add(type);
+        walk(MapObjectDefs.typeToDefSafe(type), 0);
+    };
+    for (const type of types) if (!seen.has(type)) visit(type);
+    return { sprites, strings };
+}
+
+/** Every map's own sounds by name (buildings bring theirs: club music, fireplaces...). */
+let mapSoundsByName: Map<string, { name: string; channel: string }> | undefined;
+function getMapSounds() {
+    if (!mapSoundsByName) {
+        mapSoundsByName = new Map();
+        for (const def of Object.values(MapDefs)) {
+            for (const sound of def.assets.audio) mapSoundsByName.set(sound.name, sound);
+        }
+    }
+    return mapSoundsByName;
+}
 
 function loadTexture(renderer: PIXI.IRenderer, url: string) {
     const tex = PIXI.Texture.from(url);
@@ -171,6 +218,46 @@ export class ResourceManager {
         atlas.spritesheets = [];
     }
 
+    /**
+     * Loads every atlas holding a sprite of `types` (map object types, children
+     * included) that no loaded atlas has, and the map sounds they use. Each map only
+     * loads its own atlases and sounds, but a custom map can place buildings from
+     * other maps.
+     */
+    loadAssetsForObjects(types: Iterable<string>) {
+        const { sprites, strings } = collectObjectRefs(types);
+        const mapSounds = getMapSounds();
+        setTimeout(() => {
+            for (const name of strings) {
+                const sound = mapSounds.get(name);
+                if (sound) this.loadMapSound(sound);
+            }
+        }, 0);
+
+        const defs = spritesheetDefs[this.textureRes] || spritesheetDefs.low;
+        const has = (atlas: Atlas, sprite: string) =>
+            (defs[atlas] ?? []).some((sheet) => sprite in sheet.frames);
+        const loaded = (Object.keys(this.atlases) as Atlas[]).filter((a) => this.isAtlasLoaded(a));
+        let missing = [...sprites].filter((s) => !loaded.some((a) => has(a, s)));
+        const candidates = (Object.keys(defs) as Atlas[]).filter((a) => a !== "skins" && !loaded.includes(a));
+        // greedy: the atlas covering the most missing sprites first, so as few as possible load
+        while (missing.length && candidates.length) {
+            let best = -1;
+            let bestCount = 0;
+            candidates.forEach((a, i) => {
+                const count = missing.filter((s) => has(a, s)).length;
+                if (count > bestCount) {
+                    best = i;
+                    bestCount = count;
+                }
+            });
+            if (best < 0) break; // the rest is in no atlas at all
+            const [atlas] = candidates.splice(best, 1);
+            this.loadAtlas(atlas);
+            missing = missing.filter((s) => !has(atlas, s));
+        }
+    }
+
     loadMapAssets(mapName: string) {
         console.log("Load map", mapName);
 
@@ -214,36 +301,41 @@ export class ResourceManager {
             this.audioManager.preloadSounds();
 
             // Load audio specific to the map
-            const soundList = mapDef.assets.audio;
-            for (let i = 0; i < soundList.length; i++) {
-                const sound = soundList[i];
-
-                // @HACK: Sometimes the channel doesn't correspond to where
-                // the sound is defined in sound-defs.js; this is the case
-                // with "players" sounds. Use an alternate method for looking
-                // up the sound def.
-                let soundsList = SoundDefs.Sounds[sound.channel];
-                if (!soundsList) {
-                    const channelDef = SoundDefs.Channels[sound.channel];
-                    soundsList = SoundDefs.Sounds[channelDef.list];
-                }
-
-                const soundDef = soundsList[sound.name];
-
-                const options = {
-                    canCoalesce: soundDef.canCoalesce!,
-                    channels: soundDef.maxInstances,
-                    volume: soundDef.volume,
-                };
-
-                this.audioManager.loadSound({
-                    name: sound.name,
-                    channel: sound.channel,
-                    path: soundDef.path,
-                    options,
-                });
-            }
+            for (const sound of mapDef.assets.audio) this.loadMapSound(sound);
         }, 0);
+    }
+
+    /** Sounds loaded on top of the shared ones (per map, plus what custom maps pull in). */
+    private loadedMapSounds = new Set<string>();
+
+    private loadMapSound(sound: { name: string; channel: string }) {
+        if (this.loadedMapSounds.has(sound.name)) return;
+        // @HACK: Sometimes the channel doesn't correspond to where
+        // the sound is defined in sound-defs.js; this is the case
+        // with "players" sounds. Use an alternate method for looking
+        // up the sound def.
+        let soundsList = SoundDefs.Sounds[sound.channel];
+        if (!soundsList) {
+            const channelDef = SoundDefs.Channels[sound.channel];
+            soundsList = SoundDefs.Sounds[channelDef.list];
+        }
+
+        const soundDef = soundsList?.[sound.name];
+        if (!soundDef) return;
+        this.loadedMapSounds.add(sound.name);
+
+        const options = {
+            canCoalesce: soundDef.canCoalesce!,
+            channels: soundDef.maxInstances,
+            volume: soundDef.volume,
+        };
+
+        this.audioManager.loadSound({
+            name: sound.name,
+            channel: sound.channel,
+            path: soundDef.path,
+            options,
+        });
     }
 
     update(dt: number) {

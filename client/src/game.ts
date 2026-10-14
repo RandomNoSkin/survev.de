@@ -334,14 +334,7 @@ export class Game {
                     this.m_sendMessage(net.MsgType.JoinAsSpectator, joinMessage, 8192);
                 };
                 this.m_ws.onmessage = (e) => {
-                    const msgStream = new net.MsgStream(e.data);
-                    while (true) {
-                        const type = msgStream.deserializeMsgType();
-                        if (type == net.MsgType.None) {
-                            break;
-                        }
-                        this.m_onMsg(type, msgStream.getStream());
-                    }
+                    this.m_handleIncomingBuffer(e.data);
                 };
                 this.m_ws.onclose = () => {
                     const displayingStats = this.m_uiManager?.displayingStats;
@@ -1729,6 +1722,17 @@ export class Game {
                     this.m_particleBarn,
                 );
                 this.m_resourceManager.loadMapAssets(this.m_map.mapName);
+                // objects from other maps (custom maps) need those maps' sprites and
+                // sounds - placed ones plus what spawns later (airdrop crates)
+                const planes = this.m_map.getMapDef().gameConfig.planes;
+                this.m_resourceManager.loadAssetsForObjects(new Set([
+                    ...msg.objects.map((o) => o.type),
+                    ...planes.crates.map((c) => c.name),
+                    // custom map airdrops fall back to these when the mode has none
+                    "airdrop_crate_01",
+                    "airdrop_crate_02",
+                    ...planes.timings.flatMap((t) => (t.options.airdropType ? [t.options.airdropType] : [])),
+                ]));
                 this.m_map.renderMap(this.m_pixi.renderer, this.m_canvasMode);
                 this.m_bulletBarn.onMapLoad(this.m_map);
                 this.m_particleBarn.onMapLoad(this.m_map);
@@ -2121,10 +2125,13 @@ export class Game {
                         }
                     }
 
+                    if (msg.color) color = msg.color;
+
                     const txt = this.m_ui2Manager.getChatMessage(
                         player,
                         text,
                         msg.chatType,
+                        msg.roleTag,
                     );
                     this.m_ui2Manager.addChatMessage(txt, color, "#000000");
                 } else if (msg.type === net.KillFeedMsgType.AdminMsg) {
@@ -2173,6 +2180,19 @@ export class Game {
                         assistCountText,
                     );
                 }
+                break;
+            }
+            case net.MsgType.AdvancedSpectatorAllowed: {
+                // opens up mid-game, e.g. once the whole own team is dead
+                const msg = new net.AdvancedSpectatorAllowedMsg();
+                msg.deserialize(stream);
+                this.m_advancedSpectatorAllowed = msg.allowed || this.m_replayMode;
+                if (!this.m_advancedSpectatorAllowed && this.m_advSpec.enabled) {
+                    this.m_advSpec.enabled = false;
+                }
+                this.m_uiManager.updateAdvancedSpectatorUi();
+                this.m_uiManager.updateSpectateCycleButtons();
+                this.m_uiManager.updateSpectateText();
                 break;
             }
             case net.MsgType.PickupExtra: {

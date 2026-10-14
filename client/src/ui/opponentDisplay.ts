@@ -130,6 +130,8 @@ export class LoadoutDisplay {
                 groundPatches: [],
                 height: 720,
                 mapName: "main",
+                rulesMapName: "",
+                colors: [],
                 objects: [],
                 places: [],
                 rivers: [],
