@@ -39,18 +39,38 @@ const app = new Hono();
 // Binding to 127.0.0.1 keeps the network out; these two checks keep the owner's own
 // browser from being used against it: the Host check defeats DNS rebinding, and the
 // custom header forces a CORS preflight (which is never answered) on any cross-site call.
+
 app.use("*", async (c, next) => {
     const port = Config.superAdmin.port;
     const host = c.req.header("host") ?? "";
-    const allowedHosts = [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`];
-    if (!allowedHosts.includes(host) || !isLoopback(getConnInfo(c).remote.address)) {
+
+    const allowedHosts = [
+        `127.0.0.1:${port}`,
+        `localhost:${port}`,
+        `[::1]:${port}`,
+        `10.10.0.1:${port}`,
+    ];
+
+    const remoteAddress = getConnInfo(c).remote.address;
+    const isWireGuardClient = remoteAddress === "10.10.0.2";
+
+    if (
+        !allowedHosts.includes(host) ||
+        (!isLoopback(remoteAddress) && !isWireGuardClient)
+    ) {
         return c.text("Forbidden", 403);
     }
-    if (c.req.path.startsWith("/api/") && c.req.header("x-superadmin") !== "1") {
+
+    if (
+        c.req.path.startsWith("/api/") &&
+        c.req.header("x-superadmin") !== "1"
+    ) {
         return c.text("Forbidden", 403);
     }
+
     await next();
 });
+
 
 app.get("/", (c) => c.html(superAdminHtml));
 
