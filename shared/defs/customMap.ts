@@ -524,7 +524,10 @@ export function applyLobbyRules(mapDef: MapDef, rules: MapDef) {
         else delete gameMode[flag];
     }
     mapDef.gameMode = gameMode;
-    const unlocks = mapDef.gameConfig.unlocks;
+    // gameConfig is stripped from the prod client build (STRIP_FROM_PROD_CLIENT) -
+    // only the server has it, and only the server needs it
+    if (!rules.gameConfig) return;
+    const unlocks = mapDef.gameConfig?.unlocks;
     mapDef.gameConfig = cloneData(rules.gameConfig);
     if (unlocks) mapDef.gameConfig.unlocks = unlocks;
     else delete mapDef.gameConfig.unlocks;

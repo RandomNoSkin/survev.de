@@ -131,6 +131,8 @@ export class Game {
 
     /** True when this Game is playing back a recorded replay (no socket, no input sent). */
     m_replayMode = false;
+    /** Obstacle types whose assets were already requested this map (see m_processGameUpdate). */
+    m_seenObjTypes = new Set<string>();
     /** Current match's gameId - set by main.ts at join/spectate time, or by ReplayPlayer when loading a recording. Shown in the game-over header. */
     m_gameId = "";
     /** Bridge to the replay bar's visibility, set by ReplayPlayer while active (Game has no direct reference to it). */
@@ -1527,10 +1529,21 @@ export class Game {
         }
 
         // Update full objects
+        let newObjTypes: string[] | undefined;
         for (let i = 0; i < msg.fullObjects.length; i++) {
             const obj = msg.fullObjects[i];
+            // an obstacle type not seen yet (e.g. another map's airdrop crate on a
+            // custom map): make sure its atlas/sounds are there (no-op when they are)
+            if (obj.__type === ObjectType.Obstacle) {
+                const type = (obj as { type?: string }).type;
+                if (type && !this.m_seenObjTypes.has(type)) {
+                    this.m_seenObjTypes.add(type);
+                    (newObjTypes ??= []).push(type);
+                }
+            }
             this.m_objectCreator.m_updateObjFull(obj.__type, obj.__id, obj, ctx);
         }
+        if (newObjTypes) this.m_resourceManager.loadAssetsForObjects(newObjTypes);
 
         // Update partial objects
         for (let i = 0; i < msg.partObjects.length; i++) {
@@ -1723,16 +1736,13 @@ export class Game {
                 );
                 this.m_resourceManager.loadMapAssets(this.m_map.mapName);
                 // objects from other maps (custom maps) need those maps' sprites and
-                // sounds - placed ones plus what spawns later (airdrop crates)
-                const planes = this.m_map.getMapDef().gameConfig.planes;
-                this.m_resourceManager.loadAssetsForObjects(new Set([
-                    ...msg.objects.map((o) => o.type),
-                    ...planes.crates.map((c) => c.name),
-                    // custom map airdrops fall back to these when the mode has none
-                    "airdrop_crate_01",
-                    "airdrop_crate_02",
-                    ...planes.timings.flatMap((t) => (t.options.airdropType ? [t.options.airdropType] : [])),
-                ]));
+                // sounds. Placed ones here; whatever spawns later (airdrop crates) is
+                // picked up in m_processGameUpdate when it first shows up - the map's
+                // gameConfig (plane/crate setup) is stripped from the prod client.
+                this.m_seenObjTypes.clear();
+                const placed = new Set(msg.objects.map((o) => o.type));
+                for (const type of placed) this.m_seenObjTypes.add(type);
+                this.m_resourceManager.loadAssetsForObjects(placed);
                 this.m_map.renderMap(this.m_pixi.renderer, this.m_canvasMode);
                 this.m_bulletBarn.onMapLoad(this.m_map);
                 this.m_particleBarn.onMapLoad(this.m_map);
