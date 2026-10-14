@@ -15,7 +15,7 @@ import { usersTable } from "./db/schema";
 import { superAdminHtml } from "./superAdmin.html";
 
 const logger = new ServerLogger("SuperAdmin");
-const HOST = "127.0.0.1";
+const HOST = Config.superAdmin.adress || "127.0.0.1";
 const LOGS_DIR = path.resolve("logs");
 
 const userColumns = {

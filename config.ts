@@ -25,6 +25,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             maxGames: 12,
         },
         superAdmin: {
+            adress: "10.10.0.1",
             enabled: true,
             port: 8099,
         },

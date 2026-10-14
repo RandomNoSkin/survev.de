@@ -72,6 +72,7 @@ export interface ConfigType {
      * reach it on a remote box via `ssh -L <port>:127.0.0.1:<port>`.
      */
     superAdmin: {
+        adress: string;
         enabled: boolean;
         port: number;
     };
