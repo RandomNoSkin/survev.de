@@ -18,7 +18,16 @@ export interface ImpactStats {
     weightedKills: number;
     assists: number;
     damageDealt: number;
+    /** Display only - every source incl. gas/bleeding. */
     damageTaken: number;
+    /** Damage taken from enemy players while not downed. Drives efficiency (gas,
+     *  bleeding or a late zone rotation say nothing about how a fight went) and the
+     *  engagement check below. */
+    enemyDamageTaken: number;
+    /** Times knocked / whether this player died - a match where either happened is
+     *  always rated (see minEngagement). */
+    timesDowned: number;
+    died: boolean;
     revives: number;
     /** Times this player was covering (nearby + actively fighting) when a teammate
      *  completed a revive — counted the same as a revive in the share below, since
@@ -78,14 +87,25 @@ export interface ImpactCategory {
 export interface ImpactBreakdown {
     combat: ImpactCategory;
     support: ImpactCategory;
+    /** Set when the match isn't rated (score null): why, for display. */
+    unrated?: string;
 }
 
 export interface ImpactResult {
-    score: number;
+    /** null: the match isn't rated (the player never really got into a fight, see
+     *  minEngagement) - stored as null so it doesn't count towards the average. */
+    score: number | null;
     breakdown: ImpactBreakdown;
 }
 
 export const IMPACT_WEIGHTS = {
+    // Damage dealt to + taken from enemies below which a match isn't rated at all (no
+    // score, not part of the average) - unless the player was knocked/killed or
+    // revived someone. Being carried through a match without ever getting a fight
+    // says nothing about how well someone plays, and scoring it ~0 would drag their
+    // rating down for their team's success. Can't be farmed: it only ever removes a
+    // match from the sample, and the rating needs a minimum of rated games.
+    minEngagement: 100,
     // Every share category's target is relativeShareTarget/teamSize — this many times
     // an even split earns full points, for kills+assists, damage, revives+covers, and
     // saves alike. 1.5 is a first guess: an even 4-way squad split (25% each) lands at
@@ -246,7 +266,7 @@ export function computeImpactScore(
             ),
             0,
         ) * damageVolume;
-    const efficiencyRatio = stats.damageDealt / Math.max(stats.damageTaken, 1);
+    const efficiencyRatio = stats.damageDealt / Math.max(stats.enemyDamageTaken, 1);
     const efficiencyRate =
         w.combat.maxEfficiencyPoints / (w.combat.targetEfficiencyRatio - 1);
     const efficiencyVolume = Math.min(
@@ -331,6 +351,22 @@ export function computeImpactScore(
             detail: `${stats.revives} revives${stats.covers ? ` (+${stats.covers} covering)` : ""}${stats.teammateSaves ? `, ${stats.teammateSaves} saves` : ""}${missedDetail}`,
         },
     };
+
+    // Never really in a fight (and nothing else happened to judge): unrated.
+    const engaged =
+        stats.damageDealt + stats.enemyDamageTaken >= w.minEngagement ||
+        stats.timesDowned > 0 ||
+        stats.died ||
+        stats.revives > 0;
+    if (!engaged) {
+        return {
+            score: null,
+            breakdown: {
+                ...breakdown,
+                unrated: "Unrated - too little fighting this match to judge (doesn't count towards the rating)",
+            },
+        };
+    }
 
     // Support only ever backfills the gap combat left under combat.max — never adds
     // separate headroom on top of a combat performance that already maxed it out.

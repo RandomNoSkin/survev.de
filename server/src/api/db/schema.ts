@@ -40,6 +40,9 @@ export const usersTable = pgTable("users", {
     authId: text("auth_id").notNull(),
     slug: text("slug").notNull().unique(),
     admin: boolean("admin").notNull().default(false),
+    // Display-only role for the [OWNER] name tag - grants no permissions by itself, so
+    // an owner account also needs `admin` set.
+    owner: boolean("owner").notNull().default(false),
     // Limited staff role: access to the moderation dashboard's Replays tab only
     // (enforced server-side by the dashboard's adminGuard). Admins implicitly outrank
     // moderators, so this flag only matters when `admin` is false.
@@ -77,6 +80,7 @@ export const usersTable = pgTable("users", {
     // not opt-in. A role whose own toggle is off falls through to the next-highest
     // enabled role rather than hiding the prefix outright (e.g. an admin with the ADMIN
     // toggle off but PREM toggle on still shows [PREM]).
+    showOwnerPrefix: boolean("show_owner_prefix").notNull().default(true),
     showAdminPrefix: boolean("show_admin_prefix").notNull().default(true),
     showModPrefix: boolean("show_mod_prefix").notNull().default(true),
     showPremiumPrefix: boolean("show_premium_prefix").notNull().default(true),
@@ -404,6 +408,10 @@ export const matchDataTable = pgTable(
         // game disappears from that account's stats AND the leaderboard (both filter
         // user_id <> ''), without deleting the game. Reversible — restore moves it back.
         removedUserId: text("removed_user_id"),
+        // Accuracy for the profile stats: bullets fired (each pellet) and gun bullets
+        // that hit another player. 0 for older rows.
+        shotsFired: integer("shots_fired").notNull().default(0),
+        bulletHits: integer("bullet_hits").notNull().default(0),
     },
     (table) => [
         index("idx_match_data_user_stats").on(
@@ -417,6 +425,9 @@ export const matchDataTable = pgTable(
         ),
         index("idx_game_id").on(table.gameId),
         index("idx_user_id").on(table.userId),
+        // time windows: server stats (whole table) and profile stats (one account)
+        index("idx_match_data_created_at").on(table.createdAt),
+        index("idx_match_data_user_created").on(table.userId, table.createdAt),
         index("idx_match_data_team_query").on(
             table.teamMode,
             table.mapId,
@@ -495,6 +506,31 @@ export const weaponStatsDailyTable = pgTable(
 );
 
 export type WeaponStatsDailyTable = typeof weaponStatsDailyTable.$inferInsert;
+
+// Per account, day and weapon: the weapon stats on the (Premium) player profile. Daily
+// so the profile can show any window (day / week / month / year / season). Only
+// logged-in players get rows; counted from the update that introduced it on.
+export const userWeaponStatsDailyTable = pgTable(
+    "user_weapon_stats_daily",
+    {
+        userId: text("user_id").notNull(),
+        day: date("day").notNull(),
+        weaponType: text("weapon_type").notNull(),
+        games: integer("games").notNull().default(0),
+        kills: integer("kills").notNull().default(0),
+        damage: bigint("damage", { mode: "number" }).notNull().default(0),
+        shots: integer("shots").notNull().default(0),
+        hits: integer("hits").notNull().default(0),
+        // most damage dealt with it in one match
+        maxDamage: integer("max_damage").notNull().default(0),
+    },
+    (table) => [
+        primaryKey({ columns: [table.userId, table.day, table.weaponType] }),
+        index("idx_user_weapon_stats_user_day").on(table.userId, table.day),
+    ],
+);
+
+export type UserWeaponStatsDailyTable = typeof userWeaponStatsDailyTable.$inferInsert;
 
 //
 // LOGS

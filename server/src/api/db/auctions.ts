@@ -436,18 +436,22 @@ function mapAuction(
         currentBid: number | null;
         currentBidderId: string | null;
         currentBidderSlug: string | null;
+        currentBidderOwner?: boolean | null;
         currentBidderAdmin?: boolean | null;
         currentBidderModerator?: boolean | null;
         currentBidderPremiumUntil?: Date | null;
+        currentBidderShowOwnerPrefix?: boolean | null;
         currentBidderShowAdminPrefix?: boolean | null;
         currentBidderShowModPrefix?: boolean | null;
         currentBidderShowPremiumPrefix?: boolean | null;
         sellerId: string;
         sellerSlug: string;
         sellerUsername: string | null;
+        sellerOwner?: boolean | null;
         sellerAdmin?: boolean | null;
         sellerModerator?: boolean | null;
         sellerPremiumUntil?: Date | null;
+        sellerShowOwnerPrefix?: boolean | null;
         sellerShowAdminPrefix?: boolean | null;
         sellerShowModPrefix?: boolean | null;
         sellerShowPremiumPrefix?: boolean | null;
@@ -470,9 +474,11 @@ function mapAuction(
         currentBid: r.currentBid,
         currentBidderSlug: r.currentBidderSlug,
         currentBidderRoleTag: resolveRoleTag({
+            owner: r.currentBidderOwner,
             admin: r.currentBidderAdmin,
             moderator: r.currentBidderModerator,
             premiumUntil: r.currentBidderPremiumUntil,
+            showOwnerPrefix: r.currentBidderShowOwnerPrefix,
             showAdminPrefix: r.currentBidderShowAdminPrefix,
             showModPrefix: r.currentBidderShowModPrefix,
             showPremiumPrefix: r.currentBidderShowPremiumPrefix,
@@ -480,9 +486,11 @@ function mapAuction(
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
         sellerRoleTag: resolveRoleTag({
+            owner: r.sellerOwner,
             admin: r.sellerAdmin,
             moderator: r.sellerModerator,
             premiumUntil: r.sellerPremiumUntil,
+            showOwnerPrefix: r.sellerShowOwnerPrefix,
             showAdminPrefix: r.sellerShowAdminPrefix,
             showModPrefix: r.sellerShowModPrefix,
             showPremiumPrefix: r.sellerShowPremiumPrefix,
@@ -522,18 +530,22 @@ export async function getActiveAuctions(
             currentBid: auctionsTable.currentBid,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            currentBidderOwner: bidderUsersTable.owner,
             currentBidderAdmin: bidderUsersTable.admin,
             currentBidderModerator: bidderUsersTable.moderator,
             currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
+            currentBidderShowOwnerPrefix: bidderUsersTable.showOwnerPrefix,
             currentBidderShowAdminPrefix: bidderUsersTable.showAdminPrefix,
             currentBidderShowModPrefix: bidderUsersTable.showModPrefix,
             currentBidderShowPremiumPrefix: bidderUsersTable.showPremiumPrefix,
             sellerId: auctionsTable.sellerId,
             sellerSlug: auctionsTable.sellerSlug,
             sellerUsername: usersTable.username,
+            sellerOwner: usersTable.owner,
             sellerAdmin: usersTable.admin,
             sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowOwnerPrefix: usersTable.showOwnerPrefix,
             sellerShowAdminPrefix: usersTable.showAdminPrefix,
             sellerShowModPrefix: usersTable.showModPrefix,
             sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
@@ -604,15 +616,19 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
             sellerSlug: auctionsTable.sellerSlug,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            sellerOwner: usersTable.owner,
             sellerAdmin: usersTable.admin,
             sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowOwnerPrefix: usersTable.showOwnerPrefix,
             sellerShowAdminPrefix: usersTable.showAdminPrefix,
             sellerShowModPrefix: usersTable.showModPrefix,
             sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
+            currentBidderOwner: bidderUsersTable.owner,
             currentBidderAdmin: bidderUsersTable.admin,
             currentBidderModerator: bidderUsersTable.moderator,
             currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
+            currentBidderShowOwnerPrefix: bidderUsersTable.showOwnerPrefix,
             currentBidderShowAdminPrefix: bidderUsersTable.showAdminPrefix,
             currentBidderShowModPrefix: bidderUsersTable.showModPrefix,
             currentBidderShowPremiumPrefix: bidderUsersTable.showPremiumPrefix,
@@ -648,9 +664,11 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 kind: "won" as const,
                 otherName: r.sellerSlug,
                 otherRoleTag: resolveRoleTag({
+                    owner: r.sellerOwner,
                     admin: r.sellerAdmin,
                     moderator: r.sellerModerator,
                     premiumUntil: r.sellerPremiumUntil,
+                    showOwnerPrefix: r.sellerShowOwnerPrefix,
                     showAdminPrefix: r.sellerShowAdminPrefix,
                     showModPrefix: r.sellerShowModPrefix,
                     showPremiumPrefix: r.sellerShowPremiumPrefix,
@@ -665,9 +683,11 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 kind: "sold" as const,
                 otherName: r.currentBidderSlug ?? "someone",
                 otherRoleTag: resolveRoleTag({
+                    owner: r.currentBidderOwner,
                     admin: r.currentBidderAdmin,
                     moderator: r.currentBidderModerator,
                     premiumUntil: r.currentBidderPremiumUntil,
+                    showOwnerPrefix: r.currentBidderShowOwnerPrefix,
                     showAdminPrefix: r.currentBidderShowAdminPrefix,
                     showModPrefix: r.currentBidderShowModPrefix,
                     showPremiumPrefix: r.currentBidderShowPremiumPrefix,

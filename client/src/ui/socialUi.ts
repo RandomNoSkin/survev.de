@@ -276,7 +276,7 @@ export class SocialUi {
     private nameLink(u: {
         slug: string;
         username: string;
-        roleTag?: "admin" | "mod" | "premium" | null;
+        roleTag?: "owner" | "admin" | "mod" | "premium" | null;
     }): JQuery<HTMLElement> {
         const el = $(
             `<span class="social-player-name social-name-link">${helpers.formatUsername(

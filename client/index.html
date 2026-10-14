@@ -509,6 +509,10 @@
                   placeholder="Type message..." 
                   maxlength="100"
               />
+              <span id="ui-chat-highlight" style="display: none">
+                  <input id="ui-chat-highlight-color" type="color" value="#ff4d4d" title="Highlight color" />
+                  <button id="ui-chat-highlight-toggle" title="Highlight messages">HL</button>
+              </span>
               <button id="ui-chat-send">Send</button>
           </div>
           <div id="ui-pickup-message" class="notify-message"></div>
@@ -1113,47 +1117,64 @@
               </div>
             </div>
             <div id="spectator-menu" class="menu-column menu-block">
-              <div class="play-button-container">
-                <a class='btn-darken menu-option' id='btn-leave-spectator' data-l10n='index-leave-spectator'>Return</a>
-                <a class='btn-darken menu-option' id='btn-reload-games' data-l10n='index-reload-games'>Reload Games</a>
-                <div id="spectator-menu-header">Spectator Menu</div>
-                <div id="spectator-menu-contents">
-                    <div id="spectator-menu-options">
-                      <select id='server-select-spectate' class='server-select menu-option btn-hollow btn-hollow-selected'>
-                        <optgroup id='spectate-server-opts' label='Region' data-l10n='index-region'>
-                        </optgroup>
-                      </select>
-                      <select id='game-select-main' class='server-select menu-option btn-hollow btn-hollow-selected'>
-                        <optgroup id='game-opts' label='Games' data-l10n='index-games'>
-                        </optgroup>
-                      </select>
+              <div id="spectator-menu-top">
+                <div id="spectator-menu-header">Spectator Console</div>
+                <a class='btn-darken menu-option spectator-top-btn' id='btn-leave-spectator' data-l10n='index-leave-spectator'>Return</a>
+              </div>
+              <select id='server-select-spectate' style='display: none'>
+                <optgroup id='spectate-server-opts' label='Region' data-l10n='index-region'>
+                </optgroup>
+              </select>
+              <div id="spectator-region-tabs"></div>
+              <div id="spectator-error"></div>
+              <div id="spectator-menu-contents">
+                <div id="spectator-list-col">
+                  <div id="spectator-view-tabs">
+                    <a class="btn-hollow btn-darken spectator-view-tab btn-hollow-selected" data-view="matches">Matches<span class="spectator-region-tab-count" id="spectator-count-matches">0</span></a>
+                    <a class="btn-hollow btn-darken spectator-view-tab" data-view="lobbies">Lobbies<span class="spectator-region-tab-count" id="spectator-count-lobbies">0</span></a>
+                  </div>
+                  <div id="spectator-game-list"></div>
+                </div>
+                <div id="spectator-game-detail">
+                  <div id="spectator-detail-empty">Select a game to see who is playing.</div>
+                  <div id="spectator-detail-body">
+                    <div id="spectator-detail-head">
+                      <span id="spectator-detail-mode" class="spectator-mode-badge"></span>
+                      <span id="spectator-detail-map"></span>
+                      <span id="spectator-detail-private" class="spectator-lobby-badge">Lobby</span>
+                    </div>
+                    <div id="spectator-detail-stats">
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-detail-alive"></div><div class="spectator-stat-label">Alive</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-detail-runtime"></div><div class="spectator-stat-label">Runtime</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-detail-kills"></div><div class="spectator-stat-label">Kills</div></div>
+                    </div>
+                    <div class="spectator-section-title">Players</div>
+                    <div id="spectator-detail-players"></div>
+                    <div class="spectator-section-title" id="spectator-detail-feed-title">Recent kills</div>
+                    <div id="spectator-detail-feed"></div>
+                    <div class="spectator-actions">
                       <a class='btn-green btn-darken menu-option' id='btn-start-spectate' data-l10n='index-spectate'>Spectate</a>
+                      <a class='btn-hollow btn-darken menu-option' id='btn-join-game-lobby'>Join Lobby &amp; Spectate</a>
                     </div>
-
-                    <div id="spectator-menu-gameinfo">
-                      <div id="spectator-menu-gameinfo-header">Game Info</div>
-                      <div id="spectator-menu-gameinfo-contents">
-                        <div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-l10n='index-teamMode'>Team Mode:</span>
-                          <span class="spectator-menu-gameinfo-value" id="spectate-teamMode-name"></span>
-                        </div>
-                        <div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-l10n='index-playerCount'>Player Count:</span>
-                          <span class="spectator-menu-gameinfo-value" id="spectate-playerCount"></span>
-                        </div>
-                        <!--<div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-i10n="index-players">Players:</span>
-                          <button id="players-toggle" class="spectator-menu-toggle" type="button">Show</button>
-                        </div>
-                        <div id="spectate-players" class="spectator-menu-players collapsed"></div>-->
-                        <div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-l10n='index-runtime'>Runtime:</span>
-                          <span class="spectator-menu-gameinfo-value" id="spectate-runtime"></span>
-                        </div>
-                      </div>
+                  </div>
+                  <div id="spectator-lobby-body">
+                    <div id="spectator-lobby-head">
+                      <span id="spectator-lobby-mode" class="spectator-mode-badge"></span>
+                      <span id="spectator-lobby-title"></span>
+                      <span class="spectator-lobby-badge">Lobby</span>
                     </div>
-
-
+                    <div id="spectator-lobby-stats">
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-lobby-players"></div><div class="spectator-stat-label">Players</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-lobby-spectators"></div><div class="spectator-stat-label">Spectators</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-lobby-status"></div><div class="spectator-stat-label">Status</div></div>
+                    </div>
+                    <div class="spectator-section-title">Members</div>
+                    <div id="spectator-lobby-members"></div>
+                    <div id="spectator-lobby-actions" class="spectator-actions">
+                      <a class='btn-green btn-darken menu-option' id='btn-spectate-lobby-match'>Spectate Match</a>
+                      <a class='btn-hollow btn-darken menu-option' id='btn-join-lobby-spectator'>Join Lobby as Spectator</a>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1480,6 +1501,13 @@
                     <div class="loadout-setting-desc">Hide your loadout on the stats &amp; advanced game stats pages.</div>
                   </div>
                   <div id="setting-loadout-private" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Show [OWNER] tag</div>
+                    <div class="loadout-setting-desc">Show the owner tag next to your name (web &amp; in-game).</div>
+                  </div>
+                  <div id="setting-show-owner-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
                 </div>
                 <div class="loadout-setting-row">
                   <div class="loadout-setting-text">

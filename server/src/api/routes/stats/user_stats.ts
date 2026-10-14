@@ -15,7 +15,7 @@ UserStatsRouter.post(
     rateLimitMiddleware(40, 60 * 1000),
     validateParams(zUserStatsRequest),
     async (c) => {
-        const { interval, mapIdFilter, slug } = c.req.valid("json");
+        const { interval, month, mapIdFilter, slug } = c.req.valid("json");
 
         const result = await db.query.usersTable.findFirst({
             where: eq(usersTable.slug, slug),
@@ -31,7 +31,7 @@ UserStatsRouter.post(
 
         const { id: userId } = result;
 
-        const data = await userStatsSqlQuery(userId, mapIdFilter, interval);
+        const data = await userStatsSqlQuery(userId, mapIdFilter, interval, month);
 
         return c.json<UserStatsResponse>(data, 200);
     },

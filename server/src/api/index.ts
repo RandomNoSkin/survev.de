@@ -34,6 +34,11 @@ import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { resolveRoleTag } from "./db/roleTag";
+import { CUSTOM_MAP_TEMPLATES } from "../../../shared/defs/customMap";
+import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
+import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
+import { spectateStream } from "./spectateFeed";
+import { startSuperAdmin } from "./superAdmin";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
 import { grantCreatorItems } from "./db/creatorGrants";
@@ -355,6 +360,105 @@ app.post("/api/game_infos", validateParams(zRegionOnly), async (c) => {
     return c.json(data);
 });
 
+app.get("/api/spectate_stream", (c) => spectateStream(c));
+
+// generation defaults of every custom map template - the client build strips mapGen
+let customMapTemplates: unknown[] | null = null;
+app.get("/api/custom_map_templates", (c) => {
+    customMapTemplates ??= CUSTOM_MAP_TEMPLATES.flatMap((id) => {
+        const def = (MapDefs as Record<string, MapDef>)[id];
+        const gen = def?.mapGen;
+        if (!gen) return [];
+        const m = gen.map;
+        return [{
+            id,
+            label: def.desc?.name || id,
+            size: m.baseWidth * m.scale.large + m.extension,
+            sizeSmall: m.baseWidth * m.scale.small + m.extension,
+            riverWidths: m.rivers.weights.map((w) => w.widths),
+            smoothness: m.rivers.smoothness,
+            shoreInset: m.shoreInset,
+            places: gen.places.map((p) => ({ name: p.name, x: p.pos.x, y: p.pos.y })),
+            colors: { grass: def.biome.colors.grass, beach: def.biome.colors.beach, water: def.biome.colors.water, riverbank: def.biome.colors.riverbank },
+            lakes: m.rivers.lakes.length,
+            fixedSpawns: gen.fixedSpawns[0],
+            densitySpawns: gen.densitySpawns[0],
+            randomSpawns: gen.randomSpawns,
+        }];
+    });
+    c.header("Cache-Control", "no-cache");
+    return c.json({
+        templates: customMapTemplates,
+        wholeBuildings: customMapWholeBuildings(),
+        standaloneObjects: standaloneObjects ?? [],
+    });
+});
+
+/** Buildings/structures some map places as a whole (parts like floors or bunker
+ *  sublevels are only ever spawned by their parent and make no sense on their own). */
+let wholeBuildings: string[] | null = null;
+let standaloneObjects: string[] | null = null;
+function customMapWholeBuildings() {
+    if (wholeBuildings) return wholeBuildings;
+    const types = new Set<string>();
+    for (const def of Object.values(MapDefs as Record<string, MapDef>)) {
+        const gen = def.mapGen;
+        if (!gen) continue;
+        for (const t of Object.keys(gen.fixedSpawns[0] ?? {})) types.add(t);
+        for (const t of Object.keys(gen.densitySpawns[0] ?? {})) types.add(t);
+        for (const r of gen.randomSpawns) for (const t of r.spawns) types.add(t);
+        for (const t of gen.importantSpawns) types.add(t);
+        for (const t of gen.customSpawnRules.placeSpawns) types.add(t);
+        for (const s of gen.customSpawnRules.locationSpawns) types.add(s.type);
+        for (const [k, v] of Object.entries(gen.spawnReplacements[0] ?? {})) {
+            types.add(k);
+            if (typeof v === "string") types.add(v);
+            else for (const w of v) types.add(w.type);
+        }
+    }
+    const objs = RawMapObjectDefs as unknown as Record<string, { type?: string }>;
+    wholeBuildings = [...types].filter((t) => objs[t]?.type === "building" || objs[t]?.type === "structure");
+    // obstacles (trees, crates, barrels...) and loot spots some map places on their own -
+    // never the walls, furniture etc. that only exist as parts of a building
+    standaloneObjects = [...types].filter((t) => objs[t]?.type === "obstacle" || objs[t]?.type === "loot_spawner");
+    return wholeBuildings;
+}
+
+const customMapLoot = new Map<string, unknown>();
+app.get("/api/custom_map_loot", (c) => {
+    const id = c.req.query("template") ?? "";
+    if (!CUSTOM_MAP_TEMPLATES.includes(id)) return c.json({ error: "unknown_template" }, 400);
+    if (!customMapLoot.has(id)) {
+        customMapLoot.set(id, (MapDefs as Record<string, MapDef>)[id]?.lootTable ?? {});
+    }
+    c.header("Cache-Control", "no-cache");
+    return c.json({ template: id, lootTable: customMapLoot.get(id) });
+});
+
+app.post(
+    "/api/spectate_lobby_details",
+    validateParams(z.object({ publicId: z.string().max(32) })),
+    (c) => {
+        const details = server.privateLobbyMenu.getPublicLobbyDetails(
+            c.req.valid("json").publicId,
+        );
+        return c.json(details ?? { error: "not_found" });
+    },
+);
+
+// /api/spectate_game_details
+app.post(
+    "/api/spectate_game_details",
+    validateParams(z.object({ region: z.string(), gameId: z.string().max(64) })),
+    async (c) => {
+        const { region, gameId } = c.req.valid("json");
+        if (!Object.hasOwn(server.regions, region)) {
+            return c.json({ error: "invalid_region" }, 400);
+        }
+        return c.json(await server.regions[region].getSpectateGameDetails(gameId));
+    },
+);
+
 // /api/find_spectator_game
 app.post("/api/find_spectator_game", validateParams(zFindSpectator), async (c) => {
     const body = c.req.valid("json");
@@ -528,6 +632,7 @@ const honoServer = serve({
     port: Config.apiServer.port,
 });
 injectWebSocket(honoServer);
+startSuperAdmin();
 
 // Warm the ownership-based cosmetic rarity cache once at boot (then on-demand per request).
 warmCosmeticStats();

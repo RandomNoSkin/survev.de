@@ -12,7 +12,7 @@ import type { DisplayRoleTag } from "../types/user";
  * module init order.
  */
 // Append-only: the index IS the wire value, so never reorder or remove entries.
-const ROLE_TAG_DECODE: DisplayRoleTag[] = [null, "premium", "mod", "admin", "bot"];
+const ROLE_TAG_DECODE: DisplayRoleTag[] = [null, "premium", "mod", "admin", "bot", "owner"];
 
 export function encodeRoleTag(tag: DisplayRoleTag): number {
     const idx = tag ? ROLE_TAG_DECODE.indexOf(tag) : 0;

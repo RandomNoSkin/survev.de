@@ -81,6 +81,9 @@ export class Account {
         usernameChangeTime: 0,
         goldenFries: 0,
         premiumUntil: null as number | null,
+        owner: false,
+        admin: false,
+        moderator: false,
     };
 
     loadout = loadouts.defaultLoadout();
@@ -105,6 +108,7 @@ export class Account {
     settings: AccountSettings = {
         offersDisabled: false,
         loadoutPrivate: false,
+        showOwnerPrefix: true,
         showAdminPrefix: true,
         showModPrefix: true,
         showPremiumPrefix: true,

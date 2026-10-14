@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
+import { type CustomLoadoutConfig, showsPlayersOnMap } from "../../../shared/defs/customLoadout";
 import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
@@ -35,6 +35,7 @@ import { DecalBarn } from "./objects/decal";
 import { ExplosionBarn } from "./objects/explosion";
 import { type GameObject, ObjectRegister } from "./objects/gameObject";
 import { Gas } from "./objects/gas";
+import { GameWeaponStats } from "./weaponStats";
 import { LootBarn } from "./objects/loot";
 import { MapIndicatorBarn } from "./objects/mapIndicator";
 import { PlaneBarn } from "./objects/plane";
@@ -54,6 +55,8 @@ export interface JoinTokenData {
     customLoadout?: CustomLoadoutConfig;
     admin: boolean;
     roleTag: RoleTag;
+    /** Invisible spectator (staff via the dashboard), see Player.stealth. */
+    stealth?: boolean;
     groupData: {
         autoFill: boolean;
         playerCount: number;
@@ -71,6 +74,8 @@ export class Game {
     frozen = false;
     verifiedOnly = false;
     startedTime = 0;
+    /** Epoch ms of the (current) match start, 0 while not started. */
+    startedAt = 0;
     stopTicker = 0;
     /** Seconds the game has had 0 connected players (abandoned lobby / emptied game). */
     emptyTime = 0;
@@ -149,6 +154,8 @@ export class Game {
 
     map: GameMap;
     gas: Gas;
+    /** Weapon definitions with the private lobby's weapon stat changes (see GameWeaponStats). */
+    weaponStats: GameWeaponStats;
 
     /** Server-side AI players. Inert unless `Config.bots.enabled`. */
     botBarn: BotBarn;
@@ -180,6 +187,9 @@ export class Game {
     /** True if the private lobby leader enabled "Custom Loadout"; when true, every player spawns with `customLoadout`'s items instead of the map's default items. */
     customLoadoutEnabled: boolean = false;
 
+    /** Lobby advanced setting: every enemy's position is marked on the map (see Player.positionIndicator). */
+    showPlayerPositions: boolean = false;
+
     /** In-memory kill event buffer for the live moderation dashboard (capped at 200). */
     recentKills: import("../utils/types").KillFeedEntry[] = [];
 
@@ -200,6 +210,7 @@ export class Game {
         this.logger.info("Creating");
 
         this.config = config;
+        this.weaponStats = new GameWeaponStats(config.weaponStats);
 
         this.teamMode = config.teamMode;
         this.mapName = config.mapName;
@@ -216,6 +227,7 @@ export class Game {
         this.advancedSettings = config.advancedSettings ?? false;
         this.customLoadout = config.customLoadout;
         this.customLoadoutEnabled = config.customLoadoutEnabled ?? false;
+        this.showPlayerPositions = showsPlayersOnMap(this.customLoadout);
 
         this.map = new GameMap(this);
         this.grid = new Grid(this.map.width, this.map.height);
@@ -299,10 +311,30 @@ export class Game {
             if (this.started) {
                 this.hasEverStarted = true;
                 this.gas.advanceGasStage();
+                // custom map airdrops run on their own timer, not on gas circles
+                const airdrops = this.map.customMap?.airdrops;
+                if (airdrops?.mode === "custom") {
+                    const times = airdrops.timing === "times"
+                        ? airdrops.times
+                        : Array.from({ length: airdrops.count }, (_, i) => airdrops.firstAt + i * airdrops.interval);
+                    for (const time of times) {
+                        this.planeBarn.schedulePlane(time, { type: GameConfig.Plane.Airdrop });
+                    }
+                }
             }
         }
 
         if (this.started) this.startedTime += dt;
+
+        // Wall-clock start for live runtime displays; tracks the freeze-phase reset of
+        // `started` too, and reports right away instead of waiting for the next update.
+        if (this.started && !this.startedAt) {
+            this.startedAt = Date.now() - this.startedTime * 1000;
+            this.updateData();
+        } else if (!this.started && this.startedAt) {
+            this.startedAt = 0;
+            this.updateData();
+        }
 
         let freezeTimer = this.map.mapDef.gameMode.freezeTime || 0;
         const alivePlayers = this.playerBarn.livingPlayers;
@@ -813,8 +845,11 @@ export class Game {
             alive: !p.dead,
             isSpectator: p.spectating !== undefined,
             joinedAsSpectator: p.spectator,
+            stealth: p.stealth,
             isAdmin: p.isAdmin,
             disconnected: p.disconnected,
+            roleTag: p.roleTag,
+            teamId: p.teamId,
         }));
     }
 
@@ -950,6 +985,8 @@ export class Game {
                 customLoadout: token.customLoadout,
                 admin: token.admin,
                 roleTag: token.roleTag,
+                // staff watching from the dashboard: invisible (see Player.stealth)
+                stealth: token.stealth === true,
             });
         }
     }
@@ -997,6 +1034,7 @@ export class Game {
             aliveCount: this.aliveCount,
             humanAliveCount: this.humanAliveCount,
             startedTime: this.startedTime,
+            startedAt: this.startedAt,
             stopped: this.stopped,
         });
     }
@@ -1109,6 +1147,9 @@ export class Game {
                     assists: player.assists,
                     damageDealt: player.damageDealt,
                     damageTaken: player.damageTaken,
+                    enemyDamageTaken: player.enemyDamageTaken,
+                    timesDowned: player.downedCount,
+                    died: player.dead,
                     revives: player.revives,
                     covers: player.covers,
                     teammateSaves: player.teammateSaves,
@@ -1150,6 +1191,8 @@ export class Game {
                 team_kills: teamKills[player.groupId] ?? 0,
                 damageDealt: Math.round(player.damageDealt),
                 damageTaken: Math.round(player.damageTaken),
+                shotsFired: player.shotsFired,
+                bulletHits: player.bulletHits,
                 killerId: player.killedBy?.matchDataId || 0,
                 gameId: this.id,
                 mapId,
@@ -1186,14 +1229,21 @@ export class Game {
         // Per weapon a player dealt damage with this match: fuel for the weapon-ranking
         // stats page's daily rollup (see attributeWeaponStats in private.ts). Not tied to
         // a user account, so spectators/bots/guests all still contribute.
+        // Also every weapon a player only shot with (accuracy), and - for logged-in
+        // players - whose it was, for the per-account profile stats.
         const weaponStatsEntries = players
-            .filter(({ player }) => player.weaponDamageDealt.size > 0)
+            .filter(({ player }) => player.weaponDamageDealt.size > 0 || player.weaponShots.size > 0)
             .flatMap(({ player }) =>
-                [...player.weaponDamageDealt.entries()].map(([weaponType, damage]) => ({
-                    weaponType,
-                    damage: Math.round(damage),
-                    kills: player.weaponKills.get(weaponType) ?? 0,
-                })),
+                [...new Set([...player.weaponDamageDealt.keys(), ...player.weaponShots.keys()])].map(
+                    (weaponType) => ({
+                        weaponType,
+                        damage: Math.round(player.weaponDamageDealt.get(weaponType) ?? 0),
+                        kills: player.weaponKills.get(weaponType) ?? 0,
+                        shots: player.weaponShots.get(weaponType) ?? 0,
+                        hits: player.weaponHits.get(weaponType) ?? 0,
+                        userId: !player.spectator && !player.bot && player.userId ? player.userId : undefined,
+                    }),
+                ),
             );
         const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length
             ? { mapId, teamMode: this.teamMode, entries: weaponStatsEntries }

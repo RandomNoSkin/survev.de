@@ -111,7 +111,7 @@ export function nameFor(type: string): string {
  */
 export function showMatchLoadout(
     username: string,
-    roleTag: "admin" | "mod" | "premium" | null,
+    roleTag: "owner" | "admin" | "mod" | "premium" | null,
     cosmetics: string[],
 ): void {
     $(".loadout-modal-overlay").remove();

@@ -250,11 +250,28 @@ class Region {
         await this.fetch("api/dashboard/set_server_verified", { state });
     }
 
-    async findGameById(gameId: string, admin: boolean): Promise<any> {
+    async getSpectateGameDetails(gameId: string): Promise<any> {
+        const data = await this.fetch<any>("api/spectate_game_details", { gameId });
+        return data ?? { error: "spectate_game_details_failed" };
+    }
+
+    async getSystemStatus(): Promise<any | null> {
+        return (await this.fetch<any>("api/dashboard/system_status", {})) ?? null;
+    }
+
+    async setMaxGames(maxGames: number): Promise<boolean> {
+        const data = await this.fetch<{ ok?: boolean }>("api/dashboard/set_max_games", {
+            maxGames,
+        });
+        return data?.ok ?? false;
+    }
+
+    async findGameById(gameId: string, admin: boolean, stealth = false): Promise<any> {
         const data = await this.fetch<any>("api/find_game_by_id", {
             region: this.id,
             gameId,
             admin,
+            stealth,
         });
         return data ?? { error: "find_game_by_id_failed" };
     }
@@ -417,10 +434,11 @@ export class ApiServer {
         return map;
     }
 
-    async findGameById(region: string, gameId: string, admin: boolean) {
+    /** `stealth`: staff watching from the dashboard - an invisible spectator (see Player.stealth). */
+    async findGameById(region: string, gameId: string, admin: boolean, stealth = false) {
         const r = this.regions[region];
         if (!r) return { error: "Invalid Region" };
-        return await r.findGameById(gameId, admin);
+        return await r.findGameById(gameId, admin, stealth);
     }
 
     /** Returns live players for a game from the game server of the given region. */

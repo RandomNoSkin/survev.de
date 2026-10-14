@@ -1,5 +1,7 @@
 import type { MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
+import type { CustomMapConfig } from "../../shared/defs/customMap.ts";
+import type { WeaponStatsProfile } from "../../shared/defs/weaponStats.ts";
 import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby.ts";
 import loadout from "../../shared/utils/loadout.ts";
 import { util } from "../../shared/utils/util.ts";
@@ -149,6 +151,9 @@ const defaultConfig = {
     gameModeIdx: 2,
     /** Private lobby settings the leader last configured, re-applied (minus `advancedSettings`) the next time they create a lobby. */
     privateLobbySettings: {} as SavedPrivateLobbySettings,
+    /** Saved custom map configs for private lobbies (see CustomMapModal). */
+    customMaps: [] as CustomMapConfig[],
+    weaponStatsProfiles: [] as WeaponStatsProfile[],
     teamAutoFill: true,
     language: "en" as Locale,
     prerollGamesPlayed: 0,

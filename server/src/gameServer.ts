@@ -2,6 +2,7 @@ import { Cron } from "croner";
 import { randomUUID } from "crypto";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { App, SSLApp, type WebSocket } from "uWebSockets.js";
 import { version } from "../../package.json";
@@ -19,6 +20,7 @@ import {
     readRecordingFile,
     readTracksFile,
     recordingFileExists,
+    recordingsRoot,
 } from "./game/recording/gameRecorder";
 import { errorLogger, gameLogger } from "./utils/betterLogger";
 import { GIT_VERSION } from "./utils/gitRevision";
@@ -197,7 +199,15 @@ class GameServer {
         const gameId = await this.manager.createPrivateGame({
             region: data.region,
             version: data.version,
-            mapName: data.mapName,
+            // a custom map is its template's map (biome, assets, generation), edited;
+            // its rules are the lobby mode's unless it asks for the template's own
+            mapName: data.customMap?.template ?? data.mapName,
+            maxPlayers: data.maxPlayers,
+            weaponStats: data.weaponStats,
+            rulesMapName:
+                data.customMap?.rules === "lobby" && data.customMap.template !== data.mapName
+                    ? data.mapName
+                    : undefined,
             teamMode: data.teamMode,
             teams: data.teams,
             spectators: data.spectators,
@@ -206,6 +216,7 @@ class GameServer {
             customLoadout: data.customLoadout,
             customLoadoutEnabled: data.customLoadoutEnabled,
             publicSpectating: data.publicSpectating,
+            customMap: data.customMap,
         });
 
         return {
@@ -509,13 +520,24 @@ app.post("/api/find_game_by_id", async (res, req) => {
 
                 const token = randomUUID();
                 const ip = getIp(res, req, Config.gameServer.proxyIPHeader) ?? "";
-                const admin = body.admin;
+                const admin = body.admin === true;
+                // staff watching from the dashboard (API-key protected: only the API
+                // server's dashboard route sets it)
+                const stealth = body.stealth === true;
+
+                // a private match with public spectating off is not watchable by id
+                // (lobby members join it through their lobby instead) - staff still can
+                if (g.isPrivate && g.publicSpectating === false && !admin && !stealth) {
+                    returnJson(res, { err: "Invalid gameId" });
+                    return;
+                }
 
                 const playerData = [
                     {
                         token,
                         ip,
                         admin,
+                        stealth,
                         // No account identity flows through this legacy "watch by
                         // gameId" spectate path (no userId either), so Premium status
                         // can't be resolved here - spectators joining this way just
@@ -604,16 +626,19 @@ app.post("/api/game_infos", async (res, req) => {
                     .map((g: any) => ({
                         id: g.id,
                         teamMode: g.teamMode,
+                        mapName: g.mapName,
+                        isPrivate: g.isPrivate ?? false,
                         playerCount: g.aliveCount,
                         playerNames: "",
                         runtime: g.startedTime,
+                        startedAt: g.startedAt ?? 0,
                         stopped: g.stopped ?? false,
                         verifiedOnly: g.verifiedOnly ?? false,
                     }))
                     .filter((g: any) => g.id);
 
                 if (res.aborted) return;
-                returnJson(res, { data });
+                returnJson(res, { data, now: Date.now() });
             } catch (error) {
                 server.logger.warn("API game_infos error: ", error);
             }
@@ -840,6 +865,146 @@ app.post("/api/dashboard/set_server_verified", (res, req) => {
             if (res.aborted) return;
             server.manager.setServerVerified(!!body?.state);
             returnJson(res, { ok: true });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Public roster + recent kills of one game for the spectator menu. Only games that
+ *  `/api/game_infos` would list publicly are answered, and nothing identifying
+ *  (userId, IP) leaves this endpoint. */
+app.post("/api/spectate_game_details", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const gameId = body?.gameId;
+            if (typeof gameId !== "string") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const games = await server.manager.getGames();
+            const game = games.find((g) => g.id === gameId);
+            if (!game || game.stopped || (game.isPrivate && game.publicSpectating === false)) {
+                if (!res.aborted) returnJson(res, { error: "not_found" });
+                return;
+            }
+            const [players, feed] = await Promise.all([
+                server.manager.getGamePlayers(gameId),
+                server.manager.getGameFeed(gameId),
+            ]);
+            if (res.aborted) return;
+            returnJson(res, {
+                now: Date.now(),
+                game: {
+                    id: game.id,
+                    teamMode: game.teamMode,
+                    mapName: game.mapName,
+                    isPrivate: game.isPrivate,
+                    playerCount: game.aliveCount,
+                    runtime: game.startedTime,
+                    startedAt: game.startedAt ?? 0,
+                },
+                players: players
+                    .filter((p) => !p.joinedAsSpectator && !p.disconnected)
+                    .map((p) => ({
+                        name: p.username,
+                        roleTag: p.roleTag ?? null,
+                        teamId: p.teamId ?? 0,
+                        kills: p.kills,
+                        alive: p.alive,
+                    })),
+                feed: feed.slice(-8).map((k) => ({
+                    killer: k.killerName,
+                    victim: k.victimName,
+                    weapon: k.weapon,
+                })),
+            });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Host + process health for the local super-admin page. */
+app.post("/api/dashboard/system_status", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async () => {
+            if (res.aborted) return;
+            let disk: { total: number; free: number } | null = null;
+            try {
+                const st = await fs.statfs(recordingsRoot()).catch(() => fs.statfs("."));
+                disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize };
+            } catch {}
+            if (res.aborted) return;
+            const mem = process.memoryUsage();
+            returnJson(res, {
+                region: server.regionId,
+                processMode: Config.processMode,
+                uptimeSec: Math.round(process.uptime()),
+                rss: mem.rss,
+                heapUsed: mem.heapUsed,
+                playerCount: server.manager.getPlayerCount(),
+                gameCount: server.manager.getGameCount(),
+                maxGames: Config.gameServer.maxGames,
+                loadavg: os.loadavg(),
+                cpus: os.cpus().length,
+                totalmem: os.totalmem(),
+                freemem: os.freemem(),
+                disk,
+            });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Changes the maxGames cap at runtime (until the next restart). */
+app.post("/api/dashboard/set_max_games", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        (body: any) => {
+            if (res.aborted) return;
+            const value = Number(body?.maxGames);
+            if (!Number.isInteger(value) || value < 1 || value > 200) {
+                returnJson(res, { error: "invalid maxGames" });
+                return;
+            }
+            Config.gameServer.maxGames = value;
+            server.logger.warn(`maxGames changed at runtime to ${value}`);
+            returnJson(res, { ok: true, maxGames: value });
         },
         () => {
             if (!res.aborted) returnJson(res, { error: "body error" });

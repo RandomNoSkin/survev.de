@@ -2295,6 +2295,17 @@ export class UiManager {
             .html(freecam ? "Freecam" : this.spectatedPlayerName);
     }
 
+    private spectateTeamMode?: TeamMode;
+
+    /** Next/prev player buttons: solo only offers them with advanced spectator. */
+    updateSpectateCycleButtons() {
+        if (!this.spectating) return;
+        const hideSpec =
+            this.spectateTeamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
+        this.specPrevButton.css("display", hideSpec ? "none" : "block");
+        this.specNextButton.css("display", hideSpec ? "none" : "block");
+    }
+
     setSpectating(spectating: boolean, teamMode?: TeamMode) {
         if (this.spectating != spectating) {
             this.spectating = spectating;
@@ -2304,10 +2315,8 @@ export class UiManager {
                 // Advanced spectators may cycle through every player, so keep the
                 // next/prev buttons available even in solo (also works while freecam
                 // is active — the weapon HUD follows whichever player is selected).
-                const hideSpec =
-                    teamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
-                this.specPrevButton.css("display", hideSpec ? "none" : "block");
-                this.specNextButton.css("display", hideSpec ? "none" : "block");
+                this.spectateTeamMode = teamMode;
+                this.updateSpectateCycleButtons();
                 this.hideStats();
                 this.updateAdvancedSpectatorUi();
             } else {
@@ -2466,8 +2475,8 @@ export class UiManager {
     // spectator); the sub-toggles only appear once the mode is enabled.
     updateAdvancedSpectatorUi() {
         const advSpec = this.game.m_advSpec;
-        // Server-authoritative: m_advancedSpectatorAllowed already encodes "is a
-        // spectator" + "admin or non-prod" (see Player.advSpecAllowed).
+        // Server-authoritative: m_advancedSpectatorAllowed comes from the server
+        // (JoinedMsg, then AdvancedSpectatorAllowedMsg; see Player.advSpecAllowed).
         const available = this.game.m_advancedSpectatorAllowed;
 
         this.specAdvancedButton.css("display", available ? "block" : "none");

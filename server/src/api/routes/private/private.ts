@@ -34,6 +34,7 @@ import {
     matchDataTable,
     usersTable,
     userXpTable,
+    userWeaponStatsDailyTable,
     weaponStatsDailyTable,
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
@@ -115,7 +116,11 @@ async function attributeCosmeticStats(
 async function attributeWeaponStats(
     weaponStats: NonNullable<SaveGameBody["weaponStats"]>,
 ): Promise<void> {
-    const { mapId, teamMode, entries } = weaponStats;
+    const { mapId, teamMode, entries: allEntries } = weaponStats;
+    await attributeUserWeaponStats(allEntries);
+    // the global ranking counts a weapon only where it actually dealt damage/kills
+    // (entries for weapons that just missed exist for the profile accuracy)
+    const entries = allEntries.filter((e) => e.damage > 0 || e.kills > 0);
     if (!entries.length) return;
 
     // Collapse per-player entries down to one row per weapon: multiple players can use
@@ -176,6 +181,62 @@ async function attributeWeaponStats(
             });
     } catch (err) {
         server.logger.warn("Failed to attribute weapon stats:", err);
+    }
+}
+
+/**
+ * Per account and weapon, the day's totals for the (Premium) profile stats. Same
+ * batching rule as above: one row per (account, weapon) per insert.
+ */
+async function attributeUserWeaponStats(
+    entries: NonNullable<SaveGameBody["weaponStats"]>["entries"],
+): Promise<void> {
+    const byKey = new Map<
+        string,
+        { userId: string; weaponType: string; damage: number; kills: number; shots: number; hits: number; games: number; maxDamage: number }
+    >();
+    for (const e of entries) {
+        if (!e.userId) continue;
+        const key = `${e.userId}\u0000${e.weaponType}`;
+        const agg = byKey.get(key) ?? {
+            userId: e.userId,
+            weaponType: e.weaponType,
+            damage: 0,
+            kills: 0,
+            shots: 0,
+            hits: 0,
+            games: 0,
+            maxDamage: 0,
+        };
+        agg.damage += e.damage;
+        agg.kills += e.kills;
+        agg.shots += e.shots ?? 0;
+        agg.hits += e.hits ?? 0;
+        agg.games += 1;
+        agg.maxDamage = Math.max(agg.maxDamage, e.damage);
+        byKey.set(key, agg);
+    }
+    if (!byKey.size) return;
+
+    const day = new Date().toISOString().slice(0, 10);
+    const t = userWeaponStatsDailyTable;
+    try {
+        await db
+            .insert(t)
+            .values([...byKey.values()].map((a) => ({ ...a, day })))
+            .onConflictDoUpdate({
+                target: [t.userId, t.day, t.weaponType],
+                set: {
+                    damage: sql`${t.damage} + excluded.damage`,
+                    kills: sql`${t.kills} + excluded.kills`,
+                    shots: sql`${t.shots} + excluded.shots`,
+                    hits: sql`${t.hits} + excluded.hits`,
+                    games: sql`${t.games} + excluded.games`,
+                    maxDamage: sql`GREATEST(${t.maxDamage}, excluded.max_damage)`,
+                },
+            });
+    } catch (err) {
+        server.logger.warn("Failed to attribute user weapon stats:", err);
     }
 }
 

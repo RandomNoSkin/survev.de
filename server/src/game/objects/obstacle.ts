@@ -466,7 +466,10 @@ export class Obstacle extends BaseGameObject {
             v2.set(lootPos, v2.add(this.pos, v2.rotate(def.lootSpawn.offset, this.rot)));
         }
 
-        const loot = [...def.loot];
+        // custom maps can change which pools an object rolls
+        const loot: Array<(typeof def.loot)[number]> = [
+            ...(this.game.map.customMap?.objectLoot[this.type]?.map((l) => ({ ...l, props: {} })) ?? def.loot),
+        ];
 
         if (
             params.source?.__type === ObjectType.Player &&

@@ -11,9 +11,11 @@ import { friendsTable, matchDataTable, usersTable } from "./schema";
 
 /** Columns `resolveRoleTag` needs, added to every select that displays a username. */
 const roleTagColumns = {
+    owner: usersTable.owner,
     admin: usersTable.admin,
     moderator: usersTable.moderator,
     premiumUntil: usersTable.premiumUntil,
+    showOwnerPrefix: usersTable.showOwnerPrefix,
     showAdminPrefix: usersTable.showAdminPrefix,
     showModPrefix: usersTable.showModPrefix,
     showPremiumPrefix: usersTable.showPremiumPrefix,
@@ -156,7 +158,7 @@ export async function getFriendsDetailed(
         username: string;
         userId: string;
         lastGame: number | null;
-        roleTag: "admin" | "mod" | "premium" | null;
+        roleTag: "owner" | "admin" | "mod" | "premium" | null;
     }>
 > {
     const rows = await db

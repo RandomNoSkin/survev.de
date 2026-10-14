@@ -416,6 +416,9 @@ export class LoadoutMenu {
             $("#setting-loadout-private").on("click", () =>
                 this.toggleSetting("loadoutPrivate", "#setting-loadout-private"),
             );
+            $("#setting-show-owner-prefix").on("click", () =>
+                this.toggleSetting("showOwnerPrefix", "#setting-show-owner-prefix"),
+            );
             $("#setting-show-admin-prefix").on("click", () =>
                 this.toggleSetting("showAdminPrefix", "#setting-show-admin-prefix"),
             );
@@ -925,6 +928,10 @@ export class LoadoutMenu {
             "loadout-toggle-on",
             this.account.settings.loadoutPrivate,
         );
+        $("#setting-show-owner-prefix").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.showOwnerPrefix,
+        );
         $("#setting-show-admin-prefix").toggleClass(
             "loadout-toggle-on",
             this.account.settings.showAdminPrefix,
@@ -937,6 +944,16 @@ export class LoadoutMenu {
             "loadout-toggle-on",
             this.account.settings.showPremiumPrefix,
         );
+        // Only offer toggles for roles the account actually has; admins also get MOD
+        // since that's what an admin falls back to with the ADMIN tag hidden.
+        const p = this.account.profile;
+        const premiumActive = !!p.premiumUntil && p.premiumUntil > Date.now();
+        $("#setting-show-owner-prefix").closest(".loadout-setting-row").toggle(!!p.owner);
+        $("#setting-show-admin-prefix").closest(".loadout-setting-row").toggle(!!p.admin);
+        $("#setting-show-mod-prefix")
+            .closest(".loadout-setting-row")
+            .toggle(!!p.moderator || !!p.admin);
+        $("#setting-show-premium-prefix").closest(".loadout-setting-row").toggle(premiumActive);
         $("#loadout-settings-status").text("");
         $("#loadout-settings-panel").css("display", "block");
 
@@ -1025,6 +1042,7 @@ export class LoadoutMenu {
         key:
             | "offersDisabled"
             | "loadoutPrivate"
+            | "showOwnerPrefix"
             | "showAdminPrefix"
             | "showModPrefix"
             | "showPremiumPrefix",

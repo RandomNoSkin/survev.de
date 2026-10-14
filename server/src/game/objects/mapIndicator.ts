@@ -3,6 +3,8 @@ import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
 
 export class MapIndicator {
     oldPosition = v2.create(0, 0);
+    /** Set on per-player position markers: viewers on this team don't receive it. */
+    ownerTeamId: number | undefined = undefined;
     pos = v2.create(0, 0);
     dead = false;
     dirty = true;

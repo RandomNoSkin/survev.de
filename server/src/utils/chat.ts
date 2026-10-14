@@ -11,6 +11,7 @@ import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { db } from "../api/db";
 import { chatLogsTable, usersTable } from "../api/db/schema";
 import { parseBotDifficulty } from "../game/bot/botDefs.ts";
+import { isOwnerAccount } from "./ownerCheck";
 
 export const KillFeedChannel = -1; // sentinel channel value for kill events in chatLogsTable
 export const DownFeedChannel = -2; // sentinel channel value for knock/down events in chatLogsTable
@@ -120,7 +121,12 @@ export class Chat{
 
                     return;
                 }
-                if(this.player.chatCooldown >0){
+                // invisible staff spectators would give themselves away by chatting
+                if (this.player.stealth) {
+                    this.sendCmdFeedback("You're watching invisibly - chat is off", "#ffcc00");
+                    return;
+                }
+                if(!this.isAdmin && this.player.chatCooldown >0){
                     msg1.string = "chat-cooldown";
                     msg1.player = "ADMIN";
                     msg1.type = net.KillFeedMsgType.AdminMsg;
@@ -128,13 +134,17 @@ export class Chat{
                     this.logChat(originalMsg, true, false, msg1.string);
                     return;
                 }
-                if(checkForBadWords(msg.string)){
+                if(!this.isAdmin && checkForBadWords(msg.string)){
                     msg1.string = "chat-bad-word";
                     msg1.player = "ADMIN";
                     msg1.type = net.KillFeedMsgType.AdminMsg;
                     this.player.sendMsg(net.MsgType.KillFeed, msg1);
                     this.logChat(originalMsg, true, false, msg1.string);
                     return;
+                }
+                msg1.roleTag = this.player.roleTag;
+                if(this.isAdmin && /^#[0-9a-fA-F]{6}$/.test(msg.color)){
+                    msg1.color = msg.color;
                 }
                 if(this.player.spectator){
                     msg1.string = msg.string;
@@ -283,7 +293,11 @@ export class Chat{
             this.game.broadcastMsg(net.MsgType.KillFeed, msg);
         },
         // /spawnbot [difficulty] [count]  e.g. "/spawnbot hard 2"
-        spawnbot: (args) => {
+        spawnbot: async (args) => {
+            if (!Config.debug.allowEditMsg && !(await this.isOwner())) {
+                this.sendCmdFeedback("Only the owner can spawn bots", "#ff4444");
+                return;
+            }
             if (!Config.bots.enabled) {
                 this.sendCmdFeedback("Bots are disabled (Config.bots.enabled)", "#ff4444");
                 return;
@@ -395,6 +409,10 @@ export class Chat{
             return;
         },
     };
+
+    private async isOwner(): Promise<boolean> {
+        return isOwnerAccount(this.player.userId);
+    }
 
     handleAdminCmds(originalMsg: string){
 

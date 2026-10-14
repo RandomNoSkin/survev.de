@@ -228,6 +228,9 @@ UserRouter.post("/profile", async (c) => {
                 usernameChangeTime: timeUntilNextChange,
                 goldenFries,
                 premiumUntil: premiumUntil ? premiumUntil.getTime() : null,
+                owner: user.owner,
+                admin: user.admin,
+                moderator: user.moderator,
             },
             loadout,
             items: items,
@@ -240,6 +243,7 @@ UserRouter.post("/profile", async (c) => {
             settings: {
                 offersDisabled: user.offersDisabled,
                 loadoutPrivate: user.loadoutPrivate,
+                showOwnerPrefix: user.showOwnerPrefix,
                 showAdminPrefix: user.showAdminPrefix,
                 showModPrefix: user.showModPrefix,
                 showPremiumPrefix: user.showPremiumPrefix,
@@ -313,6 +317,7 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const {
         offersDisabled,
         loadoutPrivate,
+        showOwnerPrefix,
         showAdminPrefix,
         showModPrefix,
         showPremiumPrefix,
@@ -320,12 +325,14 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const patch: Partial<{
         offersDisabled: boolean;
         loadoutPrivate: boolean;
+        showOwnerPrefix: boolean;
         showAdminPrefix: boolean;
         showModPrefix: boolean;
         showPremiumPrefix: boolean;
     }> = {};
     if (offersDisabled !== undefined) patch.offersDisabled = offersDisabled;
     if (loadoutPrivate !== undefined) patch.loadoutPrivate = loadoutPrivate;
+    if (showOwnerPrefix !== undefined) patch.showOwnerPrefix = showOwnerPrefix;
     if (showAdminPrefix !== undefined) patch.showAdminPrefix = showAdminPrefix;
     if (showModPrefix !== undefined) patch.showModPrefix = showModPrefix;
     if (showPremiumPrefix !== undefined) patch.showPremiumPrefix = showPremiumPrefix;
@@ -337,6 +344,7 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
         settings: {
             offersDisabled: offersDisabled ?? user.offersDisabled,
             loadoutPrivate: loadoutPrivate ?? user.loadoutPrivate,
+            showOwnerPrefix: showOwnerPrefix ?? user.showOwnerPrefix,
             showAdminPrefix: showAdminPrefix ?? user.showAdminPrefix,
             showModPrefix: showModPrefix ?? user.showModPrefix,
             showPremiumPrefix: showPremiumPrefix ?? user.showPremiumPrefix,

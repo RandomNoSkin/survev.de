@@ -25,6 +25,9 @@ export type ProfileResponse =
               goldenFries: number;
               /** Epoch ms Premium is active until, or null if never purchased/expired. */
               premiumUntil: number | null;
+              owner: boolean;
+              admin: boolean;
+              moderator: boolean;
           };
           loadout: Loadout;
           items: Item[];
@@ -88,6 +91,7 @@ export type AccountSettings = {
     /** Each independently gates the account's [ADMIN]/[MOD]/[PREM] name prefix (see
      *  resolveRoleTag on the server) - a role whose toggle is off falls through to the
      *  next-highest enabled role rather than hiding the prefix outright. */
+    showOwnerPrefix: boolean;
     showAdminPrefix: boolean;
     showModPrefix: boolean;
     showPremiumPrefix: boolean;
@@ -96,6 +100,7 @@ export type AccountSettings = {
 export const zSettingsRequest = z.object({
     offersDisabled: z.boolean().optional(),
     loadoutPrivate: z.boolean().optional(),
+    showOwnerPrefix: z.boolean().optional(),
     showAdminPrefix: z.boolean().optional(),
     showModPrefix: z.boolean().optional(),
     showPremiumPrefix: z.boolean().optional(),
@@ -588,8 +593,8 @@ export type AckGiftsResponse = { success: boolean };
  * (this bit us once already: Constants was undefined at zUsernameRequest's evaluation
  * time because of exactly this cycle).
  */
-export type RoleTag = "admin" | "mod" | "premium" | null;
-export const zRoleTag = z.enum(["admin", "mod", "premium"]).nullable();
+export type RoleTag = "owner" | "admin" | "mod" | "premium" | null;
+export const zRoleTag = z.enum(["owner", "admin", "mod", "premium"]).nullable();
 
 /**
  * The name tag actually rendered next to a player in game. A superset of `RoleTag`:
