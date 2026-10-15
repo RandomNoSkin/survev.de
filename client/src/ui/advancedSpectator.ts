@@ -69,7 +69,7 @@ export function defaultAdvSpecSettings(): AdvSpecSettings {
 
 function createLabelText(tint: number) {
     const text = new PIXI.Text("", {
-        fontFamily: "Arial",
+        fontFamily: "Roboto Condensed",
         fontWeight: "bold",
         fontSize: device.pixelRatio > 1 ? 30 : 22,
         align: "center",

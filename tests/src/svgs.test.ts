@@ -23,8 +23,8 @@ const IGNORED_SVGS = [
     "map-decal-flyer-01.svg",
     // Complex custom cosmetic illustrations that stay well above the size limit even
     // after lossless optimization; shrinking them further would visibly degrade the art.
-    "loot-chewie-cheese-outfit.svg",
-    "loot-king-galaxy-outfit.svg",
+    "loot-outfit-chewie-cheese.svg",
+    "loot-outfit-king-galaxy.svg",
     "player-base-chewie-cheese.svg",
 ];
 

@@ -13,7 +13,7 @@ import type { AbstractObject, Player, PlayerBarn } from "./player.ts";
 
 function createDeadBodyText() {
     const nameStyle: Partial<PIXI.TextStyle> = {
-        fontFamily: "Arial",
+        fontFamily: "Roboto Condensed",
         fontWeight: "bold",
         fontSize: device.pixelRatio > 1 ? 30 : 24,
         align: "center",

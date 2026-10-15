@@ -378,7 +378,7 @@ export class GameView {
             ctx.strokeStyle = "rgba(0,0,0,0.55)";
             ctx.lineWidth = 2;
             ctx.textAlign = "center";
-            ctx.font = "bold 12px Arial, sans-serif";
+            ctx.font = "bold 12px 'Roboto Condensed', sans-serif";
             for (const pl of m.places) {
                 const cx = tf.x(pl.x);
                 const cy = tf.y(pl.y);

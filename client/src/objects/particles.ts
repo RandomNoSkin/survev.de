@@ -1,6 +1,6 @@
 import * as PIXI from "pixi.js-legacy";
 import { math } from "../../../shared/utils/math.ts";
-import { util } from "../../../shared/utils/util.ts";
+import { type DeepPartial, util } from "../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import type { Camera } from "../camera.ts";
 import type { Map } from "../map.ts";
@@ -423,15 +423,61 @@ export class ParticleBarn {
     }
 }
 
-const ParticleDefs: Record<string, ParticleDef> = {
-    archwayBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
+function createChip(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-spark-01.img"],
+        life: 0.5,
         drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
+        rotVel: new Range(0, 0),
         scale: {
-            start: new Range(0.2, 0.35),
-            end: new Range(0.08, 0.12),
+            start: new Range(0.04, 0.08),
+            end: new Range(0.01, 0.02),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: 0xffffff,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createGlassChip(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef = createChip({
+        rotVel: new Range(Math.PI * 1, Math.PI * 6),
+        scale: {
+            start: new Range(0.02, 0.04),
+            end: new Range(0.01, 0.02),
+            lerp: new Range(0, 1),
+        },
+        color: 0x80d9ff,
+    });
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createWoodChip(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef = createChip({
+        image: ["part-woodchip-01.img"],
+        life: new Range(0.5, 1),
+        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+        alpha: {
+            lerp: new Range(0.9, 1),
+        },
+    });
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createPlank(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-plank-01.img"],
+        life: new Range(1, 1.5),
+        drag: new Range(1, 5),
+        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+        scale: {
+            start: new Range(0.1, 0.2),
+            end: new Range(0.08, 0.18),
             lerp: new Range(0, 1),
         },
         alpha: {
@@ -439,10 +485,368 @@ const ParticleDefs: Record<string, ParticleDef> = {
             end: 0,
             lerp: new Range(0.9, 1),
         },
-        color: function() {
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0.05, 1, util.random(0.25, 0.35)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createLeaf(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-leaf-01.img"],
+        life: new Range(0.5, 1),
+        drag: new Range(1, 5),
+        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+        scale: {
+            start: new Range(0.04, 0.08),
+            end: new Range(0.01, 0.02),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.5, 0.75)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createSmallBreak(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-spark-01.img"],
+        life: new Range(0.8, 1),
+        drag: new Range(1, 5),
+        rotVel: 0,
+        scale: {
+            start: new Range(0.07, 0.12),
+            end: new Range(0.05, 0.1),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: 0xffffff,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createLargeBreak(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-plank-01.img"],
+        life: new Range(0.5, 1.5),
+        drag: new Range(1, 5),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.25, 0.55),
+            end: new Range(0.08, 0.18),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: 0xffffff,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createGlassBreak(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-spark-01.img"],
+        life: new Range(0.4, 0.8),
+        drag: new Range(1, 4),
+        rotVel: new Range(Math.PI * 1, Math.PI * 6),
+        scale: {
+            start: new Range(0.03, 0.06),
+            end: new Range(0.05, 0.1),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 0.8,
+            end: 0,
+            lerp: new Range(0.75, 1),
+        },
+        color: 0x80d9ff,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createDepositBoxBreak(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-plate-01.img"],
+        life: new Range(0.5, 1),
+        drag: new Range(6, 8),
+        rotVel: new Range(0, Math.PI * 3),
+        scale: {
+            start: new Range(0.2, 0.35),
+            end: new Range(0.18, 0.25),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: 0xffffff,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createCasing(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-shell-01.img"],
+        life: new Range(0.5, 0.75),
+        drag: new Range(3, 4),
+        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+        scale: {
+            start: 0.0625,
+            end: 0.0325,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.95, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createExplosion(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-frag-burst-01.img"],
+        life: 0.5,
+        drag: 0,
+        rotVel: 0,
+        scale: {
+            start: 1,
+            end: 4,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.75, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0.065, 1, util.random(0.98, 0.99)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createSmoke(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-smoke-01.img"],
+        life: new Range(2, 3),
+        drag: 0,
+        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.07, 0.12),
+            end: new Range(0.05, 0.1),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createAirdropPart(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-airdrop-01.img"],
+        life: new Range(0.85, 1.15),
+        drag: new Range(2, 2.25),
+        rotVel: new Range(Math.PI * 1, Math.PI * 2),
+        scale: {
+            start: 0.5,
+            end: 0.4,
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: 0xffffff,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createAmbientLeaves(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: [
+            "part-leaf-03.img",
+            "part-leaf-04.img",
+            "part-leaf-05.img",
+            "part-leaf-06.img",
+        ],
+        life: new Range(10, 15),
+        drag: new Range(0, 0),
+        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.12, 0.15),
+            end: new Range(0.08, 0.11),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createThrowableImpact(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-snow-01.img"],
+        life: new Range(0.5, 1),
+        drag: new Range(0, 0),
+        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.13, 0.23),
+            end: new Range(0.07, 0.14),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.9, 1),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createHeal(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-heal-basic.img"],
+        life: new Range(0.75, 1),
+        drag: 0.25,
+        rotVel: new Range(0, 0),
+        scale: {
+            start: new Range(0.1, 0.12),
+            end: new Range(0.05, 0.07),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.7, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
+        },
+        ignoreValueAdjust: true,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createBoost(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: ["part-boost-basic.img"],
+        life: new Range(0.75, 1),
+        drag: 0,
+        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.12, 0.14),
+            end: new Range(0.06, 0.08),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.7, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
+        },
+        ignoreValueAdjust: true,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createStim(overrides: DeepPartial<ParticleDef>): ParticleDef {
+    const baseDef: ParticleDef = {
+        image: [
+            "part-blossom-01.img",
+            "part-blossom-02.img",
+            "part-blossom-03.img",
+            "part-blossom-04.img",
+        ],
+        life: new Range(4, 5),
+        drag: 0,
+        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
+        scale: {
+            start: new Range(0.12, 0.14),
+            end: new Range(0.06, 0.08),
+            lerp: new Range(0, 1),
+        },
+        alpha: {
+            start: 1,
+            end: 0,
+            lerp: new Range(0.7, 1),
+        },
+        alphaIn: {
+            start: 0,
+            end: 1,
+            lerp: new Range(0, 0.05),
+        },
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0.37, 1, util.random(0.95, 1)));
+        },
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+const ParticleDefs: Record<string, ParticleDef> = {
+    archwayBreak: createLargeBreak({
+        scale: {
+            start: new Range(0.2, 0.35),
+            end: new Range(0.08, 0.12),
+            lerp: new Range(0, 1),
+        },
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.06, 0.84, util.random(0.46, 0.48)));
         },
-    },
+    }),
     bloodSplat: {
         image: ["part-splat-01.img", "part-splat-02.img", "part-splat-03.img"],
         life: 0.5,
@@ -458,105 +862,41 @@ const ParticleDefs: Record<string, ParticleDef> = {
             end: 0,
             lerp: new Range(0.75, 1),
         },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0xff0000, 1, util.random(0.45, 0.8)));
         },
     },
-    barrelPlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(3, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+    barrelPlank: createPlank({
         scale: {
             start: new Range(0.08, 0.18),
             end: new Range(0.07, 0.17),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.09, 0.8, util.random(0.66, 0.68)));
         },
-    },
-    barrelChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    barrelChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.01, 0.02, util.random(0.38, 0.41)));
         },
-    },
-    barrelBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    barrelBreak: createSmallBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.01, 0.02, util.random(0.38, 0.41)));
         },
-    },
-    blackChip: {
-        image: ["part-woodchip-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    blackChip: createWoodChip({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0.08, util.random(0.16, 0.18)));
         },
-    },
-    blueChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    blueChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.64, 1, util.random(0.83, 0.85)));
         },
-    },
+    }),
     book: {
         image: ["part-book-01.img"],
         life: new Range(1, 1.5),
@@ -576,1082 +916,347 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0.08, 0.42, util.random(0.72, 0.74)));
         },
     },
-    bottleBrownChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.02, 0.04),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
+    bottleBrownChip: createGlassChip({
         color: 0x783808,
-    },
-    bottleBrownBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.4, 0.8),
-        drag: new Range(1, 4),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.03, 0.06),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 0.8,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
+    }),
+    bottleBrownBreak: createGlassBreak({
         color: 0x783808,
-    },
-    bottleBlueChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.02, 0.04),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
+    }),
+    bottleBlueChip: createGlassChip({
         color: 0x4c58,
-    },
-    bottleWhiteBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.4, 0.8),
-        drag: new Range(1, 4),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.03, 0.06),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
+    }),
+    bottleWhiteBreak: createGlassBreak({
         alpha: {
             start: 0.75,
-            end: 0,
-            lerp: new Range(0.75, 1),
         },
         color: 0xffffff,
-    },
-    bottleWhiteChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.02, 0.04),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
+    }),
+    bottleWhiteChip: createGlassChip({
         alpha: {
             start: 0.75,
             end: 0,
             lerp: new Range(0.95, 1),
         },
         color: 0xffffff,
-    },
-    bottleBlueBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.4, 0.8),
-        drag: new Range(1, 4),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.03, 0.06),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 0.8,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
+    }),
+    bottleBlueBreak: createGlassBreak({
         color: 0x4c58,
-    },
-    brickChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    brickChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0.71, util.random(0.32, 0.34)));
         },
-    },
-    clothBreak: {
+    }),
+    clothBreak: createSmallBreak({
         image: ["part-cloth-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.95, 1)));
         },
-    },
-    clothHit: {
+    }),
+    clothHit: createChip({
         image: ["part-cloth-01.img"],
-        life: 0.5,
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.95, 1)));
         },
-    },
-    depositBoxGreyBreak: {
-        image: ["part-plate-01.img"],
-        life: new Range(0.5, 1),
+    }),
+    depositBoxGreyBreak: createDepositBoxBreak({
         drag: new Range(7, 8),
-        rotVel: new Range(0, Math.PI * 3),
         scale: {
             start: new Range(0.15, 0.25),
             end: new Range(0.12, 0.2),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.36, 0.38)));
         },
-    },
-    depositBoxGoldBreak: {
-        image: ["part-plate-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(6, 8),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.2, 0.35),
-            end: new Range(0.18, 0.25),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    depositBoxGoldBreak: createDepositBoxBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.11, 0.84, util.random(0.64, 0.66)));
         },
-    },
-    depositBoxSilverBreak: {
-        image: ["part-plate-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(6, 8),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.2, 0.35),
-            end: new Range(0.18, 0.25),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
+    }),
+    depositBoxSilverBreak: createDepositBoxBreak({
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.68, 0.72)));
         },
-    },
-    glassChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
+    }),
+    glassChip: createGlassChip({
         scale: {
             start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
+    }),
+    glassPlank: createPlank({
         color: 0x80d9ff,
-    },
-    glassPlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.1, 0.2),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0x80d9ff,
-    },
-    goldChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    goldChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.11, 0.84, util.random(0.88, 0.9)));
         },
-    },
-    pinkChip: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    pinkChip: createWoodChip({
+        image: ["part-spark-01.img"],
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0.52, util.random(0.98, 1)));
         },
-    },
-    ltblueChip: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    ltblueChip: createWoodChip({
+        image: ["part-spark-01.img"],
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.5, 0.65, util.random(0.98, 1)));
         },
-    },
-    yellowChip: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    yellowChip: createWoodChip({
+        image: ["part-spark-01.img"],
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.16, 0.73, util.random(0.98, 1)));
         },
-    },
-    greenChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    greenChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.4, 0.18, util.random(0.5, 0.62)));
         },
-    },
-    greenPlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+    }),
+    greenPlank: createPlank({
         scale: {
             start: new Range(0.08, 0.16),
             end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
         },
         color: 0x3b452f,
-    },
-    greenhouseBreak: {
-        image: ["part-spark-02.img", "part-plate-01.img", "part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
+    }),
+    greenhouseBreak: createLargeBreak({
+        image: ["part-spark-01.img", "part-plate-01.img", "part-plank-01.img"],
         rotVel: new Range(Math.PI * 1, Math.PI * 6),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
         alpha: {
             start: 0.8,
-            end: 0,
             lerp: new Range(0.75, 1),
         },
         color: 0x80d9ff,
-    },
-    hutBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    hutBreak: createLargeBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.1, 0.81, util.random(0.78, 0.82)));
         },
-    },
-    leaf: {
-        image: ["part-leaf-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.5, 0.75)));
-        },
-    },
-    leafPrickly: {
+    }),
+    leaf: createLeaf({}),
+    leafPrickly: createLeaf({
         image: ["part-leaf-01sv.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.8, 0.85)));
         },
-    },
-    leafRiver: {
+    }),
+    leafRiver: createLeaf({
         image: ["part-leaf-02.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.5, 0.75)));
         },
-    },
-    lockerBreak: {
-        image: ["part-plate-01.img"],
-        life: new Range(0.5, 1),
+    }),
+    tumbleweed: createLeaf({
+        image: ["part-tumbleweed-01.img"],
+        scale: {
+            start: new Range(0.08, 0.12),
+            end: new Range(0.02, 0.03),
+        },
+        color: function () {
+            return util.rgbToInt(
+                util.hsvToRgb(
+                    util.random(0.05, 0.08),
+                    util.random(0.2, 0.3),
+                    util.random(0.25, 0.75),
+                ),
+            );
+        },
+    }),
+    lockerBreak: createDepositBoxBreak({
         drag: new Range(7, 8),
-        rotVel: new Range(0, Math.PI * 3),
         scale: {
             start: new Range(0.15, 0.2),
             end: new Range(0.12, 0.15),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.1, 0.23, util.random(0.51, 0.53)));
         },
-    },
-    ltgreenChip: {
-        image: ["part-woodchip-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    ltgreenChip: createWoodChip({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.2, 0.42, util.random(0.38, 0.42)));
         },
-    },
-    outhouseChip: {
-        image: ["part-woodchip-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    outhouseChip: createWoodChip({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.08, 0.57, util.random(0.4, 0.46)));
         },
-    },
-    outhouseBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    outhouseBreak: createLargeBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.08, 0.79, util.random(0.52, 0.54)));
         },
-    },
-    outhousePlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.1, 0.2),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    outhousePlank: createPlank({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.08, 0.57, util.random(0.4, 0.46)));
         },
-    },
-    potChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
-        drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+    }),
+    potChip: createChip({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.06, 0.84, util.random(0.73, 0.77)));
         },
-    },
-    potBreak: {
+    }),
+    potBreak: createSmallBreak({
         image: ["part-pot-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.06, 0.84, util.random(0.73, 0.77)));
         },
-    },
-    potatoChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    potatoChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.075, 0.43, util.random(0.48, 0.5)));
         },
-    },
-    potatoBreak: {
-        image: ["part-pumpkin-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.075, 0.43, util.random(0.48, 0.5)));
-        },
-    },
-    tomatoChip_01: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    tomatoChip_01: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0, util.random(0.43, 0.64), 0.7));
         },
-    },
-    tomatoChip_02: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    tomatoChip_02: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0.26, util.random(0.53, 0.63), 0.55));
         },
-    },
-    tomatoBreak_01: {
+    }),
+    tomatoBreak_01: createSmallBreak({
         image: ["part-pumpkin-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0, util.random(0.43, 0.64), 0.7));
         },
-    },
-    tomatoBreak_02: {
+    }),
+    tomatoBreak_02: createSmallBreak({
         image: ["part-pumpkin-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0.26, util.random(0.53, 0.63), 0.55));
         },
-    },
-    pumpkinChip: {
-        image: ["part-spark-02.img"],
+    }),
+    pumpkinChip: createChip({
         life: 0.5,
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.07, 1, util.random(0.98, 1)));
         },
-    },
-    pumpkinBreak: {
+    }),
+    pumpkinBreak: createSmallBreak({
         image: ["part-pumpkin-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.08, 1, util.random(0.95, 0.97)));
         },
-    },
-    squashChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    squashChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.31, 0.86, util.random(0.35, 0.36)));
         },
-    },
-    squashBreak: {
+    }),
+    squashBreak: createSmallBreak({
         image: ["part-pumpkin-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.31, 0.86, util.random(0.35, 0.36)));
         },
-    },
-    redChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    redChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.98, 1, util.random(0.52, 0.54)));
         },
-    },
-    redBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    redBreak: createSmallBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.98, 1, util.random(0.52, 0.54)));
         },
-    },
-    redPlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.1, 0.2),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    redPlank: createPlank({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.02, 1, util.random(0.26, 0.28)));
         },
-    },
-    rockChip: {
+    }),
+    rockChip: createChip({
         image: ["map-stone-01.img"],
-        life: 0.5,
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.5, 0.75)));
         },
-    },
-    rockBreak: {
+    }),
+    rockBreak: createSmallBreak({
         image: ["map-stone-01.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.5, 0.75)));
         },
-    },
-    rockEyeChip: {
+    }),
+    rockEyeChip: createChip({
         image: ["map-stone-01.img"],
-        life: 0.5,
         drag: new Range(1, 10),
-        rotVel: 0,
         scale: {
             start: new Range(0.03, 0.06),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
         },
         color: 0x292421,
-    },
-    rockEyeBreak: {
+    }),
+    rockEyeBreak: createSmallBreak({
         image: ["map-stone-01.img"],
-        life: new Range(0.8, 1),
         drag: new Range(4, 12),
-        rotVel: 0,
         scale: {
             start: new Range(0.05, 0.1),
             end: new Range(0.03, 0.06),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
         },
         color: 0x292421,
-    },
-    shackBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    shackBreak: createLargeBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.1, 0.24, util.random(0.38, 0.41)));
         },
-    },
-    shackGreenBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
+    }),
+    shackGreenBreak: createLargeBreak({
         color: 0x577066,
-    },
-    tanChip: {
-        image: ["part-woodchip-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    tanChip: createWoodChip({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.1, 0.35, util.random(0.48, 0.52)));
         },
-    },
-    teahouseBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    teahouseBreak: createLargeBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.6, 0.31, util.random(0.42, 0.45)));
         },
-    },
-    teapavilionBreak: {
-        image: ["part-panel-01.img"],
-        life: new Range(0.5, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(0, Math.PI * 3),
-        scale: {
-            start: new Range(0.25, 0.55),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    teapavilionBreak: createLargeBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0.8, util.random(0.6, 0.62)));
         },
-    },
-    toiletBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.8, 1),
-        drag: new Range(1, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    toiletBreak: createSmallBreak({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.97, 0, util.random(0.95, 0.97)));
         },
-    },
-    toiletGoldChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    }),
+    toiletGoldChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0.14, util.random(0.72, 0.86), util.random(0.71, 0.85)));
         },
-    },
-    toiletGoldBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.8, 1),
+    }),
+    toiletGoldBreak: createSmallBreak({
         drag: new Range(4, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0.14, util.random(0.72, 0.86), util.random(0.71, 0.85)));
         },
-    },
-    toiletMetalBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.8, 1),
+    }),
+    toiletMetalBreak: createSmallBreak({
         drag: new Range(4, 5),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.01, 0.02, util.random(0.38, 0.41)));
         },
-    },
+    }),
     turkeyFeathersHit: {
         image: ["part-feather-01.img", "part-feather-02.img"],
         life: new Range(1, 1.5),
@@ -1730,36 +1335,36 @@ const ParticleDefs: Record<string, ParticleDef> = {
     },
     confettiDeath: {
         image: [
-            "confetti-death-01.img",
-            "confetti-death-02.img",
-            "confetti-death-03.img",
-            "confetti-death-04.img",
-            "confetti-death-05.img",
-            "confetti-death-06.img",
-            "confetti-death-07.img",
-            "confetti-death-08.img",
-            "confetti-death-09.img",
-            "confetti-death-10.img",
-            "confetti-death-11.img",
-            "confetti-death-12.img",
-            "confetti-death-13.img",
-            "confetti-death-14.img",
-            "confetti-death-15.img",
-            "confetti-death-16.img",
-            "confetti-death-17.img",
-            "confetti-death-18.img",
-            "confetti-death-19.img",
-            "confetti-death-20.img",
-            "confetti-death-21.img",
-            "confetti-death-22.img",
-            "confetti-death-23.img",
-            "confetti-death-24.img",
-            "confetti-death-25.img",
-            "confetti-death-26.img",
-            "confetti-death-27.img",
-            "confetti-death-28.img",
-            "confetti-death-29.img",
-            "confetti-death-30.img",
+            "part-death-confetti-01.img",
+            "part-death-confetti-02.img",
+            "part-death-confetti-03.img",
+            "part-death-confetti-04.img",
+            "part-death-confetti-05.img",
+            "part-death-confetti-06.img",
+            "part-death-confetti-07.img",
+            "part-death-confetti-08.img",
+            "part-death-confetti-09.img",
+            "part-death-confetti-10.img",
+            "part-death-confetti-11.img",
+            "part-death-confetti-12.img",
+            "part-death-confetti-13.img",
+            "part-death-confetti-14.img",
+            "part-death-confetti-15.img",
+            "part-death-confetti-16.img",
+            "part-death-confetti-17.img",
+            "part-death-confetti-18.img",
+            "part-death-confetti-19.img",
+            "part-death-confetti-20.img",
+            "part-death-confetti-21.img",
+            "part-death-confetti-22.img",
+            "part-death-confetti-23.img",
+            "part-death-confetti-24.img",
+            "part-death-confetti-25.img",
+            "part-death-confetti-26.img",
+            "part-death-confetti-27.img",
+            "part-death-confetti-28.img",
+            "part-death-confetti-29.img",
+            "part-death-confetti-30.img",
         ],
         life: new Range(1.5, 2),
         drag: new Range(3, 3),
@@ -1779,7 +1384,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     sparklyDeath: {
-        image: ["sparkly-death-1.img", "sparkly-death-2.img"],
+        image: ["part-death-sparkly-01.img", "part-death-sparkly-02.img"],
         life: new Range(0.75, 1.75),
         drag: new Range(5.0, 9.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -1798,7 +1403,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     potatoBlastDeath: {
-        image: ["potato-blast-death.img"],
+        image: ["part-death-potato-blast-01.img"],
         life: new Range(0.75, 1.5),
         drag: new Range(5.0, 15.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -1841,7 +1446,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     cupidDeath: {
-        image: ["part-cupid-01.img", "part-cupid-02.img", "part-cupid-03.img"],
+        image: ["part-death-cupid-01.img", "part-death-cupid-02.img", "part-death-cupid-03.img"],
         life: new Range(1.0, 1.5),
         drag: new Range(1.0, 10.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -1860,7 +1465,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     blackHoleDeath: {
-        image: ["part-black-hole-01.img"],
+        image: ["part-death-black-hole-01.img"],
         life: new Range(1.2, 1.8),
         drag: new Range(0.5, 2.0),
         rotVel: new Range(Math.PI * 2, Math.PI * 4),
@@ -1879,7 +1484,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     pixelExplosionDeath: {
-        image: ["part-pixel-explosion-01.img", ],
+        image: ["part-death-pixel-explosion-01.img", ],
         life: new Range(1.0, 1.5),
         drag: new Range(5.0, 10.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -1917,7 +1522,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     smokeDeath: {
-        image: ["smoke-death-01.img", ],
+        image: ["part-death-smoke-01.img", ],
         life: new Range(1.0, 1.5),
         drag: new Range(5.0, 10.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -1937,10 +1542,10 @@ const ParticleDefs: Record<string, ParticleDef> = {
     },
     magicSparkDeath: {
         image: [
-            "part-magic-spark-01.img",
-            "part-magic-spark-02.img",
-            "part-magic-spark-03.img",
-            "part-magic-spark-04.img",
+            "part-death-magic-spark-01.img",
+            "part-death-magic-spark-02.img",
+            "part-death-magic-spark-03.img",
+            "part-death-magic-spark-04.img",
         ],
         life: new Range(1.0, 1.5),
         drag: new Range(5.0, 10.0),
@@ -1961,9 +1566,9 @@ const ParticleDefs: Record<string, ParticleDef> = {
     },
     billionaireDeath: {
         image: [
-            "billionaire-death-1.img",
-            "billionaire-death-2.img",
-            "billionaire-death-3.img",
+            "part-death-billionaire-01.img",
+            "part-death-billionaire-02.img",
+            "part-death-billionaire-03.img",
         ],
         life: new Range(1.0, 1.5),
         drag: new Range(4.0, 10.0),
@@ -1984,12 +1589,12 @@ const ParticleDefs: Record<string, ParticleDef> = {
     },
     xpOrbDeath: {
         image: [
-            "part-xp-orb-1.img",
-            "part-xp-orb-2.img",
-            "part-xp-orb-3.img",
-            "part-xp-orb-4.img",
-            "part-xp-orb-5.img",
-            "part-xp-orb-6.img",
+            "part-death-xp-orb-01.img",
+            "part-death-xp-orb-02.img",
+            "part-death-xp-orb-03.img",
+            "part-death-xp-orb-04.img",
+            "part-death-xp-orb-05.img",
+            "part-death-xp-orb-06.img",
         ],
         life: new Range(2, 2.5),
         drag: new Range(1, 1.5),
@@ -2010,32 +1615,32 @@ const ParticleDefs: Record<string, ParticleDef> = {
     },
     alphabetSoupDeath: {
         image: [
-            "part-alphabet-soup-01.img",
-            "part-alphabet-soup-02.img",
-            "part-alphabet-soup-03.img",
-            "part-alphabet-soup-04.img", 
-            "part-alphabet-soup-05.img",
-            "part-alphabet-soup-06.img",
-            "part-alphabet-soup-07.img",
-            "part-alphabet-soup-08.img",
-            "part-alphabet-soup-09.img",
-            "part-alphabet-soup-10.img",
-            "part-alphabet-soup-11.img",
-            "part-alphabet-soup-12.img",
-            "part-alphabet-soup-13.img",
-            "part-alphabet-soup-14.img",
-            "part-alphabet-soup-15.img",
-            "part-alphabet-soup-16.img",
-            "part-alphabet-soup-17.img",
-            "part-alphabet-soup-18.img",
-            "part-alphabet-soup-19.img",
-            "part-alphabet-soup-20.img",
-            "part-alphabet-soup-21.img",
-            "part-alphabet-soup-22.img",
-            "part-alphabet-soup-23.img",
-            "part-alphabet-soup-24.img",
-            "part-alphabet-soup-25.img",
-            "part-alphabet-soup-26.img",
+            "part-death-alphabet-soup-01.img",
+            "part-death-alphabet-soup-02.img",
+            "part-death-alphabet-soup-03.img",
+            "part-death-alphabet-soup-04.img", 
+            "part-death-alphabet-soup-05.img",
+            "part-death-alphabet-soup-06.img",
+            "part-death-alphabet-soup-07.img",
+            "part-death-alphabet-soup-08.img",
+            "part-death-alphabet-soup-09.img",
+            "part-death-alphabet-soup-10.img",
+            "part-death-alphabet-soup-11.img",
+            "part-death-alphabet-soup-12.img",
+            "part-death-alphabet-soup-13.img",
+            "part-death-alphabet-soup-14.img",
+            "part-death-alphabet-soup-15.img",
+            "part-death-alphabet-soup-16.img",
+            "part-death-alphabet-soup-17.img",
+            "part-death-alphabet-soup-18.img",
+            "part-death-alphabet-soup-19.img",
+            "part-death-alphabet-soup-20.img",
+            "part-death-alphabet-soup-21.img",
+            "part-death-alphabet-soup-22.img",
+            "part-death-alphabet-soup-23.img",
+            "part-death-alphabet-soup-24.img",
+            "part-death-alphabet-soup-25.img",
+            "part-death-alphabet-soup-26.img",
         ],
         life: new Range(2.0, 2.5),
         drag: new Range(1.5, 3.0),
@@ -2055,7 +1660,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     bubbleDeath: {
-        image: ["bubble-death.img",],
+        image: ["part-death-bubble-01.img",],
         life: new Range(0.7, 1.1),
         drag: new Range(0.5, 1.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -2076,12 +1681,12 @@ const ParticleDefs: Record<string, ParticleDef> = {
     },
     shatteredGlassDeath: {
         image: [
-            "glass-shard-death-01.img",
-            "glass-shard-death-02.img",
-            "glass-shard-death-03.img",
-            "glass-shard-death-04.img",
-            "glass-shard-death-05.img",
-            "glass-shard-death-06.img",
+            "part-death-glass-shard-01.img",
+            "part-death-glass-shard-02.img",
+            "part-death-glass-shard-03.img",
+            "part-death-glass-shard-04.img",
+            "part-death-glass-shard-05.img",
+            "part-death-glass-shard-06.img",
         ],
         life: new Range(1.0, 1.2),
         drag: new Range(0.5, 3),
@@ -2121,7 +1726,7 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
     },
     touhouDeath: {
-        image: ["touhou-death.img",],
+        image: ["part-death-potato-blast-01.img",],
         life: new Range(1.0, 1.8),
         drag: new Range(2.0, 7.0),
         rotVel: new Range(0, Math.PI * 3),
@@ -2139,121 +1744,36 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return 0xffffff;
         },
     },
-
-    whiteChip: {
-        image: ["part-spark-02.img"],
-        life: 0.5,
+    whiteChip: createChip({
         drag: new Range(1, 10),
-        rotVel: 0,
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.97, 0, util.random(0.95, 0.97)));
         },
-    },
-    whitePlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.1, 0.2),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    whitePlank: createPlank({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.97, 0, util.random(0.95, 0.97)));
         },
-    },
-    windowBreak: {
-        image: ["part-spark-02.img"],
-        life: new Range(0.4, 0.8),
-        drag: new Range(1, 4),
-        rotVel: new Range(Math.PI * 1, Math.PI * 6),
+    }),
+    windowBreak: createGlassBreak({
         scale: {
             start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 0.8,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
-        color: 8444415,
-    },
-    woodChip: {
-        image: ["part-woodchip-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.04, 0.08),
-            end: new Range(0.01, 0.02),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+    }),
+    woodChip: createWoodChip({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.05, 1, util.random(0.35, 0.45)));
         },
-    },
-    woodLog: {
+    }),
+    woodLog: createPlank({
         image: ["part-log-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.1, 0.2),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.05, 1, util.random(0.35, 0.45)));
         },
-    },
-    woodPlank: {
-        image: ["part-plank-01.img"],
-        life: new Range(1, 1.5),
-        drag: new Range(1, 5),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: new Range(0.1, 0.2),
-            end: new Range(0.08, 0.18),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.05, 1, util.random(0.25, 0.35)));
-        },
-    },
+    }),
+    woodPlank: createPlank({}),
     woodShard: {
-        image: ["part-spark-02.img"],
+        image: ["part-spark-01.img"],
         life: new Range(1, 1.5),
         drag: new Range(3, 5),
         rotVel: new Range(Math.PI * 3, Math.PI * 3),
@@ -2271,45 +1791,9 @@ const ParticleDefs: Record<string, ParticleDef> = {
             return util.rgbToInt(util.hsvToRgb(0.05, 1, util.random(0.25, 0.35)));
         },
     },
-    "9mm": {
-        image: ["part-shell-01.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: 0.0625,
-            end: 0.0325,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "9mm_cursed": {
-        image: ["part-shell-01.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: 0.0625,
-            end: 0.0325,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "762mm": {
+    "9mm": createCasing({}),
+    "9mm_cursed": createCasing({}),
+    "762mm": createCasing({
         image: ["part-shell-02.img"],
         life: new Range(0.75, 1),
         drag: new Range(1.5, 2.5),
@@ -2317,18 +1801,14 @@ const ParticleDefs: Record<string, ParticleDef> = {
         scale: {
             start: 0.075,
             end: 0.045,
-            lerp: new Range(0, 1),
         },
         alpha: {
             start: 1,
             end: 0,
             lerp: new Range(0.925, 1),
         },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "556mm": {
+    }),
+    "556mm": createCasing({
         image: ["part-shell-04.img"],
         life: new Range(0.75, 1),
         drag: new Range(1.5, 2.5),
@@ -2336,20 +1816,15 @@ const ParticleDefs: Record<string, ParticleDef> = {
         scale: {
             start: 0.075,
             end: 0.045,
-            lerp: new Range(0, 1),
         },
         alpha: {
             start: 1,
             end: 0,
             lerp: new Range(0.925, 1),
         },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "12gauge": {
+    }),
+    "12gauge": createCasing({
         image: ["part-shell-03.img"],
-        life: new Range(0.5, 0.75),
         drag: new Range(1, 2),
         rotVel: new Range(Math.PI * 3, Math.PI * 3),
         scale: {
@@ -2357,127 +1832,38 @@ const ParticleDefs: Record<string, ParticleDef> = {
             end: 0.05,
             lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "50AE": {
-        image: ["part-shell-01.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: 0.0625,
-            end: 0.0325,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "50cal": {
+    }),
+    "50AE": createCasing({}),
+    "50cal": createCasing({
         image: ["part-shell-06.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: 0.0625,
-            end: 0.0325,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "308sub": {
+    }),
+    "308sub": createCasing({
         image: ["part-shell-05.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
-        scale: {
-            start: 0.0625,
-            end: 0.0325,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    flare: {
+    }),
+    flare: createCasing({
         image: ["part-shell-03.img"],
-        life: new Range(0.5, 0.75),
         drag: new Range(1, 2),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
         scale: {
             start: 0.1,
             end: 0.05,
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    "45acp": {
-        image: ["part-shell-01.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
+    }),
+    "45acp": createCasing({
         scale: {
             start: 0.07,
             end: 0.04,
             lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    potato_ammo: {
+    }),
+    potato_ammo: createCasing({
         image: ["part-wedge-01.img"],
-        life: new Range(0.5, 0.75),
-        drag: new Range(3, 4),
-        rotVel: new Range(Math.PI * 3, Math.PI * 3),
         scale: {
             start: 0.07,
             end: 0.04,
             lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.95, 1),
         },
         color: 0xffffff,
-    },
+    }),
     bugle_ammo: {
         image: ["part-note-02.img"],
         life: new Range(1.25, 1.3),
@@ -2529,427 +1915,100 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         color: 0xffffff,
     },
-    explosionBurst: {
-        image: ["part-frag-burst-01.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.065, 1, util.random(0.98, 0.99)));
-        },
-    },
-    explosionMIRV: {
-        image: ["part-frag-burst-01.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
-        color: function() {
+    explosionBurst: createExplosion({}),
+    explosionMIRV: createExplosion({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.82, 0.84)));
         },
-    },
-    explosionSmoke: {
-        image: ["part-smoke-01.img"],
-        life: new Range(2, 3),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.07, 0.12),
-            end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    explosionUSAS: {
-        image: ["part-frag-burst-01.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
-        color: function() {
+    }),
+    explosionSmoke: createSmoke({}),
+    explosionUSAS: createExplosion({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.08, 1, util.random(0.98, 0.99)));
         },
-    },
-    explosionRounds: {
+    }),
+    explosionRounds: createExplosion({
         image: ["part-frag-burst-03.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0.08, 0.7, util.random(0.75, 0.8)));
         },
-    },
-    explosionBomb: {
+    }),
+    explosionBomb: createExplosion({
         image: ["part-frag-burst-02.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
         color: 0xffffff,
-    },
-    explosionPotato: {
-        image: ["part-frag-burst-01.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
+    }),
+    explosionPotato: createExplosion({
         color: 0xad661a,
-    },
-    explosionPotatoSMG: {
-        image: ["part-frag-burst-01.img"],
-        life: 0.5,
-        drag: 0,
-        rotVel: 0,
-        scale: {
-            start: 1,
-            end: 4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.75, 1),
-        },
+    }),
+    explosionPotatoSMG: createExplosion({
         color: 0xc4a80a,
-    },
-    airdropSmoke: {
+    }),
+    airdropSmoke: createSmoke({
         image: ["part-smoke-02.img", "part-smoke-03.img"],
         zOrd: 499,
         life: new Range(1, 1.5),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
         scale: {
             start: new Range(0.67, 0.72),
             end: new Range(0.55, 0.61),
             lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    airdropCrate01: {
-        image: ["part-airdrop-01.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    supplyCrate01: {
-        image: ["part-supply-01.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate01h: {
+    }),
+    airdropCrate01: createAirdropPart({}),
+    supplyCrate01: createAirdropPart({
+        image: ["part-airdrop-supply.img"],
+    }),
+    airdropCrate01h: createAirdropPart({
         image: ["part-airdrop-01h.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate01x: {
+    }),
+    airdropCrate01x: createAirdropPart({
         image: ["part-airdrop-01x.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate02: {
+    }),
+    airdropCrate02: createAirdropPart({
         image: ["part-airdrop-02.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
         rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate02h: {
+    }),
+    airdropCrate02h: createAirdropPart({
         image: ["part-airdrop-02h.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
         rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate02x: {
+    }),
+    airdropCrate02x: createAirdropPart({
         image: ["part-airdrop-02x.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
         rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate03: {
+    }),
+    airdropCrate03: createAirdropPart({
         image: ["part-airdrop-03.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    airdropCrate04: {
+    }),
+    airdropCrate04: createAirdropPart({
         image: ["part-airdrop-04.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
         rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    classShell01a: {
+    }),
+    classShell01a: createAirdropPart({
         image: ["part-class-shell-01a.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    classShell01b: {
+    }),
+    classShell01b: createAirdropPart({
         image: ["part-class-shell-01b.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
         rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    classShell02a: {
+    }),
+    classShell02a: createAirdropPart({
         image: ["part-class-shell-02a.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    classShell02b: {
+    }),
+    classShell02b: createAirdropPart({
         image: ["part-class-shell-02b.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
         rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    classShell03a: {
+    }),
+    classShell03a: createAirdropPart({
         image: ["part-class-shell-03a.img"],
-        life: new Range(0.85, 1.15),
-        drag: new Range(2, 2.25),
-        rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
-    classShell03b: {
+    }),
+    classShell03b: createAirdropPart({
         image: ["part-class-shell-03b.img"],
-        life: new Range(0.85, 1.15),
         drag: new Range(1.85, 2.15),
-        rotVel: new Range(0, Math.PI * 2),
-        scale: {
-            start: 0.5,
-            end: 0.4,
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 0xffffff,
-    },
+    }),
     cabinSmoke: {
         image: ["part-smoke-02.img", "part-smoke-03.img"],
         life: new Range(3, 3.25),
@@ -3058,120 +2117,32 @@ const ParticleDefs: Record<string, ParticleDef> = {
         },
         color: 0xb3f0ff,
     },
-    leafAutumn: {
-        image: [
-            "part-leaf-03.img",
-            "part-leaf-04.img",
-            "part-leaf-05.img",
-            "part-leaf-06.img",
-        ],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    leafHalloween: {
-        image: [
-            "part-leaf-03.img",
-            "part-leaf-04.img",
-            "part-leaf-05.img",
-            "part-leaf-06.img",
-        ],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
+    leafAutumn: createAmbientLeaves({}),
+    leafHalloween: createAmbientLeaves({
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.5, 0.55)));
         },
         ignoreValueAdjust: true,
-    },
-    leafSpring: {
+    }),
+    leafSpring: createAmbientLeaves({
         image: [
             "part-blossom-01.img",
             "part-blossom-02.img",
             "part-blossom-03.img",
             "part-blossom-04.img",
         ],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
         scale: {
             start: new Range(0.13, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    leafSummer: {
+    }),
+    leafSummer: createAmbientLeaves({
         image: ["part-leaf-06.img"],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
+        color: function () {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.7, 0.95)));
         },
         ignoreValueAdjust: true,
-    },
-    leafPotato: {
+    }),
+    leafPotato: createAmbientLeaves({
         image: [
             "part-blossom-01.img",
             "part-blossom-02.img",
@@ -3179,546 +2150,143 @@ const ParticleDefs: Record<string, ParticleDef> = {
             "part-blossom-04.img",
             "part-potato-02.img",
         ],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
         scale: {
             start: new Range(0.13, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    potato: {
+    }),
+    potato: createAmbientLeaves({
         image: ["part-potato-02.img"],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
         scale: {
             start: new Range(0.13, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    potato_factions: {
+    }),
+    potato_factions: createAmbientLeaves({
         image: ["part-potato-02.img", "part-tomato-02.img"],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
         scale: {
             start: new Range(0.13, 0.15),
-            end: new Range(0.08, 0.11),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
         },
         color: function() {
             return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
         },
-    },
-    snow: {
+    }),
+    snow: createAmbientLeaves({
         image: ["part-snow-01.img"],
-        life: new Range(10, 15),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
         scale: {
             start: new Range(0.07, 0.12),
             end: new Range(0.05, 0.1),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    snowball_impact: {
-        image: ["part-snow-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.13, 0.23),
-            end: new Range(0.07, 0.14),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    potato_impact: {
+    }),
+    snowball_impact: createThrowableImpact({}),
+    potato_impact: createThrowableImpact({
         image: ["part-potato-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.13, 0.23),
-            end: new Range(0.07, 0.14),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    potato_smg_impact: {
+    }),
+    potato_smg_impact: createThrowableImpact({
         image: ["part-potato-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.13, 0.23),
-            end: new Range(0.07, 0.14),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: 16770437,
-    },
-    coconut_impact: {
+        color: 0xffe585,
+    }),
+    coconut_impact: createThrowableImpact({
         image: ["part-coconut-01.img", "part-coconut-02.img", "part-coconut-03.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.13, 0.23),
-            end: new Range(0.07, 0.14),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    tomato_impact: {
+    }),
+    tomato_impact: createThrowableImpact({
         image: ["part-tomato-01.img"],
-        life: new Range(0.5, 1),
-        drag: new Range(0, 0),
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.13, 0.23),
-            end: new Range(0.07, 0.14),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.9, 1),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 0, util.random(0.9, 0.95)));
-        },
-    },
-    heal_basic: {
-        image: ["part-heal-basic.img"],
-        life: new Range(0.75, 1),
-        drag: 0.25,
-        rotVel: 0,
-        scale: {
-            start: new Range(0.1, 0.12),
-            end: new Range(0.05, 0.07),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    heal_heart: {
+    }),
+    heal_basic: createHeal({}),
+    heal_heart: createHeal({
         image: ["part-heal-heart.img"],
-        life: new Range(0.75, 1),
-        drag: 0.25,
-        rotVel: 0,
-        scale: {
-            start: new Range(0.1, 0.12),
-            end: new Range(0.05, 0.07),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    heal_moon: {
+    }),
+    heal_moon: createHeal({
         image: ["part-heal-moon.img"],
-        life: new Range(0.75, 1),
-        drag: 0.25,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.1, 0.12),
-            end: new Range(0.05, 0.07),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    heal_tomoe: {
+    }),
+    heal_tomoe: createHeal({
         image: ["part-heal-tomoe.img"],
-        life: new Range(0.75, 1),
-        drag: 0.25,
         rotVel: new Range(Math.PI * 0.5, Math.PI * 1),
-        scale: {
-            start: new Range(0.1, 0.12),
-            end: new Range(0.05, 0.07),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_basic: {
-        image: ["part-boost-basic.img"],
-        life: new Range(0.75, 1),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_star: {
+    }),
+    boost_basic: createBoost({}),
+    boost_star: createBoost({
         image: ["part-boost-star.img"],
-        life: new Range(0.75, 1),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_naturalize: {
+    }),
+    boost_naturalize: createBoost({
         image: ["part-boost-naturalize.img"],
-        life: new Range(0.75, 1),
-        drag: 0,
         rotVel: new Range(Math.PI * 0.35, Math.PI * 0.7),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_shuriken: {
+    }),
+    boost_shuriken: createBoost({
         image: ["part-boost-shuriken.img"],
-        life: new Range(0.75, 1),
-        drag: 0,
         rotVel: new Range(Math.PI * 1, Math.PI * 2),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    heal_sun: {
+    }),
+    heal_sun: createHeal({
         image: ["part-heal-sun.img"],
-        life: new Range(0.75, 1),
         drag: 0.2,
         rotVel: new Range(Math.PI * 0.25, Math.PI * 0.75),
         scale: {
             start: new Range(0.1, 0.13),
             end: new Range(0.04, 0.07),
-            lerp: new Range(0, 1),
         },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_drop: {
+    }),
+    boost_drop: createBoost({
         image: ["part-boost-drop.img"],
         life: new Range(0.75, 1),
-        drag: 0,
         rotVel: new Range(Math.PI * 0.1, Math.PI * 0.3),
         scale: {
             start: new Range(0.12, 0.15),
             end: new Range(0.05, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
         },
         ignoreValueAdjust: true,
-    },
-    heal_wave: {
+    }),
+    heal_wave: createHeal({
         image: ["part-heal-wave.img"],
         life: new Range(0.8, 1.1),
         drag: 0.15,
-        rotVel: 0,
         scale: {
             start: new Range(0.09, 0.12),
             end: new Range(0.04, 0.06),
             lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.65, 1),
         },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_flame: {
+    }),
+    boost_flame: createBoost({
         image: ["part-boost-flame.img"],
         life: new Range(0.6, 0.9),
-        drag: 0,
         rotVel: new Range(Math.PI * 0.1, Math.PI * 0.4),
         scale: {
             start: new Range(0.12, 0.15),
             end: new Range(0.03, 0.06),
-            lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.6, 1),
         },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.04),
-        },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_cosmic: {
+    }),
+    boost_cosmic: createBoost({
         image: ["part-boost-cosmic.img"],
         life: new Range(0.7, 1),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.6),
         scale: {
             start: new Range(0.11, 0.14),
             end: new Range(0.05, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
         },
         color: function () {
             // boost = green (hue ~0.3), spread for a green→lime gradient
             return util.rgbToInt(util.hsvToRgb(util.random(0.28, 0.38), 1, util.random(0.6, 1)));
         },
         ignoreValueAdjust: true,
-    },
-    heal_nebula: {
+    }),
+    heal_nebula: createHeal({
         image: ["part-heal-nebula.img"],
-        life: new Range(0.85, 1.15),
         drag: 0.2,
         rotVel: new Range(Math.PI * 0.05, Math.PI * 0.2),
         scale: {
             start: new Range(0.21, 0.26),
             end: new Range(0.07, 0.12),
-            lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.65, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
         },
         color: function () {
             // heal = red (hue ~0), spread for a red→orange gradient
             return util.rgbToInt(util.hsvToRgb(util.random(0.0, 0.04), 1, util.random(0.6, 1)));
         },
-        ignoreValueAdjust: true,
-    },
-    heal_stardust: {
+    }),
+    heal_stardust: createHeal({
         image: ["part-heal-stardust.img"],
         life: new Range(0.8, 1.1),
         drag: 0.2,
@@ -3726,179 +2294,44 @@ const ParticleDefs: Record<string, ParticleDef> = {
         scale: {
             start: new Range(0.21, 0.26),
             end: new Range(0.07, 0.12),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
         },
         color: function () {
             // heal = red (hue 0), lighter/pinker sparkle
             return util.rgbToInt(util.hsvToRgb(0, util.random(0.8, 1), util.random(0.8, 1)));
         },
         ignoreValueAdjust: true,
-    },
-    boost_nova: {
+    }),
+    boost_nova: createBoost({
         image: ["part-boost-nova.img"],
         life: new Range(0.6, 0.9),
-        drag: 0,
         rotVel: new Range(Math.PI * 0.15, Math.PI * 0.5),
         scale: {
             start: new Range(0.21, 0.26),
             end: new Range(0.07, 0.12),
-            lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.65, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
         },
         color: function () {
             // boost = green (hue ~0.3), spread for a green→teal gradient
             return util.rgbToInt(util.hsvToRgb(util.random(0.3, 0.42), 1, util.random(0.7, 1)));
         },
-        ignoreValueAdjust: true,
-    },
-    revive_basic: {
-        image: ["part-heal-basic.img"],
-        life: new Range(0.75, 1),
-        drag: 0.25,
-        rotVel: 0,
-        scale: {
-            start: new Range(0.1, 0.12),
-            end: new Range(0.05, 0.07),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.83, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    leafStim: {
-        image: [
-            "part-blossom-01.img",
-            "part-blossom-02.img",
-            "part-blossom-03.img",
-            "part-blossom-04.img",
-        ],
-        life: new Range(4, 5),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.37, 1, util.random(0.95, 1)));
-        },
-    },
-    takedownStim: {
-        image: ["part-takedown-01.img"],
-        life: new Range(4, 5),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: 13107200,
-    },
-    inspireStim: {
-        image: ["part-note-01.img"],
-        life: new Range(4, 5),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
-            return util.rgbToInt(util.hsvToRgb(0.13, 1, util.random(0.98, 1)));
-        },
-    },
-    heal_cult: {
+    }),
+    heal_cult: createHeal({
         image: ["part-heal-cult.img"],
         life: new Range(0.8, 1.1),
         drag: 0.15,
-        rotVel: 0,
         scale: {
             start: new Range(0.12, 0.17),
             end: new Range(0.07, 0.09),
-            lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.65, 1),
         },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    boost_blitzgruen: {
+    }),
+    boost_blitzgruen: createBoost({
         image: ["part-boost-blitzgruen.img"],
         life: new Range(0.6, 0.9),
-        drag: 0,
         rotVel: new Range(Math.PI * 0.1, Math.PI * 0.4),
         scale: {
             start: new Range(0.18, 0.23),
@@ -3906,155 +2339,122 @@ const ParticleDefs: Record<string, ParticleDef> = {
             lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.6, 1),
         },
         alphaIn: {
-            start: 0,
-            end: 1,
             lerp: new Range(0, 0.04),
         },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0.3, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    heal_bubble: { // made by Felix 
+    }),
+    heal_bubble: createHeal({ // made by Felix 
         image: ["part-heal-bubble.img"],
         life: new Range(0.8, 1.1),
         drag: 0.15,
-        rotVel: 0,
         scale: {
             start: new Range(0.04, 0.06),
             end: new Range(0.016, 0.20),
-            lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.65, 1),
         },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function () {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
-        },
-        ignoreValueAdjust: true,
-    },
-    heal_ruby: { //Aboves Particles 
+    }),
+    heal_ruby: createHeal({ // Aboves Particles 
         image: ["part-heal-ruby.img"],
         life: new Range(0.8, 1.1),
         drag: 0.15,
-        rotVel: 0,
         scale: {
             start: new Range(0.09, 0.12),
             end: new Range(0.07, 0.08),
-            lerp: new Range(0, 1),
         },
         alpha: {
-            start: 1,
-            end: 0,
             lerp: new Range(0.6, 1),
         },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
+    }),
+    revive_basic: createHeal({
         color: function () {
-            return util.rgbToInt(util.hsvToRgb(0, 1, util.random(0.7, 1)));
+            return util.rgbToInt(util.hsvToRgb(0.83, 1, util.random(0.7, 1)));
         },
-        ignoreValueAdjust: true,
-    },
-    xp_common: {
+    }),
+    leafStim: createStim({}),
+    takedownStim: createStim({
+        image: ["part-takedown-01.img"],
+        color: 0xc80000,
+    }),
+    inspireStim: createStim({
+        image: ["part-note-01.img"],
+        color: function () {
+            return util.rgbToInt(util.hsvToRgb(0.13, 1, util.random(0.98, 1)));
+        },
+    }),
+    xp_common: createStim({
         image: ["part-boost-basic.img"],
         life: new Range(0.75, 1),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
+        color: function () {
             if (Math.random() > 0.5) {
                 return util.rgbToInt(util.hsvToRgb(0.12, 0.97, util.random(0.95, 1)));
             }
             return util.rgbToInt(util.hsvToRgb(0.16, 1, util.random(0.95, 1)));
         },
         ignoreValueAdjust: true,
-    },
-    xp_rare: {
+    }),
+    xp_rare: createStim({
         image: ["part-boost-basic.img"],
         life: new Range(0.75, 1),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
+        color: function () {
             if (Math.random() > 0.5) {
                 return util.rgbToInt(util.hsvToRgb(0.05, 0.94, util.random(0.85, 0.88)));
             }
             return util.rgbToInt(util.hsvToRgb(0.06, 0.95, util.random(0.95, 1)));
         },
         ignoreValueAdjust: true,
-    },
-    xp_mythic: {
+    }),
+    xp_mythic: createStim({
         image: ["part-boost-basic.img"],
         life: new Range(0.75, 1),
-        drag: 0,
-        rotVel: new Range(Math.PI * 0.25, Math.PI * 0.5),
-        scale: {
-            start: new Range(0.12, 0.14),
-            end: new Range(0.06, 0.08),
-            lerp: new Range(0, 1),
-        },
-        alpha: {
-            start: 1,
-            end: 0,
-            lerp: new Range(0.7, 1),
-        },
-        alphaIn: {
-            start: 0,
-            end: 1,
-            lerp: new Range(0, 0.05),
-        },
-        color: function() {
+        color: function () {
             if (Math.random() > 0.5) {
                 return util.rgbToInt(util.hsvToRgb(0, 0.96, util.random(0.91, 0.94)));
             }
             return util.rgbToInt(util.hsvToRgb(0.03, 0.95, util.random(0.92, 0.95)));
         },
         ignoreValueAdjust: true,
-    },
+    }),
 };
+
+function createAmbientLeafEmitter(overrides: DeepPartial<EmitterDef>): EmitterDef {
+    const baseDef: EmitterDef = {
+        particle: "leafAutumn",
+        rate: new Range(0.08, 0.12),
+        radius: 120,
+        speed: new Range(2, 3),
+        angle: Math.PI * 0.2,
+        rot: new Range(0, Math.PI * 2),
+        maxCount: Number.MAX_VALUE,
+        zOrd: 999,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createHealEmitter(overrides: DeepPartial<EmitterDef>): EmitterDef {
+    const baseDef: EmitterDef = {
+        particle: "heal_basic",
+        rate: new Range(0.3, 0.35),
+        radius: 1.5,
+        speed: new Range(1, 1.5),
+        angle: 0,
+        rot: new Range(0, 0),
+        maxCount: Number.MAX_VALUE,
+    };
+    return util.mergeDeep(baseDef, overrides);
+}
+
+function createBoostEmitter(overrides: DeepPartial<EmitterDef>): EmitterDef {
+    const baseDef = createHealEmitter({
+        particle: "boost_basic",
+        rot: new Range(0, Math.PI * 2),
+    });
+    return util.mergeDeep(baseDef, overrides);
+}
+
 const EmitterDefs: Record<string, EmitterDef> = {
     smoke_barrel: {
         particle: "explosionSmoke",
@@ -4135,340 +2535,124 @@ const EmitterDefs: Record<string, EmitterDef> = {
         rot: new Range(0, Math.PI * 2),
         maxCount: Number.MAX_VALUE,
     },
-    falling_leaf: {
-        particle: "leafAutumn",
-        rate: new Range(0.08, 0.12),
-        radius: 120,
-        speed: new Range(2, 3),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_leaf_halloween: {
+    falling_leaf: createAmbientLeafEmitter({}),
+    falling_leaf_halloween: createAmbientLeafEmitter({
         particle: "leafHalloween",
-        rate: new Range(0.08, 0.12),
-        radius: 120,
-        speed: new Range(2, 3),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_leaf_spring: {
+    }),
+    falling_leaf_spring: createAmbientLeafEmitter({
         particle: "leafSpring",
         rate: new Range(0.1, 0.14),
-        radius: 120,
-        speed: new Range(2, 3),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_leaf_summer: {
+    }),
+    falling_leaf_summer: createAmbientLeafEmitter({
         particle: "leafSummer",
         rate: new Range(0.18, 0.24),
-        radius: 120,
         speed: new Range(1.4, 2.4),
-        angle: Math.PI * 0.2,
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_leaf_potato: {
+        rot: 0,
+    }),
+    falling_leaf_potato: createAmbientLeafEmitter({
         particle: "leafPotato",
         rate: new Range(0.1, 0.14),
-        radius: 120,
-        speed: new Range(2, 3),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_potato: {
+    }),
+    falling_potato: createAmbientLeafEmitter({
         particle: "potato",
         rate: new Range(0.2, 0.24),
-        radius: 120,
-        speed: new Range(2, 3),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_pvt: {
+    }),
+   falling_pvt: createAmbientLeafEmitter({
         particle: "potato_factions",
         rate: new Range(0.2, 0.24),
-        radius: 120,
-        speed: new Range(2, 3),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_snow_fast: {
+    }),
+    falling_snow_fast: createAmbientLeafEmitter({
         particle: "snow",
-        rate: new Range(0.12, 0.17),
-        maxRate: new Range(0.05, 0.07),
-        maxElapsed: 240,
+        rate: new Range(0.01, 0.02),
+        radius: 70,
+        speed: new Range(1, 12),
+    }),
+    falling_snow_slow: createAmbientLeafEmitter({
+        particle: "snow",
         radius: 70,
         speed: new Range(1, 1.5),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    falling_snow_slow: {
-        particle: "snow",
-        rate: new Range(0.08, 0.12),
-        radius: 70,
-        speed: new Range(1, 1.5),
-        angle: Math.PI * 0.2,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-        zOrd: 999,
-    },
-    heal_basic: {
-        particle: "heal_basic",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_heart: {
+    }),
+    heal_basic: createHealEmitter({}),
+    heal_heart: createHealEmitter({
         particle: "heal_heart",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_moon: {
+    }),
+    heal_moon: createHealEmitter({
         particle: "heal_moon",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_tomoe: {
+    }),
+    heal_tomoe: createHealEmitter({
         particle: "heal_tomoe",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_basic: {
-        particle: "boost_basic",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_star: {
+    }),
+    boost_basic: createBoostEmitter({}),
+    boost_star: createBoostEmitter({
         particle: "boost_star",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_naturalize: {
+    }),
+    boost_naturalize: createBoostEmitter({
         particle: "boost_naturalize",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_shuriken: {
+    }),
+    boost_shuriken: createBoostEmitter({
         particle: "boost_shuriken",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_sun: {
+    }),
+    heal_sun: createHealEmitter({
         particle: "heal_sun",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
         rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_drop: {
+    }),
+    boost_drop: createBoostEmitter({
         particle: "boost_drop",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_wave: {
+    }),
+    heal_wave: createHealEmitter({
         particle: "heal_wave",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_flame: {
+    }),
+    boost_flame: createBoostEmitter({
         particle: "boost_flame",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1.5, 2),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_cosmic: {
+    }),
+    boost_cosmic: createBoostEmitter({
         particle: "boost_cosmic",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_nebula: {
+    }),
+    heal_nebula: createHealEmitter({
         particle: "heal_nebula",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_stardust: {
+    }),
+    heal_stardust: createHealEmitter({
         particle: "heal_stardust",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_nova: {
+    }),
+    boost_nova: createBoostEmitter({
         particle: "boost_nova",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
+    }),
+    heal_cult: createHealEmitter({
+        particle: "heal_cult",
+    }),
+    boost_blitzgruen: createBoostEmitter({
+        particle: "boost_blitzgruen",
+    }),
+    heal_bubble: createHealEmitter({ // made by felix 
+        particle: "heal_bubble",
         rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    revive_basic: {
-        particle: "revive_basic",
+    }),
+    heal_ruby: createHealEmitter({
+        particle: "heal_ruby",
+    }),
+    revive_basic: createHealEmitter({
         rate: new Range(0.5, 0.55),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    windwalk: {
+    }),
+    windwalk: createHealEmitter({
         particle: "leafStim",
         rate: new Range(0.1, 0.12),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    takedown: {
+    }),
+    takedown: createHealEmitter({
         particle: "takedownStim",
         rate: new Range(0.1, 0.12),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    inspire: {
+    }),
+    inspire: createHealEmitter({
         particle: "inspireStim",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_cult: {
-        particle: "heal_cult",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    boost_blitzgruen: {
-        particle: "boost_blitzgruen",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1.5, 2),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_bubble: { // made by felix 
-        particle: "heal_bubble",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1.5, 2),
-        angle: 0,
-        rot: new Range(0, Math.PI * 2),
-        maxCount: Number.MAX_VALUE,
-    },
-    heal_ruby: {
-        particle: "heal_ruby",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1.5, 2),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    xp_common: {
+    }),
+    xp_common: createHealEmitter({
         particle: "xp_common",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    xp_rare: {
+    }),
+    xp_rare: createHealEmitter({
         particle: "xp_rare",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
-    xp_mythic: {
+    }),
+    xp_mythic: createHealEmitter({
         particle: "xp_mythic",
-        rate: new Range(0.3, 0.35),
-        radius: 1.5,
-        speed: new Range(1, 1.5),
-        angle: 0,
-        rot: 0,
-        maxCount: Number.MAX_VALUE,
-    },
+    }),
 };
 
 export interface ParticleDef {
