@@ -18,6 +18,32 @@ const isBuilding = (type: string) => {
     return t === "building" || t === "structure";
 };
 
+let beachNatives: Set<string> | undefined;
+
+/**
+ * Objects that otherwise only stand inside buildings (chests, cases, lockers, furniture)
+ * mostly have `terrain: { beach: true }`, which places a standalone one on the map's
+ * outer beach - a custom map setting their amount got them all lined up along the edge.
+ * Those go on grass instead; what a real map does spawn on the beach on its own (palms,
+ * beach loot) stays there.
+ */
+export function customSpawnOnGrass(type: string): boolean {
+    const terrain = (objectDefs[type] as { terrain?: Record<string, unknown> } | undefined)?.terrain;
+    if (!terrain?.beach || terrain.grass) return false;
+    if (!beachNatives) {
+        beachNatives = new Set();
+        for (const def of Object.values(MapDefs as Record<string, MapDef>)) {
+            const gen = def.mapGen;
+            if (!gen) continue;
+            for (const spawns of [...gen.fixedSpawns, ...gen.densitySpawns]) {
+                for (const t of Object.keys(spawns)) beachNatives.add(t);
+            }
+            for (const r of gen.randomSpawns) for (const t of r.spawns) beachNatives.add(t);
+        }
+    }
+    return !beachNatives.has(type);
+}
+
 function scaleFixed(value: FixedSpawn, mult: number): FixedSpawn {
     if (typeof value === "number") return Math.round(value * mult);
     if ("odds" in value) return { odds: Math.min(1, value.odds * mult) };

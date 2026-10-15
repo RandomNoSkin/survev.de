@@ -362,9 +362,11 @@ app.post("/api/game_infos", validateParams(zRegionOnly), async (c) => {
 
 app.get("/api/spectate_stream", (c) => spectateStream(c));
 
-// generation defaults of every custom map template - the client build strips mapGen
+// generation defaults of every custom map template - the client build strips mapGen.
+// (No "m_map" in these paths: the prod obfuscator rewrites m_<identifier> even inside
+// strings, "custom_map_templates" became "custodgplUV_templates".)
 let customMapTemplates: unknown[] | null = null;
-app.get("/api/custom_map_templates", (c) => {
+app.get("/api/custom-map/templates", (c) => {
     customMapTemplates ??= CUSTOM_MAP_TEMPLATES.flatMap((id) => {
         const def = (MapDefs as Record<string, MapDef>)[id];
         const gen = def?.mapGen;
@@ -425,7 +427,7 @@ function customMapWholeBuildings() {
 }
 
 const customMapLoot = new Map<string, unknown>();
-app.get("/api/custom_map_loot", (c) => {
+app.get("/api/custom-map/loot", (c) => {
     const id = c.req.query("template") ?? "";
     if (!CUSTOM_MAP_TEMPLATES.includes(id)) return c.json({ error: "unknown_template" }, 400);
     if (!customMapLoot.has(id)) {

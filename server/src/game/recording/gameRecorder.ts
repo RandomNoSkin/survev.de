@@ -134,6 +134,12 @@ export function recordingsRoot(): string {
     return path.resolve(Config.recording.dir);
 }
 
+/** Where bot games are copied to with `recordBots` (a sibling, not inside the tree the
+ *  dashboard lists - that one expects only date folders). */
+export function botTestRoot(): string {
+    return `${recordingsRoot()}-bot-test`;
+}
+
 /** Strips a player name down to something safe to embed in a filename. */
 function safeFileName(name: string): string {
     return (name || "player").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 24);
@@ -180,6 +186,10 @@ export class GameRecorder {
     private dir = "";
     private dirReady = false;
     private stoppedAll = false;
+    /** Every file this game writes, done when it's fully on disk (for the bot-test copy). */
+    private readonly pendingWrites: Promise<void>[] = [];
+    /** A bot's POV was recorded (only with `recordBots`) -> copy the game to bot-test. */
+    private hadBots = false;
 
     // God-view track side-file (all players' pos/health, server-authoritative).
     private tracksGzip?: zlib.Gzip;
@@ -245,8 +255,40 @@ export class GameRecorder {
         this.writeDamage();
         if (this.recorded.length) {
             this.writeMeta();
-            void cleanupRetention();
+            void cleanupRetention(recordingsRoot());
+            if (this.hadBots && Config.recording.recordBots) {
+                // once every stream has flushed, so the copy is complete
+                void Promise.all(this.pendingWrites).then(() => this.copyToBotTest());
+            }
         }
+    }
+
+    /** Waits for a file stream to be fully written (or to fail). */
+    private trackWrite(stream: fs.WriteStream): void {
+        this.pendingWrites.push(
+            new Promise((resolve) => {
+                stream.once("close", () => resolve());
+                stream.once("error", () => resolve());
+            }),
+        );
+    }
+
+    /**
+     * Bot games (`recordBots`) are additionally copied to a `<dir>-bot-test/` sibling,
+     * easy to find for bot analysis. The original stays in the normal recordings, so
+     * the dashboard/replays see the game like any other. The copy follows the same
+     * retention caps.
+     */
+    private async copyToBotTest(): Promise<void> {
+        const root = botTestRoot();
+        const day = new Date(this.startTs).toISOString().slice(0, 10);
+        try {
+            await fs.promises.cp(this.dir, path.join(root, day, this.game.id), { recursive: true });
+        } catch (err) {
+            this.game.logger.warn("Failed to copy bot recording:", err);
+            return;
+        }
+        void cleanupRetention(root);
     }
 
     /**
@@ -343,10 +385,14 @@ export class GameRecorder {
             };
             // Async gzip so a large obstacle list doesn't stall the game tick.
             const filePath = path.join(this.dir, MAP_FILE);
-            zlib.gzip(Buffer.from(JSON.stringify(payload)), (err, gz) => {
-                if (err) return;
-                fs.writeFile(filePath, gz, () => {});
-            });
+            this.pendingWrites.push(
+                new Promise((resolve) => {
+                    zlib.gzip(Buffer.from(JSON.stringify(payload)), (err, gz) => {
+                        if (err) return resolve();
+                        fs.writeFile(filePath, gz, () => resolve());
+                    });
+                }),
+            );
         } catch (err) {
             this.game.logger.warn("Failed to write map file:", err);
         }
@@ -406,6 +452,7 @@ export class GameRecorder {
             const filePath = path.join(this.dir, TRACKS_FILE);
             const gzip = zlib.createGzip();
             const fileStream = fs.createWriteStream(filePath);
+            this.trackWrite(fileStream);
             gzip.pipe(fileStream);
 
             const onErr = (err: unknown) => {
@@ -465,17 +512,12 @@ export class GameRecorder {
     }
 
     /** Lazily creates the per-game recording directory (shared by tracks + POV files).
-     *  Games recorded with `recordBots: true` (the bot-dev-test config, never on in
-     *  prod) go under a `<dir>-bot-test/` sibling directory instead of the normal
-     *  recordings tree - keeps bot-analysis matches easy to find for feeding to Claude,
-     *  and keeps them fully out of `listRecordings()`/retention/the dashboard Replays
-     *  tab, which all walk `recordingsRoot()` assuming every direct child is a date
-     *  folder (a `bot-test` child there would just silently read as an empty day). */
+     *  Always the normal recordings tree; bot games get copied to bot-test at the end
+     *  (see `copyToBotTest`). */
     private ensureDir(): void {
         if (this.dirReady) return;
         const day = new Date(this.startTs).toISOString().slice(0, 10);
-        const root = Config.recording.recordBots ? `${recordingsRoot()}-bot-test` : recordingsRoot();
-        this.dir = path.join(root, day, this.game.id);
+        this.dir = path.join(recordingsRoot(), day, this.game.id);
         fs.mkdirSync(this.dir, { recursive: true });
         this.dirReady = true;
     }
@@ -488,6 +530,8 @@ export class GameRecorder {
             const filePath = path.join(this.dir, fileName);
             const gzip = zlib.createGzip();
             const fileStream = fs.createWriteStream(filePath);
+            this.trackWrite(fileStream);
+            if (player.bot) this.hadBots = true;
             gzip.pipe(fileStream);
 
             const onErr = (err: unknown) => {
@@ -820,15 +864,15 @@ export async function readMapFile(gameId: string): Promise<GameMapFile | null> {
 
 // ─── Retention cleanup ──────────────────────────────────────────────────────────
 
-let lastCleanup = 0;
+const lastCleanup = new Map<string, number>();
 
-/** Enforces age + total-size caps by deleting the oldest game dirs. Throttled. */
-async function cleanupRetention(): Promise<void> {
+/** Enforces age + total-size caps on one recordings tree by deleting the oldest game
+ *  dirs. Throttled per tree. */
+async function cleanupRetention(root: string): Promise<void> {
     const now = Date.now();
-    if (now - lastCleanup < 60_000) return; // at most once a minute
-    lastCleanup = now;
+    if (now - (lastCleanup.get(root) ?? 0) < 60_000) return; // at most once a minute
+    lastCleanup.set(root, now);
 
-    const root = recordingsRoot();
     const maxAgeMs = Config.recording.maxAgeDays * 24 * 60 * 60 * 1000;
     const maxTotalBytes = Config.recording.maxTotalGb * 1024 * MB;
 

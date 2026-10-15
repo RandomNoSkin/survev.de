@@ -28,7 +28,7 @@ import { Obstacle } from "./objects/obstacle";
 import type { Player } from "./objects/player";
 import { Structure } from "./objects/structure";
 import { applyLobbyRules, CUSTOM_MAP_COLORS, CUSTOM_MAP_LIMITS, type CustomMapConfig, type CustomMapObjectLoot } from "../../../shared/defs/customMap";
-import { applyCustomMap } from "./customMap";
+import { applyCustomMap, customSpawnOnGrass } from "./customMap";
 import { RiverCreator } from "./riverCreator";
 
 /** Custom lobby maps stop placing objects after this long (see GameMap.genDeadline). */
@@ -1235,7 +1235,9 @@ export class GameMap {
             if (this.genDeadline && performance.now() > this.genDeadline) return;
             const def = MapObjectDefs.typeToDef(type);
 
-            if (def.terrain?.waterEdge) {
+            if (this.customMap && customSpawnOnGrass(type)) {
+                this.genOnGrass(type);
+            } else if (def.terrain?.waterEdge) {
                 this.genOnWaterEdge(type);
             } else if (def.terrain?.river) {
                 this.genOnRiver(type);
