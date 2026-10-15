@@ -88,6 +88,8 @@ export function getConfig(isProduction: boolean, dir: string) {
         },
         recording: {
             enabled: true,
+            // also record bots; games with bots are additionally copied to
+            // <dir>-bot-test/ (the originals stay in the normal recordings)
             recordBots: true,
             dir: "recordings",
             maxGameMb: 80,
