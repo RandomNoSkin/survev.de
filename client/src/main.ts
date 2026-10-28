@@ -55,12 +55,15 @@ import { loadStaticDomImages } from "./ui/ui2";
 const PRIVATE_LOBBY_CODE_LENGTH = 6;
 
 // Matches lobby codes, optionally suffixed with "-<teamId>" for team-specific
-// invite links/codes (e.g. "ABC123-2"), or "-s" for spectator links. Group 2
-// captures the team slot index or "s" when present.
+// invite links/codes (e.g. "ABC123-2"), "-s" for spectator links, or "-g" for an
+// admin watching invisibly (from the dashboard). Group 2 captures the suffix.
 // See Room.addPlayer in server/src/privateLobby.ts.
 const PRIVATE_LOBBY_CODE_REGEX = new RegExp(
-    `^([0-9a-zA-Z]{${PRIVATE_LOBBY_CODE_LENGTH}})(?:-(\\d+|s))?$`,
+    `^([0-9a-zA-Z]{${PRIVATE_LOBBY_CODE_LENGTH}})(?:-(\\d+|s|g))?$`,
 );
+
+/** How long after start the game assets begin loading (see loadMenuAssets). */
+const MENU_ASSETS_DELAY_MS = 1500;
 
 export class Application {
     nameInput = $("#player-name-input-solo");
@@ -81,6 +84,7 @@ export class Application {
     gameAreaWrapper = $("#game-area-wrapper");
     playButtons = $(".play-button-container");
     playLoading = $(".play-loading-outer");
+    playLoadingSpinners = $(".play-loading-spinner");
     errorModal = new MenuModal($("#modal-notification"));
     refreshModal = new MenuModal($("#modal-refresh"));
     notVerifiedModal = new MenuModal($("#modal-not-verified"));
@@ -497,7 +501,11 @@ export class Application {
                 this.audioManager,
                 this.config,
             );
-            this.resourceManager.loadMapAssets("main");
+            // the game's atlases (~11 MB) and sounds (~375 files) aren't needed by the
+            // menu - fetching them right away competed with the site info / account
+            // requests on a first visit. They start shortly after, or right away when
+            // the loadout preview needs them; a game loads its own map's on join.
+            setTimeout(() => this.loadMenuAssets(), MENU_ASSETS_DELAY_MS);
             this.input = new InputHandler(document.getElementById("game-touch-area")!);
             this.inputBinds = new InputBinds(this.input, this.config);
             this.inputBindUi = new InputBindUi(
@@ -506,6 +514,7 @@ export class Application {
                 this.localization,
             );
             const onJoin = () => {
+                this.loadMenuAssets();
                 this.loadoutDisplay!.free();
                 this.game!.init();
                 this.onResize();
@@ -755,6 +764,12 @@ export class Application {
                         this.playLoading.css({
                             "pointer-events": lock ? "initial" : "none",
                         });
+                        if (lock) this.playLoadingSpinners.css("animation-play-state", "running");
+                    },
+                    // stop spinning once faded out: an invisible running animation
+                    // still makes the browser render every frame
+                    complete: () => {
+                        if (!lock) this.playLoadingSpinners.css("animation-play-state", "paused");
                     },
                 },
             );
@@ -801,6 +816,8 @@ export class Application {
      */
     forceQuitGame() {
         if (!this.game) {
+            // still report back - the lobby may be holding the next match's join for us
+            this.privateLobbyMenu.onGameComplete();
             this.setAppActive(true);
             this.setPlayLockout(false);
             return;
@@ -965,8 +982,22 @@ export class Application {
         updateButton(this.playMode2Btn, 2);
     }
 
+    private menuAssetsRequested = false;
+
+    /** The default map's atlases + sounds (incl. the shared atlas the game HUD is built
+     *  from at Game.init). Once only, and never once a game is running - that game
+     *  loaded its own map's, and loading "main" over them would unload the running
+     *  map's atlases. Called before a game/replay starts too, in case the delayed
+     *  load hasn't happened yet. */
+    loadMenuAssets() {
+        if (this.menuAssetsRequested || !this.resourceManager) return;
+        this.menuAssetsRequested = true;
+        if (this.game?.initialized) return;
+        this.resourceManager.loadMapAssets("main");
+    }
+
     waitOnAccount(cb: () => void) {
-        if (this.account.requestsInFlight == 0) {
+        if (this.account.joinRequestsInFlight == 0) {
             cb();
         } else {
             // Wait some maximum amount of time for pending account requests
@@ -977,9 +1008,9 @@ export class Application {
             const runOnce = () => {
                 cb();
                 clearTimeout(timeout);
-                this.account.removeEventListener("requestsComplete", runOnce);
+                this.account.removeEventListener("joinRequestsComplete", runOnce);
             };
-            this.account.addEventListener("requestsComplete", runOnce);
+            this.account.addEventListener("joinRequestsComplete", runOnce);
         }
     }
 
@@ -1030,7 +1061,8 @@ export class Application {
             const match = !create ? raw.match(PRIVATE_LOBBY_CODE_REGEX) : null;
             const roomUrl = match ? match[1] : raw;
             const suffix = match?.[2];
-            const isSpectator = suffix === "s";
+            const isStealth = suffix === "g";
+            const isSpectator = suffix === "s" || isStealth;
             const teamId =
                 !isSpectator && suffix !== undefined ? Number(suffix) : undefined;
 
@@ -1051,6 +1083,8 @@ export class Application {
                     undefined,
                     teamId,
                     isSpectator,
+                    undefined,
+                    isStealth,
                 );
                 this.refreshUi();
             }
@@ -1253,8 +1287,10 @@ export class Application {
             return;
         }
         this.game.m_replayMode = true;
+        this.loadMenuAssets();
         const player = new ReplayPlayer(this.game, token, initialPov);
-        player.load().catch((err) => {
+        // replays build the game HUD from the atlases too (see ResourceManager.ready)
+        this.resourceManager!.ready.then(() => player.load()).catch((err) => {
             console.error("Failed to start replay:", err);
             alert("Failed to load replay: " + (err?.message ?? err));
         });
@@ -1481,11 +1517,15 @@ export class Application {
         // LoadoutDisplay update
         if (this.active && this.loadoutDisplay && this.game && !this.game.initialized) {
             if (this.loadoutMenu.active) {
-                if (!this.loadoutDisplay.initialized) {
+                this.loadMenuAssets();
+                // its sprites come from the atlases - wait for their frame data
+                if (!this.loadoutDisplay.initialized && this.resourceManager?.atlasDefsReady) {
                     this.loadoutDisplay.init();
                 }
-                this.loadoutDisplay.show();
-                this.loadoutDisplay.update(dt, this.hasFocus);
+                if (this.loadoutDisplay.initialized) {
+                    this.loadoutDisplay.show();
+                    this.loadoutDisplay.update(dt, this.hasFocus);
+                }
             } else {
                 this.loadoutDisplay.hide();
             }
@@ -1500,6 +1540,18 @@ export class Application {
             this.spectatorMenu.update(dt);
         }
         this.input!.flush();
+
+        // In the menu the canvas is blank (the background is CSS) - no need to redraw
+        // it at the monitor's full rate. Full rate again for a game, the loadout
+        // preview, the spectator menu and replays.
+        const menuIdle =
+            this.active &&
+            !this.game?.initialized &&
+            !this.loadoutMenu.active &&
+            !this.spectatorMenu.spectatorMenuOpen &&
+            !this.replaySession;
+        const maxFps = menuIdle ? 30 : 0;
+        if (this.pixi!.ticker.maxFPS !== maxFps) this.pixi!.ticker.maxFPS = maxFps;
     }
 }
 

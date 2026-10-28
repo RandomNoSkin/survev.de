@@ -24,6 +24,7 @@ import { device } from "../../device.ts";
 import { helpers } from "../../helpers.ts";
 import { STATS_MONTH_RE, statsMonthOptionsHtml } from "../../../../shared/statsPeriods.ts";
 import { ProfileStatsView } from "./profileStatsView";
+import { PLAYER_MAP_IDS } from "./statsMaps";
 import type { App } from "./app.ts";
 import {
     DEFAULT_UNLOCKED,
@@ -100,16 +101,7 @@ export interface TeamModes {
     midStats: { name: string; val: string }[];
 }
 
-// Leaderboard map filter is limited to the competitive / special modes only.
-const PLAYER_MAP_IDS: number[] = [
-    MapId.Comp,
-    MapId.CompSolo,
-    MapId.CompDuo,
-    MapId.Scrims,
-    MapId.TwoVsTwo,
-    MapId.FourVsFour,
-    MapId.Local,
-];
+// Leaderboard map filter is limited to the competitive / special modes only (statsMaps.ts).
 const DEFAULT_MAP_ID = String(PLAYER_MAP_IDS[0]);
 
 function getPlayerCardData(

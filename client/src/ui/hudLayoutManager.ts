@@ -1,4 +1,5 @@
 import { type ConfigManager, HUD_ELEMENT_DEFAULTS, type HudElementConfig } from "../config";
+import { hideTeamOverviewPreview, showTeamOverviewPreview } from "./teamOverview";
 
 /** One customizable HUD element: a stable id, the CSS id of its `.hud-drag-wrapper`
  *  (see client/css/game.css), a settings-panel label, and whether it has a click
@@ -76,11 +77,39 @@ export const HUD_ELEMENTS: HudElementDef[] = [
     },
     { id: "teamHealthBars", wrapperId: "ui-team", label: "Team Health Bars", hasClickAction: false },
     { id: "aliveCount", wrapperId: "ui-leaderboard", label: "Alive Count", hasClickAction: false },
+    {
+        id: "teamOverview",
+        wrapperId: "hud-wrap-teamOverview",
+        label: "Team Overview",
+        hasClickAction: false,
+        // shown/hidden by the big map (TeamOverview), the editor only adds its own on/off
+        usesExternalDisplayGate: true,
+    },
     { id: "fpsCounter", wrapperId: "hud-wrap-fpsCounter", label: "FPS Counter", hasClickAction: false, defaultVisible: false },
     { id: "pingCounter", wrapperId: "hud-wrap-pingCounter", label: "Ping Counter", hasClickAction: false, defaultVisible: false },
     { id: "hpNumeric", wrapperId: "hud-wrap-hpNumeric", label: "HP Number", hasClickAction: false, defaultVisible: false },
     { id: "adrenalineNumeric", wrapperId: "hud-wrap-adrenalineNumeric", label: "Adrenaline Number", hasClickAction: false, defaultVisible: false },
 ];
+
+/** The editor's views: which situation's HUD is on screen (and in the settings list)
+ * while editing, so elements that never show at the same time don't pile up. */
+export type HudView = "game" | "team" | "spectator" | "map";
+export const HUD_VIEWS: Array<{ id: HudView; label: string }> = [
+    { id: "game", label: "Game" },
+    { id: "team", label: "Team" },
+    { id: "spectator", label: "Spectator" },
+    { id: "map", label: "Map" },
+];
+const GAME_ELEMENTS = [
+    "healthBar", "boostBar", "weaponSlots", "scopeRow", "lootRow", "ammoCounter", "gearRow", "perkRow",
+    "minimap", "killfeed", "killLeader", "aliveCount", "fpsCounter", "pingCounter", "hpNumeric", "adrenalineNumeric",
+];
+const VIEW_ELEMENTS: Record<HudView, string[]> = {
+    game: GAME_ELEMENTS,
+    team: [...GAME_ELEMENTS, "teamHealthBars"],
+    spectator: ["spectatorBar", "teamHealthBars", "minimap", "killfeed", "killLeader", "aliveCount", "fpsCounter", "pingCounter"],
+    map: ["teamOverview", "aliveCount", "killfeed"],
+};
 
 /**
  * Owns the player-configurable HUD layout: per-element drag offset, opacity,
@@ -97,6 +126,9 @@ export class HudLayoutManager {
      *  outline (see the `body.hud-edit-mode` CSS in game.css). Off by default so
      *  normal gameplay clicking/click-through is never affected. */
     editModeActive = false;
+
+    /** Which situation the editor shows (see HudView) - only while editing. */
+    editView: HudView = "game";
 
     /** Whether the player is currently "thrown into a game preview" from the pre-game
      *  Settings modal - i.e. #game-area-wrapper (normally display:none outside a match,
@@ -320,6 +352,9 @@ export class HudLayoutManager {
     setEditMode(active: boolean) {
         this.editModeActive = active;
         document.body.classList.toggle("hud-edit-mode", active);
+        // the team overview only exists while the big map is open - show example
+        // teammates while editing so it can be placed at all
+        this.applyEditView();
         const btn = document.getElementById("btn-hud-edit-toggle");
         if (btn) btn.textContent = active ? "Done Editing" : "Edit HUD Layout";
     }
@@ -429,6 +464,12 @@ export class HudLayoutManager {
             if (nameEl) nameEl.textContent = name;
             const healthEl = member.querySelector<HTMLElement>(".ui-health-actual");
             if (healthEl) healthEl.style.width = "100%";
+            const boostEl = member.querySelector<HTMLElement>(".ui-team-member-boost");
+            if (boostEl) {
+                boostEl.style.display = "block";
+                const fill = boostEl.firstElementChild as HTMLElement | null;
+                if (fill) fill.style.width = `${[70, 35, 0][i] ?? 0}%`;
+            }
         });
 
         // Fake killfeed lines - real ones are built by ui2.ts's UiManager constructor
@@ -483,6 +524,8 @@ export class HudLayoutManager {
             if (nameEl) nameEl.textContent = "";
             const healthEl = member.querySelector<HTMLElement>(".ui-health-actual");
             if (healthEl) healthEl.style.width = "";
+            const boostEl = member.querySelector<HTMLElement>(".ui-team-member-boost");
+            if (boostEl) boostEl.style.display = "";
         });
 
         document.querySelectorAll(".hud-preview-fake-killfeed-line").forEach((el) => el.remove());
@@ -678,9 +721,53 @@ export class HudLayoutManager {
      *  per-element reset button. Call whenever the panel becomes visible (real game or
      *  preview, see showInGameHudTab) so displayed values stay in sync with whatever
      *  was last dragged/resized/toggled/reset. */
+    setEditView(view: HudView) {
+        this.editView = view;
+        this.applyEditView();
+        this.renderSettingsPanel();
+    }
+
+    /** While editing, only the current view's elements are on screen: the others get
+     *  `.hud-view-hidden` (display:none from CSS, so the elements' own inline display -
+     *  owned by HudLayoutManager or game code - is never touched). */
+    private applyEditView() {
+        const visibleIds = new Set(VIEW_ELEMENTS[this.editView]);
+        for (const def of HUD_ELEMENTS) {
+            document.getElementById(def.wrapperId)?.classList.toggle(
+                "hud-view-hidden",
+                this.editModeActive && !visibleIds.has(def.id),
+            );
+        }
+        // the team overview only exists while the big map is open - example teammates
+        // in the map view so it can be placed at all
+        if (this.editModeActive && this.editView === "map") showTeamOverviewPreview();
+        else hideTeamOverviewPreview();
+        document.querySelectorAll<HTMLElement>(".hud-view-btn").forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.view === this.editView);
+        });
+    }
+
+    /** The Game / Team / Spectator / Map switch above the settings list. */
+    private buildViewSwitch(): HTMLElement {
+        const row = document.createElement("div");
+        row.className = "hud-view-switch";
+        for (const view of HUD_VIEWS) {
+            const btn = document.createElement("a");
+            btn.className = `hud-view-btn${view.id === this.editView ? " active" : ""}`;
+            btn.dataset.view = view.id;
+            btn.textContent = view.label;
+            btn.addEventListener("click", () => this.setEditView(view.id));
+            row.appendChild(btn);
+        }
+        return row;
+    }
+
     renderSettingsPanel() {
         const lists = document.querySelectorAll<HTMLElement>(".js-hud-settings-list");
         for (const list of lists) {
+            // the view switch sits right above the list (rebuilt with it)
+            list.parentElement?.querySelector(":scope > .hud-view-switch")?.remove();
+            list.parentElement?.insertBefore(this.buildViewSwitch(), list);
             list.innerHTML = "";
             list.appendChild(this.buildGlobalSliderRow(
                 "hud-global-scale-row",
@@ -700,8 +787,9 @@ export class HudLayoutManager {
                 () => this.getGlobalOpacity(),
                 (v) => this.config.set("hudGlobalOpacity", v),
             ));
+            const inView = new Set(VIEW_ELEMENTS[this.editView]);
             for (const def of HUD_ELEMENTS) {
-                list.appendChild(this.buildSettingsRow(def));
+                if (inView.has(def.id)) list.appendChild(this.buildSettingsRow(def));
             }
         }
     }

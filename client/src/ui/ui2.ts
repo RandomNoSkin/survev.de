@@ -66,6 +66,59 @@ function isLmb(e: MouseEvent) {
 function isRmb(e: MouseEvent) {
     return e.button == 2;
 }
+/** The main health bar's colour for a health value (grey at full, white, then reds;
+ *  red while downed) - also used by the big map's team overview. */
+export function healthBarRgb(health: number, downed: boolean): number[] {
+    const steps = [
+        {
+            health: 100,
+            color: [179, 179, 179],
+        },
+        {
+            health: 100,
+            color: [255, 255, 255],
+        },
+        {
+            health: 75,
+            color: [255, 255, 255],
+        },
+        {
+            health: 75,
+            color: [255, 158, 158],
+        },
+        {
+            health: 25,
+            color: [255, 82, 82],
+        },
+        {
+            health: 25,
+            color: [255, 0, 0],
+        },
+        {
+            health: 0,
+            color: [255, 0, 0],
+        },
+    ];
+
+    let endIdx = 0;
+    const ceil = Math.ceil(health);
+
+    while (steps[endIdx].health > ceil && endIdx < steps.length - 1) {
+        endIdx++;
+    }
+
+    const stepA = steps[math.max(endIdx - 1, 0)];
+    const stepB = steps[endIdx];
+    const t = math.delerp(health, stepA.health, stepB.health);
+    const rgb = [
+        Math.floor(math.lerp(t, stepA.color[0], stepB.color[0])),
+        Math.floor(math.lerp(t, stepA.color[1], stepB.color[1])),
+        Math.floor(math.lerp(t, stepA.color[2], stepB.color[2])),
+    ];
+
+    return downed ? [255, 0, 0] : rgb;
+}
+
 // These functions, copy and diff, only work if both
 // arguments have the same internal structure
 function copy(src: any, dst: any, path?: any) {
@@ -1232,56 +1285,7 @@ export class UiManager2 {
 
         // Health
         if (patch.health || patch.downed) {
-            const steps = [
-                {
-                    health: 100,
-                    color: [179, 179, 179],
-                },
-                {
-                    health: 100,
-                    color: [255, 255, 255],
-                },
-                {
-                    health: 75,
-                    color: [255, 255, 255],
-                },
-                {
-                    health: 75,
-                    color: [255, 158, 158],
-                },
-                {
-                    health: 25,
-                    color: [255, 82, 82],
-                },
-                {
-                    health: 25,
-                    color: [255, 0, 0],
-                },
-                {
-                    health: 0,
-                    color: [255, 0, 0],
-                },
-            ];
-
-            let endIdx = 0;
-            const health = Math.ceil(state.health);
-
-            while (steps[endIdx].health > health && endIdx < steps.length - 1) {
-                endIdx++;
-            }
-
-            const stepA = steps[math.max(endIdx - 1, 0)];
-            const stepB = steps[endIdx];
-            const t = math.delerp(state.health, stepA.health, stepB.health);
-            let rgb = [
-                Math.floor(math.lerp(t, stepA.color[0], stepB.color[0])),
-                Math.floor(math.lerp(t, stepA.color[1], stepB.color[1])),
-                Math.floor(math.lerp(t, stepA.color[2], stepB.color[2])),
-            ];
-
-            if (state.downed) {
-                rgb = [255, 0, 0];
-            }
+            const rgb = healthBarRgb(state.health, state.downed);
 
             dom.health.inner.style.backgroundColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1.0)`;
             dom.health.inner.style.width = `${state.health}%`;

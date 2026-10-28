@@ -16,8 +16,10 @@ import type { RoleTag } from "../../shared/types/user";
 import {
     type ClientRoomData,
     type ClientToServerPrivateLobbyMsg,
+    type AdminLobbyInfo,
     type PrivateLobbyErrorMsg,
     type PrivateLobbyErrorType,
+    type PrivateLobbyJoinGameMsg,
     type PrivateLobbyMenuPlayer,
     type PrivateLobbyPlayGameMsg,
     type PublicLobby,
@@ -67,10 +69,17 @@ class Player {
     name = "Player";
 
     inGame = false;
+    /** `inGame` as a spectator: the next match may start without waiting for them. */
+    spectatingGame = false;
+    /** The next match's join, held back until they've left the one they still spectate. */
+    pendingJoin?: PrivateLobbyJoinGameMsg["data"];
+    pendingJoinTimer?: ReturnType<typeof setTimeout>;
     afk = false;
     spectator = false;
     /** Joined from the public spectator menu: locked to spectating, never sees the join code. */
     publicSpectator = false;
+    /** An admin watching invisibly (Room.watchers) - never in `room.players`. */
+    stealth = false;
 
     /** Lobby-local team slot index. Reassigned by the leader via `assignTeam`. */
     teamId = 0;
@@ -92,6 +101,7 @@ class Player {
         return {
             name: this.name,
             inGame: this.inGame,
+            spectatingGame: this.spectatingGame,
             isLeader: this.isLeader,
             playerId: this.playerId,
             teamId: this.teamId,
@@ -155,11 +165,17 @@ class Player {
 
 /** Each settings change goes to every member (custom maps make that big): at most this often. */
 const PROPS_INTERVAL_MS = 250;
+/** How long a member still spectating the last match gets to leave it before the next join is sent anyway. */
+const PENDING_JOIN_TIMEOUT_MS = 4000;
 /** See onMsg; keep in sync with the client check (privateLobby.ts). */
 const MAX_LOBBY_MSG_BYTES = 256 * 1024;
 
 class Room {
     players: Player[] = [];
+    /** Admins watching invisibly: get the state and join matches as invisible spectators,
+     *  but aren't members - nobody else sees them, and they can't change anything. */
+    watchers: Player[] = [];
+    readonly createdAt = Date.now();
 
     private lastPropsAt = 0;
     private pendingProps: { from: Player; props: ClientRoomData } | undefined;
@@ -332,6 +348,16 @@ class Room {
         if (player.room !== this) return;
 
         player.lastMsgTime = Date.now();
+        // invisible watchers only keep the connection alive and report back from matches
+        if (player.stealth) {
+            if (msg.type === "keepAlive") player.send("keepAlive", {});
+            else if (msg.type === "gameComplete") {
+                player.inGame = false;
+                player.spectatingGame = false;
+                if (player.pendingJoin) this.deliverPendingJoin(player);
+            }
+            return;
+        }
         switch (msg.type) {
             case "changeName": {
                 player.setName(msg.data.name);
@@ -344,6 +370,7 @@ class Room {
             }
             case "gameComplete": {
                 player.inGame = false;
+                player.spectatingGame = false;
                 if (
                     !this.currentGameWinnerRecorded &&
                     msg.data?.wonGame &&
@@ -353,12 +380,21 @@ class Room {
                     const tid = msg.data.lobbyTeamId;
                     this.teamScores.set(tid, (this.teamScores.get(tid) ?? 0) + 1);
                 }
+                if (player.pendingJoin) this.deliverPendingJoin(player);
                 this.sendState();
                 break;
             }
             case "resetScores": {
                 if (!player.isLeader) break;
                 this.teamScores.clear();
+                this.sendState();
+                break;
+            }
+            case "setTeamScore": {
+                if (!player.isLeader) break;
+                const { teamId, score } = msg.data;
+                if (score > 0) this.teamScores.set(teamId, score);
+                else this.teamScores.delete(teamId);
                 this.sendState();
                 break;
             }
@@ -738,7 +774,37 @@ class Room {
         this.removePlayer(player);
     }
 
+    /** An admin starts watching invisibly; mid-match they're sent straight into it. */
+    async addWatcher(player: Player) {
+        player.stealth = true;
+        player.spectator = true;
+        player.teamId = -1;
+        player.room = this;
+        this.watchers.push(player);
+        clearTimeout(player.disconnectTimeout);
+        this.sendState();
+
+        const gameId = this.currentGameId;
+        if (!gameId || !this.players.some((p) => p.inGame)) return;
+        try {
+            const res = await this.privateLobbyMenu.server.findGameById(this.data.region, gameId, player.admin, true);
+            const match = res?.res?.[0];
+            if (match && player.room === this && !player.inGame) {
+                this.sendJoin(player, { ...match, spectator: true });
+                this.sendState();
+            }
+        } catch (err) {
+            this.privateLobbyMenu.logger.warn("Invisible watcher couldn't join the running match", err);
+        }
+    }
+
     removePlayer(player: Player) {
+        if (util.removeFrom(this.watchers, player)) {
+            player.room = undefined;
+            clearTimeout(player.pendingJoinTimer);
+            player.socket.close();
+            return;
+        }
         if (!util.removeFrom(this.players, player)) {
             return;
         }
@@ -764,12 +830,13 @@ class Room {
     close(reason: PrivateLobbyErrorType) {
         if (this.propsTimer) clearTimeout(this.propsTimer);
         this.pendingProps = undefined;
-        for (const player of this.players) {
+        for (const player of [...this.players, ...this.watchers]) {
             player.send("error", { type: reason });
             player.room = undefined;
             player.socket.close();
         }
         this.players = [];
+        this.watchers = [];
 
         this.privateLobbyMenu.removeRoom(this);
     }
@@ -782,9 +849,12 @@ class Room {
      */
     forceQuitGame() {
         let pulledAnyone = false;
-        for (const player of this.players) {
+        for (const player of [...this.players, ...this.watchers]) {
             if (!player.inGame) continue;
             player.inGame = false;
+            player.spectatingGame = false;
+            player.pendingJoin = undefined;
+            clearTimeout(player.pendingJoinTimer);
             player.send("forceQuit", {});
             pulledAnyone = true;
         }
@@ -795,7 +865,8 @@ class Room {
 
     async findGame(data: PrivateLobbyPlayGameMsg["data"]) {
         if (this.data.findingGame) return;
-        if (this.players.some((p) => p.inGame)) return;
+        // spectators still watching the last match don't count - they're moved along
+        if (this.players.some((p) => p.inGame && !p.spectatingGame)) return;
         if (!this.players.length) return;
         const roomLeader = this.players[0];
         if (!roomLeader) return;
@@ -864,8 +935,9 @@ class Room {
         );
 
         // Generate tokens for spectators so the game server can authenticate them.
+        // Invisible watchers come along as invisible spectators.
         const specTokenMap = new Map<Player, string>();
-        const spectators = spectatorPlayers.map((p) => {
+        const spectators = [...spectatorPlayers, ...this.watchers].map((p) => {
             const token = randomUUID();
             specTokenMap.set(p, token);
             return {
@@ -874,6 +946,7 @@ class Room {
                 ip: p.ip,
                 admin: p.admin,
                 roleTag: p.roleTag,
+                stealth: p.stealth || undefined,
             } satisfies FindGamePrivateBody["playerData"][0];
         });
 
@@ -927,14 +1000,12 @@ class Room {
         this.currentGameId = res.gameId;
 
         for (const player of regularPlayers) {
-            player.inGame = true;
-            player.afk = false;
             const token = tokenMap.get(player);
             if (!token) {
                 this.privateLobbyMenu.logger.warn(`Missing token for player ${player.name}`);
                 continue;
             }
-            player.send("joinGame", {
+            this.sendJoin(player, {
                 zone: "",
                 data: token,
                 gameId: res.gameId,
@@ -944,10 +1015,8 @@ class Room {
             });
         }
 
-        for (const player of spectatorPlayers) {
-            player.inGame = true;
-            player.afk = false;
-            player.send("joinGame", {
+        for (const player of [...spectatorPlayers, ...this.watchers]) {
+            this.sendJoin(player, {
                 zone: "",
                 data: specTokenMap.get(player) ?? "",
                 gameId: res.gameId,
@@ -959,6 +1028,40 @@ class Room {
         }
 
         this.sendState();
+    }
+
+    /**
+     * Sends a member into the new match. Someone still spectating the previous one is
+     * pulled out first and joins once their client reports back (gameComplete) - or
+     * after a short timeout, in case it never does.
+     */
+    sendJoin(player: Player, join: PrivateLobbyJoinGameMsg["data"]) {
+        player.afk = false;
+        if (player.inGame) {
+            player.pendingJoin = join;
+            player.send("forceQuit", {});
+            clearTimeout(player.pendingJoinTimer);
+            player.pendingJoinTimer = setTimeout(() => {
+                if (player.room === this && player.pendingJoin) {
+                    this.deliverPendingJoin(player);
+                    this.sendState();
+                }
+            }, PENDING_JOIN_TIMEOUT_MS);
+            return;
+        }
+        player.inGame = true;
+        player.spectatingGame = !!join.spectator;
+        player.send("joinGame", join);
+    }
+
+    deliverPendingJoin(player: Player) {
+        const join = player.pendingJoin;
+        clearTimeout(player.pendingJoinTimer);
+        player.pendingJoin = undefined;
+        if (!join) return;
+        player.inGame = true;
+        player.spectatingGame = !!join.spectator;
+        player.send("joinGame", join);
     }
 
     /** Premium lobby features (custom map, custom weapon stats): Premium accounts and staff. */
@@ -994,6 +1097,55 @@ class Room {
                 publicSpectator: player.publicSpectator || undefined,
             });
         }
+        // watchers see everyone plus themselves (marked) as the last spectator; locked like
+        // public spectators, but with the real room data
+        for (const watcher of this.watchers) {
+            const self = {
+                ...watcher.data,
+                name: `${watcher.name} (invisible)`,
+                playerId: players.length,
+                isLeader: false,
+                teamId: -1,
+                spectator: true,
+            };
+            watcher.send("state", {
+                localPlayerId: self.playerId,
+                room: this.data,
+                players: [...players, self],
+                teamScores,
+                publicSpectator: true,
+                stealth: true,
+            });
+        }
+    }
+
+    /** Everything the admin dashboard's lobby list shows. */
+    adminInfo(): AdminLobbyInfo {
+        const mode = this.privateLobbyMenu.server.modesByRegion[this.data.region]?.[this.data.gameModeIdx];
+        return {
+            code: this.id,
+            region: this.data.region,
+            createdAt: this.createdAt,
+            leaderName: this.leader?.name ?? "",
+            mapName: mode?.mapName ?? "",
+            teamMode: mode?.teamMode ?? this.data.teamSize,
+            maxPlayers: this.data.maxPlayers,
+            publicSpectating: this.data.publicSpectating,
+            advancedSettings: this.data.advancedSettings,
+            inGame: !!this.currentGameId && this.players.some((p) => p.inGame),
+            gameId: this.currentGameId,
+            stealthWatchers: this.watchers.length,
+            members: this.players.map((p) => ({
+                name: p.name,
+                roleTag: p.roleTag,
+                isLeader: p.isLeader,
+                teamId: p.spectator ? -1 : p.teamId,
+                spectator: p.spectator,
+                inGame: p.inGame,
+                afk: p.afk,
+            })),
+            teamScores: Object.fromEntries(this.teamScores),
+        };
     }
 }
 
@@ -1263,6 +1415,13 @@ export class PrivateLobbyMenu {
                         break;
                     }
 
+                    // invisible watching is admin-only; anyone else just joins normally
+                    if (msg.data.stealth && player.admin) {
+                        player.setName(msg.data.playerData.name);
+                        void room.addWatcher(player);
+                        break;
+                    }
+
                     player.spectator = !!msg.data.spectator || room.data.joinAsSpectator;
 
                     // no room in the lobby / the linked team: watch instead of being turned away
@@ -1366,6 +1525,14 @@ export class PrivateLobbyMenu {
             inGame,
             gameId: inGame ? room.currentGameId : null,
         };
+    }
+
+    /** Every open lobby, for the admin dashboard - newest first. */
+    listAllLobbies(): AdminLobbyInfo[] {
+        return [...this.rooms.values()]
+            .filter((room) => room.players.length)
+            .map((room) => room.adminInfo())
+            .sort((a, b) => b.createdAt - a.createdAt);
     }
 
     /** Lobbies listed in the public spectator menu (Public Spectating on). */

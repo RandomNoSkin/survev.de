@@ -1,4 +1,5 @@
 import { eq, type SQL, sql } from "drizzle-orm";
+import { MapId, TeamMode } from "../../../../../shared/gameConfig.ts";
 import { Hono } from "hono";
 import { statsRangeFor, statsSeasons } from "../../../../../shared/statsPeriods.ts";
 import {
@@ -24,12 +25,17 @@ const n = (v: unknown) => Number(v ?? 0);
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
-function matchWhere(userId: string, from: number | null, to: number, teamMode?: number): SQL {
+function matchWhere(userId: string, from: number | null, to: number, teamMode?: number, mapId?: number): SQL {
     const conds: SQL[] = [sql`user_id = ${userId}`, sql`created_at < to_timestamp(${to / 1000})`];
     if (from !== null) conds.push(sql`created_at >= to_timestamp(${from / 1000})`);
     if (teamMode !== undefined) conds.push(sql`team_mode = ${teamMode}`);
+    if (mapId !== undefined) conds.push(sql`map_id = ${mapId}`);
     return sql.join(conds, sql` AND `);
 }
+
+/** Hits per shot in % - capped at 100: older rows counted every pierce / reflect /
+ *  splinter / explosion hit, so hits could outnumber shots. */
+const accuracyPct = (hits: number, shots: number) => (shots ? r1(Math.min(100, (hits / shots) * 100)) : null);
 
 async function overview(where: SQL): Promise<UserProfileOverview> {
     const res = await db.execute(sql`
@@ -78,7 +84,7 @@ async function overview(where: SQL): Promise<UserProfileOverview> {
         avgImpact: r.avg_impact === null || r.avg_impact === undefined ? null : Math.round(n(r.avg_impact)),
         shots,
         hits: n(r.hits),
-        accuracy: shots ? r1((n(r.hits) / shots) * 100) : null,
+        accuracy: accuracyPct(n(r.hits), shots),
     };
 }
 
@@ -94,7 +100,7 @@ UserProfileStatsRouter.post(
         const req = c.req.valid("json");
         const user = await db.query.usersTable.findFirst({
             where: eq(usersTable.slug, req.slug),
-            columns: { id: true, username: true, banned: true, premiumUntil: true, admin: true, owner: true, moderator: true },
+            columns: { id: true, username: true, banned: true, premiumUntil: true, admin: true, owner: true, moderator: true, trackDuels: true },
         });
         const premium =
             !!user &&
@@ -103,18 +109,28 @@ UserProfileStatsRouter.post(
         if (!user || !premium) return c.json<UserProfileStatsResponse>({ premium: false });
 
         const range = statsRangeFor(req);
-        const where = matchWhere(user.id, range.from, range.to, req.teamMode);
+        const where = matchWhere(user.id, range.from, range.to, req.teamMode, req.mapId);
         const prevWhere =
             range.prevFrom !== null && range.prevTo !== null
-                ? matchWhere(user.id, range.prevFrom, range.prevTo, req.teamMode)
+                ? matchWhere(user.id, range.prevFrom, range.prevTo, req.teamMode, req.mapId)
                 : null;
         const bucket = sql.raw(`(date_trunc('${range.bucket}', created_at AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`);
 
-        // weapons: per day, not per match - the mode filter doesn't apply to them
+        // weapons are per day (+ map / mode since migration 0038; older rows have -1 there
+        // and only count without those filters)
         const weaponConds: SQL[] = [sql`user_id = ${user.id}`, sql`day <= ${utcDay(range.to)}`];
         if (range.from !== null) weaponConds.push(sql`day >= ${utcDay(range.from)}`);
+        if (req.teamMode !== undefined) weaponConds.push(sql`team_mode = ${req.teamMode}`);
+        if (req.mapId !== undefined) weaponConds.push(sql`map_id = ${req.mapId}`);
 
-        const [ov, prev, modes, maps, weapons, activity] = await Promise.all([
+        // 1v1 duels only exist in local (solo) mode - other map / mode filters have none
+        const duelsApply =
+            user.trackDuels &&
+            (req.mapId === undefined || req.mapId === MapId.Local) && (req.teamMode === undefined || req.teamMode === TeamMode.Solo);
+        const duelConds: SQL[] = [sql`(d.winner_user_id = ${user.id} OR d.loser_user_id = ${user.id})`, sql`d.created_at < to_timestamp(${range.to / 1000})`];
+        if (range.from !== null) duelConds.push(sql`d.created_at >= to_timestamp(${range.from / 1000})`);
+
+        const [ov, prev, modes, maps, weapons, activity, duels] = await Promise.all([
             overview(where),
             prevWhere ? overview(prevWhere) : Promise.resolve(null),
             db.execute(sql`
@@ -139,6 +155,18 @@ UserProfileStatsRouter.post(
                     COUNT(*) FILTER (WHERE rank = 1) AS wins
                 FROM match_data WHERE ${where} GROUP BY ${bucket} ORDER BY ${bucket}
             `),
+            duelsApply
+                ? db.execute(sql`
+                    SELECT u.slug, u.username, x.duels, x.wins FROM (
+                        SELECT CASE WHEN d.winner_user_id = ${user.id} THEN d.loser_user_id ELSE d.winner_user_id END AS opponent,
+                            COUNT(*) AS duels, COUNT(*) FILTER (WHERE d.winner_user_id = ${user.id}) AS wins
+                        FROM duel_results d WHERE ${sql.join(duelConds, sql` AND `)}
+                        GROUP BY 1
+                    ) x JOIN users u ON u.id = x.opponent
+                    WHERE NOT u.banned AND u.track_duels
+                    ORDER BY x.duels DESC, x.wins DESC LIMIT 25
+                `)
+                : Promise.resolve({ rows: [] }),
         ]);
 
         const rows = (x: { rows: unknown[] }) => x.rows as Record<string, unknown>[];
@@ -180,7 +208,17 @@ UserProfileStatsRouter.post(
                 maxDamage: n(r.max_damage),
                 shots: n(r.shots),
                 hits: n(r.hits),
-                accuracy: n(r.shots) ? r1((n(r.hits) / n(r.shots)) * 100) : null,
+                accuracy: accuracyPct(n(r.hits), n(r.shots)),
+            })),
+            duelsHidden: !user.trackDuels || undefined,
+            // undefined = not tracked for this map / mode filter
+            duels: !duelsApply ? undefined : rows(duels).map((r) => ({
+                slug: String(r.slug),
+                username: String(r.username),
+                duels: n(r.duels),
+                wins: n(r.wins),
+                losses: n(r.duels) - n(r.wins),
+                winRate: n(r.duels) ? r1((n(r.wins) / n(r.duels)) * 100) : 0,
             })),
             bucket: range.bucket,
             activity: rows(activity).map((r) => ({

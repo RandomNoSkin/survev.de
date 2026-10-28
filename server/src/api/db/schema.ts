@@ -75,6 +75,10 @@ export const usersTable = pgTable("users", {
     offersDisabled: boolean("offers_disabled").notNull().default(false),
     // when true, this user's loadout is hidden on the stats + advanced-game-stats pages.
     loadoutPrivate: boolean("loadout_private").notNull().default(false),
+    // when false, 1v1 duels involving this user are hidden everywhere - on their own
+    // profile and in other players' 1v1 lists (still recorded, so turning it back on
+    // restores the history).
+    trackDuels: boolean("track_duels").notNull().default(true),
     // Each independently gates whether this account's [ADMIN]/[MOD]/[PREM] name prefix
     // (see resolveRoleTag in db/roleTag.ts) is shown to others - opt-out (default true),
     // not opt-in. A role whose own toggle is off falls through to the next-highest
@@ -516,6 +520,10 @@ export const userWeaponStatsDailyTable = pgTable(
         userId: text("user_id").notNull(),
         day: date("day").notNull(),
         weaponType: text("weapon_type").notNull(),
+        // the match's map / team mode, for the profile filters (-1: rows from before
+        // these were stored - only part of the unfiltered totals)
+        mapId: integer("map_id").notNull().default(-1),
+        teamMode: integer("team_mode").notNull().default(-1),
         games: integer("games").notNull().default(0),
         kills: integer("kills").notNull().default(0),
         damage: bigint("damage", { mode: "number" }).notNull().default(0),
@@ -525,12 +533,30 @@ export const userWeaponStatsDailyTable = pgTable(
         maxDamage: integer("max_damage").notNull().default(0),
     },
     (table) => [
-        primaryKey({ columns: [table.userId, table.day, table.weaponType] }),
+        primaryKey({ columns: [table.userId, table.day, table.weaponType, table.mapId, table.teamMode] }),
         index("idx_user_weapon_stats_user_day").on(table.userId, table.day),
     ],
 );
 
 export type UserWeaponStatsDailyTable = typeof userWeaponStatsDailyTable.$inferInsert;
+
+/** Clean 1v1 kills between two accounts in local mode (no third party involved, see
+ *  Game.recordDuel) - the profile "1v1" head-to-head stats. */
+export const duelResultsTable = pgTable(
+    "duel_results",
+    {
+        id: serial().primaryKey(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        gameId: uuid("game_id").notNull(),
+        mapId: integer("map_id").notNull(),
+        winnerUserId: text("winner_user_id").notNull(),
+        loserUserId: text("loser_user_id").notNull(),
+    },
+    (table) => [
+        index("idx_duel_results_winner").on(table.winnerUserId, table.createdAt),
+        index("idx_duel_results_loser").on(table.loserUserId, table.createdAt),
+    ],
+);
 
 //
 // LOGS

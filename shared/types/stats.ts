@@ -328,6 +328,8 @@ export const zUserProfileStatsRequest = z.object({
     /** what to compare with, see applyStatsCompare */
     compare: z.string().regex(STATS_COMPARE_RE).optional(),
     teamMode: z.number().int().optional(),
+    /** only this map (MapId) */
+    mapId: z.number().int().optional(),
 });
 
 export type UserProfileStatsRequest = z.input<typeof zUserProfileStatsRequest>;
@@ -373,9 +375,24 @@ export interface UserProfileWeapon {
     accuracy: number | null;
 }
 
+/** Head-to-head against one opponent: clean 1v1 kills in local mode (see Game.recordDuel). */
+export interface UserProfileDuel {
+    slug: string;
+    username: string;
+    duels: number;
+    wins: number;
+    losses: number;
+    /** 0-100 */
+    winRate: number;
+}
+
 export interface UserProfileStatsResponse {
     /** false: the account has no Premium - nothing else is sent */
     premium: boolean;
+    /** 1v1 opponents, most duels first */
+    duels?: UserProfileDuel[];
+    /** the player turned "Track 1v1s" off - no duels are shown */
+    duelsHidden?: boolean;
     username?: string;
     period?: StatsPeriod;
     range?: { from: number | null; to: number };

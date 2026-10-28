@@ -39,7 +39,8 @@ import { GameWeaponStats } from "./weaponStats";
 import { LootBarn } from "./objects/loot";
 import { MapIndicatorBarn } from "./objects/mapIndicator";
 import { PlaneBarn } from "./objects/plane";
-import { PlayerBarn } from "./objects/player";
+import { type Player, PlayerBarn } from "./objects/player";
+import { ObjectType } from "../../../shared/net/objectSerializeFns";
 import { ProjectileBarn } from "./objects/projectile";
 import { SmokeBarn } from "./objects/smoke";
 import { PluginManager } from "./pluginManager";
@@ -63,6 +64,9 @@ export interface JoinTokenData {
         groupHashToJoin: string;
     };
 }
+
+/** How far back a kill is checked for third-party damage to count as a clean 1v1. */
+const DUEL_WINDOW_MS = 15_000;
 
 export class Game {
     started = false;
@@ -1059,6 +1063,35 @@ export class Game {
         });
     }
 
+    /** Clean 1v1 kills between two accounts this match (local mode), see recordDuel. */
+    duels: Array<{ winnerUserId: string; loserUserId: string; at: number }> = [];
+
+    /**
+     * Profile "1v1" stats: a kill in local (1v1) mode counts as a duel when it really
+     * was one - in the last DUEL_WINDOW_MS neither of the two took damage from any
+     * other player (the zone, bleeding etc. don't count as a third party). Works in a
+     * full lobby too: two players fighting undisturbed count, a third-partied kill
+     * doesn't. Accounts only (no guests, bots, spectators).
+     */
+    recordDuel(winner: Player, loser: Player) {
+        if (this.map.mapId !== MapId.Local || this.advancedSettings) return;
+        if (!winner.userId || !loser.userId || winner.userId === loser.userId) return;
+        if (winner.bot || loser.bot || winner.spectator || loser.spectator) return;
+        const now = Date.now();
+        const onlyFrom = (target: Player, opponent: Player) =>
+            target.damageHistory.every(
+                (h) =>
+                    now - h.realTime > DUEL_WINDOW_MS ||
+                    h.source === opponent ||
+                    h.source === target ||
+                    h.source?.__type !== ObjectType.Player,
+            );
+        // the loser must actually have been hit by the winner in that window
+        const fought = loser.damageHistory.some((h) => h.source === winner && now - h.realTime <= DUEL_WINDOW_MS);
+        if (!fought || !onlyFrom(loser, winner) || !onlyFrom(winner, loser)) return;
+        this.duels.push({ winnerUserId: winner.userId, loserUserId: loser.userId, at: now });
+    }
+
     private async _saveGameToDatabase() {
         // Matches that contained bots are never persisted: no match data, no XP, no
         // leaderboard, no impact score. Otherwise anyone could farm wins against `easy`
@@ -1263,6 +1296,9 @@ export class Game {
                     matchData: values,
                     cosmeticStats,
                     weaponStats,
+                    duels: this.duels.length
+                        ? { gameId: this.id, mapId, entries: this.duels }
+                        : undefined,
                 },
             });
         } catch (err) {

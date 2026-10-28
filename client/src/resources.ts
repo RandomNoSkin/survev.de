@@ -1,6 +1,4 @@
 import * as PIXI from "pixi.js-legacy";
-import highResAtlasDefs from "virtual-atlases-high";
-import lowResAtlasDefs from "virtual-atlases-low";
 import { type Atlas, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";
 import type { AudioManager } from "./audioManager.ts";
@@ -10,10 +8,15 @@ import SoundDefs from "./soundDefs.ts";
 
 type AtlasDef = Record<Atlas, PIXI.ISpritesheetData[]>;
 
-const spritesheetDefs = {
-    low: lowResAtlasDefs as AtlasDef,
-    high: highResAtlasDefs as AtlasDef,
-};
+/** The sprite frame data of one texture resolution (~480 KB of JS each). Loaded on
+ *  demand - both used to sit in the main bundle although a device only ever uses one. */
+function importAtlasDefs(res: "high" | "low"): Promise<AtlasDef> {
+    const load = () =>
+        (res === "high" ? import("virtual-atlases-high") : import("virtual-atlases-low")).then(
+            (m) => ((m as { default?: unknown }).default ?? m) as AtlasDef,
+        );
+    return load().catch(load); // one retry on a flaky connection
+}
 
 /**
  * Every "*.img" sprite and every other string (sound names etc.) the map object defs
@@ -151,6 +154,15 @@ export class ResourceManager {
     mapName!: string;
     preloadMap!: boolean;
 
+    /** This device's atlas frame data, once loaded (see importAtlasDefs). */
+    private defs: AtlasDef | null = null;
+    atlasDefsReady = false;
+    /** Atlases asked for before the frame data arrived - loaded right after. */
+    private pendingAtlases: Atlas[] = [];
+    /** Resolves once the atlas frame data is there: games, spectating, replays and the
+     *  loadout preview wait for it (they build sprites from the atlases right away). */
+    readonly ready: Promise<void>;
+
     constructor(
         public renderer: PIXI.IRenderer,
         public audioManager: AudioManager,
@@ -159,6 +171,13 @@ export class ResourceManager {
     ) {
         this.textureRes = selectTextureRes(this.renderer, this.config);
         PIXI.BasePrepare.uploadsPerFrame = 1;
+        this.ready = importAtlasDefs(this.textureRes).then((defs) => {
+            this.defs = defs;
+            this.atlasDefsReady = true;
+            const pending = this.pendingAtlases;
+            this.pendingAtlases = [];
+            for (const name of pending) this.loadAtlasSheets(name);
+        });
     }
 
     isAtlasLoaded(name: Atlas) {
@@ -170,6 +189,7 @@ export class ResourceManager {
             return false;
         }
 
+        if (this.pendingAtlases.includes(name)) return false;
         const atlas = this.atlases[name];
         for (let i = 0; i < atlas.spritesheets.length; i++) {
             const spritesheet = atlas.spritesheets[i];
@@ -192,10 +212,17 @@ export class ResourceManager {
             loaded: false,
             spritesheets: [],
         };
+        if (!this.defs) {
+            // counts as loaded already (no double loads); the sheets follow the data
+            this.atlases[name].loaded = true;
+            this.pendingAtlases.push(name);
+            return;
+        }
+        this.loadAtlasSheets(name);
+    }
 
-        let atlasDefs = spritesheetDefs[this.textureRes] || spritesheetDefs.low;
-
-        const atlasDef = atlasDefs[name];
+    private loadAtlasSheets(name: Atlas) {
+        const atlasDef = this.defs![name];
         for (let i = 0; i < atlasDef.length; i++) {
             const atlas = loadSpritesheet(this.renderer, this.basePath, atlasDef[i]);
             this.atlases[name].spritesheets.push(atlas);
@@ -209,6 +236,7 @@ export class ResourceManager {
         }
 
         console.log("Unload atlas", name);
+        this.pendingAtlases = this.pendingAtlases.filter((a) => a !== name);
 
         const atlas = this.atlases[name];
         for (let i = 0; i < atlas.spritesheets.length; i++) {
@@ -225,6 +253,11 @@ export class ResourceManager {
      * other maps.
      */
     loadAssetsForObjects(types: Iterable<string>) {
+        if (!this.defs) {
+            const list = [...types];
+            void this.ready.then(() => this.loadAssetsForObjects(list));
+            return;
+        }
         const { sprites, strings } = collectObjectRefs(types);
         const mapSounds = getMapSounds();
         setTimeout(() => {
@@ -234,7 +267,7 @@ export class ResourceManager {
             }
         }, 0);
 
-        const defs = spritesheetDefs[this.textureRes] || spritesheetDefs.low;
+        const defs = this.defs;
         const has = (atlas: Atlas, sprite: string) =>
             (defs[atlas] ?? []).some((sheet) => sprite in sheet.frames);
         const loaded = (Object.keys(this.atlases) as Atlas[]).filter((a) => this.isAtlasLoaded(a));

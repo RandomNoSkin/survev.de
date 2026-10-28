@@ -93,6 +93,8 @@ export interface PrivateLobbyMenuPlayer {
     playerId: number;
     isLeader: boolean;
     inGame: boolean;
+    /** In the running match as a spectator - doesn't hold up the next start. */
+    spectatingGame?: boolean;
     /** Lobby-local team slot index this player is currently assigned to. */
     teamId: number;
     /** True when the player has self-marked as AFK. Cleared automatically when a match starts. */
@@ -118,7 +120,36 @@ export interface PrivateLobbyStateMsg {
         /** Set for members who joined from the public spectator menu: they stay spectators,
          *  and `room.roomUrl` (the join code) is blanked for them. */
         publicSpectator?: boolean;
+        /** An admin watching invisibly: the other members don't see them. */
+        stealth?: boolean;
     };
+}
+
+/** One lobby in the admin dashboard's lobby list (all lobbies, incl. private ones). */
+export interface AdminLobbyInfo {
+    code: string;
+    region: string;
+    createdAt: number;
+    leaderName: string;
+    mapName: string;
+    teamMode: number;
+    maxPlayers: number;
+    publicSpectating: boolean;
+    advancedSettings: boolean;
+    inGame: boolean;
+    gameId: string | null;
+    /** admins watching invisibly */
+    stealthWatchers: number;
+    members: {
+        name: string;
+        roleTag: RoleTag;
+        isLeader: boolean;
+        teamId: number;
+        spectator: boolean;
+        inGame: boolean;
+        afk: boolean;
+    }[];
+    teamScores: Record<number, number>;
 }
 
 /**
@@ -254,6 +285,9 @@ export const zPrivateLobbyJoinMsg = z.object({
         /** Joins by a lobby's public id from the spectator menu instead of its join code -
          *  always as a spectator, and only while the lobby has Public Spectating on. */
         publicId: z.string().max(32).optional(),
+        /** Admins only (from the dashboard): watch the lobby invisibly - nobody sees you in
+         *  it, and you join its matches as an invisible spectator. */
+        stealth: z.boolean().optional(),
     }),
 });
 export type PrivateLobbyJoinMsg = z.infer<typeof zPrivateLobbyJoinMsg>;
@@ -393,6 +427,18 @@ export const zPrivateLobbyResetScoresMsg = z.object({
 
 export type PrivateLobbyResetScoresMsg = z.infer<typeof zPrivateLobbyResetScoresMsg>;
 
+/** Leader-only: sets one team slot's win count by hand. */
+export const TEAM_SCORE_MAX = 999;
+export const zPrivateLobbySetTeamScoreMsg = z.object({
+    type: z.literal("setTeamScore"),
+    data: z.object({
+        teamId: z.number().int().min(0).max(PRIVATE_LOBBY_PLAYER_LIMIT_MAX),
+        score: z.number().int().min(0).max(TEAM_SCORE_MAX),
+    }),
+});
+
+export type PrivateLobbySetTeamScoreMsg = z.infer<typeof zPrivateLobbySetTeamScoreMsg>;
+
 export const zPrivateLobbyClientMsg = z.discriminatedUnion("type", [
     zPrivateLobbyCreateMsg,
     zPrivateLobbySetRoomPropsMsg,
@@ -409,6 +455,7 @@ export const zPrivateLobbyClientMsg = z.discriminatedUnion("type", [
     zPrivateLobbyChangeNameMsg,
     zGameCompleteMsg,
     zPrivateLobbyResetScoresMsg,
+    zPrivateLobbySetTeamScoreMsg,
     zKeepAliveMsg,
 ]);
 
@@ -428,7 +475,8 @@ export type ClientToServerPrivateLobbyMsg =
     | PrivateLobbyLeaveGameMsg
     | PrivateLobbySetAfkMsg
     | PrivateLobbySetSpectatorMsg
-    | PrivateLobbyResetScoresMsg;
+    | PrivateLobbyResetScoresMsg
+    | PrivateLobbySetTeamScoreMsg;
 
 //
 // Public lobby listing (spectator menu)

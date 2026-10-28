@@ -71,6 +71,9 @@ export interface BulletParams {
     // (used for reflections to continue acceleration state)
     initialSpeed?: number;
     initialDistanceTraveled?: number;
+    /** The fired shot this bullet belongs to - kept by pierce/reflect/splinter bullets
+     *  spawned from it, so accuracy counts a hit at most once per shot (see damage()). */
+    shotId?: number;
 }
 
 export class BulletBarn {
@@ -141,6 +144,7 @@ export class BulletBarn {
 export class Bullet {
     alive = false;
     active = false;
+    shotId = 0;
 
     distanceTraveled!: number;
     sentToClient!: boolean;
@@ -264,6 +268,7 @@ export class Bullet {
         }
 
         this.shotSourceType = params.gameSourceType;
+        this.shotId = params.shotId ?? 0;
         this.mapSourceType = params.mapSourceType ?? "";
         this.damageType = params.damageType;
         this.damageMult = params.damageMult;
@@ -462,6 +467,7 @@ export class Bullet {
                     );
                     this.bulletManager.fireBullet({
                         playerId: this.playerId,
+                        shotId: this.shotId,
                         bulletType: def.spawnBulletType,
                         gameSourceType: this.shotSourceType,
                         mapSourceType: this.mapSourceType,
@@ -769,6 +775,7 @@ export class Bullet {
                     ) {
                         this.bulletManager.fireBullet({
                             bulletType: this.bulletType,
+                            shotId: this.shotId,
                             gameSourceType: this.shotSourceType,
                             mapSourceType: this.mapSourceType,
                             pos: col.point,
@@ -842,6 +849,7 @@ export class Bullet {
 
                     this.bulletManager.damages.push({
                         obj: col.player!,
+                        shotId: this.shotId,
                         gameSourceType: this.shotSourceType,
                         weaponSourceType: this.shotSourceType,
                         mapSourceType: this.mapSourceType,
@@ -886,6 +894,7 @@ export class Bullet {
         
         this.bulletManager.fireBullet({
             bulletType: this.bulletType,
+            shotId: this.shotId,
             gameSourceType: this.shotSourceType,
             mapSourceType: this.mapSourceType,
             pos,

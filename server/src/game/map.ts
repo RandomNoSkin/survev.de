@@ -1373,6 +1373,37 @@ export class GameMap {
     ];
 
     /**
+     * A building's ground patch, in world space, kept inside the map. canSpawn() rejects
+     * patches over the edge, but buildings placed as part of a bigger structure (or by
+     * fixed positions) never pass through it - a patch with a negative / too large
+     * coordinate then made MapMsg serialization throw (writeFloat out of [0, 1024])
+     * while the map was being built, crashing the whole game process. Clamped to the
+     * map instead (it's only the drawn ground under the building); null when nothing
+     * of it is left on the map.
+     */
+    private clampGroundPatch(bound: Collider, type: string): Collider | null {
+        const w = this.width;
+        const h = this.height;
+        if (bound.type === collider.Type.Circle) {
+            const pos = v2.create(math.clamp(bound.pos.x, 0, w), math.clamp(bound.pos.y, 0, h));
+            if (pos.x !== bound.pos.x || pos.y !== bound.pos.y) {
+                this.game.logger.warn(`Ground patch of ${type} was off the map - clamped`);
+            }
+            return collider.createCircle(pos, bound.rad);
+        }
+        const min = v2.create(math.clamp(bound.min.x, 0, w), math.clamp(bound.min.y, 0, h));
+        const max = v2.create(math.clamp(bound.max.x, 0, w), math.clamp(bound.max.y, 0, h));
+        if (min.x >= max.x || min.y >= max.y) {
+            this.game.logger.warn(`Ground patch of ${type} was completely off the map - skipped`);
+            return null;
+        }
+        if (min.x !== bound.min.x || min.y !== bound.min.y || max.x !== bound.max.x || max.y !== bound.max.y) {
+            this.game.logger.warn(`Ground patch of ${type} was off the map - clamped`);
+        }
+        return collider.createAabb(min, max);
+    }
+
+    /**
      * Checks if a map object can spawn at a given position, orientation and scale
      */
     canSpawn(type: string, pos: Vec2, ori: number, scale = 1): boolean {
@@ -1380,16 +1411,20 @@ export class GameMap {
 
         if (def.type === "building" && def.mapGroundPatches) {
             for (const patch of def.mapGroundPatches) {
-                const min = math.addAdjust(pos, (patch.bound as { min: Vec2; max: Vec2 }).min, ori);
-                const max = math.addAdjust(pos, (patch.bound as { min: Vec2; max: Vec2 }).max, ori);
-
-                if (
-                    min.x < 0 || min.y < 0 ||
-                    max.x < 0 || max.y < 0 ||
-                    min.x > this.width || min.y > this.height ||
-                    max.x > this.width || max.y > this.height
-                ) {
-                    return false;
+                const bound = patch.bound;
+                // circles have pos/rad, not min/max - the old cast read undefined there
+                // and so never rejected a circular patch over the edge
+                const pts =
+                    bound.type === collider.Type.Circle
+                        ? (() => {
+                              const c = math.addAdjust(pos, bound.pos, ori);
+                              return [v2.create(c.x - bound.rad, c.y - bound.rad), v2.create(c.x + bound.rad, c.y + bound.rad)];
+                          })()
+                        : [math.addAdjust(pos, bound.min, ori), math.addAdjust(pos, bound.max, ori)];
+                for (const pt of pts) {
+                    if (pt.x < 0 || pt.y < 0 || pt.x > this.width || pt.y > this.height) {
+                        return false;
+                    }
                 }
             }
         }
@@ -2384,7 +2419,7 @@ export class GameMap {
         }
 
         for (const patch of def.mapGroundPatches ?? []) {
-            const worldBound =
+            const worldBound = this.clampGroundPatch(
                 patch.bound.type === collider.Type.Circle
                     ? collider.createCircle(
                           math.addAdjust(pos, patch.bound.pos, ori),
@@ -2393,7 +2428,10 @@ export class GameMap {
                     : collider.createAabb(
                           math.addAdjust(pos, patch.bound.min, ori),
                           math.addAdjust(pos, patch.bound.max, ori),
-                      );
+                      ),
+                type,
+            );
+            if (!worldBound) continue;
             this.msg.groundPatches.push({
                 bound: worldBound,
                 color: patch.color,

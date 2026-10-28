@@ -243,6 +243,7 @@ UserRouter.post("/profile", async (c) => {
             settings: {
                 offersDisabled: user.offersDisabled,
                 loadoutPrivate: user.loadoutPrivate,
+                trackDuels: user.trackDuels,
                 showOwnerPrefix: user.showOwnerPrefix,
                 showAdminPrefix: user.showAdminPrefix,
                 showModPrefix: user.showModPrefix,
@@ -317,6 +318,7 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const {
         offersDisabled,
         loadoutPrivate,
+        trackDuels,
         showOwnerPrefix,
         showAdminPrefix,
         showModPrefix,
@@ -325,6 +327,7 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const patch: Partial<{
         offersDisabled: boolean;
         loadoutPrivate: boolean;
+        trackDuels: boolean;
         showOwnerPrefix: boolean;
         showAdminPrefix: boolean;
         showModPrefix: boolean;
@@ -332,6 +335,7 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     }> = {};
     if (offersDisabled !== undefined) patch.offersDisabled = offersDisabled;
     if (loadoutPrivate !== undefined) patch.loadoutPrivate = loadoutPrivate;
+    if (trackDuels !== undefined) patch.trackDuels = trackDuels;
     if (showOwnerPrefix !== undefined) patch.showOwnerPrefix = showOwnerPrefix;
     if (showAdminPrefix !== undefined) patch.showAdminPrefix = showAdminPrefix;
     if (showModPrefix !== undefined) patch.showModPrefix = showModPrefix;
@@ -344,6 +348,7 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
         settings: {
             offersDisabled: offersDisabled ?? user.offersDisabled,
             loadoutPrivate: loadoutPrivate ?? user.loadoutPrivate,
+            trackDuels: trackDuels ?? user.trackDuels,
             showOwnerPrefix: showOwnerPrefix ?? user.showOwnerPrefix,
             showAdminPrefix: showAdminPrefix ?? user.showAdminPrefix,
             showModPrefix: showModPrefix ?? user.showModPrefix,

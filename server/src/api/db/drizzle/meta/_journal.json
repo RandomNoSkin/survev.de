@@ -281,6 +281,27 @@
       "when": 1792000035328,
       "tag": "0037_small_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793220945141,
+      "tag": "0038_ancient_dragon_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793222656447,
+      "tag": "0039_zippy_silver_fox",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793223798602,
+      "tag": "0040_lush_marauders",
+      "breakpoints": true
     }
   ]
 }

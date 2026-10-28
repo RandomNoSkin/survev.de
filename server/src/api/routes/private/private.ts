@@ -34,6 +34,7 @@ import {
     matchDataTable,
     usersTable,
     userXpTable,
+    duelResultsTable,
     userWeaponStatsDailyTable,
     weaponStatsDailyTable,
 } from "../../db/schema";
@@ -117,7 +118,7 @@ async function attributeWeaponStats(
     weaponStats: NonNullable<SaveGameBody["weaponStats"]>,
 ): Promise<void> {
     const { mapId, teamMode, entries: allEntries } = weaponStats;
-    await attributeUserWeaponStats(allEntries);
+    await attributeUserWeaponStats(allEntries, mapId, teamMode);
     // the global ranking counts a weapon only where it actually dealt damage/kills
     // (entries for weapons that just missed exist for the profile accuracy)
     const entries = allEntries.filter((e) => e.damage > 0 || e.kills > 0);
@@ -190,6 +191,8 @@ async function attributeWeaponStats(
  */
 async function attributeUserWeaponStats(
     entries: NonNullable<SaveGameBody["weaponStats"]>["entries"],
+    mapId: number,
+    teamMode: number,
 ): Promise<void> {
     const byKey = new Map<
         string,
@@ -223,9 +226,9 @@ async function attributeUserWeaponStats(
     try {
         await db
             .insert(t)
-            .values([...byKey.values()].map((a) => ({ ...a, day })))
+            .values([...byKey.values()].map((a) => ({ ...a, day, mapId, teamMode })))
             .onConflictDoUpdate({
-                target: [t.userId, t.day, t.weaponType],
+                target: [t.userId, t.day, t.weaponType, t.mapId, t.teamMode],
                 set: {
                     damage: sql`${t.damage} + excluded.damage`,
                     kills: sql`${t.kills} + excluded.kills`,
@@ -362,6 +365,22 @@ export const PrivateRouter = new Hono<Context>()
         }
         if (data.weaponStats?.entries.length) {
             await attributeWeaponStats(data.weaponStats);
+        }
+        if (data.duels?.entries.length) {
+            const { gameId, mapId, entries } = data.duels;
+            try {
+                await db.insert(duelResultsTable).values(
+                    entries.map((d) => ({
+                        gameId,
+                        mapId,
+                        winnerUserId: d.winnerUserId,
+                        loserUserId: d.loserUserId,
+                        createdAt: new Date(d.at),
+                    })),
+                );
+            } catch (err) {
+                server.logger.warn("Failed to save duel results:", err);
+            }
         }
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);
         return c.json({}, 200);

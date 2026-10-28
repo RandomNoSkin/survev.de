@@ -297,6 +297,9 @@ class GameProcess implements GameData {
     }
 }
 
+/** A game process still not "Created" after this long is considered dead (see the keep-alive loop). */
+const CREATE_TIMEOUT_MS = 60_000;
+
 export class GameProcessManager implements GameManager {
     readonly sockets = new Map<string, WebSocket<GameSocketData>>();
 
@@ -354,6 +357,18 @@ export class GameProcessManager implements GameManager {
                         gameProc,
                         process.env.NODE_ENV === "production" ? "SIGKILL" : "SIGQUIT",
                     );
+                } else if (
+                    gameProc.creating &&
+                    gameProc.createStartTime &&
+                    Date.now() - gameProc.createStartTime > CREATE_TIMEOUT_MS
+                ) {
+                    // Safety net for any game that never finishes creating (normal init
+                    // takes well under a second): left alone it would hold its maxGames
+                    // slot forever - 11 of 12 slots ended up stuck like this in prod.
+                    this.logger.warn(
+                        `Process ${gameProc.process.pid} - #${gameProc.id.substring(0, 4)} still creating after ${CREATE_TIMEOUT_MS / 1000}s, killing`,
+                    );
+                    this.killProcess(gameProc);
                 } else if (
                     gameProc.stopped &&
                     Date.now() - gameProc.stoppedTime > 60000

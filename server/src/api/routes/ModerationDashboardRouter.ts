@@ -1471,11 +1471,17 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/game/:region/:id/spectate-token", async (c) => {
         const regionId = c.req.param("region");
         const gameId = c.req.param("id");
-        // staff watch invisibly (no join, no spectator count, no end-of-game entry);
-        // in-game admin powers only for actual admins, not moderators
+        // staff watch invisibly by default (no join message, no spectator count, no
+        // end-of-game entry); admins may also join as a normal, visible spectator.
+        // In-game admin powers only for actual admins, not moderators.
         const user = c.get("user") as { admin?: boolean } | undefined;
-        const data = await server.findGameById(regionId, gameId, !!user?.admin, true);
+        const visible = c.req.query("visible") === "1" && !!user?.admin;
+        const data = await server.findGameById(regionId, gameId, !!user?.admin, !visible);
         return c.json(data);
+    })
+    /** Every open private lobby (admins only - not in the moderator allow-list). */
+    .get("/api/lobbies", (c) => {
+        return c.json({ lobbies: server.privateLobbyMenu.listAllLobbies() });
     })
     // ─────────────────────────────────────────────────────────────────────────
     // REPLAYS

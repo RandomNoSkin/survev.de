@@ -67,9 +67,24 @@ export type PassType = {
     newItems: unknown;
 };
 
+/** Account requests a game join has to wait for: they decide the loadout, name and
+ *  quest data the join sends. Everything else (shop, market, friends, offers...) loads
+ *  in the background - waiting on those made Play take seconds on a busy server. */
+const JOIN_RELEVANT = [
+    "/api/user/profile",
+    "/api/user/loadout",
+    "/api/user/username",
+    "/api/user/get_pass",
+    "/api/user/set_quest",
+];
+
 export class Account {
     events: Record<string, Array<(...args: any[]) => void>> = {};
     requestsInFlight = 0;
+    /** Only the requests whose result goes into joining a game (see JOIN_RELEVANT) -
+     *  what Play waits for, and what the account / loadout loading spinners show.
+     *  Shop, market, friends etc. never hold a join up or spin a spinner. */
+    joinRequestsInFlight = 0;
     loggingIn = false;
     loggedIn = false;
     profile = {
@@ -108,6 +123,7 @@ export class Account {
     settings: AccountSettings = {
         offersDisabled: false,
         loadoutPrivate: false,
+        trackDuels: true,
         showOwnerPrefix: true,
         showAdminPrefix: true,
         showModPrefix: true,
@@ -124,7 +140,9 @@ export class Account {
             cb = data;
             data = null;
         }
+        const joinRelevant = JOIN_RELEVANT.includes(url);
         this.requestsInFlight++;
+        if (joinRelevant) this.joinRequestsInFlight++;
         this.emit("request", this);
 
         ajaxRequest(url, data, (err, res) => {
@@ -133,6 +151,9 @@ export class Account {
             this.emit("request", this);
             if (this.requestsInFlight == 0) {
                 this.emit("requestsComplete");
+            }
+            if (joinRelevant && --this.joinRequestsInFlight == 0) {
+                this.emit("joinRequestsComplete");
             }
         });
     }
@@ -170,6 +191,12 @@ export class Account {
         }
 
         if (helpers.getCookie("app-data")) {
+            // last visit's pass right away (same account only); get_pass refreshes it
+            const cached = this.config.get("cachedPass");
+            const slug = this.config.get("profile")?.slug;
+            if (cached && slug && cached.slug === slug) {
+                this.emit("pass", cached.pass, cached.quests, true);
+            }
             this.login();
             return;
         }
@@ -225,6 +252,7 @@ export class Account {
 
     logout() {
         this.config.set("profile", null);
+        this.config.set("cachedPass", null);
         this.config.set("sessionCookie", null);
         this.config.set("loadout", loadouts.defaultLoadout());
         this.ajaxRequest("/api/user/logout", () => {
@@ -267,6 +295,7 @@ export class Account {
                 this.settings = data.settings ?? {
                     offersDisabled: false,
                     loadoutPrivate: false,
+                    trackDuels: true,
                 };
                 // Validate the server loadout so older accounts (saved before newer
                 // loadout fields like death_effect existed) get the missing fields
@@ -451,6 +480,8 @@ export class Account {
                     return a.idx - b.idx;
                 });
                 this.emit("pass", this.pass, this.quests, true);
+                const slug = this.config.get("profile")?.slug;
+                if (slug) this.config.set("cachedPass", { slug, pass: this.pass, quests: this.quests });
                 // Reload the profile if new cosmetics OR Golden Fries were granted,
                 // so the items list and the top-left fries balance stay in sync.
                 if (this.pass.newItems || (res.goldenFriesAwarded ?? 0) > 0) {

@@ -4,6 +4,25 @@
     %VITE_TURNSTILE_SCRIPT%
     <!-- Meta Properties -->
     <meta charset="UTF-8">
+    <!-- Startup API requests, sent before the app JS has even loaded (see src/prefetch.ts). -->
+    <script>
+      (function () {
+        try {
+          var P = (window.__svPrefetch = {});
+          var json = function (r) { return r.ok ? r.json() : Promise.reject(r.status); };
+          P["GET /api/site_info?language=en "] = fetch("/api/site_info?language=en").then(json);
+          if (document.cookie.indexOf("app-data=") !== -1) {
+            var post = function (url, body) {
+              var opts = { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "XMLHttpRequest" } };
+              if (body) { opts.headers["Content-Type"] = "application/json; charset=utf-8"; opts.body = JSON.stringify(body); }
+              return fetch(url, opts).then(json);
+            };
+            P["POST /api/user/profile "] = post("/api/user/profile");
+            P["POST /api/user/get_pass {\"tryRefreshQuests\":true}"] = post("/api/user/get_pass", { tryRefreshQuests: true });
+          }
+        } catch (e) {}
+      })();
+    </script>
     <title>survev.de - Competitive survev.io.</title>
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover, user-scalable=no">
     <link rel="manifest" href="manifest.json">
@@ -64,6 +83,8 @@
         </div>
       </div>
       <div id="ui-game" class="click-through">
+        <!-- teammates next to the big map, see ui/teamOverview.ts (HUD editor: "Team Overview") -->
+        <div id="hud-wrap-teamOverview" class="hud-drag-wrapper"><div id="ui-team-overview"></div></div>
         <div id="tablet-console"></div>
         <div id="ui-center">
           <div id="ui-game-menu">
@@ -361,6 +382,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
             <div class="ui-team-member ui-bg-standard" data-id="1">
@@ -369,6 +391,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
             <div class="ui-team-member ui-bg-standard" data-id="2">
@@ -377,6 +400,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
             <div class="ui-team-member ui-bg-standard" data-id="3">
@@ -385,6 +409,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
           </div>
@@ -1501,6 +1526,13 @@
                     <div class="loadout-setting-desc">Hide your loadout on the stats &amp; advanced game stats pages.</div>
                   </div>
                   <div id="setting-loadout-private" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Track 1v1s</div>
+                    <div class="loadout-setting-desc">Show your 1v1 duels on the stats page. When off, duels against you are hidden for everyone.</div>
+                  </div>
+                  <div id="setting-track-duels" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
                 </div>
                 <div class="loadout-setting-row">
                   <div class="loadout-setting-text">

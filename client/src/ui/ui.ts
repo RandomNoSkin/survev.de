@@ -31,6 +31,7 @@ import type { Localization } from "./localization";
 import { PieTimer } from "./pieTimer";
 import type { Touch } from "./touch";
 import type { UiManager2 } from "./ui2";
+import { TeamOverview } from "./teamOverview";
 
 function humanizeTime(time: number) {
     const hours = Math.floor(time / 3600);
@@ -268,6 +269,8 @@ export class UiManager {
 
     mapSprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
     bigmapDisplayed = false;
+    /** teammates' health/gear/heals next to the big map (team modes) */
+    teamOverview = new TeamOverview();
     screenScaleFactor = 1;
     minimapPos!: Vec2;
     /** In-progress minimap drag offset, set live by HudLayoutManager#onMinimapDrag
@@ -700,6 +703,7 @@ export class UiManager {
 
     m_free() {
         this.gasRenderer.free();
+        this.teamOverview.free();
 
         this.clearUI();
 
@@ -1290,6 +1294,8 @@ export class UiManager {
         playerId: number,
         activePlayerId: number,
         playerBarn: PlayerBarn,
+        /** a ping from before we joined: the marker's remaining seconds, no pulse */
+        restoredLife?: number,
     ) {
         const pingDef = PingDefs[pingType];
         if (pingDef) {
@@ -1297,7 +1303,7 @@ export class UiManager {
                 const s = this.mapSpriteBarn.addSprite();
                 s.pos = v2.copy(pos);
                 s.scale = scale;
-                s.lifetime = pingDef.mapLife!;
+                s.lifetime = restoredLife ?? pingDef.mapLife!;
                 s.pulse = false;
                 s.zOrder = 100;
                 s.sprite.texture = PIXI.Texture.from(pingDef.mapTexture!);
@@ -1308,7 +1314,8 @@ export class UiManager {
                 const s = this.mapSpriteBarn.addSprite();
                 s.pos = v2.copy(pos);
                 s.scale = 0;
-                s.lifetime = pingDef.pingLife!;
+                // already pulsed out for a restored ping
+                s.lifetime = restoredLife !== undefined ? 0 : pingDef.pingLife!;
                 s.pulse = true;
                 s.zOrder = 99;
                 s.sprite.texture = PIXI.Texture.from("ping-map-pulse.img");
@@ -1336,9 +1343,11 @@ export class UiManager {
                 let tint = 0xffffff;
                 const activePlayerInfo = playerBarn.getPlayerInfo(activePlayerId);
                 const playerInfo = playerBarn.getPlayerInfo(playerId);
+                // the status (role) arrives with a later update than the infos - a ping
+                // re-sent on join came in before it and ended up white
                 const playerStatus = playerBarn.getPlayerStatus(playerId);
-                if (activePlayerInfo && playerInfo && playerStatus) {
-                    if (playerStatus.role == "leader") {
+                if (activePlayerInfo && playerInfo) {
+                    if (playerStatus?.role == "leader") {
                         // Use a special color if they are a faction leader
                         tint = 0x00ff00;
                     } else if (activePlayerInfo.groupId == playerInfo.groupId) {
@@ -2611,6 +2620,7 @@ export class UiManager {
             this.bigmapDisplayed ? "none" : "block",
         );
         $(".js-ui-map-show").css("display", this.bigmapDisplayed ? "block" : "none");
+        this.teamOverview.setMapOpen(this.bigmapDisplayed, this.game.m_playerBarn, this.game.m_activeId);
         this.updateSpectatorCountDisplay(true);
         this.redraw(this.game.m_camera);
     }
@@ -2886,8 +2896,24 @@ export class UiManager {
         }
     }
 
+    /** Teammates' adrenaline under their health bars in the top-left team list - the
+     *  values come with the team info (TeamInfoMsg), which only goes to the own group. */
+    updateTeamBoost(players: Array<{ playerId: number; boost: number; dead: boolean; disconnected: boolean }>) {
+        for (const sel of this.teamSelectors) {
+            const bar = sel.groupId.find(".ui-team-member-boost");
+            const p = players.find((x) => x.playerId === sel.playerId);
+            if (!p || p.dead || p.disconnected) {
+                bar.css("display", "none");
+                continue;
+            }
+            bar.css("display", "block");
+            bar.find(".ui-team-member-boost-fill").css("width", `${Math.round(p.boost)}%`);
+        }
+    }
+
     clearTeamUI() {
         $(".ui-team-member").css("display", "none");
+        $(".ui-team-member-boost").css("display", "none");
         $(".ui-team-indicator").css("display", "none");
         $(".ui-team-member-name").removeAttr("style");
         $(".ui-team-member-status").removeAttr("style");

@@ -1954,6 +1954,48 @@ td.data-player-status {
   font-size: 12px;
   opacity: 0.85;
 }
+.ps-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.ps-tab {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #2c3e50;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ps-tab:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+.ps-tab.active {
+  background: #2c3e50;
+  color: #fff;
+}
+.ps-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #2c3e50;
+  opacity: 0.75;
+  margin: 2px 0 6px 2px;
+}
+.ps-card-value.ps-card-name {
+  font-size: 16px;
+  line-height: 26px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ps-card-name a {
+  color: inherit;
+}
 .ps-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -2110,4 +2152,77 @@ td.data-player-status {
   border-radius: 2px;
   margin: 0 4px 0 10px;
   vertical-align: middle;
+}
+
+/* Favourite / best gun above the weapon table (profileStatsView.ts) */
+.ps-guns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ps-gun {
+  background: #f4f6f8;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.ps-gun-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #7f8c8d;
+  margin-bottom: 6px;
+}
+.ps-gun-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ps-gun-icon {
+  width: 44px;
+  height: 44px;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  flex: none;
+}
+.ps-gun-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #2c3e50;
+}
+.ps-gun-value {
+  font-size: 12px;
+  color: #556270;
+}
+.ps-gun-empty {
+  font-size: 13px;
+  color: #95a5a6;
+  padding: 8px 0;
+}
+
+/* 1v1 head-to-head (profileStatsView.ts) */
+.ps-duel-name {
+  font-weight: 700;
+  color: #2c3e50;
+}
+.ps-duel-bar {
+  margin-top: 4px;
+  height: 4px;
+  width: 140px;
+  border-radius: 2px;
+  background: #e57373;
+  overflow: hidden;
+}
+.ps-duel-bar .won {
+  display: block;
+  height: 100%;
+  background: #4caf50;
+}
+.ps-duel-w {
+  color: #2e7d32;
+  font-weight: 700;
+}
+.ps-duel-l {
+  color: #c62828;
 }
