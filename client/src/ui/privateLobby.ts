@@ -22,7 +22,7 @@ import type {
     SavedPrivateLobbySettings,
     ServerToClientPrivateLobbyMsg,
 } from "../../../shared/types/privateLobby";
-import { PRIVATE_LOBBY_PLAYER_LIMIT_MAX } from "../../../shared/types/privateLobby";
+import { PRIVATE_LOBBY_PLAYER_LIMIT_MAX, TEAM_SCORE_MAX } from "../../../shared/types/privateLobby";
 import { api } from "../api";
 import type { AudioManager } from "../audioManager";
 import type { ConfigManager } from "../config";
@@ -31,9 +31,34 @@ import { helpers } from "../helpers";
 import type { PingTest } from "../pingTest";
 import { SDK } from "../sdk/sdk";
 import type { SiteInfo } from "../siteInfo";
-import { CustomMapModal } from "./customMapModal";
-import { WeaponStatsModal } from "./weaponStatsModal";
-import { LoadoutEditorModal } from "./loadoutEditorModal";
+import type { CustomMapModal } from "./customMapModal";
+import type { LoadoutEditorModal } from "./loadoutEditorModal";
+import type { WeaponStatsModal } from "./weaponStatsModal";
+
+/** A modal whose code (and instance) only loads the first time it's used - the
+ *  custom map editor, weapon stats and loadout editor are big and most players never
+ *  open them, so they stay out of the bundle the page needs to start. */
+function lazyModal<T>(create: () => Promise<T>) {
+    let value: T | undefined;
+    let pending: Promise<T> | undefined;
+    return {
+        /** the instance, if it was already loaded */
+        get current() {
+            return value;
+        },
+        use(fn: (modal: T) => void) {
+            if (value) {
+                fn(value);
+                return;
+            }
+            pending ??= create().then((v) => (value = v));
+            pending.then(fn).catch((err) => {
+                pending = undefined;
+                console.error("Failed to load modal", err);
+            });
+        },
+    };
+}
 import type { Localization } from "./localization";
 
 function errorTypeToString(type: string, localization: Localization) {
@@ -111,11 +136,13 @@ export class PrivateLobbyMenu {
     teamId: number | undefined;
     /** Id of the currently selected settings tab (e.g. "arenaRoles"); reset to the first available tab whenever it stops applying. */
     activeSettingsTab: string | null = null;
-    loadoutEditor: LoadoutEditorModal;
-    customMapModal: CustomMapModal;
-    weaponStatsModal: WeaponStatsModal;
+    loadoutEditor: ReturnType<typeof lazyModal<LoadoutEditorModal>>;
+    customMapModal: ReturnType<typeof lazyModal<CustomMapModal>>;
+    weaponStatsModal: ReturnType<typeof lazyModal<WeaponStatsModal>>;
     /** True when the local client joined via a spectator invite link (`#CODE-s`). */
     spectator = false;
+    /** An admin asked to watch invisibly (`#CODE-g` link from the dashboard). */
+    stealth = false;
     /** Set when joining from the spectator menu's lobby list instead of a join code. */
     publicId: string | undefined = undefined;
     /** Server-confirmed: we joined publicly, so we stay a spectator and never see the code. */
@@ -134,7 +161,7 @@ export class PrivateLobbyMenu {
         public forceQuitCb: () => void,
         public joinGameAsSpectatorCb: (data: FindGameMatchData) => void,
     ) {
-        this.customMapModal = new CustomMapModal({
+        this.customMapModal = lazyModal(() => import("./customMapModal").then(({ CustomMapModal }) => new CustomMapModal({
             config,
             isLeader: () => this.isLeader,
             getActive: () => this.roomData.customMap,
@@ -144,8 +171,8 @@ export class PrivateLobbyMenu {
                 this.sendMessage("setRoomProps", this.roomData);
                 this.refreshUi();
             },
-        });
-        this.weaponStatsModal = new WeaponStatsModal({
+        })));
+        this.weaponStatsModal = lazyModal(() => import("./weaponStatsModal").then(({ WeaponStatsModal }) => new WeaponStatsModal({
             config,
             isLeader: () => this.isLeader,
             getActive: () =>
@@ -159,8 +186,8 @@ export class PrivateLobbyMenu {
                 this.sendMessage("setRoomProps", this.roomData);
                 this.refreshUi();
             },
-        });
-        this.loadoutEditor = new LoadoutEditorModal({
+        })));
+        this.loadoutEditor = lazyModal(() => import("./loadoutEditorModal").then(({ LoadoutEditorModal }) => new LoadoutEditorModal({
             localization,
             getLoadout: (index) => this.getLoadouts()[index],
             getLabel: (index) => this.getLoadoutLabel(index),
@@ -170,7 +197,7 @@ export class PrivateLobbyMenu {
                 this.sendMessage("setRoomProps", this.roomData);
                 this.refreshUi();
             },
-        });
+        })));
         // Listen for ui modifications
         // The server dropdown holds geographic groups (eu/asia/...); the playlist
         // within the group is chosen via the category tabs. Both resolve to a
@@ -333,6 +360,7 @@ export class PrivateLobbyMenu {
         teamId?: number,
         spectator = false,
         publicId?: string,
+        stealth = false,
     ) {
         if (!this.active || roomUrl !== this.roomData.roomUrl) {
             const roomHost = api.resolveRoomHost();
@@ -349,6 +377,7 @@ export class PrivateLobbyMenu {
             this.importGroupId = importGroupId;
             this.teamId = teamId;
             this.spectator = spectator;
+            this.stealth = stealth;
             this.publicId = publicId;
             this.publicSpectator = false;
 
@@ -413,6 +442,7 @@ export class PrivateLobbyMenu {
                             teamId: this.teamId,
                             spectator: this.spectator || undefined,
                             publicId: this.publicId,
+                            stealth: this.stealth || undefined,
                         });
                     }
                 };
@@ -429,6 +459,7 @@ export class PrivateLobbyMenu {
     }
 
     leave(errType = "") {
+        this.closeScoreEditor();
         if (this.active) {
             // Captured before the reset below: `isLeader` defaults to true and is
             // only corrected once a "state" arrives, so a failed create/join
@@ -641,6 +672,59 @@ export class PrivateLobbyMenu {
             this.roomData.findingGame = true;
             this.refreshUi();
         }
+    }
+
+    /** Leader-only popup to set one team's win count, anchored under its score tag. */
+    openScoreEditor(teamId: number, label: string, anchor: JQuery) {
+        this.closeScoreEditor();
+        const value = this.teamScores[teamId] ?? 0;
+        const popup = $(`<div class="private-lobby-score-editor">
+            <div class="private-lobby-score-editor-title">${helpers.htmlEscape(label)} - wins</div>
+            <div class="private-lobby-score-editor-row">
+                <button class="private-lobby-score-step" data-step="-1">−</button>
+                <input type="number" min="0" max="${TEAM_SCORE_MAX}" step="1" value="${value}">
+                <button class="private-lobby-score-step" data-step="1">+</button>
+            </div>
+            <div class="private-lobby-score-editor-row">
+                <button class="private-lobby-score-cancel">Cancel</button>
+                <button class="private-lobby-score-save">Save</button>
+            </div>
+        </div>`);
+        const input = popup.find("input");
+        const read = () => {
+            const n = Math.round(Number(input.val()));
+            return Number.isFinite(n) ? Math.min(TEAM_SCORE_MAX, Math.max(0, n)) : 0;
+        };
+        const save = () => {
+            this.sendMessage("setTeamScore", { teamId, score: read() });
+            this.closeScoreEditor();
+        };
+        popup.find(".private-lobby-score-step").on("click", (e) => {
+            input.val(Math.min(TEAM_SCORE_MAX, Math.max(0, read() + Number($(e.currentTarget).attr("data-step")))));
+        });
+        popup.find(".private-lobby-score-save").on("click", save);
+        popup.find(".private-lobby-score-cancel").on("click", () => this.closeScoreEditor());
+        input.on("keydown", (e) => {
+            if (e.key === "Enter") save();
+            else if (e.key === "Escape") this.closeScoreEditor();
+        });
+        popup.on("mousedown click", (e) => e.stopPropagation());
+
+        $("body").append(popup);
+        const rect = anchor[0].getBoundingClientRect();
+        const width = popup.outerWidth() ?? 180;
+        popup.css({
+            left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+            top: rect.bottom + 6,
+        });
+        input.trigger("focus").trigger("select");
+        // any click outside closes it
+        setTimeout(() => $(document).on("mousedown.scoreEditor", () => this.closeScoreEditor()));
+    }
+
+    closeScoreEditor() {
+        $(".private-lobby-score-editor").remove();
+        $(document).off("mousedown.scoreEditor");
     }
 
     /** Leader-only: pulls every in-game lobby member back to the lobby mid-match. */
@@ -990,13 +1074,26 @@ export class PrivateLobbyMenu {
             // Left: team name + invite code text
             const headerLeft = $("<div/>", { class: "private-lobby-spectator-label" });
             const wins = this.teamScores[t] ?? 0;
-            const winsTag =
-                wins > 0 ? ` <span class="private-lobby-team-wins">${wins}W</span>` : "";
             headerLeft.append(
                 $("<span/>", {
-                    html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})${winsTag}`,
+                    html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})`,
                 }),
             );
+            // the leader can click the score to set it by hand (shown even at 0)
+            if (wins > 0 || this.isLeader) {
+                const winsTag = $("<span/>", {
+                    class: `private-lobby-team-wins${this.isLeader ? " private-lobby-team-wins-editable" : ""}${wins === 0 ? " private-lobby-team-wins-zero" : ""}`,
+                    text: `${wins}W`,
+                    title: this.isLeader ? "Edit score" : "",
+                });
+                if (this.isLeader) {
+                    winsTag.on("click", (e) => {
+                        e.stopPropagation();
+                        this.openScoreEditor(t, `${teamLabel} ${t + 1}`, winsTag);
+                    });
+                }
+                headerLeft.append(" ", winsTag);
+            }
             if (teamSize > 1 && this.roomData.roomUrl) {
                 const teamCodeText = $("<span/>", {
                     class: "private-lobby-invite-code-text",
@@ -1612,7 +1709,7 @@ export class PrivateLobbyMenu {
             copy.name = undefined;
             this.roomData.extraCustomLoadouts.push(copy);
             update();
-            this.loadoutEditor.open(this.roomData.extraCustomLoadouts.length);
+            this.loadoutEditor.use((m) => m.open(this.roomData.extraCustomLoadouts.length));
         });
         row.append(btn);
         return row;
@@ -1646,7 +1743,7 @@ export class PrivateLobbyMenu {
                 this.sendMessage("setRoomProps", this.roomData);
                 this.refreshUi();
                 if (this.roomData.weaponStatsEnabled && !this.roomData.weaponStats) {
-                    this.weaponStatsModal.open();
+                    this.weaponStatsModal.use((m) => m.open());
                 }
             }),
         );
@@ -1677,7 +1774,7 @@ export class PrivateLobbyMenu {
             }));
         }
         card.append(info);
-        card.on("click", () => this.weaponStatsModal.open());
+        card.on("click", () => this.weaponStatsModal.use((m) => m.open()));
         wrap.append(card);
         return wrap;
     }
@@ -1691,7 +1788,7 @@ export class PrivateLobbyMenu {
                 this.sendMessage("setRoomProps", this.roomData);
                 this.refreshUi();
                 if (this.roomData.customMapEnabled && !this.roomData.customMap) {
-                    this.customMapModal.open();
+                    this.customMapModal.use((m) => m.open());
                 }
             }),
         );
@@ -1722,7 +1819,7 @@ export class PrivateLobbyMenu {
             }));
         }
         card.append(info);
-        card.on("click", () => this.customMapModal.open());
+        card.on("click", () => this.customMapModal.use((m) => m.open()));
         wrap.append(card);
         return wrap;
     }
@@ -1785,7 +1882,7 @@ export class PrivateLobbyMenu {
             card.append(actions);
         }
         card.attr("title", this.isLeader ? "Click to edit" : "Click to view");
-        card.on("click", () => this.loadoutEditor.open(index));
+        card.on("click", () => this.loadoutEditor.use((m) => m.open(index)));
         return card;
     }
 
@@ -1921,17 +2018,20 @@ export class PrivateLobbyMenu {
     }
 
     refreshUi() {
-        if (this.loadoutEditor.isOpen) {
-            if (this.active && this.roomData.customLoadoutEnabled) this.loadoutEditor.refresh();
-            else this.loadoutEditor.close();
+        const loadoutEditor = this.loadoutEditor.current;
+        if (loadoutEditor?.isOpen) {
+            if (this.active && this.roomData.customLoadoutEnabled) loadoutEditor.refresh();
+            else loadoutEditor.close();
         }
-        if (this.weaponStatsModal.isOpen) {
-            if (this.active) this.weaponStatsModal.refresh();
-            else this.weaponStatsModal.close();
+        const weaponStatsModal = this.weaponStatsModal.current;
+        if (weaponStatsModal?.isOpen) {
+            if (this.active) weaponStatsModal.refresh();
+            else weaponStatsModal.close();
         }
-        if (this.customMapModal.isOpen) {
-            if (this.active) this.customMapModal.refresh();
-            else this.customMapModal.close();
+        const customMapModal = this.customMapModal.current;
+        if (customMapModal?.isOpen) {
+            if (this.active) customMapModal.refresh();
+            else customMapModal.close();
         }
         const setButtonState = function (
             el: JQuery<HTMLElement>,
@@ -2078,7 +2178,10 @@ export class PrivateLobbyMenu {
             }
             let playersInGame = false;
             for (let i = 0; i < this.players.length; i++) {
-                playersInGame = playersInGame || this.players[i].inGame;
+                // spectators still watching the last match get moved along on start
+                playersInGame =
+                    playersInGame ||
+                    (this.players[i].inGame && !this.players[i].spectatingGame);
             }
 
             const waitReason = $("#msg-private-lobby-wait-reason");

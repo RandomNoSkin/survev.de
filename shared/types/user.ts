@@ -88,6 +88,8 @@ export type AccountSettings = {
     offersDisabled: boolean;
     /** When true, this user's loadout is hidden on the stats + advanced-game-stats pages. */
     loadoutPrivate: boolean;
+    /** When false, 1v1 duels against this user are hidden on every profile (own included). */
+    trackDuels: boolean;
     /** Each independently gates the account's [ADMIN]/[MOD]/[PREM] name prefix (see
      *  resolveRoleTag on the server) - a role whose toggle is off falls through to the
      *  next-highest enabled role rather than hiding the prefix outright. */
@@ -100,6 +102,7 @@ export type AccountSettings = {
 export const zSettingsRequest = z.object({
     offersDisabled: z.boolean().optional(),
     loadoutPrivate: z.boolean().optional(),
+    trackDuels: z.boolean().optional(),
     showOwnerPrefix: z.boolean().optional(),
     showAdminPrefix: z.boolean().optional(),
     showModPrefix: z.boolean().optional(),

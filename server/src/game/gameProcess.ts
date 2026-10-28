@@ -114,7 +114,19 @@ process.on("message", async (msg: ProcessMsg) => {
         // `process.uptime()` as "startup", which for a REUSED process is the process age
         // (minutes) — pure noise that spammed false "slow creation" webhooks.
         const initStart = Date.now();
-        await game.init();
+        try {
+            await game.init();
+        } catch (err) {
+            // A game that fails to build (e.g. map generation throws) never reports
+            // Created, and this process keeps answering, so the parent would count it as
+            // "creating" forever - every such crash used to permanently eat one of the
+            // maxGames slots. Report it and exit: the parent's exit handler removes the
+            // process and fails the waiting requests right away.
+            reportCrash(`game.init crashed (map ${msg.config.mapName})`, err);
+            game = undefined;
+            await new Promise((resolve) => setTimeout(resolve, 500)); // let the webhook go out
+            process.exit(1);
+        }
         const initMs = Date.now() - initStart;
         gameLogger.info(`Game "${msg.config.mapName}" ready — init ${initMs}ms`);
         sendMsg({

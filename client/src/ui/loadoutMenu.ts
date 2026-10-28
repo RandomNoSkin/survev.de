@@ -416,6 +416,9 @@ export class LoadoutMenu {
             $("#setting-loadout-private").on("click", () =>
                 this.toggleSetting("loadoutPrivate", "#setting-loadout-private"),
             );
+            $("#setting-track-duels").on("click", () =>
+                this.toggleSetting("trackDuels", "#setting-track-duels"),
+            );
             $("#setting-show-owner-prefix").on("click", () =>
                 this.toggleSetting("showOwnerPrefix", "#setting-show-owner-prefix"),
             );
@@ -553,7 +556,7 @@ export class LoadoutMenu {
     onRequest() {
         $("#modal-customize-loading").css(
             "opacity",
-            this.account.requestsInFlight > 0 ? 1 : 0,
+            this.account.joinRequestsInFlight > 0 ? 1 : 0,
         );
     }
 
@@ -928,6 +931,10 @@ export class LoadoutMenu {
             "loadout-toggle-on",
             this.account.settings.loadoutPrivate,
         );
+        $("#setting-track-duels").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.trackDuels,
+        );
         $("#setting-show-owner-prefix").toggleClass(
             "loadout-toggle-on",
             this.account.settings.showOwnerPrefix,
@@ -1042,6 +1049,7 @@ export class LoadoutMenu {
         key:
             | "offersDisabled"
             | "loadoutPrivate"
+            | "trackDuels"
             | "showOwnerPrefix"
             | "showAdminPrefix"
             | "showModPrefix"

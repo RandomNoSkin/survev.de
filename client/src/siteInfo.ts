@@ -5,6 +5,7 @@ import type { SiteInfoRes } from "../../shared/types/api.ts";
 import { api } from "./api.ts";
 import type { ConfigManager } from "./config.ts";
 import { device } from "./device.ts";
+import { prefetchKey, takePrefetch } from "./prefetch.ts";
 import type { Localization } from "./ui/localization.ts";
 
 export class SiteInfo {
@@ -207,8 +208,12 @@ export class SiteInfo {
             );
         }
 
-        const siteInfoUrl = api.resolveUrl(`/api/site_info?language=${locale}`);
-        fetch(siteInfoUrl).then(res => res.json()).then((data: SiteInfoRes) => {
+        const sitePath = `/api/site_info?language=${locale}`;
+        const siteInfoUrl = api.resolveUrl(sitePath);
+        const fetchSiteInfo = () => fetch(siteInfoUrl).then((res) => res.json());
+        // sent ahead by index.html when the API is on this host (see prefetch.ts)
+        const prefetched = siteInfoUrl === sitePath ? takePrefetch<SiteInfoRes>(prefetchKey("GET", sitePath)) : undefined;
+        (prefetched ? prefetched.catch(fetchSiteInfo) : fetchSiteInfo()).then((data: SiteInfoRes) => {
             this.info = data || {};
             this.loaded = true;
             this.updatePageFromInfo();

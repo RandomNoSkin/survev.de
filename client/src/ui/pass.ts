@@ -307,14 +307,23 @@ export class Pass {
             })(p);
         }
         this.quests = newQuests;
+        // Animate only progress on what's shown (e.g. the cached pass from the last visit
+        // -> the fresh one). Another pass (new season) or less than shown (XP revoked)
+        // is set straight away instead of animating backwards.
+        const shownType = this.pass.data?.type;
+        const animate =
+            this.loaded &&
+            shownType === pass.type &&
+            (pass.level > this.pass.currentLevel ||
+                (pass.level === this.pass.currentLevel && pass.xp >= Math.round(this.pass.currentXp)));
         this.pass.data = pass;
         this.pass.animSteps = [];
-        console.log("pass", pass);
         this.pass.currentXp = Math.round(this.pass.currentXp);
         this.pass.levelXp = passUtil.getPassLevelXp(pass.type, this.pass.currentLevel);
-        if (!this.loaded) {
+        if (!animate) {
             const u = passUtil.getPassLevelXp(pass.type, pass.level);
-            this.pass.currentXp = 0;
+            // shown as it is right away - only gains after that are animated
+            this.pass.currentXp = Math.round(pass.xp);
             this.pass.currentLevel = pass.level;
             this.pass.levelXp = u;
             this.pass.ticker = 0;
@@ -324,7 +333,7 @@ export class Pass {
         let xp = this.pass.currentXp;
         // Animate level-ups
 
-        if (this.loaded) {
+        if (animate) {
             while (level < pass.level) {
                 const levelXp = passUtil.getPassLevelXp(pass.type, level);
                 this.pass.animSteps.push({
@@ -367,7 +376,9 @@ export class Pass {
     }
 
     onRequest(account: Account) {
-        $("#pass-loading").css("display", account.loggingIn ? "block" : "none");
+        // only until the pass is shown - this used to follow the (much bigger) profile
+        // request, so the spinner came back over an already loaded pass until it was done
+        $("#pass-loading").css("display", account.loggingIn && !this.loaded ? "block" : "none");
     }
 
     scheduleUpdatePass(delay: number) {

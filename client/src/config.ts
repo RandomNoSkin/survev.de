@@ -189,6 +189,9 @@ const defaultConfig = {
     goldenFriesSeen: 0,
     goldenFriesSeenSlug: "",
     cachedBgImg: "img/main_splash.png",
+    /** The last pass state get_pass returned, per account (slug) - shown right away on
+     *  the next visit instead of a spinner, then updated once get_pass answers. */
+    cachedPass: null as { slug: string; pass: unknown; quests: unknown[] } | null,
     version: 1,
     /** Per-element HUD customization (position/visibility/opacity/click), keyed by HUD
      *  element id. An absent id means "untouched" (see HUD_ELEMENT_DEFAULTS) - this

@@ -170,6 +170,8 @@ export class Game {
      *  ping values bounce around too fast to actually read otherwise. */
     m_lastFpsCounterTime = 0;
     m_lastPingCounterTime = 0;
+    /** Ping samples since the counter last updated - it shows their median. */
+    m_pingCounterSamples: number[] = [];
 
     constructor(
         public m_pixi: PIXI.Application,
@@ -207,6 +209,11 @@ export class Game {
         questPriv: string,
         onConnectFail: () => void,
     ) {
+        // the HUD is built from the atlases on join - their frame data loads after startup
+        if (!this.m_resourceManager.atlasDefsReady) {
+            void this.m_resourceManager.ready.then(() => this.tryJoinGame(url, matchPriv, questPriv, onConnectFail));
+            return;
+        }
         if (!this.connecting && !this.connected && !this.initialized) {
             if (this.m_ws) {
                 this.m_ws.onerror = function () {};
@@ -300,6 +307,12 @@ export class Game {
         questPriv: string,
         onConnectFail: () => void,
     ) {
+        if (!this.m_resourceManager.atlasDefsReady) {
+            void this.m_resourceManager.ready.then(() =>
+                this.tryJoinGameAsSpectator(url, matchPriv, questPriv, onConnectFail),
+            );
+            return;
+        }
         if (!this.connecting && !this.connected && !this.initialized) {
             if (this.m_ws) {
                 this.m_ws.onerror = function () {};
@@ -1146,6 +1159,9 @@ export class Game {
         this.m_uiManager.interactionTouched = false;
         this.m_uiManager.swapWeapSlots = false;
         this.m_uiManager.roleSelected = "";
+        // sent once - left set it re-sent the role and re-stored the whole config
+        // (localStorage) every single frame for the rest of an arena match
+        this.m_uiManager.roleArenaSelected = "";
 
         // Only send a InputMsg if the new data has changed from the previously sent data. For the look direction, we need to determine if the angle difference is large enough.
         let diff = false;
@@ -1662,17 +1678,22 @@ export class Game {
         this.m_updateRecvCount++;
         if (msg.ack == this.seq && this.seqInFlight) {
             this.seqInFlight = false;
-            const ping = now - this.seqSendTime;
+            // Input sent -> update acking it, minus the time the server held the input
+            // until its next network tick (up to ~30ms of batching, not latency).
+            const ping = Math.max(0, now - this.seqSendTime - msg.ackDelay);
             this.debugHUD.pingGraph.addEntry(ping);
             this.pings.push(ping);
-            // Opt-in ping counter (see hudLayoutManager.ts) - same measurement
-            // debugHUD's own ping graph already uses, just also written to the
-            // player-facing element, throttled to once/second (raw per-packet values
-            // bounce around too fast to actually read otherwise).
+            // Opt-in ping counter (see hudLayoutManager.ts): the median of the last
+            // second's samples, once a second (single samples jump around, and one
+            // late frame would show as a spike).
+            this.m_pingCounterSamples.push(ping);
             if (now - this.m_lastPingCounterTime >= 1000) {
                 this.m_lastPingCounterTime = now;
+                const samples = this.m_pingCounterSamples.sort((a, b) => a - b);
+                const median = samples[Math.floor(samples.length / 2)];
+                this.m_pingCounterSamples = [];
                 const pingEl = document.getElementById("ui-ping-counter");
-                if (pingEl) pingEl.textContent = String(ping);
+                if (pingEl) pingEl.textContent = String(median);
             }
         }
         if (this.lastUpdateTime > 0) {
@@ -2190,6 +2211,13 @@ export class Game {
                         assistCountText,
                     );
                 }
+                break;
+            }
+            case net.MsgType.TeamInfo: {
+                const msg = new net.TeamInfoMsg();
+                msg.deserialize(stream);
+                this.m_uiManager.teamOverview.setData(msg.players, this.m_playerBarn, this.m_activeId);
+                this.m_uiManager.updateTeamBoost(msg.players);
                 break;
             }
             case net.MsgType.AdvancedSpectatorAllowed: {

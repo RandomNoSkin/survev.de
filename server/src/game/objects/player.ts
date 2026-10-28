@@ -25,6 +25,7 @@ import type { OutfitDef } from "../../../../shared/defs/gameObjects/outfitDefs";
 import { PerkProperties } from "../../../../shared/defs/gameObjects/perkDefs";
 import { type RoleDef, RoleDefs } from "../../../../shared/defs/gameObjects/roleDefs";
 import type { ThrowableDef } from "../../../../shared/defs/gameObjects/throwableDefs";
+import { PingDefs } from "../../../../shared/defs/gameObjects/pingDefs";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapObjectDefs } from "../../../../shared/defs/register.ts";
 import type { TeamColor } from "../../../../shared/defs/maps/factionDefs";
@@ -112,6 +113,8 @@ interface Emote {
     pos: Vec2;
     type: string;
     isPing: boolean;
+    /** see net Emote.restoredLife */
+    restoredLife?: number;
     /**
      * if type is "emote_loot", typestring of item goes here
      * "m870", "mosin", "1xscope", "762mm", etc
@@ -150,6 +153,10 @@ export class PlayerBarn {
     socketIdToPlayer = new Map<string, Player>();
 
     emotes: Emote[] = [];
+    /** Pings whose map marker is still showing (player pings up to 5 min), re-sent to
+     *  players who join later - pings themselves are one-shot events. A player's new
+     *  ping replaces their previous one, same as on the client. */
+    activePings: Array<{ emote: Emote; expiresAt: number }> = [];
 
     killLeaderDirty = false;
     killLeader?: Player;
@@ -902,13 +909,35 @@ export class PlayerBarn {
     }
 
     addMapPing(type: string, pos: Vec2, playerId = 0) {
-        this.emotes.push({
+        const emote: Emote = {
             isPing: true,
             type,
             pos,
             playerId,
             itemType: "",
-        });
+        };
+        this.emotes.push(emote);
+
+        const def = PingDefs[type];
+        if (!def) return;
+        const now = Date.now();
+        this.activePings = this.activePings.filter(
+            (p) => p.expiresAt > now && (def.mapEvent || p.emote.playerId !== playerId || !playerId),
+        );
+        const life = Math.max(def.mapLife ?? 0, def.pingLife ?? 0);
+        if (life > 0) this.activePings.push({ emote, expiresAt: now + life * 1000 });
+    }
+
+    /** Still-showing pings from before `now`, with their remaining life (for a joiner). */
+    restorablePings(now: number): Emote[] {
+        const out: Emote[] = [];
+        for (const p of this.activePings) {
+            const left = (p.expiresAt - now) / 1000;
+            // added this tick: the joiner gets it as a normal ping anyway
+            if (left <= 0.5 || this.emotes.includes(p.emote)) continue;
+            out.push({ ...p.emote, restoredLife: left });
+        }
+        return out;
     }
 }
 
@@ -1992,6 +2021,8 @@ export class Player extends BaseGameObject {
     socketId: string;
 
     ack = 0;
+    /** performance.now() when the current `ack` seq first arrived (see UpdateMsg.ackDelay). */
+    ackRecvTime = 0;
 
     name: string;
     isMobile: boolean;
@@ -3476,6 +3507,42 @@ export class Player extends BaseGameObject {
     }
 
     private _firstUpdate = true;
+    /** Team overview (TeamInfoMsg): when it was last checked, and what was last sent. */
+    private teamInfoCheckedAt = 0;
+    private teamInfoSent = "";
+
+    /** What the teammates carry, for the big-map team overview - twice a second at
+     *  most, and only when it changed. Team modes, own group only. */
+    private sendTeamInfo(msgStream: net.MsgStream): void {
+        if (!this.game.isTeamMode || !this.group || this.group.players.length < 2) return;
+        const now = Date.now();
+        if (now - this.teamInfoCheckedAt < 500) return;
+        this.teamInfoCheckedAt = now;
+
+        const msg = new net.TeamInfoMsg();
+        msg.players = this.group.players.map((p) => ({
+            playerId: p.__id,
+            dead: p.dead,
+            downed: p.downed,
+            disconnected: p.disconnected,
+            health: p.health,
+            boost: p.boost,
+            weapons: p.weapons.slice(0, 4).map((w) => ({ type: w.type, ammo: w.ammo })),
+            scope: p.scope,
+            scopes: net.TEAM_INFO_SCOPES.filter((s) => (p.inventory[s] ?? 0) > 0 || s === p.scope),
+            helmet: p.helmet,
+            chest: p.chest,
+            backpack: p.backpack,
+            bandage: p.inventory.bandage ?? 0,
+            healthkit: p.inventory.healthkit ?? 0,
+            soda: p.inventory.soda ?? 0,
+            painkiller: p.inventory.painkiller ?? 0,
+        }));
+        const key = JSON.stringify(msg.players.map((p) => ({ ...p, health: Math.round(p.health), boost: Math.round(p.boost) })));
+        if (key === this.teamInfoSent) return;
+        this.teamInfoSent = key;
+        msgStream.serializeMsg(net.MsgType.TeamInfo, msg);
+    }
     visibleObjects = new Set<GameObject>();
     visibleMapIndicators = new Set<MapIndicator>();
 
@@ -3520,6 +3587,7 @@ export class Player extends BaseGameObject {
         const updateMsg = new net.UpdateMsg();
 
         updateMsg.ack = this.ack;
+        updateMsg.ackDelay = Math.max(0, Math.min(255, Math.round(performance.now() - this.ackRecvTime)));
 
         if (game.gas.dirty || this._firstUpdate) {
             updateMsg.gasDirty = true;
@@ -3720,6 +3788,12 @@ export class Player extends BaseGameObject {
                 updateMsg.emotes.push(emote);
             }
         }
+        // joined late: the pings still on the map
+        if (this._firstUpdate) {
+            for (const emote of playerBarn.restorablePings(Date.now())) {
+                if (shouldSendEmote(emote)) updateMsg.emotes.push(emote);
+            }
+        }
 
         const extendedRadius = 1.1 * radius;
         const radiusSquared = extendedRadius * extendedRadius;
@@ -3803,6 +3877,8 @@ export class Player extends BaseGameObject {
             allowedMsg.allowed = advSpecAllowed;
             msgStream.serializeMsg(net.MsgType.AdvancedSpectatorAllowed, allowedMsg);
         }
+
+        this.sendTeamInfo(msgStream);
 
         for (let i = 0; i < this.msgsToSend.length; i++) {
             const msg = this.msgsToSend[i];
@@ -3920,6 +3996,10 @@ export class Player extends BaseGameObject {
     /** Per-weapon bullets fired / gun bullets that hit another player this match (profile accuracy). */
     weaponShots: Map<string, number> = new Map();
     weaponHits: Map<string, number> = new Map();
+    /** Running number of fired shots (each pellet) - see BulletParams.shotId. */
+    shotSeq = 0;
+    /** Shots that already counted as a hit (accuracy: one hit per shot). */
+    hitShotIds = new Set<number>();
 
     damageHistory: {
         source: GameObject;
@@ -3963,8 +4043,12 @@ export class Player extends BaseGameObject {
         }
 
         // Accuracy tracking: count a bullet hit on the shooter when a gun's bullet
-        // connects with another player (paired with shotsFired in weaponManager).
-        if (playerSource && params.source !== this) {
+        // connects with another player (paired with shotsFired in weaponManager) - once
+        // per fired shot. A piercing / reflected / splintered bullet (or an explosive
+        // round's blast, which has no shotId) hitting more players is still one hit,
+        // otherwise hits outnumbered shots (an SV-98 showed 127% accuracy).
+        if (playerSource && params.source !== this && params.shotId && !playerSource.hitShotIds.has(params.shotId)) {
+            playerSource.hitShotIds.add(params.shotId);
             if (GameObjectDefs.typeToDefSafe(params.gameSourceType ?? "")?.type === "gun") {
                 playerSource.bulletHits++;
                 const gun = params.gameSourceType!;
@@ -4417,6 +4501,7 @@ export class Player extends BaseGameObject {
                 // Impact score: weighted by the kill-weight snapshotted when this
                 // victim went down (undiscarded, i.e. they weren't revived first).
                 killCreditSource.weightedKills += this.pendingKillWeight ?? 1;
+                this.game.recordDuel(killCreditSource, this);
                 const weapon = params.gameSourceType ?? params.mapSourceType ?? "unknown";
                 this.game.logKillFeedEntry({
                     ts: Date.now(),
@@ -4561,7 +4646,9 @@ export class Player extends BaseGameObject {
             this.lastDamagedBy.randomWeaponSwap(params);
         }
 
-        this.game.broadcastMsg(net.MsgType.Kill, killMsg);
+        // an invisible staff spectator's "joined as spectator" line only goes to themselves
+        if (this.stealth) this.msgsToSend.push({ type: net.MsgType.Kill, msg: killMsg });
+        else this.game.broadcastMsg(net.MsgType.Kill, killMsg);
 
         //assist logic
         // When finished from the downed state, only consider damage dealt before the
@@ -5183,6 +5270,9 @@ export class Player extends BaseGameObject {
     }
 
     handleInput(msg: net.InputMsg): void {
+        // the client keeps resending the same seq until it's acked: the hold time
+        // counts from the first one
+        if (msg.seq !== this.ack) this.ackRecvTime = performance.now();
         this.ack = msg.seq;
 
         if (this.dead) return;

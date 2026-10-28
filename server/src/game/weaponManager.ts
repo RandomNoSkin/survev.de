@@ -1240,6 +1240,7 @@ export class WeaponManager {
                 lastShot: weapon.ammo <= 0,
                 reflectObjId: this.player.obstacleOutfit?.__id,
                 onHitFx: hasExplosive ? "explosion_rounds" : undefined,
+                shotId: ++this.player.shotSeq,
             };
 
             this.player.game.bulletBarn.fireBullet(params);

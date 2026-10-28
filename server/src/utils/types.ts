@@ -69,6 +69,12 @@ export interface SaveGameBody {
             userId?: string;
         }[];
     };
+    /** Clean 1v1 kills between two accounts (local mode) - profile "1v1" stats. */
+    duels?: {
+        gameId: string;
+        mapId: number;
+        entries: { winnerUserId: string; loserUserId: string; at: number }[];
+    };
 }
 
 export interface ServerGameConfig {
@@ -148,6 +154,8 @@ const zPrivateLobbyPlayerData = z.object({
     roleTag: zRoleTag,
     loadout: loadoutSchema.optional(),
     customLoadout: zCustomLoadoutConfig.optional(),
+    /** An admin watching the lobby invisibly (see Player.stealth). */
+    stealth: z.boolean().optional(),
 });
 
 /** Body for spinning up a fully isolated match from a private lobby; `teams` groups players that should land in the same in-game Group. */

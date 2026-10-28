@@ -344,6 +344,9 @@ export class UpdateMsg implements AbstractMsg {
     killLeaderKills = 0;
     killLeaderDirty = false;
     ack = 0;
+    /** ms the server held the acked input before this update went out (its netSync
+     *  batching) - the client takes it off the measured ping. */
+    ackDelay = 0;
 
     serialize(s: BitStream) {
         /* STRIP_FROM_PROD_CLIENT:START */
@@ -486,6 +489,11 @@ export class UpdateMsg implements AbstractMsg {
 
                 if (emote.isPing) {
                     s.writeMapPos(emote.pos!);
+                    // a ping from before this player joined: its remaining map life
+                    s.writeBoolean(emote.restoredLife !== undefined);
+                    if (emote.restoredLife !== undefined) {
+                        s.writeUint16(Math.min(65535, Math.round(emote.restoredLife * 10)));
+                    }
                 }
                 s.writeAlignToNextByte();
             });
@@ -543,6 +551,7 @@ export class UpdateMsg implements AbstractMsg {
         }
 
         s.writeUint8(this.ack);
+        s.writeUint8(this.ackDelay);
         const idx = s.byteIndex;
         s.byteIndex = flagsIdx;
         s.writeUint16(flags);
@@ -717,6 +726,7 @@ export class UpdateMsg implements AbstractMsg {
 
                 if (emote.isPing) {
                     emote.pos = s.readMapPos();
+                    if (s.readBoolean()) emote.restoredLife = s.readUint16() / 10;
                 }
                 s.readAlignToNextByte();
                 return emote;
@@ -778,6 +788,7 @@ export class UpdateMsg implements AbstractMsg {
             this.killLeaderDirty = true;
         }
         this.ack = s.readUint8();
+        this.ackDelay = s.readUint8();
     }
 }
 
@@ -832,6 +843,9 @@ export interface Emote {
     itemType: string;
     isPing: boolean;
     pos?: Vec2;
+    /** Set on pings re-sent to a player who joined after they were made: seconds the
+     *  map marker has left (no sound / world indicator for those). */
+    restoredLife?: number;
 }
 
 export interface Airstrike {

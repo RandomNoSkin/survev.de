@@ -586,10 +586,49 @@ img {
    * gap above it) - #ui-game-tab-settings already uses `height: initial` the same way,
    * so this isn't a new pattern for this panel. */
   height: initial;
+  /* fixed: the views (Game/Team/Spectator/Map) list different rows, and a content-
+   * sized menu jumped in width when switching between them */
+  width: 270px;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #ui-game-tab-hud {
+    width: auto;
+  }
 }
 
 #ui-game-tab-hud > #btn-hud-edit-toggle {
   margin-bottom: 10px;
+}
+
+/* HUD editor view switch (Game / Team / Spectator / Map, see HudLayoutManager#setEditView) */
+.hud-view-switch {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  pointer-events: all;
+}
+.hud-view-btn {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ddd;
+  font-size: 13px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.hud-view-btn:hover {
+  background: rgba(0, 0, 0, 0.45);
+}
+.hud-view-btn.active {
+  border-color: #6fcf6f;
+  color: #fff;
+}
+/* elements of the other views while editing */
+body.hud-edit-mode .hud-drag-wrapper.hud-view-hidden {
+  display: none !important;
 }
 
 #ui-game-tab-hud > #btn-hud-reset-all {
@@ -623,6 +662,7 @@ img {
 
 .hud-settings-label {
   flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: #fff;
   white-space: nowrap;
@@ -1796,7 +1836,7 @@ body.hud-preview-mode #hud-preview-backdrop {
   display: none;
   position: relative;
   width: 200px;
-  height: 32px;
+  height: 36px;
   padding: 4px;
   margin-bottom: 8px;
 }
@@ -1874,7 +1914,29 @@ body.hud-preview-mode #hud-preview-backdrop {
 }
 
 .ui-team-member-health {
-  margin-top: 4px;
+  /* room for the boost bar between the name and the health bar */
+  margin-top: 8px;
+  /* anchors the boost bar above the health bar */
+  position: relative;
+}
+
+/* teammate adrenaline between name and health bar (from TeamInfoMsg; hidden until known) */
+.ui-team-member-boost {
+  display: none;
+  position: absolute;
+  top: -5px;
+  left: 0;
+  width: 200px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ui-team-member-boost-fill {
+  height: 100%;
+  width: 0;
+  background: #ff9800;
 }
 
 .ui-team-member-health .ui-bar-inner {
@@ -4428,7 +4490,7 @@ span.ui-stats-header-value {
     display: none;
     position: relative;
     width: 110px;
-    height: 20px;
+    height: 22px;
     padding: 4px;
     margin-bottom: 4px;
   }
@@ -4502,7 +4564,13 @@ span.ui-stats-header-value {
   }
 
   .ui-team-member-health {
-    margin-top: 2px;
+    margin-top: 4px;
+  }
+
+  .ui-team-member-boost {
+    top: -3px;
+    width: 110px;
+    height: 2px;
   }
 
   .ui-team-member-health .ui-bar-inner {
@@ -6496,4 +6564,139 @@ span.ui-stats-header-value {
   #ui-stats-options {
     bottom: 40px; 
   }
+}
+
+/* ── Teammate overview next to the big map (see ui/teamOverview.ts) ── */
+#hud-wrap-teamOverview {
+  display: none;
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 3;
+  pointer-events: none;
+}
+#ui-team-overview {
+  transform-origin: left top;
+  width: 300px;
+  font-family: "Roboto Condensed", Arial, sans-serif;
+  color: #fff;
+}
+.ui-to-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin: 0 0 6px 2px;
+}
+.ui-to-player {
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+  padding: 8px 9px;
+  margin-bottom: 8px;
+}
+.ui-to-player.inactive {
+  opacity: 0.55;
+}
+.ui-to-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  margin-bottom: 5px;
+  min-width: 0;
+}
+.ui-to-head i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ui-to-head b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-to-state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.ui-to-state.ui-to-down {
+  background: #c62828;
+}
+.ui-to-bar {
+  position: relative;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+.ui-to-bar span {
+  position: absolute;
+  right: 4px;
+  top: -1px;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 0 2px #000;
+}
+.ui-to-hp {
+  height: 100%;
+  background: #dcdcdc;
+}
+.ui-to-hp.ui-to-danger {
+  animation: pulse 0.5s ease-out 0s infinite alternate none;
+}
+.ui-to-boostbar {
+  height: 5px;
+  margin-bottom: 6px;
+}
+.ui-to-boost {
+  height: 100%;
+  background: #ff9800;
+}
+.ui-to-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ui-to-slot {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ui-to-slot img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+.ui-to-slot.ui-to-none img {
+  opacity: 0.35;
+}
+.ui-to-slot.ui-to-empty {
+  background: rgba(255, 255, 255, 0.04);
+}
+.ui-to-slot span {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+/* the overview replaces these while it's open (they'd sit under it) */
+#ui-game.team-overview-open #ui-team,
+#ui-game.team-overview-open #hud-wrap-fpsCounter,
+#ui-game.team-overview-open #hud-wrap-pingCounter {
+  visibility: hidden !important;
 }

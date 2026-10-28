@@ -116,6 +116,9 @@ export class EmoteBarn {
     gameElem = $("#ui-game");
     disable = false;
     activePlayer: Player | null = null;
+    /** Pings that arrived before the first frame knew the active player (the pings
+     *  still on the map are re-sent in a joiner's very first update) - shown then. */
+    pendingPings: Array<{ ping: Emote; factionMode: boolean }> = [];
     worldPos = v2.create(0, 0);
     zIdxNext = 0;
     emoteSelector = {
@@ -598,6 +601,10 @@ export class EmoteBarn {
     }
 
     addPing(ping: Emote, factionMode: boolean) {
+        if (!this.activePlayer) {
+            this.pendingPings.push({ ping, factionMode });
+            return;
+        }
         // Given the ping position, create an indicator on the map and make a sound
         if (this.activePlayer) {
             const pingData = PingDefs[ping.type];
@@ -608,7 +615,10 @@ export class EmoteBarn {
                     ping.playerId,
                     this.activePlayer.__id,
                     this.playerBarn,
+                    ping.restoredLife,
                 );
+                // made before we joined: just the map marker, no sound/indicator
+                if (ping.restoredLife !== undefined) return;
                 let indicator: Indicator | null = null;
                 let pingSound = pingData.sound!;
                 if (ping.type == "ping_airdrop") {
@@ -873,6 +883,11 @@ export class EmoteBarn {
 
         // Update local emote wheels
         this.activePlayer = player;
+        if (this.pendingPings.length) {
+            const pending = this.pendingPings;
+            this.pendingPings = [];
+            for (const { ping, factionMode } of pending) this.addPing(ping, factionMode);
+        }
         if ((localId != player.__id || !!player.m_netData.m_dead) && !this.disable) {
             this.m_free();
             this.disable = true;

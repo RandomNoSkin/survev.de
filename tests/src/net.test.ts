@@ -213,6 +213,15 @@ test("Update Msg", () => {
 
     inMsg.delObjIds = Array.from({ length: 300 }, () => util.randomInt(0, 500));
 
+    inMsg.emotes = [
+        { playerId: 12, type: "ping_danger", itemType: "", isPing: true, pos: v2.create(100, 200) },
+        // a ping re-sent to a late joiner, with its remaining map life
+        { playerId: 13, type: "ping_coming", itemType: "", isPing: true, pos: v2.create(300, 400), restoredLife: 123.4 },
+        { playerId: 14, type: "emote_happyface", itemType: "", isPing: false },
+    ];
+    inMsg.ack = 77;
+    inMsg.ackDelay = 23;
+
     // TODO: add more tests for UpdateMsg fields...
 
     stream.serializeMsg(net.MsgType.Update, inMsg);
@@ -254,4 +263,13 @@ test("Update Msg", () => {
     });
 
     expect(outMsg.delObjIds).toStrictEqual(inMsg.delObjIds);
+
+    expect(outMsg.emotes.map((e) => [e.playerId, e.type, e.isPing, e.restoredLife])).toStrictEqual([
+        [12, "ping_danger", true, undefined],
+        [13, "ping_coming", true, 123.4],
+        [14, "emote_happyface", false, undefined],
+    ]);
+    expect(outMsg.emotes[1].pos!.x).toBeCloseTo(300, 0);
+    expect(outMsg.ack).toBe(77);
+    expect(outMsg.ackDelay).toBe(23);
 });

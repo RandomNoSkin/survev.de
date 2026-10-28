@@ -365,7 +365,23 @@ export const dashboardHtml = `<!DOCTYPE html>
 
       #toast { left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); text-align: center; }
     }
-  </style>
+  
+.gc-watch { display: flex; gap: 6px; margin-top: 8px; }
+.gc-watch .btn { flex: 1; }
+.lobby-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.lobby-toolbar .muted { flex: 1; }
+.lobby-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.lobby-card { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.lobby-head { display: flex; align-items: baseline; gap: 8px; }
+.lobby-code { font-family: monospace; font-weight: 700; font-size: 14px; }
+.lobby-count { margin-left: auto; font-size: 12px; }
+.lobby-members { display: flex; flex-direction: column; gap: 2px; font-size: 12px; max-height: 180px; overflow-y: auto; }
+.lobby-member.ingame::before { content: "● "; color: #4caf50; }
+.lobby-specs { margin-top: 4px; font-size: 11px; }
+.lobby-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.lobby-actions .btn { flex: 1; }
+.gc-tag.live { color: #4caf50; }
+</style>
 </head>
 <body>
 
@@ -385,6 +401,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div class="nav-group" data-group="live">Live</div>
   <button class="tab-btn active" data-tab="overview"><span class="nav-icon">◉</span>Overview</button>
   <button class="tab-btn" data-tab="servers"><span class="nav-icon">▶</span>Live Games<span class="nav-count" id="nav-count-games"></span></button>
+  <button class="tab-btn" data-tab="lobbies"><span class="nav-icon">◫</span>Lobbies<span class="nav-count" id="nav-count-lobbies"></span></button>
 
   <div class="nav-group" data-group="moderation">Moderation</div>
   <button class="tab-btn" data-tab="sus"><span class="nav-icon">⚑</span>Sus Reports<span class="nav-count" id="nav-count-sus"></span></button>
@@ -703,6 +720,15 @@ export const dashboardHtml = `<!DOCTYPE html>
       </tr></thead>
       <tbody id="accounts-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
     </table>
+  </div>
+
+  <!-- ════════════════ LOBBIES (admin-only: every open private lobby) ════════════════ -->
+  <div id="tab-lobbies" class="tab-pane">
+    <div class="lobby-toolbar">
+      <span class="muted" id="lobbies-info">Loading…</span>
+      <button class="btn btn-gray btn-sm" onclick="loadLobbies()">↻ Refresh</button>
+    </div>
+    <div id="lobby-list"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ TAB 3: LIVE SERVERS ════════════════ -->
@@ -1249,6 +1275,9 @@ function switchTab(name) {
   } else if (name === 'apps') {
     closeSSE();
     loadApps();
+  } else if (name === 'lobbies') {
+    closeSSE();
+    loadLobbies();
   } else {
     closeSSE();
   }
@@ -3591,7 +3620,9 @@ function gameCardHtml(regionId, g) {
     + '<div class="gc-mode">' + esc(mode) + '</div>'
     + '<div class="gc-count">' + gamePlayers(g) + ' players alive</div>'
     + '<div class="gc-meta">' + tags + '</div>'
-    + '<div style="margin-top:8px;"><button class="btn btn-blue btn-sm" style="width:100%" title="Nobody in the game sees you: no join message, no spectator count, no entry at the end" onclick="event.stopPropagation();spectateGame(\\'' + esc(regionId) + '\\',\\'' + esc(g.id) + '\\')">👁 WATCH (INVISIBLE)</button></div>'
+    + '<div class="gc-watch">'
+    + (isAdmin ? '<button class="btn btn-gray btn-sm" title="Join as a normal spectator - players see you join" onclick="event.stopPropagation();spectateGame(\\'' + esc(regionId) + '\\',\\'' + esc(g.id) + '\\',true)">👁 WATCH</button>' : '')
+    + '<button class="btn btn-blue btn-sm" title="Nobody in the game sees you: no join message, no spectator count, no entry at the end" onclick="event.stopPropagation();spectateGame(\\'' + esc(regionId) + '\\',\\'' + esc(g.id) + '\\')">👻 INVISIBLE</button></div>'
     + killBtn
     + '</div>';
 }
@@ -3709,9 +3740,9 @@ function renderServers() {
 }
 
 /** Opens the game client in a new tab and auto-spectates the given game. */
-async function spectateGame(region, gameId) {
+async function spectateGame(region, gameId, visible) {
   try {
-    const data = await get('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/spectate-token');
+    const data = await get('/api/game/' + encodeURIComponent(region) + '/' + encodeURIComponent(gameId) + '/spectate-token' + (visible ? '?visible=1' : ''));
     const matchData = data?.res?.[0];
     if (!matchData) { toast('Could not get spectate token', true); return; }
     // CLIENT_URL may be a different origin (e.g. dev: dashboard on :8000, client on :3000),
@@ -3720,6 +3751,90 @@ async function spectateGame(region, gameId) {
     window.open(url, '_blank');
     toast('Opening spectator view…');
   } catch (e) { toast('Spectate failed', true); }
+}
+
+// ── LOBBIES ──────────────────────────────────────────────────────────────────
+let lobbiesTimer = null;
+
+/** Loads every open private lobby; refreshes itself while the tab stays open. */
+async function loadLobbies() {
+  clearTimeout(lobbiesTimer);
+  try {
+    const data = await get('/api/lobbies');
+    renderLobbies(data.lobbies || []);
+  } catch (e) {
+    document.getElementById('lobby-list').innerHTML = '<div class="empty">Could not load the lobbies.</div>';
+  }
+  if (document.getElementById('tab-lobbies').classList.contains('active')) {
+    lobbiesTimer = setTimeout(loadLobbies, 5000);
+  }
+}
+
+function lobbyAge(ms) {
+  const m = Math.floor((Date.now() - ms) / 60000);
+  return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+}
+
+function setLobbyCount(n) {
+  const count = document.getElementById('nav-count-lobbies');
+  if (count) count.textContent = n ? n : '';
+}
+
+/** Keeps the nav count current while another tab is open (the Lobbies tab polls itself). */
+async function refreshLobbyCount() {
+  if (document.getElementById('tab-lobbies').classList.contains('active')) return;
+  try {
+    const data = await get('/api/lobbies');
+    setLobbyCount((data.lobbies || []).length);
+  } catch { /* next round */ }
+}
+
+function renderLobbies(lobbies) {
+  setLobbyCount(lobbies.length);
+  const players = lobbies.reduce((a, l) => a + l.members.length, 0);
+  document.getElementById('lobbies-info').textContent = lobbies.length + ' open ' + (lobbies.length === 1 ? 'lobby' : 'lobbies') + ' · ' + players + ' members';
+  document.getElementById('lobby-list').innerHTML = lobbies.length
+    ? '<div class="lobby-cards">' + lobbies.map(lobbyCardHtml).join('') + '</div>'
+    : '<div class="empty">No open lobbies.</div>';
+}
+
+function lobbyCardHtml(l) {
+  const mode = TEAM_MODE_LABEL[l.teamMode] || ('Mode ' + l.teamMode);
+  const inTeams = l.members.filter(m => !m.spectator);
+  const specs = l.members.filter(m => m.spectator);
+  const tags = [
+    '<span class="gc-tag">' + esc(l.region) + '</span>',
+    '<span class="gc-tag">' + esc(l.mapName || '?') + '</span>',
+    '<span class="gc-tag">⏱ ' + lobbyAge(l.createdAt) + '</span>',
+    l.inGame ? '<span class="gc-tag live">● In game</span>' : '<span class="gc-tag">In lobby</span>',
+    l.advancedSettings ? '<span class="gc-tag">Advanced</span>' : '',
+    l.publicSpectating ? '' : '<span class="gc-tag hidden">Hidden from spectators</span>',
+    l.stealthWatchers ? '<span class="gc-tag">👻 ' + l.stealthWatchers + ' invisible</span>' : '',
+  ].join('');
+  const member = (m) => '<div class="lobby-member' + (m.inGame ? ' ingame' : '') + '">'
+    + (m.isLeader ? '👑 ' : '') + esc(m.name)
+    + (m.teamId >= 0 ? ' <span class="muted">T' + (m.teamId + 1) + (l.teamScores[m.teamId] ? ' · ' + l.teamScores[m.teamId] + 'W' : '') + '</span>' : '')
+    + (m.afk ? ' <span class="muted">afk</span>' : '')
+    + '</div>';
+  const code = esc(l.code);
+  return '<div class="lobby-card">'
+    + '<div class="lobby-head"><span class="lobby-code">' + code + '</span><span class="gc-mode">' + esc(mode) + '</span>'
+    + '<span class="muted lobby-count">' + inTeams.length + '/' + l.maxPlayers + (specs.length ? ' · ' + specs.length + ' spec' : '') + '</span></div>'
+    + '<div class="gc-meta">' + tags + '</div>'
+    + '<div class="lobby-members">' + inTeams.map(member).join('')
+    + (specs.length ? '<div class="lobby-specs muted">Spectators:</div>' + specs.map(member).join('') : '') + '</div>'
+    + '<div class="lobby-actions">'
+    + '<button class="btn btn-gray btn-sm" data-code="' + code + '" data-how="" onclick="joinLobby(this)" title="Join as a normal member">➜ JOIN</button>'
+    + '<button class="btn btn-gray btn-sm" data-code="' + code + '" data-how="s" onclick="joinLobby(this)" title="Join as a visible spectator">👁 SPECTATE</button>'
+    + '<button class="btn btn-blue btn-sm" data-code="' + code + '" data-how="g" onclick="joinLobby(this)" title="Nobody sees you in the lobby; you watch its matches as an invisible spectator">👻 INVISIBLE</button>'
+    + '</div></div>';
+}
+
+/** Opens the game client with the lobby's join link: normal, spectator (-s) or invisible (-g). */
+function joinLobby(btn) {
+  const how = btn.dataset.how;
+  window.open(CLIENT_URL + '/#' + btn.dataset.code + (how ? '-' + how : ''), '_blank');
+  toast(how === 'g' ? 'Joining invisibly…' : 'Opening lobby…');
 }
 
 /** Force-stops a running game immediately (private games that are empty/stuck). */
@@ -4654,6 +4769,11 @@ const MODERATOR_TABS = ['overview', 'servers', 'replays', 'xp', 'games', 'sus'];
     currentAdminSlug = me.slug;
     isAdmin     = !!me.admin;
     isModerator = !!me.moderator && !me.admin;
+    // lobby count in the nav (admins only - moderators have no Lobbies tab)
+    if (isAdmin) {
+      refreshLobbyCount();
+      setInterval(refreshLobbyCount, 10000);
+    }
     document.getElementById('topbar-user').textContent =
       'Logged in as ' + (me.username || me.slug) + (isModerator ? ' · moderator' : '');
   } catch { /* already redirected by server */ }

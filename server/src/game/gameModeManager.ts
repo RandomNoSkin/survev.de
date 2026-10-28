@@ -297,7 +297,7 @@ export class GameModeManager {
             case GameMode.Faction:
                 const redLeader = this.game.playerBarn.teams[TeamColor.Red - 1].leader;
                 const blueLeader = this.game.playerBarn.teams[TeamColor.Blue - 1].leader;
-                const highestKiller = this.game.playerBarn.players.reduce(
+                const highestKiller = this.game.playerBarn.players.filter((p) => !p.stealth).reduce(
                     (highestKiller, p) => {
                         if (highestKiller.kills === p.kills) {
                             return highestKiller.damageDealt > p.damageDealt

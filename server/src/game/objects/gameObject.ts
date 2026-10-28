@@ -31,6 +31,9 @@ export type GameObject =
 
 export interface DamageParams {
     amount?: number;
+    /** Set on bullet hits: the fired shot (see BulletParams.shotId) - accuracy counts
+     *  one hit per shot, however many players its pierce/reflect/splinter bullets hit. */
+    shotId?: number;
     damageType: DamageType;
     dir: Vec2;
     gameSourceType?: string;
