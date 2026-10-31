@@ -1322,7 +1322,6 @@ export class Game {
                         ? { gameId: this.id, mapId, entries: this.duels }
                         : undefined,
                     antiCheat: this.antiCheatFlags(),
-                    isPrivate: this.isPrivate,
                 },
             });
         } catch (err) {

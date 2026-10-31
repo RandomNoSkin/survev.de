@@ -59,8 +59,9 @@ export function weekKey(t = Date.now()): string {
 
 /**
  * Adds a finished game to the weekly stats of every player in it who is in a clan.
- * Only public Comp games with a full lobby of humans count - private lobbies or a
- * half-empty server would let a clan farm stats. (Games with bots are never saved.)
+ * Only Comp games with a full lobby of humans count - a half-empty server would let a
+ * clan farm stats. Private lobbies count like for XP: with "Advanced Settings" the game
+ * is saved as MapId.Custom, which isn't a Comp map. (Games with bots are never saved.)
  */
 export async function recordClanStats(
     rows: {
@@ -72,9 +73,8 @@ export async function recordClanStats(
         kills: number;
         userBanned?: boolean | null;
     }[],
-    isPrivate: boolean,
 ): Promise<void> {
-    if (isPrivate || rows.length < CLAN_MIN_LOBBY_PLAYERS) return;
+    if (rows.length < CLAN_MIN_LOBBY_PLAYERS) return;
     const counted = rows.filter((r) => r.userId && !r.userBanned && COMP_MAPS.has(r.mapId));
     if (!counted.length) return;
     const members = await db
