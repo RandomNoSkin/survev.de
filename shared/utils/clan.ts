@@ -350,6 +350,19 @@ export function clanTagColor(index: number): string {
 /** Tags that look like staff / premium prefixes can't be used. */
 export const CLAN_RESERVED_TAGS = new Set(["OWNER", "ADMIN", "MOD", "PREM", "BOT", "STAFF", "DEV"]);
 
+/** Letter pairs no clan name or tag may contain (clans only - the chat filter is separate):
+ *  they keep slur-adjacent names like "Ninja" / "Nigg..." / "NGR" out. Checked case-insensitive, with
+ *  look-alike digits / symbols read as letters and spaces / dots / dashes ignored. */
+export const CLAN_BLOCKED_PARTS = ["nin", "nig", "ngr"];
+
+export function clanTextBlocked(text: string): boolean {
+    const s = text
+        .toLowerCase()
+        .replace(/[1!|]/g, "i")
+        .replace(/[^a-z]/g, "");
+    return CLAN_BLOCKED_PARTS.some((p) => s.includes(p));
+}
+
 /**
  * Clan banners: patterns drawn behind the clan's header (clan page, clan popup) and as a
  * strip behind its row in the league / clan list. They take the clan's tag colour. The

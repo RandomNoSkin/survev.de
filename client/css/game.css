@@ -6711,3 +6711,6 @@ span.ui-stats-header-value {
 #ui-game.team-overview-open #hud-wrap-pingCounter {
   visibility: hidden !important;
 }
+
+/* a spectator writing in the ALL chat */
+.chat-spec-tag { color: #c3a6ff; }

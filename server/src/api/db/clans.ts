@@ -9,6 +9,7 @@ import {
     CLAN_BANNERS,
     CLAN_TAG_COLORS,
     clanLevel,
+    clanTextBlocked,
     type ClanActionResponse,
     type ClanDetails,
     type ClanEditRequest,
@@ -86,7 +87,9 @@ async function checkFields(tx: Tx, userId: string, req: ClanEditRequest, clanId?
         if (level < color.level) throw new ClanError("color_locked");
         if (level < bannerDef.level) throw new ClanError("banner_locked");
     }
-    if (checkForBadWords(name) || checkForBadWords(tag)) throw new ClanError("bad_words");
+    if (checkForBadWords(name) || checkForBadWords(tag) || clanTextBlocked(name) || clanTextBlocked(tag)) {
+        throw new ClanError("bad_words");
+    }
     if (!(await iconAllowed(tx, userId, req.icon))) throw new ClanError("bad_icon");
     const clash = await tx
         .select({ id: clansTable.id, name: clansTable.name, tag: clansTable.tag })

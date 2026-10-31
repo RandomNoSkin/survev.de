@@ -146,14 +146,23 @@ export class Chat{
                 if(this.player.spectator){
                     msg1.string = msg.string;
                     msg1.player = this.player.name;
-                    msg1.chatType = 2;
                     msg1.type = net.KillFeedMsgType.ChatMsg;
 
                     //THIS ARE ONLY PEOPLE JOINED AS SPECS (invisible staff included - chatting is
-                    //their choice to show up); everyone sees it, tagged [SPEC].
-                    //Already dead players can still type both chats
-                    this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
-                    this.logChat(originalMsg, false, false, undefined, 2);
+                    //their choice to show up). Already dead players keep the normal chats.
+                    // 0 = ALL: everyone sees it, tagged as a spectator (chatType 3)
+                    // anything else = SPEC: only the other spectators (chatType 2)
+                    if(chatType === 0){
+                        msg1.chatType = 3;
+                        this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
+                        this.logChat(originalMsg, false, false, undefined, 3);
+                    }else{
+                        msg1.chatType = 2;
+                        for(const p of this.game.playerBarn.players){
+                            if(p.spectator) p.sendMsg(net.MsgType.KillFeed, msg1);
+                        }
+                        this.logChat(originalMsg, false, false, undefined, 2);
+                    }
                     this.player.chatCooldown = 3;
                     return;
                 }

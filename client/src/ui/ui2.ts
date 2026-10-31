@@ -1953,6 +1953,10 @@ export class UiManager2 {
                 channel = "SPEC";
                 break;
             }
+            case(3):{
+                // a spectator writing in ALL
+                return `[ALL] <span class="chat-spec-tag">[SPEC]</span> ${name}: ${body}`;
+            }
         }
         if(channel !== "") return `[${channel}]  ${name}: ${body}`;
         return `${name}: ${body}`;
