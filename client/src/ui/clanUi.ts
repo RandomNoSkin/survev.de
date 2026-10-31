@@ -822,7 +822,7 @@ export class ClanUi {
         this.render();
     }
 
-    // ── weekly stats (public Comp games) ───────────────────────────────────
+    // ── weekly stats (full Comp games) ───────────────────────────────────
 
     /** "Mon 26 Oct – Sun 1 Nov · resets in 1d 4h" */
     private weekLabel(w: ClanWeek): string {
@@ -850,7 +850,7 @@ export class ClanUi {
                 $("<span/>", { class: "clan-head-stat-value", text: value }),
                 $("<span/>", { class: "clan-head-stat-label", text: label }),
             );
-        const strip = $('<div class="clan-head-stats" title="This week, full public Comp lobbies"></div>').append(
+        const strip = $('<div class="clan-head-stats" title="This week, full Comp lobbies"></div>').append(
             tile(`${(s.rating * 100).toFixed(1)}%`, "rated win rate", "clan-head-stat-main").attr(
                 "title",
                 `Decides the weekly rewards: your win rate, smoothed with ${CLAN_RATING_PRIOR_GAMES} average games so a few lucky games can't decide the league.`,
@@ -1000,7 +1000,7 @@ export class ClanUi {
             wrap.append(ClanUi.goalBox(res.totals));
             wrap.append(this.memberStatsTable(res));
             wrap.append(
-                $(`<div class="clan-muted clan-stats-note">Only full public Comp lobbies count (${CLAN_MIN_LOBBY_PLAYERS} players), played while in the clan. Games where the clan is on more than one team don't count for it. Games from before joining count too, if the player was in no clan this week - after switching clans, only games from the join on count for the new one. Everything resets every Monday at 00:00.</div>`),
+                $(`<div class="clan-muted clan-stats-note">Only full Comp lobbies count (${CLAN_MIN_LOBBY_PLAYERS} players, private lobbies too unless Advanced Settings are on), played while in the clan. Games where the clan is on more than one team don't count for it. Games from before joining count too, if the player was in no clan this week - after switching clans, only games from the join on count for the new one. Everything resets every Monday at 00:00.</div>`),
                 ClanUi.teamBonusNote(),
             );
         });
@@ -1136,7 +1136,7 @@ export class ClanUi {
             const details = $('<div class="clan-rewards-details"></div>').append(
                 $("<div/>", {
                     class: "clan-muted",
-                    text: `Every Sunday night the top 3 clans by rated win rate get a key pool, which the owner shares out among the members. The rated win rate is your win rate with ${CLAN_RATING_PRIOR_GAMES} average games added, so a few lucky games can't win it - consistent good play does, whatever the clan size. Only full public Comp lobbies count - not games where your clan is on more than one team - and a clan needs ${CLAN_REWARD_MIN_ACTIVE} players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games to be ranked.`,
+                    text: `Every Sunday night the top 3 clans by rated win rate get a key pool, which the owner shares out among the members. The rated win rate is your win rate with ${CLAN_RATING_PRIOR_GAMES} average games added, so a few lucky games can't win it - consistent good play does, whatever the clan size. Only full Comp lobbies count - not games where your clan is on more than one team - and a clan needs ${CLAN_REWARD_MIN_ACTIVE} players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games to be ranked.`,
                 }),
                 ClanUi.teamBonusNote(),
                 $("<div/>", {

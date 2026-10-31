@@ -8,7 +8,8 @@ import { util } from "../../../shared/utils/util";
  *
  *  - touch_desktop: a desktop client steering with the touch joystick (auto-dodge /
  *    auto-melee scripts do), worst when it flips between keys and touch within ms
- *  - spinbot: the aim turning round and round, steadily, for seconds
+ *  - spinbot: the aim turning round and round at a machine-steady speed, for a long
+ *    time - players spinning for fun turn unevenly (and not for long)
  *  - snap_aim: the aim jumping away right as a shot starts and back to where it was
  *    a moment later (silent aim - the "trezor client" one holds the target until the
  *    shot's input is acked, then jumps back) - a human flick stays on the target
@@ -29,7 +30,8 @@ export const KNOWN_CHEAT_NAMES = ["trezor client"];
 /** Score at which a signal flags the player (once per game). */
 export const CHEAT_THRESHOLDS: Record<CheatSignal, number> = {
     touch_desktop: 60,
-    spinbot: 30,
+    /** 10 per steady 3 s window: ~18 s of bot-like spinning */
+    spinbot: 60,
     snap_aim: 25,
     cheat_name: 1,
     /** seconds of tracking hidden, moving enemies */
@@ -47,6 +49,11 @@ const SPIN_WINDOW_MS = 3000;
 /** sustained turning in one direction within the window, in full turns (~0.8/s) */
 const SPIN_TURNS = 2.5;
 const SPIN_SCORE = 10;
+/** the turning per input may vary at most this much (coefficient of variation): a
+ *  script adds the same angle every frame, a hand on a mouse / stick doesn't */
+const SPIN_MAX_CV = 0.2;
+/** share of the inputs in the window that must turn the same way */
+const SPIN_MIN_SAME_DIR = 0.95;
 
 /** the aim jumps at least this far as the shot starts... */
 const SNAP_OUT_RAD = (60 * Math.PI) / 180;
@@ -269,18 +276,30 @@ export class CheatMonitor {
     }
 
     private checkSpin(now: number, d: number) {
+        // spin scripts are desktop cheats; a thumb circling the aim stick isn't one
+        if (this.source.isMobile) return;
         this.turns.push({ at: now, d });
         while (this.turns.length && now - this.turns[0].at > SPIN_WINDOW_MS) this.turns.shift();
         if (now < this.spinCooldownUntil) return;
         // only steady turning counts: the net rotation, not back-and-forth wiggling
         let net = 0;
         for (const t of this.turns) net += t.d;
-        if (Math.abs(net) >= SPIN_TURNS * 2 * Math.PI) {
+        if (Math.abs(net) >= SPIN_TURNS * 2 * Math.PI && this.spinIsSteady(Math.sign(net))) {
             this.add("spinbot", SPIN_SCORE);
             // one score per window, not per input
             this.spinCooldownUntil = now + SPIN_WINDOW_MS;
             this.turns = [];
         }
+    }
+
+    /** The turning in the window is machine-even: (almost) every input turns the same way,
+     *  by (almost) the same angle. */
+    private spinIsSteady(dir: number) {
+        const steps = this.turns.map((t) => t.d * dir);
+        if (steps.filter((s) => s > 0).length < steps.length * SPIN_MIN_SAME_DIR) return false;
+        const mean = steps.reduce((a, b) => a + b, 0) / steps.length;
+        const sd = Math.sqrt(steps.reduce((a, s) => a + (s - mean) ** 2, 0) / steps.length);
+        return sd / mean <= SPIN_MAX_CV;
     }
 
     private add(signal: CheatSignal, score: number) {

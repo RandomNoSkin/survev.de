@@ -29,8 +29,8 @@ function rng(seed: number) {
 describe("flags", () => {
     test("a spinbot", () => {
         const mon = new CheatMonitor({ isMobile: false, name: "Player" });
-        // ~2 turns a second, inputs at 60/s, for 10 seconds
-        feed(mon, 600, 16, (i) => input(i * 0.21));
+        // ~2 turns a second, inputs at 60/s, for 30 seconds
+        feed(mon, 1900, 16, (i) => input(i * 0.21));
         expect(mon.flagged).toContain("spinbot");
         expect(mon.report()).toMatch(/spinbot/);
     });
@@ -82,12 +82,35 @@ describe("flags the trezor client", () => {
 
     test("a slow spinbot (1 turn a second)", () => {
         const mon = new CheatMonitor({ isMobile: false, name: "Player" });
-        feed(mon, 900, 16, (i) => input((i * 16 * 2 * Math.PI) / 1000));
+        feed(mon, 1900, 16, (i) => input((i * 16 * 2 * Math.PI) / 1000));
         expect(mon.flagged).toContain("spinbot");
     });
 });
 
 describe("doesn't flag", () => {
+    test("a player spinning around with the mouse for fun (uneven speed)", () => {
+        const mon = new CheatMonitor({ isMobile: false, name: "Player" });
+        const r = rng(7);
+        let a = 0;
+        // ~2 turns a second for a whole minute, but by hand: each frame turns 0-2x as far
+        feed(mon, 3750, 16, () => input((a += 0.21 * 2 * r())));
+        expect(mon.flagged).not.toContain("spinbot");
+    });
+
+    test("a few seconds of perfectly even spinning", () => {
+        const mon = new CheatMonitor({ isMobile: false, name: "Player" });
+        // 10 s, then normal aiming
+        feed(mon, 625, 16, (i) => input(i * 0.21));
+        feed(mon, 2000, 16, () => input(0.3), 10_000);
+        expect(mon.flagged).not.toContain("spinbot");
+    });
+
+    test("a mobile player circling the aim stick", () => {
+        const mon = new CheatMonitor({ isMobile: true, name: "Player" });
+        feed(mon, 1900, 16, (i) => input(i * 0.21));
+        expect(mon.flagged).not.toContain("spinbot");
+    });
+
     test("flicking to an enemy, shooting, and now and then flicking back", () => {
         const mon = new CheatMonitor({ isMobile: false, name: "Player" });
         let t = 0;
@@ -140,7 +163,7 @@ test("A flagged player ends up in the save_game anti-cheat list, a clean one doe
     const clean = game.playerBarn.addTestPlayer({});
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
-        for (let i = 0; i < 600; i++) {
+        for (let i = 0; i < 1900; i++) {
             vi.advanceTimersByTime(16);
             cheater.handleInput(input(i * 0.21));
             clean.handleInput(input(0.1 + (i % 7) * 0.01));

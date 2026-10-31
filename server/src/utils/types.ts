@@ -69,9 +69,6 @@ export interface SaveGameBody {
             userId?: string;
         }[];
     };
-    /** A private lobby game - doesn't count for the weekly clan stats. Optional for
-     *  backward-compat (older servers / locally-saved games count as public). */
-    isPrivate?: boolean;
     /** Clean 1v1 kills between two accounts (local mode) - profile "1v1" stats. */
     duels?: {
         gameId: string;

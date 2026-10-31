@@ -363,8 +363,8 @@ export const PrivateRouter = new Hono<Context>()
             })),
         );
         await logPlayerIPs(matchData);
-        // weekly clan stats (public Comp / Local games only)
-        await recordClanStats(matchData, !!data.isPrivate).catch((err) =>
+        // weekly clan stats (full Comp lobbies, private ones without Advanced Settings too)
+        await recordClanStats(matchData).catch((err) =>
             server.logger.error("save_game: failed to record clan stats", err),
         );
         // clan progress: the members' match XP
