@@ -1888,9 +1888,10 @@ export class UiManager2 {
     getJoinedText(
         name: string,
         roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        clan: { clanTag?: string; clanColor?: number } | null = null,
     ){
         const joinTxt = this.localization.translate("game-joined");
-        return `${helpers.formatUsername(name, roleTag)} ${joinTxt}`;
+        return `${helpers.formatUsername(name, roleTag, clan)} ${joinTxt}`;
     }
 
     getEnemieText(group1: string[]){
@@ -1932,9 +1933,10 @@ export class UiManager2 {
         text: string,
         chatType?: number,
         roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        clan: { clanTag?: string; clanColor?: number } | null = null,
     ){
         // the kill feed renders via innerHTML, so both name and text must be escaped
-        const name = helpers.formatUsername(player, roleTag);
+        const name = helpers.formatUsername(player, roleTag, clan);
         const body = helpers.htmlEscape(text);
 
         let channel = "";

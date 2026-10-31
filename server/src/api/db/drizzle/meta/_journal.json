@@ -302,6 +302,13 @@
       "when": 1793223798602,
       "tag": "0040_lush_marauders",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793393060022,
+      "tag": "0041_wakeful_shadow_king",
+      "breakpoints": true
     }
   ]
 }

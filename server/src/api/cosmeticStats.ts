@@ -1,4 +1,4 @@
-import { count, eq } from "drizzle-orm";
+import { and, count, eq, gte, inArray } from "drizzle-orm";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { UnlockDefs } from "../../../shared/defs/gameObjects/unlockDefs";
 import {
@@ -9,7 +9,7 @@ import {
 import { Config } from "../config";
 import { server } from "./apiServer";
 import { db } from "./db";
-import { itemsTable, usersTable } from "./db/schema";
+import { itemsTable, matchDataTable, usersTable } from "./db/schema";
 
 /** Cosmetic def types whose rarity is driven by ownership. */
 const COSMETIC_TYPES = new Set([
@@ -27,6 +27,9 @@ const COSMETIC_TYPES = new Set([
  * so we leave the stats empty and everything falls back to its static def rarity.
  */
 const MIN_ACCOUNTS = 2;
+
+/** A player counts as active (and into the rarity stats) with a match in this window. */
+const ACTIVE_DAYS = 30;
 
 // Ownership-based rarity is a slow-moving daily statistic, so it is recomputed once at
 // boot and once per day by the midnight cron in index.ts — no background loop, no
@@ -61,10 +64,19 @@ export async function computeCosmeticStats(): Promise<void> {
         // Admin accounts are excluded everywhere below so the market stays fair: admins
         // often own every cosmetic (self-grants), which would inflate copy counts and
         // make genuinely rare skins look common. Rarity is measured over real players only.
+        // Only active players count, too: most accounts are abandoned and would push every
+        // item towards Mythic. Active = played a match in the last ACTIVE_DAYS days, and
+        // only their copies count (what's actually in circulation).
+        const cutoff = new Date(Date.now() - ACTIVE_DAYS * 24 * 60 * 60 * 1000);
+        const activeUserIds = db
+            .selectDistinct({ id: matchDataTable.userId })
+            .from(matchDataTable)
+            .where(gte(matchDataTable.createdAt, cutoff));
+        const isCounted = and(eq(usersTable.admin, false), inArray(usersTable.id, activeUserIds));
         const [{ total }] = await db
             .select({ total: count() })
             .from(usersTable)
-            .where(eq(usersTable.admin, false));
+            .where(isCounted);
         const totalAccounts = Number(total) || 0;
 
         if (totalAccounts < MIN_ACCOUNTS) {
@@ -80,7 +92,7 @@ export async function computeCosmeticStats(): Promise<void> {
             .select({ type: itemsTable.type, copies: count() })
             .from(itemsTable)
             .innerJoin(usersTable, eq(usersTable.id, itemsTable.userId))
-            .where(eq(usersTable.admin, false))
+            .where(isCounted)
             .groupBy(itemsTable.type);
 
         const copiesByType = new Map<string, number>();

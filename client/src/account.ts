@@ -1,3 +1,4 @@
+import type { TagDisplay } from "../../shared/types/user";
 import type {
     AccountSettings,
     AuctionListResponse,
@@ -5,6 +6,8 @@ import type {
     BuyListingResponse,
     BuyPremiumResponse,
     BuyShopResponse,
+    OpenCrateResponse,
+    DumpItemResponse,
     CancelListingResponse,
     CreateAuctionResponse,
     EndAuctionResponse,
@@ -39,6 +42,14 @@ import type {
     UsernameRequest,
     UsernameResponse,
     UserSearchResponse,
+    BuyOrder,
+    BuyOrderActionResponse,
+    BuyOrderListResponse,
+    CreateBuyOrderResponse,
+    TradeEventsResponse,
+    TradeHistoryResponse,
+    InviteResponse,
+    PresenceResponse,
 } from "../../shared/types/user";
 import type { OAuthGrantEntry } from "../../shared/types/oauth";
 import type { ItemStatus } from "../../shared/utils/loadout";
@@ -128,6 +139,7 @@ export class Account {
         showAdminPrefix: true,
         showModPrefix: true,
         showPremiumPrefix: true,
+        tagDisplay: "both" as TagDisplay,
     };
     quests: Quest[] = [];
     questPriv = "";
@@ -551,6 +563,24 @@ export class Account {
         });
     }
 
+    /** Opens a crate with a key. No profile refresh here - the crate UI reloads it once
+     *  the reveal animation is done, so the item doesn't show up before it's revealed. */
+    openCrate(crate: string, key: string, cb: (err: unknown, res?: OpenCrateResponse) => void) {
+        this.ajaxRequest("/api/user/crate/open", { crate, key }, (err, res: OpenCrateResponse) => {
+            if (err) errorLogManager.storeGeneric("account", "open_crate_error");
+            cb(err, res);
+        });
+    }
+
+    /** Destroys one item instance for a flat amount of Golden Fries. */
+    dumpItem(itemId: number, cb: (err: unknown, res?: DumpItemResponse) => void) {
+        this.ajaxRequest("/api/user/item/dump", { itemId }, (err, res: DumpItemResponse) => {
+            if (err) errorLogManager.storeGeneric("account", "dump_item_error");
+            else if (res.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
     buyPremium(cb: (err: unknown, res?: BuyPremiumResponse) => void) {
         this.ajaxRequest("/api/user/premium/buy", {}, (err, res: BuyPremiumResponse) => {
             if (err) {
@@ -762,6 +792,66 @@ export class Account {
     //
     // OFFERS (buy-offers on another player's item)
     //
+
+    //
+    // BUY ORDERS + TRADE HISTORY / NOTIFICATIONS
+    //
+
+    /** Every open order the caller placed + open orders for items they own. */
+    getBuyOrders(cb: (err: unknown, res?: BuyOrderListResponse) => void) {
+        this.ajaxRequest("/api/user/order/list", {}, cb);
+    }
+
+    /** The best open order per item type ("Wanted"). */
+    getTopBuyOrders(cb: (err: unknown, res?: { success: boolean; orders: BuyOrder[] }) => void) {
+        this.ajaxRequest("/api/user/order/top", {}, cb);
+    }
+
+    /** Places a buy order; the fries (offer + fee) are taken right away. */
+    createBuyOrder(type: string, amount: number, cb: (err: unknown, res?: CreateBuyOrderResponse) => void) {
+        this.ajaxRequest("/api/user/order/create", { type, amount }, (err, res: CreateBuyOrderResponse) => {
+            if (!err && res?.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
+    cancelBuyOrder(orderId: number, cb: (err: unknown, res?: BuyOrderActionResponse) => void) {
+        this.ajaxRequest("/api/user/order/cancel", { orderId }, (err, res: BuyOrderActionResponse) => {
+            if (!err && res?.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
+    /** Sells owned copy `itemId` to buy order `orderId`. */
+    fillBuyOrder(orderId: number, itemId: number, cb: (err: unknown, res?: BuyOrderActionResponse) => void) {
+        this.ajaxRequest("/api/user/order/fill", { orderId, itemId }, (err, res: BuyOrderActionResponse) => {
+            if (!err && res?.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
+    /** Recent sales (of `type`, or of everything) + price stats of `type`. */
+    getTradeHistory(type: string | undefined, cb: (err: unknown, res?: TradeHistoryResponse) => void) {
+        this.ajaxRequest("/api/user/trade/history", type ? { type } : {}, cb);
+    }
+
+    getTradeEvents(cb: (err: unknown, res?: TradeEventsResponse) => void) {
+        this.ajaxRequest("/api/user/trade/events", {}, cb);
+    }
+
+    markTradeEventsSeen(ids: number[]) {
+        if (ids.length) this.ajaxRequest("/api/user/trade/events/seen", { ids }, () => {});
+    }
+
+    /** Heartbeat for the online status; the reply carries pending team/lobby invites. */
+    sendPresence(cb: (err: unknown, res?: PresenceResponse) => void) {
+        this.ajaxRequest("/api/user/presence", {}, cb);
+    }
+
+    /** Invites an online friend to the caller's team (kind "team") or private lobby. */
+    inviteFriend(slug: string, kind: "team" | "lobby", code: string, cb: (err: unknown, res?: InviteResponse) => void) {
+        this.ajaxRequest("/api/user/friends/invite", { slug, kind, code }, cb);
+    }
 
     getOffers(cb: (err: unknown, res?: OfferListResponse) => void) {
         this.ajaxRequest("/api/user/offer/list", {}, (err, res) => {

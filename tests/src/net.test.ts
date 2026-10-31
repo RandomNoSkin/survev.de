@@ -222,6 +222,12 @@ test("Update Msg", () => {
     inMsg.ack = 77;
     inMsg.ackDelay = 23;
 
+    // player infos, incl. the clan tag shown before the name
+    inMsg.playerInfos = [
+        { playerId: 7, teamId: 1, groupId: 2, name: "Alice", roleTag: "mod", clanTag: "FRY", clanColor: 3, loadout: { heal: "heal_basic", boost: "boost_basic", death_effect: "death_basic" } },
+        { playerId: 8, teamId: 1, groupId: 2, name: "Bob", roleTag: null, clanTag: "", clanColor: 0, loadout: { heal: "heal_basic", boost: "boost_basic", death_effect: "death_basic" } },
+    ] as typeof inMsg.playerInfos;
+
     // TODO: add more tests for UpdateMsg fields...
 
     stream.serializeMsg(net.MsgType.Update, inMsg);
@@ -235,6 +241,11 @@ test("Update Msg", () => {
             return ObjectType.Invalid;
         },
     });
+
+    expect(outMsg.playerInfos.map((p) => [p.name, p.roleTag, p.clanTag, p.clanColor])).toStrictEqual([
+        ["Alice", "mod", "FRY", 3],
+        ["Bob", null, "", 0],
+    ]);
 
     expect(outMsg.activePlayerData).toStrictEqual({
         ...inMsg.activePlayerData,

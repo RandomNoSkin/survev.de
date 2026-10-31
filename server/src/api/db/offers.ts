@@ -23,6 +23,7 @@ import {
     offersTable,
     usersTable,
 } from "./schema";
+import { addTradeEvent } from "./tradeEvents";
 
 class OfferError extends Error {
     constructor(public code: string) {
@@ -135,6 +136,7 @@ export async function makeOffer(
                 toSlug: to?.slug ?? "",
                 amount,
             });
+            await addTradeEvent(tx, item.ownerId, "offer_received", item.type, amount, from?.slug ?? null);
         });
         return { success: true };
     } catch (err) {
@@ -303,6 +305,14 @@ export async function acceptOffer(
                     balanceAfter: toBal?.balance ?? 0,
                 },
             ]);
+            // the other side hears about it: the bidder when the owner took it, the
+            // owner when the bidder took their counter
+            const [typeRow] = await tx.select({ type: offersTable.type }).from(offersTable).where(eq(offersTable.id, offerId));
+            if (offer.status === "pending") {
+                await addTradeEvent(tx, offer.fromUserId, "offer_accepted", typeRow?.type ?? "", price, offer.toSlug);
+            } else {
+                await addTradeEvent(tx, offer.toUserId, "offer_accepted", typeRow?.type ?? "", price, offer.fromSlug);
+            }
 
             return fromBal.balance;
         });
@@ -342,7 +352,20 @@ export async function declineOffer(
                 )!,
             ),
         )
-        .returning({ id: offersTable.id });
+        .returning({
+            id: offersTable.id,
+            type: offersTable.type,
+            amount: offersTable.amount,
+            fromUserId: offersTable.fromUserId,
+            toUserId: offersTable.toUserId,
+            fromSlug: offersTable.fromSlug,
+            toSlug: offersTable.toSlug,
+        });
+    if (row) {
+        // the one who didn't decline hears about it
+        const toBidder = row.toUserId === userId;
+        await addTradeEvent(db, toBidder ? row.fromUserId : row.toUserId, "offer_declined", row.type, row.amount, toBidder ? row.toSlug : row.fromSlug);
+    }
     return row ? { success: true } : { success: false, error: "not_found" };
 }
 
@@ -362,7 +385,8 @@ export async function counterOffer(
                 eq(offersTable.status, "pending"),
             ),
         )
-        .returning({ id: offersTable.id });
+        .returning({ id: offersTable.id, type: offersTable.type, fromUserId: offersTable.fromUserId, toSlug: offersTable.toSlug });
+    if (row) await addTradeEvent(db, row.fromUserId, "offer_countered", row.type, counterAmount, row.toSlug);
     return row ? { success: true } : { success: false, error: "not_found" };
 }
 

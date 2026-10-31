@@ -211,6 +211,10 @@ export interface PlayerInfo {
      *  server-resolved priority (ADMIN > MOD > PREM), see resolveRoleTag on the server.
      *  [BOT] is not an account role and is set directly on AI players. */
     roleTag: DisplayRoleTag;
+    /** Clan tag shown before the name ("" = none / hidden by the player). */
+    clanTag: string;
+    /** Index into CLAN_TAG_COLORS. */
+    clanColor: number;
 
     loadout: {
         heal: string;
@@ -225,6 +229,8 @@ function serializePlayerInfo(s: BitStream, data: PlayerInfo) {
     s.writeUint8(data.groupId);
     s.writeString(data.name);
     s.writeUint8(encodeRoleTag(data.roleTag));
+    s.writeString(data.clanTag ?? "", 6);
+    s.writeUint8(data.clanColor ?? 0);
 
     s.writeGameType(data.loadout.heal);
     s.writeGameType(data.loadout.boost);
@@ -239,6 +245,8 @@ function deserializePlayerInfo(s: BitStream, data: PlayerInfo) {
     data.groupId = s.readUint8();
     data.name = s.readString();
     data.roleTag = decodeRoleTag(s.readUint8());
+    data.clanTag = s.readString(6);
+    data.clanColor = s.readUint8();
     data.loadout = {} as PlayerInfo["loadout"];
     data.loadout.heal = s.readGameType();
     data.loadout.boost = s.readGameType();

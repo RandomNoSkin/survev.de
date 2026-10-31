@@ -6,6 +6,7 @@ import type {
 } from "../../../../shared/types/user";
 import { isBlockedBetween } from "./blocks";
 import { db } from "./index";
+import { playerIcon, playerIconColumns } from "./playerIcon";
 import { resolveRoleTag } from "./roleTag";
 import { friendsTable, matchDataTable, usersTable } from "./schema";
 
@@ -19,6 +20,7 @@ const roleTagColumns = {
     showAdminPrefix: usersTable.showAdminPrefix,
     showModPrefix: usersTable.showModPrefix,
     showPremiumPrefix: usersTable.showPremiumPrefix,
+    ...playerIconColumns,
 };
 
 /** Resolves a slug to a user id (null if no such user). */
@@ -145,6 +147,7 @@ export async function getFriends(userId: string): Promise<Friend[]> {
         slug: r.slug,
         username: r.username,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }
 
@@ -159,6 +162,7 @@ export async function getFriendsDetailed(
         userId: string;
         lastGame: number | null;
         roleTag: "owner" | "admin" | "mod" | "premium" | null;
+        icon: string;
     }>
 > {
     const rows = await db
@@ -194,6 +198,7 @@ export async function getFriendsDetailed(
         userId: r.friendId,
         lastGame: lastMap.get(r.friendId) ?? null,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }
 
@@ -213,6 +218,7 @@ export async function getIncomingRequests(userId: string): Promise<Friend[]> {
         slug: r.slug,
         username: r.username,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }
 
@@ -232,6 +238,7 @@ export async function getOutgoingRequests(userId: string): Promise<Friend[]> {
         slug: r.slug,
         username: r.username,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }
 
@@ -291,6 +298,7 @@ export async function getRecentPlayers(
             slug: o.slug,
             username: o.username,
             roleTag: resolveRoleTag(o),
+            icon: playerIcon(o),
             relation: myTeam != null && o.teamId === myTeam ? "with" : "against",
         });
         if (recent.length >= limit) break;

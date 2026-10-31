@@ -39,6 +39,7 @@ import {
     offersTable,
     usersTable,
 } from "./schema";
+import { addTradeEvent } from "./tradeEvents";
 
 const PAGE_SIZE = 30;
 /** Second reference to `users`, joined on the current bidder (the seller already uses the base `usersTable`). */
@@ -169,6 +170,7 @@ export async function placeBid(
             const [auction] = await tx
                 .select({
                     sellerId: auctionsTable.sellerId,
+                    type: auctionsTable.type,
                     minBid: auctionsTable.minBid,
                     currentBid: auctionsTable.currentBid,
                     currentBidderId: auctionsTable.currentBidderId,
@@ -249,6 +251,11 @@ export async function placeBid(
                     reason: `auction:refund:${auctionId}`,
                     balanceAfter: prevBal?.balance ?? 0,
                 });
+                const [bidder] = await tx
+                    .select({ slug: usersTable.slug })
+                    .from(usersTable)
+                    .where(eq(usersTable.id, userId));
+                await addTradeEvent(tx, auction.currentBidderId, "outbid", auction.type, amount, bidder?.slug ?? null);
             }
 
             return bidderBal.balance;
@@ -286,8 +293,10 @@ async function settleAuctionTx(
             itemId: auctionsTable.itemId,
             sellerId: auctionsTable.sellerId,
             sellerSlug: auctionsTable.sellerSlug,
+            type: auctionsTable.type,
             currentBid: auctionsTable.currentBid,
             currentBidderId: auctionsTable.currentBidderId,
+            currentBidderSlug: auctionsTable.currentBidderSlug,
         })
         .from(auctionsTable)
         .where(and(eq(auctionsTable.id, id), eq(auctionsTable.status, "active")))
@@ -360,6 +369,8 @@ async function settleAuctionTx(
         reason: `auction:sell:${id}`,
         balanceAfter: sellerBal?.balance ?? 0,
     });
+    await addTradeEvent(tx, a.sellerId, "auction_sold", a.type, a.currentBid, a.currentBidderSlug);
+    await addTradeEvent(tx, a.currentBidderId, "auction_won", a.type, a.currentBid, a.sellerSlug);
 
     await tx
         .update(auctionsTable)

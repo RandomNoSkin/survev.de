@@ -1391,13 +1391,17 @@ export class GameMap {
             }
             return collider.createCircle(pos, bound.rad);
         }
-        const min = v2.create(math.clamp(bound.min.x, 0, w), math.clamp(bound.min.y, 0, h));
-        const max = v2.create(math.clamp(bound.max.x, 0, w), math.clamp(bound.max.y, 0, h));
+        // a rotated building's corners come out swapped (addAdjust rotates both), so
+        // sort them before clamping - otherwise min > max reads as "off the map"
+        const lo = v2.create(Math.min(bound.min.x, bound.max.x), Math.min(bound.min.y, bound.max.y));
+        const hi = v2.create(Math.max(bound.min.x, bound.max.x), Math.max(bound.min.y, bound.max.y));
+        const min = v2.create(math.clamp(lo.x, 0, w), math.clamp(lo.y, 0, h));
+        const max = v2.create(math.clamp(hi.x, 0, w), math.clamp(hi.y, 0, h));
         if (min.x >= max.x || min.y >= max.y) {
             this.game.logger.warn(`Ground patch of ${type} was completely off the map - skipped`);
             return null;
         }
-        if (min.x !== bound.min.x || min.y !== bound.min.y || max.x !== bound.max.x || max.y !== bound.max.y) {
+        if (min.x !== lo.x || min.y !== lo.y || max.x !== hi.x || max.y !== hi.y) {
             this.game.logger.warn(`Ground patch of ${type} was off the map - clamped`);
         }
         return collider.createAabb(min, max);

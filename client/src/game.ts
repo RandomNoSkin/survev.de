@@ -133,6 +133,8 @@ export class Game {
     m_replayMode = false;
     /** Obstacle types whose assets were already requested this map (see m_processGameUpdate). */
     m_seenObjTypes = new Set<string>();
+    /** Group whose pings are on the map (see the spectate switch in m_processGameUpdate). */
+    m_pingGroupId: number | undefined;
     /** Current match's gameId - set by main.ts at join/spectate time, or by ReplayPlayer when loading a recording. Shown in the game-over header. */
     m_gameId = "";
     /** Bridge to the replay bar's visibility, set by ReplayPlayer while active (Game has no direct reference to it). */
@@ -489,6 +491,7 @@ export class Game {
         this.m_updatePassDelay = 0;
         this.m_localId = 0;
         this.m_activeId = 0;
+        this.m_pingGroupId = undefined;
         this.m_activePlayer = null as unknown as Player;
         this.m_validateAlpha = false;
         this.m_targetZoom = 1;
@@ -1639,6 +1642,16 @@ export class Game {
             this.m_explosionBarn.addExplosion(e.type, e.pos, e.layer);
         }
 
+        // Spectating another team now: its pings come with this update, the old
+        // team's go (map events stay)
+        const pingGroupId = this.m_playerBarn.getPlayerInfo(this.m_activeId)?.groupId;
+        if (pingGroupId !== undefined) {
+            if (this.m_pingGroupId !== undefined && pingGroupId !== this.m_pingGroupId) {
+                this.m_uiManager.clearPlayerPings();
+            }
+            this.m_pingGroupId = pingGroupId;
+        }
+
         // Create emotes and pings
         for (let i = 0; i < msg.emotes.length; i++) {
             const e = msg.emotes[i];
@@ -1840,11 +1853,12 @@ export class Game {
                     this.m_activeId,
                     true,
                 );
-                targetName = helpers.formatUsername(targetName, targetInfo.roleTag);
-                killerName = helpers.formatUsername(killerName, killerInfo.roleTag);
+                targetName = helpers.formatUsername(targetName, targetInfo.roleTag, targetInfo);
+                killerName = helpers.formatUsername(killerName, killerInfo.roleTag, killerInfo);
                 killfeedKillerName = helpers.formatUsername(
                     killfeedKillerName,
                     killfeedKillerInfo.roleTag,
+                    killfeedKillerInfo,
                 );
                 // Display the kill / downed notification for the active player
                 if (msg.killCreditId == this.m_activeId) {
@@ -1927,7 +1941,7 @@ export class Game {
                 const group1 = msg.group1;
                 const group2 = msg.group2;
                 if (group1.length <= 0) {
-                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.roleTag);
+                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.roleTag, msg);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 } else {
                     const group1Text = this.m_ui2Manager.getEnemieText(group1);
@@ -2163,6 +2177,7 @@ export class Game {
                         text,
                         msg.chatType,
                         msg.roleTag,
+                        msg,
                     );
                     this.m_ui2Manager.addChatMessage(txt, color, "#000000");
                 } else if (msg.type === net.KillFeedMsgType.AdminMsg) {
@@ -2194,6 +2209,7 @@ export class Game {
                     const targetNameHtml = helpers.formatUsername(
                         targetInfo.name,
                         targetInfo.roleTag,
+                        targetInfo,
                     );
                     // Add to killfeed
                     this.m_ui2Manager.addKillFeedMessage(

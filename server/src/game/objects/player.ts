@@ -64,6 +64,7 @@ import { WeaponManager } from "../weaponManager";
 import type { Building } from "./building";
 import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject";
 import { getGasDamageMultiplier } from "./gas";
+import { CheatMonitor } from "../antiCheat";
 import type { Loot } from "./loot";
 import type { MapIndicator } from "./mapIndicator";
 import type { Obstacle } from "./obstacle";
@@ -294,6 +295,8 @@ export class PlayerBarn {
             joinData.customLoadout,
         );
 
+        player.clanTag = joinData.clanTag?.tag ?? "";
+        player.clanColor = joinData.clanTag?.color ?? 0;
         this.socketIdToPlayer.set(socketId, player);
 
         this.activatePlayer(player, group, team);
@@ -386,6 +389,8 @@ export class PlayerBarn {
             joinData.customLoadout,
         );
 
+        player.clanTag = joinData.clanTag?.tag ?? "";
+        player.clanColor = joinData.clanTag?.color ?? 0;
         this.socketIdToPlayer.set(socketId, player);
         player.spectator = true;
         player.stealth = joinData.stealth === true;
@@ -440,6 +445,8 @@ export class PlayerBarn {
             let joinFeedMsg = new net.JoinFeedMsg();
             joinFeedMsg.name = player.name;
             joinFeedMsg.roleTag = player.roleTag;
+            joinFeedMsg.clanTag = player.clanTag;
+            joinFeedMsg.clanColor = player.clanColor;
             this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
         this.game.pluginManager.emit("playerJoin", player);
@@ -1100,6 +1107,10 @@ export class Player extends BaseGameObject {
     indoors = false;
     insideZoomRegion = false;
     insideSmoke = false;
+    /** the building whose roof is over this player right now (anti-cheat ESP check) */
+    occupiedBuilding: Building | undefined;
+    /** Date.now() of the last shot fired (anti-cheat: shooting gives a hidden player away) */
+    lastShotAt = 0;
 
     private _zoom: number = 0;
     // zoom used for the area in which the server will send objects to the client
@@ -2197,6 +2208,9 @@ export class Player extends BaseGameObject {
     isAdmin: boolean;
     /** [ADMIN]/[MOD]/[PREM] tag - drives the client-side name tag (see PlayerInfo/JoinFeedMsg). */
     roleTag: DisplayRoleTag;
+    /** The player's clan [TAG] ("" = none or hidden in their settings) and its colour. */
+    clanTag = "";
+    clanColor = 0;
     // see comment on server/src/api/schema.ts
     // about logging find_game IP's
     findGameIp: string;
@@ -2352,6 +2366,14 @@ export class Player extends BaseGameObject {
     }
 
     update(dt: number): void {
+        // ESP: aim following enemies this player can't see (see antiCheat.ts)
+        if (this.cheatMonitor && !this.dead) {
+            const flagged = this.cheatMonitor.onTick(this, this.game.playerBarn.livingPlayers, Date.now());
+            if (flagged) {
+                this.game.logger.warn(`Anti-cheat: ${this.name} (${this.userId ?? "guest"}) flagged for ${flagged}`);
+            }
+        }
+
         if (this.spectator) {
             this.kill({
                 damageType: GameConfig.DamageType.Spectator,
@@ -3299,6 +3321,8 @@ export class Player extends BaseGameObject {
             }
         }
 
+        this.occupiedBuilding = occupiedBuilding;
+
         // only dirty if heal effect state changed from last tick to current tick
         if (
             oldHealEffect != this.healEffect
@@ -3507,6 +3531,8 @@ export class Player extends BaseGameObject {
     }
 
     private _firstUpdate = true;
+    /** Whose team pings this client was last sent (spectating switches it). */
+    private pingGroupId = -1;
     /** Team overview (TeamInfoMsg): when it was last checked, and what was last sent. */
     private teamInfoCheckedAt = 0;
     private teamInfoSent = "";
@@ -3788,12 +3814,14 @@ export class Player extends BaseGameObject {
                 updateMsg.emotes.push(emote);
             }
         }
-        // joined late: the pings still on the map
-        if (this._firstUpdate) {
+        // joined late, or now spectating another team: the pings still on the map
+        // (the client drops the old team's pings itself when its view switches)
+        if (this._firstUpdate || player.groupId !== this.pingGroupId) {
             for (const emote of playerBarn.restorablePings(Date.now())) {
                 if (shouldSendEmote(emote)) updateMsg.emotes.push(emote);
             }
         }
+        this.pingGroupId = player.groupId;
 
         const extendedRadius = 1.1 * radius;
         const radiusSquared = extendedRadius * extendedRadius;
@@ -5251,6 +5279,8 @@ export class Player extends BaseGameObject {
     private _cullingPortrait = false;
     private _cullingPortraitTicker = 0;
     touchMoveActive = false;
+    /** reads every input for cheat signals (see antiCheat.ts); created on first input */
+    cheatMonitor: CheatMonitor | undefined;
     touchMoveDir = v2.create(1, 0);
     touchMoveLen = 255;
     toMouseDir = v2.create(1, 0);
@@ -5278,6 +5308,15 @@ export class Player extends BaseGameObject {
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
         if (this.game.map.arenaMode && !this.role) return;
+
+        // cheat signals (sus flags only, see antiCheat.ts) - real players only
+        if (!this.bot && !this.spectator) {
+            this.cheatMonitor ??= new CheatMonitor(this);
+            const flagged = this.cheatMonitor.onInput(msg, Date.now());
+            if (flagged) {
+                this.game.logger.warn(`Anti-cheat: ${this.name} (${this.userId ?? "guest"}) flagged for ${flagged}`);
+            }
+        }
 
         this.dirNew = v2.normalizeSafe(msg.toMouseDir);
 

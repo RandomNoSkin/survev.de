@@ -1506,6 +1506,8 @@
               <div id="modal-customize-item-header">
                 <div id="modal-customize-item-name"></div>
                 <div id="modal-customize-item-rarity"></div>
+                <!-- random cosmetic for this category: now, or before every match -->
+                <div id="loadout-random-controls" class="loadout-random-controls"></div>
                 <div class="modal-customize-loading-container">
                   <div id="modal-customize-loading"></div>
                 </div>
@@ -1562,6 +1564,17 @@
                   </div>
                   <div id="setting-show-premium-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
                 </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">In-game name tag</div>
+                    <div class="loadout-setting-desc">Which tag shows in front of your name in games: your role tag ([PREM], [MOD]…), your clan's [TAG], or both. Clan-only keeps your role tag while you're in no clan.</div>
+                  </div>
+                  <div id="setting-tag-display" class="loadout-seg">
+                    <div class="loadout-seg-btn" data-value="both">Both</div>
+                    <div class="loadout-seg-btn" data-value="role">Role</div>
+                    <div class="loadout-seg-btn" data-value="clan">Clan</div>
+                  </div>
+                </div>
                 <div id="loadout-settings-status" class="loadout-settings-status"></div>
                 <div class="loadout-settings-title loadout-settings-title-spaced">Connected accounts</div>
                 <div class="loadout-setting-row">
@@ -1574,6 +1587,8 @@
                 <div class="loadout-setting-desc">Third-party applications you've authorized to access your account data. <a href="/apps" target="_blank" rel="noopener">Manage your own apps &rarr;</a></div>
                 <div id="loadout-connected-apps-list"></div>
               </div>
+              <!-- Crates tab: key counts, the three lootboxes, drop chances -->
+              <div id="loadout-crates-panel" style="display:none"></div>
             </div>
             <div id="modal-customize-footer" class="modal-footer modal-footer-round">
               <div id="loadout-value-bar" class="loadout-value-bar"></div>
@@ -1581,6 +1596,8 @@
               <div id="modal-customize-item-lore"></div>
             </div>
             <div id="modal-customize-info-toggle" class="btn-darken" title="More info">Info</div>
+            <!-- crate opening animation (covers the left panel) -->
+            <div id="crate-open-overlay" style="display:none"></div>
           </div>
           <div id="modal-content-right-crosshair" class="modal-content-right modal-content-shadow">
             <div class="modal-spacer"></div>
@@ -1892,32 +1909,65 @@
             <span class="close close-corner"></span>
           </div>
           <div class="shop-tabs">
-            <div class="shop-tab shop-tab-active" data-shop-tab="daily">Deals<span id="shop-daily-dot" class="tab-dot"></span></div>
+            <div class="shop-tab shop-tab-active" data-shop-tab="store">Store<span id="shop-daily-dot" class="tab-dot"></span></div>
             <div class="shop-tab" data-shop-tab="market">Market<span id="shop-market-badge" class="tab-badge"></span></div>
-            <div class="shop-tab" data-shop-tab="auction">Auction<span id="shop-auction-badge" class="tab-badge"></span></div>
-            <div class="shop-tab" data-shop-tab="owners">Owners</div>
-            <div class="shop-tab" data-shop-tab="premium">Premium</div>
+            <div class="shop-tab" data-shop-tab="sell">Sell</div>
+            <div class="shop-tab" data-shop-tab="trades">My Trades<span id="shop-trades-badge" class="tab-badge"></span></div>
           </div>
           <div class="modal-body shop-body">
-            <div id="shop-daily-offers" class="shop-offers"></div>
-            <div id="shop-owners" style="display:none">
-              <div class="market-toolbar">
-                <input id="owners-item-search" class="market-search" type="text" placeholder="Pick an item…" autocomplete="off" />
-                <input id="owners-user-search" class="market-search" type="text" placeholder="Filter owners by name" autocomplete="off" />
-              </div>
-              <div id="owners-item-suggestions" class="owners-suggestions" style="display:none"></div>
-              <div id="owners-selected" class="owners-selected" style="display:none"></div>
-              <div id="owners-list" class="shop-offers owners-list"></div>
-              <div id="owners-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
+            <!-- Store: the daily / weekly shop and Premium -->
+            <div id="shop-store-nav" class="shop-subnav">
+              <div class="market-subtab market-subtab-active" data-store-view="deals">Deals</div>
+              <div class="market-subtab" data-store-view="premium">⭐ Premium</div>
             </div>
+            <div id="shop-daily-offers" class="shop-offers"></div>
+            <!-- Market: what other players sell, auction off and want to buy -->
+            <div id="shop-market-nav" style="display:none">
+              <div class="trade-hero">
+                <div class="trade-recent">
+                  <span class="trade-recent-label">🔥 Recently sold</span>
+                  <div id="trade-recent-list" class="trade-recent-list"></div>
+                </div>
+                <div id="trade-make-offer-btn" class="shop-buy-btn menu-option btn-darken trade-make-offer-btn" title="Offer a price for any item - every owner can sell it to you">＋ Make offer</div>
+              </div>
+              <div class="shop-subnav">
+                <div id="market-tab-browse" class="market-subtab market-subtab-active">Buy now</div>
+                <div class="market-subtab" data-market-view="auctions">🔨 Auctions<span id="shop-auction-badge" class="tab-badge"></span></div>
+                <div class="market-subtab" data-market-view="wanted">Wanted</div>
+              </div>
+            </div>
+            <div id="shop-wanted" class="shop-offers market-listings" style="display:none"></div>
+            <!-- Sell: your own items -->
+            <div id="shop-sell" style="display:none">
+              <div class="market-toolbar">
+                <input id="sell-search" class="market-search" type="text" placeholder="Search your items…" autocomplete="off" />
+                <select id="sell-category-filter" class="market-select">
+                  <option value="">All categories</option>
+                  <option value="outfit">Skins</option>
+                  <option value="melee">Melee</option>
+                  <option value="emote">Emotes</option>
+                  <option value="particle">Particles</option>
+                  <option value="death_effect">Death Effects</option>
+                  <option value="key">Keys</option>
+                </select>
+              </div>
+              <div class="sell-layout">
+                <div id="sell-grid" class="sell-grid"></div>
+                <div id="sell-detail" class="sell-detail"></div>
+              </div>
+            </div>
+            <!-- My Trades: everything you have going on -->
+            <div id="shop-trades-nav" class="shop-subnav" style="display:none">
+              <div class="market-subtab" data-trades-view="requests">Requests<span id="trades-requests-badge" class="tab-badge"></span></div>
+              <div id="market-tab-offers" class="market-subtab">Offers<span id="market-offers-badge" class="tab-badge"></span></div>
+              <div id="market-tab-private" class="market-subtab">Private<span id="market-private-badge" class="tab-badge"></span></div>
+              <div id="market-tab-mine" class="market-subtab">My listings</div>
+              <div class="market-subtab" data-trades-view="orders">My orders</div>
+            </div>
+            <div id="shop-requests" style="display:none"></div>
+            <div id="shop-myorders" style="display:none"></div>
             <div id="shop-market" style="display:none">
               <div class="market-toolbar">
-                <div class="market-subtabs">
-                  <div id="market-tab-browse" class="market-subtab market-subtab-active">Browse</div>
-                  <div id="market-tab-private" class="market-subtab">Private<span id="market-private-badge" class="tab-badge"></span></div>
-                  <div id="market-tab-mine" class="market-subtab">My Listings</div>
-                  <div id="market-tab-offers" class="market-subtab">Offers<span id="market-offers-badge" class="tab-badge"></span></div>
-                </div>
                 <input id="market-search" class="market-search" type="text" placeholder="Search name / source / owner" />
                 <select id="market-category-filter" class="market-select">
                   <option value="">All categories</option>
@@ -1926,6 +1976,7 @@
                   <option value="emote">Emotes</option>
                   <option value="particle">Particles</option>
                   <option value="death_effect">Death Effects</option>
+                  <option value="key">Keys</option>
                 </select>
                 <select id="market-rarity-filter" class="market-select">
                   <option value="">All rarities</option>
@@ -1950,6 +2001,7 @@
                   <option value="emote">Emotes</option>
                   <option value="particle">Particles</option>
                   <option value="death_effect">Death Effects</option>
+                  <option value="key">Keys</option>
                 </select>
                 <select id="auction-rarity-filter" class="market-select">
                   <option value="">All rarities</option>
@@ -2013,6 +2065,30 @@
           </div>
         </div>
       </div>
+      <div id="modal-make-offer" class="modal">
+        <div class="modal-content market-sell-content">
+          <div class="modal-header shop-header">
+            <h2>Make an offer</h2>
+            <span class="close close-corner"></span>
+          </div>
+          <div class="modal-body market-sell-body">
+            <div class="market-sell-hint">Name a price for any item. Every player who owns it can sell it to you - the first one who does gets the fries. You pay now; if nobody sells within 3 days you get everything back.</div>
+            <input id="offer-item-search" class="market-search" type="text" placeholder="Which item?" autocomplete="off" />
+            <div id="offer-item-suggestions" class="owners-suggestions" style="display:none"></div>
+            <div id="offer-item-selected" class="offer-item-selected"></div>
+            <div id="offer-item-stats" class="trade-stats"></div>
+            <div class="market-sell-row">
+              <label for="offer-amount">Your offer</label>
+              <input id="offer-amount" class="market-sell-price" type="number" min="1" />
+              <div class="shop-fries-icon"></div>
+            </div>
+            <div id="offer-total" class="market-sell-hint"></div>
+            <div id="offer-error" class="market-sell-error"></div>
+            <div id="offer-confirm" class="shop-buy-btn menu-option btn-darken">Place offer</div>
+          </div>
+        </div>
+      </div>
+      <div id="trade-toasts" class="trade-toasts"></div>
       <div id="modal-social" class="modal">
         <div class="modal-content">
           <div class="modal-header shop-header">
@@ -2020,16 +2096,25 @@
             <span class="close close-corner"></span>
           </div>
           <div class="shop-tabs social-tabs">
-            <div class="shop-tab shop-tab-active" data-social-tab="gift">Social Hub</div>
-            <div class="shop-tab" data-social-tab="friends">Friends<span id="social-friends-tab-badge" class="tab-badge"></span></div>
-            <div class="shop-tab" data-social-tab="clans">Clans</div>
+            <div class="shop-tab shop-tab-active" data-social-tab="friends">Friends<span id="social-friends-tab-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-social-tab="players">Players</div>
+            <div class="shop-tab" data-social-tab="clans">Clans<span id="social-clans-tab-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-social-tab="league">Clan League</div>
+            <div class="shop-tab" data-social-tab="owners">Owners</div>
           </div>
           <div class="modal-body shop-body">
-            <div id="social-gift">
-              <div id="social-search-view">
-                <input id="social-user-search" class="market-search" type="text" placeholder="Search a player…" autocomplete="off" />
-                <div id="social-search-results" class="social-search-results"></div>
-              </div>
+            <!-- Friends: requests, playing now, online, everyone, recently played, blocked -->
+            <div id="social-friends">
+              <input id="social-friend-search" class="market-search social-search" type="text" placeholder="🔍 Add a friend or find a player…" autocomplete="off" />
+              <div id="social-friends-sections" class="social-list"></div>
+            </div>
+            <!-- Players: search anyone -->
+            <div id="social-players" style="display:none">
+              <input id="social-user-search" class="market-search social-search" type="text" placeholder="🔍 Search a player…" autocomplete="off" />
+              <div id="social-search-results" class="social-list"></div>
+            </div>
+            <!-- Gifting (opened from a player's ⋯ menu) -->
+            <div id="social-gift" style="display:none">
               <div id="social-fries-view" style="display:none">
                 <div class="social-subhead">
                   <span id="social-fries-back" class="social-back">← Back</span>
@@ -2067,20 +2152,19 @@
                 <div id="social-cosmetics-status" class="social-status"></div>
               </div>
             </div>
-            <div id="social-friends" style="display:none">
-              <div id="social-requests-head" class="social-friends-head" style="display:none">Friend requests</div>
-              <div id="social-requests-list" class="social-friends-list"></div>
-              <div id="social-sent-head" class="social-friends-head" style="display:none">Sent requests</div>
-              <div id="social-sent-list" class="social-friends-list"></div>
-              <div class="social-friends-head">Friends</div>
-              <div id="social-friends-list" class="social-friends-list"></div>
-              <div class="social-friends-head">Recently played</div>
-              <div id="social-recent-list" class="social-friends-list"></div>
-              <div id="social-blocked-head" class="social-friends-head" style="display:none">Blocked</div>
-              <div id="social-blocked-list" class="social-friends-list"></div>
-            </div>
             <div id="social-clans" style="display:none">
-              <div class="shop-status">Clans are coming soon.</div>
+              <div id="clan-view"></div>
+            </div>
+            <div id="social-league" style="display:none"></div>
+            <div id="shop-owners" style="display:none">
+              <div class="market-toolbar">
+                <input id="owners-item-search" class="market-search" type="text" placeholder="Pick an item…" autocomplete="off" />
+                <input id="owners-user-search" class="market-search" type="text" placeholder="Filter owners by name" autocomplete="off" />
+              </div>
+              <div id="owners-item-suggestions" class="owners-suggestions" style="display:none"></div>
+              <div id="owners-selected" class="owners-selected" style="display:none"></div>
+              <div id="owners-list" class="shop-offers owners-list"></div>
+              <div id="owners-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
             </div>
           </div>
           <div id="social-confirm" class="social-confirm" style="display:none">

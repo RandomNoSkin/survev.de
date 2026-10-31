@@ -44,6 +44,30 @@ import {
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
+import { CrateKeyDefs } from "../../../../shared/defs/gameObjects/crateKeyDefs";
+import {
+    CRATE_TYPES,
+    CrateDefs,
+    crateOverrides,
+    getAutoPool,
+    getCrateChances,
+    getCratePoolTypes,
+    getCrateWeights,
+    getFriesChance,
+    getKeyDef,
+    getKeyTypes,
+    isCrateEligible,
+    isCrateType,
+} from "../../../../shared/defs/crateConfig";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
+import { getItemCategory, getItemRarity } from "../../../../shared/defs/shopConfig";
+import {
+    cleanFries,
+    cleanPool,
+    cleanWeights,
+    resetCrateSettings,
+    saveCrateSettings,
+} from "../crateSettings";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
 import { Config } from "../../config";
 import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
@@ -83,6 +107,7 @@ import {
     chatBannedIpsTable,
     chatLogsTable,
     gameModerationTable,
+    antiCheatScoresTable,
     goldenFriesLedgerTable,
     ipLogsTable,
     itemsTable,
@@ -95,6 +120,7 @@ import {
 } from "../db/schema";
 import { signReplayToken } from "../replayToken";
 import { dashboardHtml } from "./moderationDashboard.html";
+import { CHEAT_THRESHOLDS } from "../../game/antiCheat";
 
 /** map_id → MapDefs key (name), for labelling match rows in the XP-gain drill-down. */
 const MAP_ID_TO_NAME: Record<number, string> = Object.fromEntries(
@@ -177,6 +203,8 @@ const COSMETIC_CATALOG = {
     crosshair: _allowedCrosshairs,
 };
 const ALLOWED_COSMETICS = [...new Set(Object.values(COSMETIC_CATALOG).flat())];
+/** Single grants may also hand out crate keys (not part of "give all"). */
+const GRANTABLE_ITEMS = [...ALLOWED_COSMETICS, ...Object.keys(CrateKeyDefs)];
 
 /** Default-unlock item types that must never be removed (would break accounts). */
 const PROTECTED_ITEM_TYPES = [
@@ -232,6 +260,8 @@ const MODERATOR_ALLOWED_PATHS = new Set([
     // Live games, to watch them (invisibly) - the stream leaves bans out for them
     "/api/events",
     "/api/servers",
+    // Anti-Cheat tab: read-only scores (flags themselves land in their Sus view)
+    "/api/anticheat",
 ]);
 
 /** Dynamic (parameterised) sub-paths a moderator may hit — see MODERATOR_ALLOWED_PATHS. */
@@ -1479,10 +1509,160 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const data = await server.findGameById(regionId, gameId, !!user?.admin, !visible);
         return c.json(data);
     })
+    /**
+     * Anti-cheat scores of the last `days`, worst first (admins and moderators): every player
+     * that scored at all, flagged or not - for tuning the thresholds on real games.
+     */
+    .get("/api/anticheat", async (c) => {
+        const days = Math.min(90, Math.max(1, Number(c.req.query("days")) || 7));
+        const minRatio = Math.max(0, Number(c.req.query("minRatio")) || 0);
+        const since = new Date(Date.now() - days * 86400_000);
+        const rows = await db
+            .select({
+                createdAt: antiCheatScoresTable.createdAt,
+                gameId: antiCheatScoresTable.gameId,
+                mapId: antiCheatScoresTable.mapId,
+                userId: antiCheatScoresTable.userId,
+                name: antiCheatScoresTable.name,
+                maxRatio: antiCheatScoresTable.maxRatio,
+                scores: antiCheatScoresTable.scores,
+                details: antiCheatScoresTable.details,
+                slug: usersTable.slug,
+                username: usersTable.username,
+            })
+            .from(antiCheatScoresTable)
+            .leftJoin(usersTable, eq(usersTable.id, antiCheatScoresTable.userId))
+            .where(and(gte(antiCheatScoresTable.createdAt, since), gte(antiCheatScoresTable.maxRatio, minRatio)))
+            .orderBy(desc(antiCheatScoresTable.maxRatio), desc(antiCheatScoresTable.createdAt))
+            .limit(300);
+        // the IP each player had in that game (accounts by user id, guests by name)
+        const gameIds = [...new Set(rows.map((r) => r.gameId))];
+        const ips = gameIds.length
+            ? await db
+                  .select({ gameId: ipLogsTable.gameId, userId: ipLogsTable.userId, username: ipLogsTable.username, encodedIp: ipLogsTable.encodedIp })
+                  .from(ipLogsTable)
+                  .where(inArray(ipLogsTable.gameId, gameIds))
+            : [];
+        const ipOf = (r: (typeof rows)[number]) =>
+            ips.find((i) => i.gameId === r.gameId && (r.slug ? i.userId === r.userId : i.username === r.name))?.encodedIp ?? null;
+        return c.json({ thresholds: CHEAT_THRESHOLDS, rows: rows.map((r) => ({ ...r, encodedIp: ipOf(r) })) });
+    })
     /** Every open private lobby (admins only - not in the moderator allow-list). */
     .get("/api/lobbies", (c) => {
         return c.json({ lobbies: server.privateLobbyMenu.listAllLobbies() });
     })
+    // ─────────────────────────────────────────────────────────────────────────
+    // CRATES (admin-only): loot pools + rarity weights, and handing out keys
+    // ─────────────────────────────────────────────────────────────────────────
+    .get("/api/crates", (c) => {
+        const name = (t: string) => (GameObjectDefs.typeToDefSafe(t) as { name?: string })?.name || t;
+        const catalog = GameObjectDefs.getAllTypes()
+            .filter(isCrateEligible)
+            .map((type) => ({ type, name: name(type), category: getItemCategory(type), rarity: getItemRarity(type) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const overrides = crateOverrides.get();
+        const crates = CRATE_TYPES.map((type) => {
+            const def = CrateDefs[type];
+            const weights = getCrateWeights(type);
+            const pool = getCratePoolTypes(type);
+            const chances = getCrateChances(type);
+            const dropping = new Set(chances.flatMap((ch) => ch.items));
+            return {
+                type,
+                name: def.name,
+                tier: def.tier,
+                img: def.img,
+                weights,
+                defaultWeights: def.rarityWeights,
+                customPool: !!overrides[type]?.pool,
+                customWeights: !!overrides[type]?.rarityWeights || !!overrides[type]?.fries,
+                // the raw setting (weight 0 = off) and the default, for the editor
+                fries: overrides[type]?.fries ?? def.fries ?? { weight: 0, min: 0, max: 0 },
+                defaultFries: def.fries ?? { weight: 0, min: 0, max: 0 },
+                friesChance: getFriesChance(type),
+                pool,
+                chances,
+                // in the list but never drops: its rarity has weight 0 (or it isn't droppable)
+                excluded: pool.filter((t) => !dropping.has(t)),
+            };
+        });
+        const keys = getKeyTypes().map((type) => ({ type, name: name(type) }));
+        return c.json({ crates, catalog, autoPool: getAutoPool(), keys });
+    })
+    .post(
+        "/api/crates/save",
+        validateParams(
+            z.object({
+                crate: z.string(),
+                pool: z.array(z.string().max(64)).max(2000).nullable(),
+                weights: z.record(z.string(), z.number()).nullable(),
+                fries: z.object({ weight: z.number(), min: z.number(), max: z.number() }).nullable().optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { crate, pool, weights, fries } = c.req.valid("json");
+            if (!isCrateType(crate)) return c.json({ error: "unknown_crate" }, 400);
+            const cleanP = cleanPool(pool);
+            if (cleanP && !cleanP.length) return c.json({ error: "empty_pool" }, 400);
+            await saveCrateSettings(crate, cleanP, cleanWeights(weights), cleanFries(fries), admin.id);
+            void logModerationAction(
+                "📦 Crate loot changed",
+                [
+                    { name: "Crate", value: CrateDefs[crate].name },
+                    { name: "Pool", value: cleanP ? `${cleanP.length} items (custom)` : "automatic" },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xb5793c,
+            );
+            return c.json({ ok: true });
+        },
+    )
+    .post("/api/crates/reset", validateParams(z.object({ crate: z.string() })), async (c) => {
+        const { crate } = c.req.valid("json");
+        if (!isCrateType(crate)) return c.json({ error: "unknown_crate" }, 400);
+        await resetCrateSettings(crate);
+        return c.json({ ok: true });
+    })
+    .post(
+        "/api/crates/give-keys",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                key: z.string(),
+                amount: z.number().int().min(1).max(100),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, key, amount } = c.req.valid("json");
+            if (!getKeyDef(key)) return c.json({ error: "unknown_key" }, 400);
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug.trim().toLowerCase()),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+            const now = Date.now();
+            await db.insert(itemsTable).values(
+                Array.from({ length: amount }, () => ({
+                    userId: user.id,
+                    type: key,
+                    source: "admin_grant",
+                    timeAcquired: now,
+                })),
+            );
+            void logModerationAction(
+                "🔑 Crate keys given",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Keys", value: `${amount}× ${getKeyDef(key)!.name}` },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x1a7a1a,
+            );
+            return c.json({ ok: true, given: amount });
+        },
+    )
     // ─────────────────────────────────────────────────────────────────────────
     // REPLAYS
     // ─────────────────────────────────────────────────────────────────────────
@@ -3876,7 +4056,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 return c.json({ ok: true, given: missing.length });
             }
 
-            if (!ALLOWED_COSMETICS.includes(item)) {
+            if (!GRANTABLE_ITEMS.includes(item)) {
                 return c.json({ error: "item_not_allowed" }, 400);
             }
 

@@ -15,6 +15,7 @@ import { isBlockedBetween } from "./blocks";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { getOwnedLoadouts } from "./loadouts";
+import { playerIcon, playerIconColumns } from "./playerIcon";
 import { resolveRoleTag } from "./roleTag";
 import {
     auctionsTable,
@@ -247,6 +248,7 @@ export async function searchUsers(
             showAdminPrefix: usersTable.showAdminPrefix,
             showModPrefix: usersTable.showModPrefix,
             showPremiumPrefix: usersTable.showPremiumPrefix,
+            ...playerIconColumns,
         })
         .from(usersTable)
         .where(
@@ -262,6 +264,7 @@ export async function searchUsers(
         slug: r.slug,
         username: r.username,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }
 

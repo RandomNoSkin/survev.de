@@ -956,7 +956,7 @@ export class UiManager {
                 // Team UI
                 this.updateTeam(
                     i,
-                    helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
+                    helpers.formatUsername(playerInfo.name, playerInfo.roleTag, playerInfo),
                     playerStatus.health!,
                     {
                         disconnected: playerStatus.disconnected,
@@ -1380,6 +1380,14 @@ export class UiManager {
         }
     }
 
+    /** Removes every player ping (map + pulse); map-event pings stay. */
+    clearPlayerPings() {
+        for (const id in this.playerPingSprites) {
+            for (const s of this.playerPingSprites[id]) s.free();
+        }
+        this.playerPingSprites = {};
+    }
+
     /* not used? */
     updateMapSprite(
         mapSprite: any,
@@ -1748,7 +1756,7 @@ export class UiManager {
                     B.append(
                         $("<div/>", {
                             class: "ui-stats-info-player-name",
-                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag, playerInfo),
                         }),
                     );
                     B.append(
@@ -1988,7 +1996,7 @@ export class UiManager {
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag, playerInfo),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -2284,6 +2292,7 @@ export class UiManager {
             this.spectatedPlayerName = helpers.formatUsername(
                 name,
                 playerBarn.getPlayerInfo(targetId).roleTag,
+                playerBarn.getPlayerInfo(targetId),
             );
             this.updateSpectateText();
             this.actionSeq = -1;

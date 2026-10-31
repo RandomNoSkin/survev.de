@@ -1004,6 +1004,7 @@ export class WeaponManager {
         const toMouseLen = this.player.toMouseLen;
 
         this.player.shotSlowdownTimer = itemDef.fireDelay;
+        this.player.lastShotAt = Date.now();
 
         this.player.cancelAction();
 
@@ -1518,6 +1519,7 @@ export class WeaponManager {
         weapon.cooldown = itemDef.fireDelay;
         weapon.recoilTime = itemDef.recoilTime;
         this.player.shotSlowdownTimer = itemDef.fireDelay;
+        this.player.lastShotAt = Date.now();
         this.player.cancelAction();
 
         const direction = this.player.dir;

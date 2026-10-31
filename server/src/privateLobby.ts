@@ -886,7 +886,7 @@ class Room {
 
         // Strips cosmetics the account no longer owns (traded/rented away) from the
         // stored loadout before the game server trusts it — see getOwnedLoadouts.
-        const loadouts = await getOwnedLoadouts(userIds);
+        const loadouts = await getOwnedLoadouts(userIds, { forGame: true });
 
         const regionModes = this.privateLobbyMenu.server.modesByRegion[region] ?? [];
         const mode = regionModes[this.data.gameModeIdx];

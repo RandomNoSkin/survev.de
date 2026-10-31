@@ -597,6 +597,17 @@ img {
   }
 }
 
+/* In a match the desktop ESC menu (.ui-game-menu-desktop) is a fixed 350x495 box
+ * (touch.ts): there the HUD tab fills the box's width instead of its own 270px, and the
+ * box grows while the HUD tab is open - its list doesn't fit the fixed height and pushed
+ * "Return to Game" out of the box. The pre-game preview menu has no such class. */
+.ui-game-menu-desktop #ui-game-tab-hud {
+  width: auto;
+}
+.ui-game-menu-desktop:has(> #ui-game-tab-hud[style*="block"]) {
+  height: auto;
+}
+
 #ui-game-tab-hud > #btn-hud-edit-toggle {
   margin-bottom: 10px;
 }

@@ -6580,12 +6580,14 @@ a:active {
 /* ---- Player marketplace (rendered inside the shop modal's Market tab) ---- */
 /* The sell dialog floats above everything (loadout modal is z-index 4). */
 #modal-market-sell,
-#modal-auction-create {
+#modal-auction-create,
+#modal-make-offer {
   background-color: rgba(0, 0, 0, 0.6);
   z-index: 100002;
 }
 #modal-market-sell .modal-content,
-#modal-auction-create .modal-content {
+#modal-auction-create .modal-content,
+#modal-make-offer .modal-content {
   position: fixed;
   left: 50%;
   top: 50%;
@@ -7622,7 +7624,15 @@ input [type="image"]:focus {
   /* Fixed so the modal never resizes between tabs (item list / settings / with or without
      a selected item's header). Content fits/scrolls inside. */
   height: 420px;
+  /* a column: the item name on top, the list takes exactly what's left (on every
+     screen size - the per-breakpoint list heights below no longer have to match) */
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  /* clip, not just hide: a focused input / a selected item scrolled into view used to
+     scroll this box (hidden still allows programmatic scrolling), pushing the item name
+     up under the category tabs. The item list scrolls on its own. */
+  overflow: clip;
 }
 
 #modal-customize-item-header {
@@ -7802,6 +7812,10 @@ input [type="image"]:focus {
 #modal-customize-list {
   background-color: rgba(0, 0, 0, 0.3);
   height: 362px;
+  /* fills the rest of #modal-customize-body (flex-basis 0 wins over the heights) */
+  flex: 1 1 0;
+  min-height: 0;
+  box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: scroll;
   position: relative;
@@ -8168,18 +8182,6 @@ input [type="image"]:focus {
   color: rgba(255, 255, 255, 0.5);
 }
 
-@media (max-height: 768px) {
-  #modal-customize-sort-wrap {
-    bottom: 50px;
-    display: block;
-    position: absolute;
-  }
-  .customize-search {
-    top: auto;
-    bottom: 48px;
-    right: 170px;
-  }
-}
 
 #modal-customize-sort-wrap:after {
   content: "\25BC";
@@ -8260,16 +8262,23 @@ input [type="image"]:focus {
 }
 
 #modal-customize-cat-standalone {
-  margin-left: 16px;
+  /* the gap that holds the separator between the cosmetic tabs and the meta tabs */
+  --cat-sep-gap: 16px;
+  --cat-sep-width: 6px;
+  margin-left: var(--cat-sep-gap);
 }
 
 #modal-customize-cat-standalone:before {
-  border-bottom: solid 72px rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.5);
   content: "";
   cursor: default;
-  margin-left: -20px;
   position: absolute;
-  width: 8px;
+  top: 0;
+  height: 100%;
+  width: var(--cat-sep-width);
+  /* centred in the gap: half the gap plus half the bar back from this tab's edge */
+  left: calc((var(--cat-sep-gap) + var(--cat-sep-width)) / -2);
+  pointer-events: none;
 }
 
 .modal-customize-cat {
@@ -8283,14 +8292,15 @@ input [type="image"]:focus {
   margin-left: 4px;
   margin-top: 44px;
   position: relative;
-  /* Slightly narrower than before so all cosmetic tabs + the Settings tab fit one row
+  /* Narrow enough that all cosmetic tabs + the Settings and Crates tabs fit one row
      without widening the panel (which is anchored inside a fixed-width wrapper). */
-  width: 64px;
+  width: 59px;
 }
 
 .modal-customize-cat-image {
   background-repeat: no-repeat;
-  background-size: 56px;
+  background-size: 52px;
+  background-position: center;
   height: 56px;
   margin: auto;
   opacity: 0.4;
@@ -12309,4 +12319,2052 @@ img.custom-map-loot-icon {
   color: rgba(255, 255, 255, 0.45);
   font-size: 12px;
   margin: -4px 0 8px;
+}
+
+/* ── Shop: Store / Market / Sell / My Trades ─────────────────────────────── */
+.shop-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.shop-subnav .tab-badge {
+  margin-left: 6px;
+}
+.trade-hero {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.trade-recent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(245, 216, 64, 0.2);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.trade-recent-label {
+  color: #f2d63b;
+  font-weight: 700;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.trade-recent-list {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  font-size: 13px;
+  color: #ddd;
+}
+.trade-recent-list::-webkit-scrollbar {
+  display: none;
+}
+.trade-recent-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.trade-recent-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trade-make-offer-btn {
+  white-space: nowrap;
+  padding: 0 16px;
+  width: auto;
+}
+.trade-fries {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #f2d63b;
+  font-weight: 700;
+}
+.trade-fries .shop-fries-icon {
+  width: 14px;
+  height: 14px;
+}
+.trade-muted {
+  color: #9a9a9a;
+  font-size: 12px;
+}
+.trade-img {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 2px solid #c5c5c5;
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.trade-img-sm {
+  width: 24px;
+  height: 24px;
+  border-width: 1px;
+  border-radius: 4px;
+}
+.trade-img-lg {
+  width: 96px;
+  height: 96px;
+}
+.trade-order-img {
+  display: flex;
+  justify-content: center;
+}
+.trade-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  color: #ddd;
+  padding: 40px 20px;
+  text-align: center;
+  width: 100%;
+}
+.trade-empty-btn {
+  width: auto;
+  padding: 0 20px;
+}
+.trade-armed {
+  background: #d96100 !important;
+  color: #fff !important;
+}
+.trade-stats {
+  font-size: 13px;
+  color: #ddd;
+  line-height: 1.6;
+}
+.offer-item-selected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.trade-orders-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.trade-orders-head .shop-buy-btn {
+  width: auto;
+  padding: 0 16px;
+}
+
+/* Sell tab: your items on the left, the picked one on the right */
+.sell-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.sell-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.sell-tile {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid transparent;
+}
+.sell-tile:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.sell-tile-active {
+  border-color: #f2d63b;
+}
+.sell-count {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 3px #000;
+}
+.sell-dots {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  display: flex;
+  gap: 3px;
+}
+.sell-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+.sell-dot-wanted {
+  background: #2ecc40;
+}
+.sell-dot-selling {
+  background: #e74c3c;
+}
+.sell-detail {
+  width: 300px;
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 14px;
+}
+.sell-detail-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.sell-quick {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 6px;
+  background: rgba(46, 158, 79, 0.15);
+  border: 1px solid rgba(46, 158, 79, 0.5);
+  color: #ddd;
+  font-size: 13px;
+}
+.sell-actions {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+}
+.sell-actions .shop-buy-btn {
+  flex: 1;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+#modal-make-offer .modal-content {
+  width: 380px;
+}
+#modal-make-offer .market-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+.trade-img-inner {
+  width: 100%;
+  height: 100%;
+  background-size: 80%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.sell-hint {
+  line-height: 1.4;
+}
+@media (max-width: 850px) {
+  .sell-layout {
+    flex-direction: column-reverse;
+  }
+  .sell-detail {
+    width: 100%;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+  }
+  .trade-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Trade notifications */
+.trade-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 70px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 340px;
+}
+.trade-toast {
+  pointer-events: auto;
+  background: rgba(20, 18, 10, 0.95);
+  border: 1px solid rgba(245, 216, 64, 0.5);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #eee;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateX(20px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.trade-toast-in {
+  opacity: 1;
+  transform: none;
+}
+.trade-toast-link {
+  cursor: pointer;
+}
+.trade-toast-link:hover {
+  border-color: #f2d63b;
+}
+@media (max-width: 850px) {
+  .market-toolbar {
+    flex-wrap: wrap;
+  }
+  .market-toolbar .market-search {
+    flex: 1 1 100%;
+  }
+}
+
+/* Premium: after buying, and the "already active - extend?" check */
+.premium-done,
+.premium-confirm {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 8px;
+  color: #eee;
+  font-size: 14px;
+  text-align: center;
+}
+.premium-done {
+  background: rgba(46, 158, 79, 0.2);
+  border: 2px solid #2e9e4f;
+}
+.premium-done-title {
+  color: #5fe07c;
+  font-size: 20px;
+  font-weight: 700;
+}
+.premium-done-ok,
+.premium-confirm-no {
+  padding: 8px 22px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.premium-confirm {
+  background: rgba(242, 214, 59, 0.12);
+  border: 2px solid #f2d63b;
+}
+.premium-confirm-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+.premium-confirm-row > * {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Social: one row per person (avatar · name + status · primary button · ⋯) ── */
+#modal-social .social-search {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.social-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.social-section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 2px 4px;
+  color: #c9b98a;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.social-list > .social-section-head:first-child {
+  margin-top: 2px;
+}
+.social-section-hot {
+  color: #f2d63b;
+}
+.social-count {
+  color: #888;
+  font-weight: 700;
+}
+.social-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.social-row:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.social-avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.social-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #111;
+}
+.social-presence-online {
+  background: #2ecc40;
+}
+.social-presence-game {
+  background: #3d9bff;
+}
+.social-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.social-row-name {
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.social-row-name:hover {
+  text-decoration: underline;
+}
+.social-row-sub {
+  color: #8f8f8f;
+  font-size: 12px;
+}
+.social-sub-online {
+  color: #5fe07c;
+}
+.social-sub-game {
+  color: #6fb5ff;
+}
+.social-sub-hot {
+  color: #f2d63b;
+}
+.social-sub-with {
+  color: #7fd0a0;
+}
+.social-sub-vs {
+  color: #e0a080;
+}
+.social-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.social-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.social-btn-green {
+  background: #3a9a4a;
+}
+.social-btn-green:hover {
+  background: #45b157;
+}
+.social-btn-blue {
+  background: #2f74c0;
+}
+.social-btn-blue:hover {
+  background: #3a86d8;
+}
+.social-btn-ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ddd;
+}
+.social-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.social-btn-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.social-tag {
+  color: #7fd0a0;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 6px;
+}
+.social-menu-btn {
+  width: 32px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #ccc;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.social-menu-btn:hover,
+.social-menu-open {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.social-menu {
+  position: fixed;
+  z-index: 100010;
+  min-width: 190px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #1e1e1e;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+.social-menu-item {
+  padding: 8px 12px;
+  border-radius: 5px;
+  color: #eee;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.social-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.social-menu-danger {
+  color: #ff7b7b;
+}
+.social-empty {
+  color: #9a9a9a;
+  font-size: 13px;
+  padding: 10px 4px;
+}
+.social-blocked summary {
+  cursor: pointer;
+  list-style: none;
+}
+.social-blocked summary::before {
+  content: "▸";
+  margin-right: 4px;
+}
+.social-blocked[open] summary::before {
+  content: "▾";
+}
+.social-blocked .social-row {
+  margin-top: 4px;
+}
+@media (max-width: 600px) {
+  .social-row {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+  .social-btn {
+    padding: 6px 10px;
+  }
+}
+
+/* the player icon from their loadout as the avatar */
+.social-avatar-icon {
+  background-color: rgba(255, 255, 255, 0.08);
+  background-size: 82%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Loadout: random cosmetic for the current category (now / before every match) */
+/* its own row under the item name (the list below takes whatever height is left) */
+.loadout-random-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.loadout-random-controls:not(:empty) {
+  margin-top: 8px;
+}
+.loadout-random-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.loadout-random-btn:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+.loadout-random-switch {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.3);
+  transition: background 0.15s;
+}
+.loadout-random-switch::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+.loadout-random-on .loadout-random-switch {
+  background: #2ecc40;
+}
+.loadout-random-on .loadout-random-switch::after {
+  left: 14px;
+}
+
+/* an item kept out of the random draw (loadout "Skip in random") */
+.customize-norandom-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ff8a8a;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.loadout-random-skipped .loadout-random-switch {
+  background: #d9534f;
+}
+.loadout-random-skipped .loadout-random-switch::after {
+  left: 14px;
+}
+/* The loading spinner sat as an empty 30px block under the item name / random buttons
+   (the old #modal-customize-loading-container rule targets an id, the element only has
+   the class) - pin it top-right so it takes no room. */
+#modal-customize-item-header {
+  position: relative;
+  padding-bottom: 10px;
+}
+#modal-customize-item-header .modal-customize-loading-container {
+  position: absolute;
+  top: 16px;
+  right: 0;
+  height: 30px;
+}
+
+/* ---------- Loadout: Crates tab ---------- */
+.modal-customize-crates-icon {
+  background-image: url(../img/map/map-crate-01.svg) !important;
+  background-size: 70% !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+#loadout-crates-panel {
+  box-sizing: border-box;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 12px;
+}
+.crate-keys {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.crate-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  padding: 4px 10px 4px 6px;
+}
+.crate-key-none {
+  opacity: 0.45;
+}
+.crate-key-icon {
+  width: 30px;
+  height: 30px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.crate-key-name {
+  color: #ddd;
+  font-size: 14px;
+}
+.crate-key-count {
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 16px;
+}
+.crate-row {
+  display: flex;
+  gap: 10px;
+}
+.crate-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 8px;
+}
+.crate-card-wooden { border-color: rgba(181, 121, 60, 0.55); }
+.crate-card-soviet { border-color: rgba(212, 42, 31, 0.5); }
+.crate-card-airdrop { border-color: rgba(242, 194, 48, 0.6); }
+.crate-card-img {
+  width: 96px;
+  height: 96px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  transition: transform 0.15s;
+}
+.crate-card:hover .crate-card-img {
+  transform: scale(1.06) rotate(-2deg);
+}
+.crate-card-name {
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.crate-card-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: center;
+}
+.crate-open-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #50a13b;
+  border-bottom: 2px solid #3b7a2b;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 14px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.crate-open-btn-key {
+  width: 18px;
+  height: 18px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.crate-need-key {
+  border-radius: 5px;
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom-color: transparent;
+  color: #999;
+  cursor: default;
+  font-size: 12px;
+}
+.crate-chances-toggle {
+  color: #9ab;
+  font-size: 12px;
+  cursor: pointer;
+}
+.crate-chances-toggle:hover,
+.crate-chances-toggle-on {
+  color: #f2d63b;
+}
+.crate-chances {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.crate-chances-title {
+  color: #f2d63b;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.crate-chance-group + .crate-chance-group {
+  margin-top: 8px;
+}
+.crate-chance-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.crate-chance-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.crate-chance-item {
+  width: 34px;
+  height: 34px;
+  border: 2px solid;
+  border-radius: 5px;
+  background-color: rgba(0, 0, 0, 0.3);
+  background-size: 80%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.crate-hint {
+  color: #8a9aa8;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* opening animation */
+#crate-open-overlay {
+  --crate-color: transparent;
+  /* fullscreen, above the menu modals */
+  position: fixed;
+  inset: 0;
+  z-index: 100010;
+  overflow: hidden;
+  background: #111;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.crate-open-stage {
+  --crate-color: #fff;
+  position: relative;
+  width: 260px;
+  height: 260px;
+}
+/* bigger on large screens: scale the whole scene (the margin makes room, transform
+   doesn't take part in layout) */
+@media (min-height: 700px) and (min-width: 900px) {
+  #crate-open-overlay .crate-open-stage {
+    transform: scale(1.6);
+    margin: 80px 0;
+  }
+  #crate-open-overlay .crate-open-info {
+    transform: scale(1.25);
+    margin-top: 20px;
+  }
+}
+.crate-open-crate {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150px;
+  height: 150px;
+  margin: -75px 0 0 -75px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  z-index: 2;
+}
+.crate-shaking {
+  animation: crate-shake 1.6s ease-in infinite;
+}
+@keyframes crate-shake {
+  0%, 100% { transform: rotate(0) translate(0, 0); }
+  10% { transform: rotate(-3deg) translate(-2px, 0); }
+  20% { transform: rotate(3deg) translate(2px, 0); }
+  30% { transform: rotate(-5deg) translate(-3px, -2px); }
+  40% { transform: rotate(5deg) translate(3px, -2px); }
+  50% { transform: rotate(-8deg) translate(-4px, -4px) scale(1.03); }
+  60% { transform: rotate(8deg) translate(4px, -4px) scale(1.03); }
+  70% { transform: rotate(-11deg) translate(-5px, -8px) scale(1.06); }
+  80% { transform: rotate(11deg) translate(5px, -8px) scale(1.06); }
+  90% { transform: rotate(-6deg) translate(0, -12px) scale(1.08); }
+}
+.crate-popped {
+  animation: crate-pop 0.6s ease-out forwards;
+}
+@keyframes crate-pop {
+  0% { transform: scale(1.1) translateY(-10px); opacity: 1; }
+  30% { transform: scale(1.35) translateY(4px); opacity: 1; }
+  100% { transform: scale(0.85) translateY(70px); opacity: 0.35; }
+}
+.crate-open-beam {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 420px;
+  height: 420px;
+  margin: -210px 0 0 -210px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, var(--crate-color) 0deg 9deg, transparent 9deg 30deg);
+  -webkit-mask-image: radial-gradient(circle, #000 15%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 15%, transparent 68%);
+  opacity: 0;
+  transform: scale(0.2);
+  z-index: 1;
+}
+.crate-open-revealed .crate-open-beam {
+  animation: crate-beam-in 0.5s ease-out forwards, crate-beam-spin 9s linear infinite;
+}
+@keyframes crate-beam-in {
+  to { opacity: 0.55; transform: scale(1); }
+}
+@keyframes crate-beam-spin {
+  from { rotate: 0deg; }
+  to { rotate: 360deg; }
+}
+.crate-open-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, var(--crate-color) 30%, transparent 65%);
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.crate-open-revealed .crate-open-flash {
+  animation: crate-flash 0.7s ease-out forwards;
+}
+@keyframes crate-flash {
+  0% { opacity: 0; transform: scale(0.3); }
+  25% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+.crate-open-item {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0;
+  z-index: 4;
+  filter: drop-shadow(0 0 14px var(--crate-color));
+}
+.crate-open-revealed .crate-open-item {
+  animation: crate-item-rise 0.8s cubic-bezier(0.2, 1.4, 0.4, 1) 0.15s forwards;
+}
+@keyframes crate-item-rise {
+  0% { opacity: 0; translate: 0 50px; scale: 0.3; }
+  100% { opacity: 1; translate: 0 -10px; scale: 1; }
+}
+.crate-open-info {
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.crate-open-rarity {
+  font-weight: 700;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: crate-fade-in 0.3s ease-out;
+}
+.crate-open-name {
+  color: #fff;
+  font-weight: 700;
+  font-size: 24px;
+  animation: crate-fade-in 0.3s ease-out;
+}
+@keyframes crate-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.crate-open-error {
+  color: #ff7b6b;
+  max-width: 360px;
+  text-align: center;
+}
+.crate-open-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.crate-open-again,
+.crate-open-close {
+  background: #50a13b;
+  border-bottom: 2px solid #3b7a2b;
+  border-radius: 5px;
+  color: #fff;
+  padding: 6px 16px;
+  cursor: pointer;
+}
+.crate-open-close {
+  background: #555;
+  border-bottom-color: #3a3a3a;
+}
+
+/* crate opening backdrops: a themed scene per crate, a spotlight from above and a
+   vignette; after the reveal the scene glows in the rarity colour */
+#crate-open-overlay::before,
+#crate-open-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+#crate-open-overlay::before {
+  background:
+    radial-gradient(ellipse 45% 65% at 50% 0%, rgba(255, 245, 210, 0.22), transparent 70%),
+    radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.75) 100%);
+}
+#crate-open-overlay::after {
+  background: radial-gradient(circle at 50% 42%, var(--crate-color), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.6s ease-out;
+}
+#crate-open-overlay.crate-open-lit::after {
+  opacity: 0.28;
+}
+#crate-open-overlay > * {
+  position: relative;
+  z-index: 1;
+}
+/* wooden: warm plank wall */
+.crate-open-bg-wooden {
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.35) 0 3px, transparent 3px 46px),
+    repeating-linear-gradient(90deg, rgba(255, 220, 160, 0.04) 0 2px, transparent 2px 9px),
+    linear-gradient(180deg, #5b3a1e, #3a2412 70%, #24160b) !important;
+}
+/* soviet: dark red bunker with hazard stripes */
+.crate-open-bg-soviet {
+  background:
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.25) 0 22px, transparent 22px 44px),
+    linear-gradient(180deg, #5a1410, #34100c 65%, #1c0807) !important;
+}
+/* airdrop: night sky over a steel deck */
+.crate-open-bg-airdrop {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.3) 0 2px, transparent 2px 60px) 0 100% / 100% 30% no-repeat,
+    linear-gradient(180deg, transparent 70%, #3a4350 70%, #262d38 85%, #171c23) 0 0 / 100% 100%,
+    radial-gradient(circle, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px) 0 0 / 38px 38px,
+    radial-gradient(circle, rgba(255, 255, 255, 0.3) 0 1px, transparent 1.5px) 19px 13px / 52px 52px,
+    linear-gradient(180deg, #0a1529, #16294a 70%) !important;
+}
+.crate-open-floor {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 230px;
+  height: 46px;
+  margin: 58px 0 0 -115px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.65), transparent 70%);
+  z-index: 0;
+}
+.crate-chance-fries {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.crate-chance-fries-icon {
+  width: 20px;
+  height: 20px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* Loadout detail panel: dump an item for Golden Fries (two clicks) */
+.detail-dump-btn {
+  background: #6b3a2a;
+  border-bottom-color: #4a2619;
+}
+.detail-dump-btn.detail-dump-armed {
+  background: #c0392b;
+  border-bottom-color: #8e2a20;
+}
+
+/* ---------- Social: Clans tab (client/src/ui/clanUi.ts) ---------- */
+.clan-card {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.clan-card-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+.clan-muted {
+  color: #b8b8a8;
+  font-size: 13px;
+}
+.clan-tag {
+  color: #f2d63b;
+}
+.clan-found {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.clan-found-text {
+  flex: 1;
+  min-width: 0;
+}
+.clan-found-btn {
+  flex-shrink: 0;
+  width: auto;
+  padding: 0 16px;
+}
+.clan-badge {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background-color: #3b5a2b;
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-size: 80%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.clan-badge-icon {
+  background-color: rgba(0, 0, 0, 0.25);
+}
+.clan-badge-big {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  font-size: 18px;
+}
+/* the whole clan row is the click target (opens the clan popup) */
+.clan-row-name {
+  cursor: inherit;
+}
+.clan-mine {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.clan-mine-text {
+  flex: 1;
+  min-width: 0;
+}
+.clan-actions {
+  display: flex;
+  gap: 8px;
+}
+.clan-actions .shop-buy-btn {
+  width: auto;
+  padding: 0 16px;
+}
+.clan-disband-btn {
+  background: #6b3a2a;
+}
+.clan-disband-btn.clan-disband-armed {
+  background: #c0392b;
+}
+.clan-member-initial {
+  background: #3b5a2b;
+}
+.clan-role-badge {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f2d63b;
+  border: 1px solid #f2d63b;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.clan-form .clan-card-title {
+  margin-bottom: 10px;
+}
+.clan-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.clan-preview .clan-card-title {
+  margin: 0;
+}
+.clan-fields {
+  display: flex;
+  gap: 10px;
+}
+.clan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  color: #ddd;
+  font-size: 13px;
+}
+.clan-field-tag {
+  flex: 0 0 110px;
+}
+.clan-field .clan-input {
+  /* .market-search is a flex: 1 item - in this column it would grow downwards */
+  flex: none;
+  width: 100%;
+  height: 36px;
+  min-height: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 10px;
+  font-size: 15px;
+}
+.clan-input-tag {
+  text-transform: uppercase;
+}
+.clan-field-label {
+  color: #ddd;
+  font-size: 13px;
+  margin: 12px 0 4px;
+}
+.clan-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+.clan-icon-option {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-color: rgba(255, 255, 255, 0.05);
+  background-size: 80%;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.clan-icon-option:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.clan-icon-selected {
+  border-color: #f2d63b;
+}
+.clan-icon-none {
+  color: #f2d63b;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.clan-balance {
+  margin-top: 10px;
+}
+.clan-balance-low {
+  color: #ff7b6b;
+}
+.clan-form-status {
+  min-height: 18px;
+  margin-top: 8px;
+  color: #b8b8a8;
+  font-size: 13px;
+}
+.clan-form-error {
+  color: #ff7b6b;
+}
+.clan-form-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.clan-form-buttons .shop-buy-btn {
+  width: auto;
+  padding: 0 18px;
+}
+.clan-cancel-btn {
+  background: #555;
+}
+.clan-small-btn {
+  width: auto !important;
+  flex-shrink: 0;
+  padding: 0 12px;
+  height: 30px;
+  line-height: 30px;
+  font-size: 14px;
+}
+.clan-grey-btn {
+  background: #555;
+}
+.clan-danger-btn {
+  background: #6b3a2a;
+}
+.clan-danger-btn.clan-armed {
+  background: #c0392b;
+}
+.clan-row-buttons {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.clan-row .clan-small-btn,
+.social-row .clan-small-btn {
+  margin-left: auto;
+}
+.clan-row-buttons .clan-small-btn {
+  margin-left: 0;
+}
+.clan-box-title {
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.clan-box-title-spaced {
+  margin-top: 14px;
+}
+.clan-invite-box .clan-invite-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+.clan-invite-results {
+  margin-top: 6px;
+}
+.clan-link-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.clan-link-row .clan-link-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+}
+.clan-link-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(242, 214, 59, 0.5);
+}
+.clan-link-note {
+  color: #f2d63b;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.clan-flash {
+  background: rgba(80, 161, 59, 0.25);
+  border: 1px solid #50a13b;
+  color: #d8f5cc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+.clan-flash-error {
+  background: rgba(192, 57, 43, 0.25);
+  border-color: #c0392b;
+  color: #ffd2cc;
+}
+.clan-role-badge.clan-role-lieutenant {
+  color: #7fd3ff;
+  border-color: #7fd3ff;
+}
+.clan-row-buttons .clan-role-badge {
+  margin-left: 0;
+  align-self: center;
+}
+.clan-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.clan-tab {
+  padding: 8px 16px;
+  color: #c9b98a;
+  font-weight: 700;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.clan-tab:hover {
+  color: #fff;
+}
+.clan-tab-active {
+  color: #f2d63b;
+  border-bottom-color: #f2d63b;
+}
+.clan-tab .clan-tab-badge {
+  display: inline-block;
+}
+.clan-empty {
+  padding: 4px 2px 10px;
+}
+
+/* Clan page: weekly stats tab + Social "Clan League" tab */
+.clan-week {
+  margin: 0 2px 10px;
+}
+.clan-stats-head {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.clan-stats-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.clan-stats-modes {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.clan-stats-mode {
+  flex: 1 1 240px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.clan-stats-mode-title {
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.clan-stat-tiles {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.clan-stat-value {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.clan-stat-label {
+  color: #a8a898;
+  font-size: 11px;
+}
+.clan-stats-table-wrap {
+  overflow-x: auto;
+}
+.clan-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.clan-stats-table th {
+  color: #c9b98a;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.clan-stats-table th:first-child {
+  text-align: left;
+}
+.clan-stats-table th.clan-th-group {
+  text-align: center;
+  color: #f2d63b;
+  border-bottom: 1px solid rgba(242, 214, 59, 0.3);
+}
+.clan-stats-table td {
+  color: #fff;
+  text-align: right;
+  padding: 4px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+}
+.clan-stats-table td.clan-td-group {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+.clan-stats-table td:first-child {
+  text-align: left;
+  width: 100%;
+}
+.clan-stats-person {
+  background: none !important;
+  padding: 2px 0;
+}
+.clan-stats-note {
+  margin-top: 10px;
+}
+.clan-league-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.clan-seg {
+  display: flex;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  padding: 3px;
+}
+.clan-seg-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  color: #c9b98a;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.clan-seg-btn:hover {
+  color: #fff;
+}
+.clan-seg-active {
+  background: #f2d63b;
+  color: #1d1808;
+}
+.clan-seg-active:hover {
+  color: #1d1808;
+}
+.clan-league-rank {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: center;
+  color: #c9b98a;
+  font-weight: 700;
+  font-size: 16px;
+}
+.clan-league-value {
+  margin-left: auto;
+  text-align: right;
+}
+.clan-league-top-1 .clan-league-rank {
+  color: #f2d63b;
+  font-size: 20px;
+}
+.clan-league-top-2 .clan-league-rank {
+  color: #d9d9d9;
+  font-size: 18px;
+}
+.clan-league-top-3 .clan-league-rank {
+  color: #d08a4a;
+  font-size: 18px;
+}
+.clan-league-mine {
+  outline: 1px solid rgba(242, 214, 59, 0.5);
+}
+.clan-head-stats {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+}
+.clan-head-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.clan-head-stat-value {
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+}
+.clan-head-stat-label {
+  color: #a8a898;
+  font-size: 12px;
+}
+.clan-head-stats-note {
+  color: #6f6f62;
+  font-size: 11px;
+}
+.clan-row-clickable {
+  cursor: pointer;
+}
+.clan-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.clan-popup {
+  position: relative;
+  width: 100%;
+  max-width: 620px;
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: #15140f;
+  border: 1px solid rgba(242, 214, 59, 0.35);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+.clan-popup-close {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  color: #c9b98a;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.clan-popup-close:hover {
+  color: #fff;
+}
+.clan-popup-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding-right: 20px;
+}
+.clan-stats-table th.clan-th-sort {
+  cursor: pointer;
+  user-select: none;
+}
+.clan-stats-table th.clan-th-sort:hover {
+  color: #fff;
+}
+.clan-stats-table th.clan-th-sorted {
+  color: #f2d63b;
+}
+.clan-head-stat-main .clan-head-stat-value {
+  color: #f2d63b;
+  font-size: 20px;
+}
+.clan-titles {
+  color: #f2d63b;
+  font-weight: 700;
+  font-size: 13px;
+}
+.clan-eligibility {
+  color: #e6a23c;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.clan-keys {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.clan-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+.clan-key-icon {
+  width: 22px;
+  height: 22px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.clan-league-rewards .clan-muted {
+  margin-bottom: 8px;
+}
+.clan-reward-places {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.clan-reward-place {
+  flex: 1 1 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.clan-reward-place .clan-league-rank {
+  width: auto;
+}
+.clan-league-unranked {
+  opacity: 0.6;
+}
+.clan-pool {
+  border: 1px solid rgba(242, 214, 59, 0.4);
+}
+.clan-pool-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.clan-pool-head .clan-box-title {
+  margin-bottom: 0;
+}
+.clan-pool-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+.clan-pool-select {
+  height: 30px;
+}
+.clan-pool-form .clan-pool-amount {
+  flex: 0 0 64px;
+  height: 30px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.clan-level {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.clan-level-chip {
+  background: #f2d63b;
+  color: #1d1808;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.clan-level-bar {
+  width: 140px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.clan-level-bar i {
+  display: block;
+  height: 100%;
+  background: #f2d63b;
+}
+.clan-level-text {
+  color: #a8a898;
+  font-size: 12px;
+}
+.clan-color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.clan-color-option {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 3px solid transparent;
+  box-sizing: border-box;
+  cursor: pointer;
+  position: relative;
+}
+.clan-color-selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #000 inset;
+}
+.clan-color-locked {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.clan-color-lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+}
+.clan-color-note {
+  margin-top: 4px;
+}
+.clan-goal-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 14px 18px 30px 4px;
+}
+.clan-goal-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: #50a13b;
+}
+.clan-goal-mark {
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0.55;
+}
+.clan-goal-mark .clan-key-icon {
+  width: 20px;
+  height: 20px;
+}
+.clan-goal-reached {
+  opacity: 1;
+}
+.clan-goal-num {
+  color: #c9b98a;
+  font-size: 11px;
+  font-weight: 700;
+}
+.clan-bonus-note {
+  margin-top: 8px;
+  color: #9fd88c;
+  font-size: 13px;
+}
+.clan-goal-hint {
+  margin-top: 6px;
+}
+/* Account settings: small segmented choice (In-game name tag) */
+.loadout-seg {
+  display: flex;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  padding: 2px;
+}
+.loadout-seg-btn {
+  padding: 4px 10px;
+  border-radius: 5px;
+  color: #c9b98a;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.loadout-seg-btn:hover {
+  color: #fff;
+}
+.loadout-seg-active {
+  background: #f2d63b;
+  color: #1d1808;
+}
+.loadout-seg-active:hover {
+  color: #1d1808;
+}
+.clan-rewards-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.clan-rewards-head .clan-box-title {
+  margin-bottom: 0;
+}
+.clan-rewards-toggle {
+  color: #9ab;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.clan-rewards-toggle:hover {
+  color: #f2d63b;
+}
+.clan-rewards-details {
+  margin-top: 8px;
+}
+
+/* ---------- Clan banners (shared/utils/clan.ts CLAN_BANNERS) ----------
+   Patterns behind a clan's header; --clan-color is the clan's tag colour. A dark veil
+   (::before) keeps the text readable; the strip variant is fainter for list rows. */
+.clan-banner {
+  --clan-color: #ffffff;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.clan-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.clan-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+/* list rows (league, clan list): the banner shows behind the clan name, the value on
+   the right stays on a darker background */
+.clan-banner-strip::after {
+  opacity: 0.6;
+}
+.clan-banner-strip::before {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.15) 18%, rgba(0, 0, 0, 0.2) 55%, rgba(0, 0, 0, 0.8) 85%);
+}
+.clan-banner-strip .social-row-name {
+  text-shadow: 0 1px 3px #000;
+}
+.clan-banner-strip .social-row-sub {
+  color: #d0d0d0;
+  text-shadow: 0 1px 2px #000;
+}
+.clan-banner-stripes::after {
+  background: repeating-linear-gradient(135deg, var(--clan-color) 0 10px, transparent 10px 26px);
+}
+.clan-banner-dots::after {
+  background: radial-gradient(circle, var(--clan-color) 0 3px, transparent 3.5px) 0 0 / 18px 18px;
+}
+.clan-banner-camo::after {
+  background:
+    radial-gradient(ellipse 34px 20px at 20% 30%, var(--clan-color) 60%, transparent 62%) 0 0 / 120px 80px,
+    radial-gradient(ellipse 26px 30px at 70% 70%, var(--clan-color) 60%, transparent 62%) 0 0 / 120px 80px,
+    radial-gradient(ellipse 40px 16px at 60% 15%, color-mix(in srgb, var(--clan-color) 55%, #000) 60%, transparent 62%) 0 0 / 120px 80px,
+    radial-gradient(ellipse 30px 22px at 15% 80%, color-mix(in srgb, var(--clan-color) 55%, #000) 60%, transparent 62%) 0 0 / 120px 80px;
+}
+.clan-banner-chevron::after {
+  background:
+    linear-gradient(135deg, var(--clan-color) 25%, transparent 25%) -14px 0 / 28px 28px,
+    linear-gradient(225deg, var(--clan-color) 25%, transparent 25%) -14px 0 / 28px 28px;
+}
+.clan-banner-sunburst::after {
+  background: repeating-conic-gradient(from 0deg at 12% 50%, var(--clan-color) 0deg 7deg, transparent 7deg 18deg);
+}
+.clan-banner-waves::after {
+  background:
+    radial-gradient(circle at 50% 100%, transparent 14px, var(--clan-color) 15px 19px, transparent 20px) 0 0 / 40px 20px,
+    radial-gradient(circle at 50% 0%, transparent 14px, var(--clan-color) 15px 19px, transparent 20px) 20px 10px / 40px 20px;
+}
+.clan-banner-flames::after {
+  opacity: 0.7;
+  background:
+    radial-gradient(ellipse 22px 70px at 10% 100%, var(--clan-color), transparent 70%),
+    radial-gradient(ellipse 28px 90px at 30% 100%, color-mix(in srgb, var(--clan-color) 60%, #ff7a00), transparent 70%),
+    radial-gradient(ellipse 20px 60px at 50% 100%, var(--clan-color), transparent 70%),
+    radial-gradient(ellipse 30px 95px at 70% 100%, color-mix(in srgb, var(--clan-color) 60%, #ff3d00), transparent 70%),
+    radial-gradient(ellipse 22px 70px at 90% 100%, var(--clan-color), transparent 70%);
+}
+.clan-banner-carbon::after {
+  background:
+    linear-gradient(27deg, color-mix(in srgb, var(--clan-color) 30%, #111) 5px, transparent 5px) 0 5px / 20px 20px,
+    linear-gradient(207deg, color-mix(in srgb, var(--clan-color) 30%, #111) 5px, transparent 5px) 10px 0 / 20px 20px,
+    linear-gradient(27deg, color-mix(in srgb, var(--clan-color) 60%, #222) 5px, transparent 5px) 0 10px / 20px 20px,
+    linear-gradient(207deg, color-mix(in srgb, var(--clan-color) 60%, #222) 5px, transparent 5px) 10px 5px / 20px 20px,
+    linear-gradient(90deg, #1b1b1b 10px, transparent 10px) 0 0 / 20px 20px,
+    #1d1d1d;
+  opacity: 0.8;
+}
+.clan-banner-galaxy::after {
+  opacity: 0.9;
+  background:
+    radial-gradient(1.5px 1.5px at 20px 30px, #fff, transparent) 0 0 / 120px 70px,
+    radial-gradient(1px 1px at 70px 10px, #fff, transparent) 0 0 / 120px 70px,
+    radial-gradient(1.5px 1.5px at 95px 50px, #fff, transparent) 0 0 / 120px 70px,
+    radial-gradient(1px 1px at 45px 60px, #fff, transparent) 0 0 / 120px 70px,
+    radial-gradient(ellipse at 70% 40%, color-mix(in srgb, var(--clan-color) 70%, transparent), transparent 60%),
+    radial-gradient(ellipse at 25% 70%, color-mix(in srgb, var(--clan-color) 40%, #3a1a6a), transparent 65%),
+    #0b0b1a;
+  animation: clan-galaxy-drift 40s linear infinite;
+}
+@keyframes clan-galaxy-drift {
+  from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; }
+  to { background-position: 120px 0, 120px 0, 120px 0, 120px 0, 0 0, 0 0, 0 0; }
+}
+/* banner picker in the edit form */
+.clan-banner-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.clan-banner-option {
+  width: 84px;
+  height: 40px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: #1a1a14;
+}
+.clan-banner-option .clan-banner-name {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding-bottom: 2px;
+  text-shadow: 0 1px 2px #000;
+}
+.clan-banner-selected {
+  border-color: #fff;
+}
+.clan-banner-locked {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
