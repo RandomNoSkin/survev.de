@@ -47,7 +47,17 @@ export const zClanEditRequest = z.object({
 });
 export type ClanEditRequest = z.infer<typeof zClanEditRequest>;
 
-export const zClanListRequest = z.object({ search: z.string().max(32).optional() });
+/** Orders of the clan list (Discover tab). */
+export const CLAN_LIST_SORTS = ["members", "active", "level", "titles", "newest"] as const;
+export type ClanListSort = (typeof CLAN_LIST_SORTS)[number];
+/** Clans per page of the clan list. */
+export const CLAN_LIST_PAGE = 30;
+export const zClanListRequest = z.object({
+    /** matches the clan's name or tag, or the name / slug of one of its members */
+    search: z.string().max(32).optional(),
+    sort: z.enum(CLAN_LIST_SORTS).optional(),
+    offset: z.number().int().min(0).max(5000).optional(),
+});
 export const zClanSlugRequest = z.object({ slug: z.string().min(1).max(64) });
 export const zClanRespondRequest = z.object({ accept: z.boolean() });
 export const zClanInviteRespondRequest = z.object({ clanId: z.number().int().positive(), accept: z.boolean() });
@@ -133,8 +143,17 @@ export interface ClanLinkResponse {
     error?: string;
 }
 
+export interface ClanListEntry extends ClanSummary {
+    /** counted league games of the clan this week (all members) */
+    weekGames: number;
+    /** search hit on members, not on the clan itself: the matching members' names */
+    matched?: string[];
+}
+
 export interface ClanListResponse {
-    clans: ClanSummary[];
+    clans: ClanListEntry[];
+    /** another page follows (pass offset + clans.length) */
+    hasMore: boolean;
 }
 
 export interface ClanActionResponse {

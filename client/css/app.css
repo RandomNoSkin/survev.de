@@ -14368,3 +14368,13 @@ img.custom-map-loot-icon {
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* Social → Discover: every clan, searchable */
+.clan-discover-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: auto; padding-left: 10px; white-space: nowrap; }
+.clan-discover-level { font-weight: 700; font-size: 13px; color: #fff; }
+.clan-discover-week { font-size: 11px; color: #cfd6e0; }
+.clan-discover-idle { color: #7d8794; }
+.clan-row-matched { color: #9fd3ff; }
+.clan-discover-more { margin: 10px auto 4px; width: 160px; text-align: center; }
+.clan-discover-hint { margin-top: 8px; text-align: center; }
+.clan-discover-sorts { flex-wrap: wrap; }

@@ -1,8 +1,9 @@
-import { and, asc, count, desc, eq, gte, ilike, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, or, sql } from "drizzle-orm";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import {
     CLAN_CREATE_COST,
+    CLAN_LIST_PAGE,
     CLAN_MAX_MEMBERS,
     CLAN_MAX_PENDING,
     CLAN_BANNERS,
@@ -12,6 +13,8 @@ import {
     type ClanDetails,
     type ClanEditRequest,
     type ClanLinkInfoResponse,
+    type ClanListEntry,
+    type ClanListSort,
     type ClanMember,
     type ClanViewResponse,
     type ClanLinkResponse,
@@ -23,7 +26,7 @@ import {
     validateClan,
 } from "../../../../shared/utils/clan";
 import { checkForBadWords } from "../../utils/serverHelpers";
-import { adoptWeekStats, getClanPool, getClanStats, getClanWeekTotals } from "./clanStats";
+import { adoptWeekStats, getClanPool, getClanStats, getClanWeekTotals, weekKey } from "./clanStats";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { playerIcon, playerIconColumns } from "./playerIcon";
@@ -31,7 +34,10 @@ import {
     blocksTable,
     clanWeekRewardsTable,
     clanInvitesTable,
+    clanKeyPoolTable,
     clanMembersTable,
+    clanWeekGoalsTable,
+    clanWeekStatsTable,
     clansTable,
     goldenFriesLedgerTable,
     itemsTable,
@@ -302,17 +308,64 @@ export async function getMyClan(userId: string): Promise<MyClanResponse> {
     return { clan: details, invites: [], requests: [] };
 }
 
-/** Clans by size (biggest first), optionally filtered by name or tag. */
-export async function listClans(search?: string): Promise<ClanSummary[]> {
-    const q = search?.trim();
+/**
+ * The clan list (Discover tab), one page at a time. `search` matches the clan's name or
+ * tag, or the username / slug of one of its members - those hits say which members.
+ */
+export async function listClans(
+    search?: string,
+    sort: ClanListSort = "members",
+    offset = 0,
+): Promise<{ clans: ClanListEntry[]; hasMore: boolean }> {
+    const q = search?.trim().replace(/[%_\\]/g, "");
+    const like = `%${q}%`;
+    const memberHit = (clanId: typeof clansTable.id) =>
+        sql`EXISTS (SELECT 1 FROM ${clanMembersTable} m JOIN ${usersTable} u ON u.id = m.user_id
+            WHERE m.clan_id = ${clanId} AND (u.username ILIKE ${like} OR u.slug ILIKE ${like}))`;
+    const weekGames = sql<number>`(SELECT coalesce(sum(${clanWeekStatsTable.games}), 0) FROM ${clanWeekStatsTable}
+        WHERE ${clanWeekStatsTable.clanId} = ${clansTable.id} AND ${clanWeekStatsTable.week} = ${weekKey()})`;
+    const order = {
+        members: [desc(summaryColumns.members), asc(clansTable.createdAt)],
+        active: [desc(weekGames), desc(summaryColumns.members)],
+        level: [desc(clansTable.xp), asc(clansTable.createdAt)],
+        titles: [desc(summaryColumns.titles), desc(clansTable.xp)],
+        newest: [desc(clansTable.createdAt)],
+    }[sort];
     const rows = await db
-        .select(summaryColumns)
+        .select({ ...summaryColumns, weekGames })
         .from(clansTable)
         .innerJoin(usersTable, eq(usersTable.id, clansTable.ownerId))
-        .where(q ? or(ilike(clansTable.name, `%${q.replace(/[%_\\]/g, "")}%`), ilike(clansTable.tag, `%${q.replace(/[%_\\]/g, "")}%`)) : undefined)
-        .orderBy(desc(summaryColumns.members), asc(clansTable.createdAt))
-        .limit(50);
-    return rows.map(toSummary);
+        .where(q ? or(ilike(clansTable.name, like), ilike(clansTable.tag, like), memberHit(clansTable.id)) : undefined)
+        .orderBy(...order, asc(clansTable.id))
+        .limit(CLAN_LIST_PAGE + 1)
+        .offset(offset);
+    const page = rows.slice(0, CLAN_LIST_PAGE);
+    // which members made a clan match (when its name / tag didn't)
+    const viaMembers = q
+        ? page.filter((r) => !r.name.toLowerCase().includes(q.toLowerCase()) && !r.tag.toLowerCase().includes(q.toLowerCase()))
+        : [];
+    const matched = new Map<number, string[]>();
+    if (viaMembers.length) {
+        const hits = await db
+            .select({ clanId: clanMembersTable.clanId, username: usersTable.username, slug: usersTable.slug })
+            .from(clanMembersTable)
+            .innerJoin(usersTable, eq(usersTable.id, clanMembersTable.userId))
+            .where(
+                and(
+                    inArray(clanMembersTable.clanId, viaMembers.map((r) => r.id)),
+                    or(ilike(usersTable.username, like), ilike(usersTable.slug, like)),
+                ),
+            );
+        for (const h of hits) matched.set(h.clanId, [...(matched.get(h.clanId) ?? []), h.username || h.slug]);
+    }
+    return {
+        clans: page.map(({ weekGames: games, ...r }) => ({
+            ...toSummary(r),
+            weekGames: Number(games),
+            ...(matched.has(r.id) ? { matched: matched.get(r.id)!.slice(0, 3) } : {}),
+        })),
+        hasMore: rows.length > CLAN_LIST_PAGE,
+    };
 }
 
 
@@ -595,4 +648,196 @@ export function setMemberRole(ownerId: string, slug: string, role: "lieutenant" 
             .returning({ userId: clanMembersTable.userId });
         if (!changed.length) throw new ClanError("not_member");
     });
+}
+
+// ── Moderation dashboard (admins): any clan, no owner / level / ownership checks ──
+
+/** Every clan for the dashboard: newest first, filtered by name, tag or owner slug. */
+export async function adminListClans(search?: string) {
+    const q = search?.trim().replace(/[%_\\]/g, "");
+    const rows = await db
+        .select({ ...summaryColumns, inviteCode: clansTable.inviteCode })
+        .from(clansTable)
+        .innerJoin(usersTable, eq(usersTable.id, clansTable.ownerId))
+        .where(
+            q
+                ? or(ilike(clansTable.name, `%${q}%`), ilike(clansTable.tag, `%${q}%`), ilike(usersTable.slug, `%${q}%`))
+                : undefined,
+        )
+        .orderBy(desc(clansTable.createdAt))
+        .limit(500);
+    return rows.map(({ inviteCode, ...r }) => ({ ...toSummary(r), level: clanLevel(r.xp).level, hasLink: !!inviteCode }));
+}
+
+/** One clan with everything staff may need: members, pending joins, key pool, this
+ *  week's stats and the league history. */
+export async function adminGetClan(clanId: number) {
+    const [clan] = await db
+        .select({ ...summaryColumns, inviteCode: clansTable.inviteCode })
+        .from(clansTable)
+        .innerJoin(usersTable, eq(usersTable.id, clansTable.ownerId))
+        .where(eq(clansTable.id, clanId));
+    if (!clan) return null;
+    const { inviteCode, ...summary } = clan;
+    const rewards = await db
+        .select({ week: clanWeekRewardsTable.week, rank: clanWeekRewardsTable.rank, rating: clanWeekRewardsTable.rating, keys: clanWeekRewardsTable.keys })
+        .from(clanWeekRewardsTable)
+        .where(eq(clanWeekRewardsTable.clanId, clanId))
+        .orderBy(desc(clanWeekRewardsTable.week));
+    const goals = await db
+        .select({ week: clanWeekGoalsTable.week, tier: clanWeekGoalsTable.tier, players: clanWeekGoalsTable.players })
+        .from(clanWeekGoalsTable)
+        .where(eq(clanWeekGoalsTable.clanId, clanId))
+        .orderBy(desc(clanWeekGoalsTable.week));
+    return {
+        clan: { ...toSummary(summary), level: clanLevel(summary.xp).level, inviteCode },
+        members: await membersOf(clanId),
+        invites: await pendingPlayers(clanId, "invite"),
+        requests: await pendingPlayers(clanId, "request"),
+        pool: await getClanPool(clanId),
+        stats: await getClanStats(clanId),
+        rewards,
+        goals,
+    };
+}
+
+async function adminClan(tx: Tx, clanId: number) {
+    const [c] = await tx
+        .select({ id: clansTable.id, name: clansTable.name, tag: clansTable.tag, ownerId: clansTable.ownerId })
+        .from(clansTable)
+        .where(eq(clansTable.id, clanId));
+    if (!c) throw new ClanError("not_found");
+    return c;
+}
+
+async function adminMember(tx: Tx, clanId: number, slug: string) {
+    const target = await userBySlug(tx, slug);
+    const [m] = await tx
+        .select({ role: clanMembersTable.role })
+        .from(clanMembersTable)
+        .where(and(eq(clanMembersTable.userId, target.id), eq(clanMembersTable.clanId, clanId)));
+    if (!m) throw new ClanError("not_member");
+    return { id: target.id, role: m.role };
+}
+
+/** Renames a clan / clears an offensive icon. Format, reserved tags and uniqueness still
+ *  apply; bad words, level locks and icon ownership don't (staff decide). */
+export function adminEditClan(clanId: number, req: { name: string; tag: string; clearIcon?: boolean; tagColor?: number; banner?: number }) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        const name = normalizeClanName(req.name);
+        const tag = normalizeClanTag(req.tag);
+        const invalid = validateClan(name, tag);
+        if (invalid) throw new ClanError(invalid);
+        if (req.tagColor !== undefined && !CLAN_TAG_COLORS[req.tagColor]) throw new ClanError("bad_color");
+        if (req.banner !== undefined && !CLAN_BANNERS[req.banner]) throw new ClanError("bad_banner");
+        const clash = await tx
+            .select({ id: clansTable.id, name: clansTable.name })
+            .from(clansTable)
+            .where(or(sql`lower(${clansTable.name}) = lower(${name})`, sql`upper(${clansTable.tag}) = ${tag}`));
+        for (const c of clash) {
+            if (c.id === clanId) continue;
+            throw new ClanError(c.name.toLowerCase() === name.toLowerCase() ? "name_taken" : "tag_taken");
+        }
+        await tx
+            .update(clansTable)
+            .set({
+                name,
+                tag,
+                ...(req.clearIcon ? { icon: "" } : {}),
+                ...(req.tagColor !== undefined ? { tagColor: req.tagColor } : {}),
+                ...(req.banner !== undefined ? { banner: req.banner } : {}),
+            })
+            .where(eq(clansTable.id, clanId));
+    });
+}
+
+/** Removes any member. The owner can't be kicked - transfer ownership first. */
+export function adminKickMember(clanId: number, slug: string) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        const m = await adminMember(tx, clanId, slug);
+        if (m.role === "owner") throw new ClanError("owner_cannot_leave");
+        await tx.delete(clanMembersTable).where(eq(clanMembersTable.userId, m.id));
+    });
+}
+
+/** Makes a member lieutenant / member, or the new owner (the old owner becomes lieutenant). */
+export function adminSetRole(clanId: number, slug: string, role: "owner" | "lieutenant" | "member") {
+    return run(async (tx) => {
+        const clan = await adminClan(tx, clanId);
+        const m = await adminMember(tx, clanId, slug);
+        if (m.role === "owner") throw new ClanError(role === "owner" ? "already_owner" : "owner_cannot_leave");
+        if (role !== "owner") {
+            await tx.update(clanMembersTable).set({ role }).where(eq(clanMembersTable.userId, m.id));
+            return;
+        }
+        await tx.update(clanMembersTable).set({ role: "lieutenant" }).where(eq(clanMembersTable.userId, clan.ownerId));
+        await tx.update(clanMembersTable).set({ role: "owner" }).where(eq(clanMembersTable.userId, m.id));
+        await tx.update(clansTable).set({ ownerId: m.id }).where(eq(clansTable.id, clanId));
+    });
+}
+
+/** Kills the invite link (a new one only exists when the owner makes it again). */
+export function adminResetLink(clanId: number) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        await tx.update(clansTable).set({ inviteCode: null }).where(eq(clansTable.id, clanId));
+        await tx.delete(clanInvitesTable).where(and(eq(clanInvitesTable.clanId, clanId), eq(clanInvitesTable.kind, "request")));
+    });
+}
+
+/** Sets how many keys of one type wait in the clan's pool (0 = none). */
+export function adminSetPool(clanId: number, keyType: string, amount: number) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        await tx
+            .insert(clanKeyPoolTable)
+            .values({ clanId, keyType, amount })
+            .onConflictDoUpdate({ target: [clanKeyPoolTable.clanId, clanKeyPoolTable.keyType], set: { amount } });
+    });
+}
+
+/** Wipes this week's league stats of the clan, or of one member (cheated / boosted games). */
+export function adminResetWeekStats(clanId: number, slug?: string) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        const user = slug ? await userBySlug(tx, slug) : null;
+        await tx
+            .delete(clanWeekStatsTable)
+            .where(
+                and(
+                    eq(clanWeekStatsTable.clanId, clanId),
+                    eq(clanWeekStatsTable.week, weekKey()),
+                    user ? eq(clanWeekStatsTable.userId, user.id) : undefined,
+                ),
+            );
+    });
+}
+
+/** Sets the clan's XP (and with it the level). Colours / banners above the new level stay
+ *  as they are until the owner edits the clan. */
+export function adminSetXp(clanId: number, xp: number) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        await tx.update(clansTable).set({ xp }).where(eq(clansTable.id, clanId));
+    });
+}
+
+/** Deletes the clan (members, pool and stats go with it). No refund. */
+export function adminDisbandClan(clanId: number) {
+    return run(async (tx) => {
+        await adminClan(tx, clanId);
+        await tx.delete(clansTable).where(eq(clansTable.id, clanId));
+    });
+}
+
+/** Name / tag / role of an account's clan, for the account view. */
+export async function adminClanOf(userId: string) {
+    const [r] = await db
+        .select({ id: clansTable.id, name: clansTable.name, tag: clansTable.tag, role: clanMembersTable.role })
+        .from(clanMembersTable)
+        .innerJoin(clansTable, eq(clansTable.id, clanMembersTable.clanId))
+        .where(eq(clanMembersTable.userId, userId));
+    return r ?? null;
 }

@@ -420,6 +420,19 @@ export const dashboardHtml = `<!DOCTYPE html>
 .crate-ed-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 .crate-ed-actions .dirty { color: #f2c230; font-size: 11px; margin-right: auto; }
 
+.cl-row { cursor: pointer; }
+.cl-tag { display: inline-block; font-weight: 700; font-family: monospace; padding: 1px 6px; border-radius: 4px; background: var(--surface3); }
+#clan-modal-body { display: flex; flex-direction: column; gap: 12px; }
+#clan-modal-body .detail-card { padding: 12px 14px; }
+.cl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.cl-grid label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-dim); }
+.cl-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.cl-kpis { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; }
+.cl-kpis b { color: var(--text); }
+.cl-pool { display: flex; flex-wrap: wrap; gap: 10px; }
+.cl-pool label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.cl-pool input { width: 64px; }
+.cl-danger { border-color: #c0392b !important; }
 .ac-sel { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); padding: 6px 8px; font-family: inherit; font-size: 12px; }
 #ac-table th { white-space: nowrap; }
 #ac-table th.sortable { cursor: pointer; user-select: none; }
@@ -464,6 +477,7 @@ export const dashboardHtml = `<!DOCTYPE html>
   <div class="nav-group" data-group="players">Players</div>
   <button class="tab-btn" data-tab="accounts"><span class="nav-icon">👤</span>Accounts</button>
   <button class="tab-btn" data-tab="crates"><span class="nav-icon">📦</span>Crates</button>
+  <button class="tab-btn" data-tab="clans"><span class="nav-icon">🛡️</span>Clans</button>
   <button class="tab-btn" data-tab="xp"><span class="nav-icon">✦</span>XP Gain</button>
   <button class="tab-btn" data-tab="leaderboard"><span class="nav-icon">🏆</span>Leaderboard</button>
 
@@ -805,6 +819,17 @@ export const dashboardHtml = `<!DOCTYPE html>
     <div id="crate-editors"><div class="loading">Loading…</div></div>
   </div>
 
+  <!-- ════════════════ CLANS (admin-only: any clan, names, members, keys, stats) ════════════════ -->
+  <div id="tab-clans" class="tab-pane">
+    <div class="toolbar" style="margin-bottom:8px;">
+      <input id="clan-search" type="text" class="ac-sel" placeholder="Clan name, tag or owner slug…" style="width:260px;flex:none;">
+      <button class="btn btn-gray" onclick="loadClans()">↻ Refresh</button>
+      <span id="clan-info" style="font-size:11px;color:var(--text-dim);">Loading…</span>
+    </div>
+    <div class="muted ac-help">Every clan, newest first. Click a clan to rename it, manage members, fix its key pool, wipe cheated league stats or disband it. Every change is logged to Discord.</div>
+    <div id="clan-list"><div class="loading">Loading…</div></div>
+  </div>
+
   <!-- ════════════════ LOBBIES (admin-only: every open private lobby) ════════════════ -->
   <div id="tab-lobbies" class="tab-pane">
     <div class="lobby-toolbar">
@@ -976,6 +1001,17 @@ export const dashboardHtml = `<!DOCTYPE html>
   </div>
 </div>
 
+<!-- ── Clan detail modal (below the account modal, so an account opens on top) ── -->
+<div id="clan-modal" style="display:none;position:fixed;inset:0;background:#000000aa;z-index:110;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 12px;">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;width:900px;max-width:100%;padding:18px;display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div id="clan-modal-title" style="font-weight:700;font-size:15px;color:#fff;">Clan</div>
+      <button class="btn btn-gray btn-sm" id="clan-modal-close" style="margin-left:auto;">✕ Close</button>
+    </div>
+    <div id="clan-modal-body"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
 <!-- ── Account detail modal ── -->
 <div id="account-modal" style="display:none;position:fixed;inset:0;background:#000000aa;z-index:120;align-items:flex-start;justify-content:center;overflow-y:auto;padding:28px 12px;">
   <div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;width:820px;max-width:100%;padding:18px;display:flex;flex-direction:column;gap:14px;">
@@ -1091,6 +1127,7 @@ function hLookup(qv)          { return 'view=lookup&q=' + encodeURIComponent(qv)
 function hChatGame(gid, msg)  { return 'view=chatgame&gameId=' + encodeURIComponent(gid) + (msg != null ? '&msg=' + encodeURIComponent(msg) : ''); }
 function hAccount(slug)       { return 'view=account&slug=' + encodeURIComponent(slug); }
 function hReplays(qv)         { return 'view=replays&q=' + encodeURIComponent(qv); }
+function hClan(id)            { return 'view=clan&id=' + encodeURIComponent(id); }
 function hGame(gid)           { return 'view=game&gameId=' + encodeURIComponent(gid); }
 function hXpUser(userId, win) { return 'view=xpuser&userId=' + encodeURIComponent(userId) + (win ? '&window=' + encodeURIComponent(win) : ''); }
 
@@ -1165,6 +1202,10 @@ function routeFromHash(h) {
       if (el) el.value = gid;
       loadGamesSearch();
     }
+  } else if (view === 'clan') {
+    switchTab('clans');
+    const id = Number(p.get('id'));
+    if (id) openClanDetail(id);
   } else if (view === 'sus') {
     switchTab('sus');
   } else if (view === 'xpuser') {
@@ -1367,6 +1408,9 @@ function switchTab(name) {
   } else if (name === 'crates') {
     closeSSE();
     loadCrates();
+  } else if (name === 'clans') {
+    closeSSE();
+    loadClans();
   } else {
     closeSSE();
   }
@@ -4125,6 +4169,228 @@ document.getElementById('ac-list').addEventListener('click', (e) => {
   renderAntiCheat();
 });
 
+// ── CLANS ────────────────────────────────────────────────────────────────────
+let clanMeta = null;      // colours, banners, key types (from /api/clans)
+let clanRows = [];
+let clanSort = { col: 'created', dir: -1 };
+let clanDetail = null;    // the clan open in the modal
+let clanSearchTimer = null;
+
+const CLAN_ERRORS = {
+  name_length: 'Name must be 3-20 characters.', name_chars: 'Name has invalid characters.',
+  tag_length: 'Tag must be 2-5 characters.', tag_chars: 'Tag may only use letters and digits.',
+  tag_reserved: 'That tag is reserved.', name_taken: 'Another clan has that name.', tag_taken: 'Another clan has that tag.',
+  not_member: 'Not a member of this clan.', not_found: 'Not found.', owner_cannot_leave: 'Transfer ownership first.',
+  already_owner: 'Already the owner.', bad_color: 'Unknown colour.', bad_banner: 'Unknown banner.',
+};
+
+async function loadClans() {
+  const q = document.getElementById('clan-search').value.trim();
+  try {
+    clanMeta = await get('/api/clans' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    clanRows = clanMeta.clans || [];
+    renderClans();
+  } catch (e) {
+    document.getElementById('clan-list').innerHTML = '<div class="empty">Could not load the clans.</div>';
+  }
+}
+
+function clanTagHtml(c) {
+  const col = clanMeta && clanMeta.colors[c.tagColor] ? clanMeta.colors[c.tagColor].color : '#fff';
+  return '<span class="cl-tag" style="color:' + esc(col) + '">' + esc(c.tag) + '</span>';
+}
+
+function renderClans() {
+  document.getElementById('clan-info').textContent = clanRows.length + (clanRows.length === 1 ? ' clan' : ' clans') + (clanRows.length >= 500 ? ' (first 500 - search to narrow)' : '');
+  if (!clanRows.length) { document.getElementById('clan-list').innerHTML = '<div class="empty">No clans found.</div>'; return; }
+  const val = (c, k) => k === 'name' ? c.name.toLowerCase() : k === 'tag' ? c.tag : k === 'owner' ? c.ownerSlug : k === 'created' ? c.createdAt : c[k];
+  const rows = clanRows.slice().sort((a, b) => { const x = val(a, clanSort.col), y = val(b, clanSort.col); return (x < y ? -1 : x > y ? 1 : 0) * clanSort.dir; });
+  const head = (col, label) => '<th class="sortable' + (clanSort.col === col ? ' ac-sorted' : '') + '" data-col="' + col + '">' + esc(label) + (clanSort.col === col ? (clanSort.dir < 0 ? ' ▼' : ' ▲') : '') + '</th>';
+  document.getElementById('clan-list').innerHTML = '<table class="data-table" id="clan-table"><thead><tr>'
+    + head('tag', 'Tag') + head('name', 'Name') + head('owner', 'Owner') + head('members', 'Members') + head('xp', 'Level') + head('titles', '#1 weeks') + '<th>Link</th>' + head('created', 'Created')
+    + '</tr></thead><tbody>' + rows.map(c => '<tr class="cl-row" data-id="' + c.id + '">'
+      + '<td>' + clanTagHtml(c) + '</td>'
+      + '<td><b>' + esc(c.name) + '</b></td>'
+      + '<td>' + navLink(hAccount(c.ownerSlug), '@' + esc(c.ownerSlug), { title: 'Open account' }) + '</td>'
+      + '<td>' + c.members + '</td>'
+      + '<td>Lv ' + c.level + ' <span class="muted">· ' + Math.round(c.xp) + ' XP</span></td>'
+      + '<td>' + (c.titles || '–') + '</td>'
+      + '<td>' + (c.hasLink ? 'yes' : '<span class="muted">–</span>') + '</td>'
+      + '<td class="ac-when">' + esc(new Date(c.createdAt).toLocaleDateString()) + '</td>'
+      + '</tr>').join('') + '</tbody></table>';
+}
+
+document.getElementById('clan-search').addEventListener('input', () => { clearTimeout(clanSearchTimer); clanSearchTimer = setTimeout(loadClans, 300); });
+document.getElementById('clan-list').addEventListener('click', (e) => {
+  if (e.target.closest('[data-nav]')) return;
+  const h = e.target.closest('th.sortable');
+  if (h) {
+    const col = h.dataset.col;
+    if (clanSort.col === col) clanSort.dir *= -1;
+    else clanSort = { col, dir: col === 'name' || col === 'tag' || col === 'owner' ? 1 : -1 };
+    renderClans();
+    return;
+  }
+  const row = e.target.closest('.cl-row');
+  if (row) openClanDetail(Number(row.dataset.id));
+});
+
+const clanModal = document.getElementById('clan-modal');
+document.getElementById('clan-modal-close').addEventListener('click', () => { clanModal.style.display = 'none'; });
+clanModal.addEventListener('click', (e) => { if (e.target === clanModal) clanModal.style.display = 'none'; });
+
+async function openClanDetail(id) {
+  clanModal.style.display = 'flex';
+  document.getElementById('clan-modal-body').innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    if (!clanMeta) clanMeta = await get('/api/clans');
+    clanDetail = await get('/api/clans/' + id);
+    renderClanDetail();
+  } catch (e) {
+    document.getElementById('clan-modal-body').innerHTML = '<div class="empty">Clan not found (disbanded?).</div>';
+  }
+}
+
+function renderClanDetail() {
+  const d = clanDetail, c = d.clan, st = d.stats || {}, tot = st.totals || {};
+  document.getElementById('clan-modal-title').innerHTML = clanTagHtml(c) + ' ' + esc(c.name) + ' <span style="color:var(--text-muted);font-weight:400;font-size:12px;">#' + c.id + ' · created ' + esc(new Date(c.createdAt).toLocaleDateString()) + '</span>';
+  const opt = (list, sel) => list.map((x, i) => '<option value="' + i + '"' + (i === sel ? ' selected' : '') + '>' + esc(x.name) + ' (Lv ' + x.level + ')</option>').join('');
+  const weekStats = {};
+  (st.members || []).forEach(m => { weekStats[m.slug] = m.stats; });
+  const roleSel = (m) => '<select class="ac-sel cl-role" data-slug="' + esc(m.slug) + '"' + (m.role === 'owner' ? ' disabled' : '') + '>'
+    + ['member', 'lieutenant', 'owner'].map(r => '<option value="' + r + '"' + (r === m.role ? ' selected' : '') + '>' + r + '</option>').join('') + '</select>';
+  const pend = (list) => list.length ? list.map(p => navLink(hAccount(p.slug), '@' + esc(p.slug), { title: 'Open account' }) + ' <span class="muted">' + esc(new Date(p.at).toLocaleDateString()) + '</span>').join(' · ') : '<span class="muted">none</span>';
+  const keyName = (t) => ((clanMeta.keys.find(k => k.type === t)) || {}).name || t;
+
+  document.getElementById('clan-modal-body').innerHTML =
+    '<div class="detail-card"><h3>Clan</h3>'
+    + '<div class="cl-kpis"><span>Owner <b>' + navLink(hAccount(c.ownerSlug), '@' + esc(c.ownerSlug), { title: 'Open account' }) + '</b></span>'
+    + '<span>Members <b>' + c.members + '</b></span><span>Level <b>' + c.level + '</b> (' + Math.round(c.xp) + ' XP)</span>'
+    + '<span>Icon <b>' + esc(c.icon || '–') + '</b></span><span>#1 weeks <b>' + (c.titles || 0) + '</b></span>'
+    + '<span>Invite link <b>' + (c.inviteCode ? esc(c.inviteCode) : '–') + '</b></span></div>'
+    + '<div class="cl-grid" style="margin-top:10px;">'
+    + '<label>Name<input id="cl-name" class="ac-sel" maxlength="20" value="' + esc(c.name) + '"></label>'
+    + '<label>Tag<input id="cl-tag" class="ac-sel" maxlength="5" value="' + esc(c.tag) + '"></label>'
+    + '<label>Tag colour<select id="cl-color" class="ac-sel">' + opt(clanMeta.colors, c.tagColor) + '</select></label>'
+    + '<label>Banner<select id="cl-banner" class="ac-sel">' + opt(clanMeta.banners, c.banner) + '</select></label>'
+    + '<label>XP<input id="cl-xp" class="ac-sel" type="number" min="0" value="' + Math.round(c.xp) + '"></label>'
+    + '</div><div class="cl-actions">'
+    + '<label style="font-size:12px;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="cl-clear-icon"' + (c.icon ? '' : ' disabled') + '> remove icon</label>'
+    + '<button class="btn btn-blue btn-sm" data-cl="edit">💾 Save name / tag / looks</button>'
+    + '<button class="btn btn-gray btn-sm" data-cl="xp">Set XP</button>'
+    + '<button class="btn btn-gray btn-sm" data-cl="reset_link"' + (c.inviteCode ? '' : ' disabled') + '>Reset invite link</button>'
+    + '</div><div class="muted" style="font-size:11px;margin-top:6px;">Staff edits skip the bad-word filter and level locks; format, reserved tags and uniqueness still apply.</div></div>'
+
+    + '<div class="detail-card"><h3>Members (' + d.members.length + ')</h3>'
+    + '<table class="data-table"><thead><tr><th>Name</th><th>Slug</th><th>Role</th><th>Joined</th><th>This week</th><th></th></tr></thead><tbody>'
+    + d.members.map(m => {
+        const w = weekStats[m.slug] || { games: 0, wins: 0, weightedWins: 0 };
+        return '<tr><td><b>' + esc(m.username || m.slug) + '</b></td>'
+          + '<td>' + navLink(hAccount(m.slug), '@' + esc(m.slug), { title: 'Open account' }) + '</td>'
+          + '<td>' + roleSel(m) + '</td>'
+          + '<td class="ac-when">' + esc(new Date(m.joinedAt).toLocaleDateString()) + '</td>'
+          + '<td>' + w.games + ' games · ' + w.wins + ' wins</td>'
+          + '<td style="white-space:nowrap;text-align:right;">'
+          + (w.games ? '<button class="btn btn-gray btn-sm" data-cl="reset_week" data-slug="' + esc(m.slug) + '" title="Wipe the league stats of this member for this week">Wipe week</button> ' : '')
+          + (m.role === 'owner' ? '' : '<button class="btn btn-red btn-sm" data-cl="kick" data-slug="' + esc(m.slug) + '">Kick</button>')
+          + '</td></tr>';
+      }).join('') + '</tbody></table>'
+    + '<div style="font-size:12px;margin-top:8px;"><b>Invited:</b> ' + pend(d.invites) + '</div>'
+    + '<div style="font-size:12px;margin-top:4px;"><b>Asked to join:</b> ' + pend(d.requests) + '</div></div>'
+
+    + '<div class="detail-card"><h3>League · this week</h3><div class="cl-kpis">'
+    + '<span>Games <b>' + (tot.games || 0) + '</b></span><span>Wins <b>' + (tot.wins || 0) + '</b></span>'
+    + '<span>Weighted wins <b>' + (+(tot.weightedWins || 0)).toFixed(2) + '</b></span>'
+    + '<span>Rated win rate <b>' + ((tot.rating || 0) * 100).toFixed(1) + ' %</b></span>'
+    + '<span>Active <b>' + (tot.players || 0) + '</b> · qualified <b>' + (tot.qualified || 0) + '</b>' + (tot.eligible ? ' ✓ eligible' : '') + '</span>'
+    + '<span>Avg games <b>' + (+(tot.avgGames || 0)).toFixed(1) + '</b> · goal tier <b>' + (tot.goalTier || 0) + '</b></span></div>'
+    + '<div class="cl-actions"><button class="btn btn-orange btn-sm" data-cl="reset_week"' + (tot.games ? '' : ' disabled') + '>Wipe week stats (whole clan)</button></div>'
+    + '<h3 style="margin-top:12px;">History</h3>'
+    + (d.rewards.length || d.goals.length
+        ? '<div style="font-size:12px;display:flex;flex-direction:column;gap:3px;">'
+          + d.rewards.map(r => '<div>🏆 ' + esc(r.week) + ' · #' + r.rank + ' · ' + (r.rating * 100).toFixed(1) + ' % · ' + Object.entries(r.keys).map(([k, n]) => n + '× ' + esc(keyName(k))).join(', ') + '</div>').join('')
+          + d.goals.map(g => '<div>🎯 ' + esc(g.week) + ' · goal tier ' + g.tier + ' · ' + g.players + ' players got keys</div>').join('')
+          + '</div>'
+        : '<div class="muted" style="font-size:12px;">No rewards yet.</div>')
+    + '</div>'
+
+    + '<div class="detail-card"><h3>Key pool (waiting for the owner to hand out)</h3><div class="cl-pool">'
+    + clanMeta.keys.map(k => '<label>' + esc(k.name) + ' <input class="ac-sel cl-pool-in" type="number" min="0" max="1000" data-key="' + esc(k.type) + '" value="' + (d.pool[k.type] || 0) + '"></label>').join('')
+    + '<button class="btn btn-blue btn-sm" data-cl="pool">💾 Save pool</button></div></div>'
+
+    + '<div class="detail-card cl-danger"><h3>Danger zone</h3><div class="cl-actions" style="margin-top:0;">'
+    + '<button class="btn btn-red btn-sm" data-cl="disband">Disband clan</button>'
+    + '<span class="muted" style="font-size:11px;">Deletes the clan with its members, key pool and stats. No refund.</span></div></div>';
+}
+
+async function clanAction(body, okMsg) {
+  try {
+    await post('/api/clans/' + clanDetail.clan.id + '/action', body);
+    toast(okMsg);
+    return true;
+  } catch (e) {
+    toast('Failed: ' + (CLAN_ERRORS[e.message] || e.message), true);
+    return false;
+  }
+}
+
+async function refreshClanViews() {
+  try { clanDetail = await get('/api/clans/' + clanDetail.clan.id); renderClanDetail(); }
+  catch { clanModal.style.display = 'none'; }
+  if (document.getElementById('tab-clans').classList.contains('active')) loadClans();
+}
+
+document.getElementById('clan-modal-body').addEventListener('change', async (e) => {
+  const sel = e.target.closest('.cl-role');
+  if (!sel) return;
+  const slug = sel.dataset.slug, role = sel.value;
+  if (role === 'owner' && !confirm('Make @' + slug + ' the owner? The current owner becomes a lieutenant.')) { renderClanDetail(); return; }
+  await clanAction({ action: 'role', slug, role }, '@' + slug + ' is now ' + role);
+  refreshClanViews();
+});
+
+document.getElementById('clan-modal-body').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-cl]');
+  if (!b || b.disabled) return;
+  const c = clanDetail.clan, act = b.dataset.cl, slug = b.dataset.slug;
+  let ok = false;
+  if (act === 'edit') {
+    ok = await clanAction({
+      action: 'edit',
+      name: document.getElementById('cl-name').value,
+      tag: document.getElementById('cl-tag').value,
+      tagColor: Number(document.getElementById('cl-color').value),
+      banner: Number(document.getElementById('cl-banner').value),
+      clearIcon: document.getElementById('cl-clear-icon').checked,
+    }, 'Clan saved');
+  } else if (act === 'xp') {
+    ok = await clanAction({ action: 'xp', xp: Math.max(0, Number(document.getElementById('cl-xp').value) || 0) }, 'XP set');
+  } else if (act === 'reset_link') {
+    if (!confirm('Reset the invite link? The old link stops working and open link requests are dropped.')) return;
+    ok = await clanAction({ action: 'reset_link' }, 'Invite link reset');
+  } else if (act === 'kick') {
+    if (!confirm('Kick @' + slug + ' from [' + c.tag + ']?')) return;
+    ok = await clanAction({ action: 'kick', slug }, '@' + slug + ' kicked');
+  } else if (act === 'reset_week') {
+    if (!confirm(slug ? 'Wipe the league stats of @' + slug + ' in this clan for this week?' : 'Wipe the league stats of the WHOLE clan [' + c.tag + '] for this week?')) return;
+    ok = await clanAction(slug ? { action: 'reset_week', slug } : { action: 'reset_week' }, 'Week stats wiped');
+  } else if (act === 'pool') {
+    const inputs = [...document.querySelectorAll('.cl-pool-in')].filter(i => (Number(i.value) || 0) !== (clanDetail.pool[i.dataset.key] || 0));
+    if (!inputs.length) { toast('Nothing changed'); return; }
+    for (const i of inputs) ok = await clanAction({ action: 'pool', key: i.dataset.key, amount: Math.max(0, Math.floor(Number(i.value) || 0)) }, 'Pool saved');
+  } else if (act === 'disband') {
+    const typed = prompt('Type the clan tag (' + c.tag + ') to disband [' + c.tag + '] ' + c.name + ' for good:');
+    if (typed == null) return;
+    if (typed.trim().toUpperCase() !== c.tag) { toast('Tag did not match - nothing deleted', true); return; }
+    if (await clanAction({ action: 'disband' }, 'Clan disbanded')) {
+      clanModal.style.display = 'none';
+      if (document.getElementById('tab-clans').classList.contains('active')) loadClans();
+    }
+    return;
+  }
+  if (ok) refreshClanViews();
+});
+
 // ── LOBBIES ──────────────────────────────────────────────────────────────────
 let lobbiesTimer = null;
 
@@ -4656,6 +4922,7 @@ function renderAccountDetail(data) {
       <div class="kv-row"><span class="kv-key">Slug:</span><span class="kv-val">\${esc(u.slug)}</span></div>
       <div class="kv-row"><span class="kv-key">Discord ID:</span><span class="kv-val">\${u.discordId ? esc(u.discordId) : '–'}</span></div>
       <div class="kv-row"><span class="kv-key">Account:</span><span class="kv-val">\${esc(linked)}</span></div>
+      <div class="kv-row"><span class="kv-key">Clan:</span><span class="kv-val">\${data.clan ? navLink(hClan(data.clan.id), '[' + esc(data.clan.tag) + '] ' + esc(data.clan.name), { title: 'Open clan' }) + ' <span style="color:var(--text-muted)">· ' + esc(data.clan.role) + '</span>' : '–'}</span></div>
       <div class="kv-row"><span class="kv-key">Created:</span><span class="kv-val">\${fmtDate(u.userCreated)}</span></div>
       <div class="kv-row"><span class="kv-key">Golden Fries:</span><span class="kv-val">🍟 \${u.goldenFries ?? 0}</span></div>
       <div style="margin-top:6px;">\${flags}</div>

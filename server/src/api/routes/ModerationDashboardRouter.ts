@@ -79,6 +79,20 @@ import { REPLAY_LIST_DEFAULT_LIMIT, server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
+import {
+    adminClanOf,
+    adminDisbandClan,
+    adminEditClan,
+    adminGetClan,
+    adminKickMember,
+    adminListClans,
+    adminResetLink,
+    adminResetWeekStats,
+    adminSetPool,
+    adminSetRole,
+    adminSetXp,
+} from "../db/clans";
+import { CLAN_BANNERS, CLAN_TAG_COLORS } from "../../../../shared/utils/clan";
 import { RevertError, revertLedgerEntry } from "../db/friesRevert";
 import {
     deleteGame,
@@ -1661,6 +1675,100 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 0x1a7a1a,
             );
             return c.json({ ok: true, given: amount });
+        },
+    )
+    // ─────────────────────────────────────────────────────────────────────────
+    // CLANS (admin-only): look into any clan, fix names, members, keys and stats
+    // ─────────────────────────────────────────────────────────────────────────
+    .get("/api/clans", async (c) => {
+        const keyName = (t: string) => (GameObjectDefs.typeToDefSafe(t) as { name?: string })?.name || t;
+        return c.json({
+            clans: await adminListClans(c.req.query("q")),
+            colors: CLAN_TAG_COLORS,
+            banners: CLAN_BANNERS,
+            keys: getKeyTypes().map((type) => ({ type, name: keyName(type) })),
+        });
+    })
+    .get("/api/clans/:id", async (c) => {
+        const data = await adminGetClan(Number(c.req.param("id")) || 0);
+        return data ? c.json(data) : c.json({ error: "not_found" }, 404);
+    })
+    .post(
+        "/api/clans/:id/action",
+        validateParams(
+            z.discriminatedUnion("action", [
+                z.object({
+                    action: z.literal("edit"),
+                    name: z.string().max(64),
+                    tag: z.string().max(16),
+                    clearIcon: z.boolean().optional(),
+                    tagColor: z.number().int().min(0).max(63).optional(),
+                    banner: z.number().int().min(0).max(63).optional(),
+                }),
+                z.object({ action: z.literal("kick"), slug: z.string().min(1).max(64) }),
+                z.object({ action: z.literal("role"), slug: z.string().min(1).max(64), role: z.enum(["owner", "lieutenant", "member"]) }),
+                z.object({ action: z.literal("reset_link") }),
+                z.object({ action: z.literal("pool"), key: z.string(), amount: z.number().int().min(0).max(1000) }),
+                z.object({ action: z.literal("reset_week"), slug: z.string().min(1).max(64).optional() }),
+                z.object({ action: z.literal("xp"), xp: z.number().min(0).max(10_000_000) }),
+                z.object({ action: z.literal("disband") }),
+            ]),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const clanId = Number(c.req.param("id")) || 0;
+            const body = c.req.valid("json");
+            const before = await adminGetClan(clanId);
+            if (!before) return c.json({ error: "not_found" }, 404);
+            const clanLabel = `[${before.clan.tag}] ${before.clan.name}`;
+            let res;
+            let what: string;
+            switch (body.action) {
+                case "edit":
+                    res = await adminEditClan(clanId, body);
+                    what = `Edited → [${body.tag.trim().toUpperCase()}] ${body.name.trim()}${body.clearIcon ? " (icon removed)" : ""}`;
+                    break;
+                case "kick":
+                    res = await adminKickMember(clanId, body.slug);
+                    what = `Kicked @${body.slug}`;
+                    break;
+                case "role":
+                    res = await adminSetRole(clanId, body.slug, body.role);
+                    what = body.role === "owner" ? `Ownership → @${body.slug}` : `@${body.slug} → ${body.role}`;
+                    break;
+                case "reset_link":
+                    res = await adminResetLink(clanId);
+                    what = "Invite link reset";
+                    break;
+                case "pool":
+                    if (!getKeyDef(body.key)) return c.json({ error: "unknown_key" }, 400);
+                    res = await adminSetPool(clanId, body.key, body.amount);
+                    what = `Key pool: ${getKeyDef(body.key)!.name} = ${body.amount} (was ${before.pool[body.key] ?? 0})`;
+                    break;
+                case "reset_week":
+                    res = await adminResetWeekStats(clanId, body.slug);
+                    what = body.slug ? `This week's stats of @${body.slug} wiped` : "This week's stats wiped";
+                    break;
+                case "xp":
+                    res = await adminSetXp(clanId, body.xp);
+                    what = `XP ${Math.round(before.clan.xp)} → ${Math.round(body.xp)}`;
+                    break;
+                case "disband":
+                    res = await adminDisbandClan(clanId);
+                    what = `Disbanded (${before.members.length} members)`;
+                    break;
+            }
+            if (!res.success) return c.json({ error: res.error ?? "error" }, 400);
+            void logModerationAction(
+                "🛡️ Clan moderated",
+                [
+                    { name: "Clan", value: clanLabel },
+                    { name: "Action", value: what },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                body.action === "disband" ? 0xc0392b : 0x3b7dd8,
+            );
+            return c.json({ ok: true });
         },
     )
     // ─────────────────────────────────────────────────────────────────────────
@@ -3577,6 +3685,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
 
         return c.json({
             user: { ...user, discordId: user.linkedDiscord ? user.authId : null },
+            clan: await adminClanOf(user.id),
             passTypes,
             xp,
             itemsBySource,
