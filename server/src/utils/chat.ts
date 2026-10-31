@@ -121,11 +121,6 @@ export class Chat{
 
                     return;
                 }
-                // invisible staff spectators would give themselves away by chatting
-                if (this.player.stealth) {
-                    this.sendCmdFeedback("You're watching invisibly - chat is off", "#ffcc00");
-                    return;
-                }
                 if(!this.isAdmin && this.player.chatCooldown >0){
                     msg1.string = "chat-cooldown";
                     msg1.player = "ADMIN";
@@ -143,6 +138,8 @@ export class Chat{
                     return;
                 }
                 msg1.roleTag = this.player.roleTag;
+                msg1.clanTag = this.player.clanTag;
+                msg1.clanColor = this.player.clanColor;
                 if(this.isAdmin && /^#[0-9a-fA-F]{6}$/.test(msg.color)){
                     msg1.color = msg.color;
                 }
@@ -152,12 +149,10 @@ export class Chat{
                     msg1.chatType = 2;
                     msg1.type = net.KillFeedMsgType.ChatMsg;
 
-                    //THIS ARE ONLY PEOPLE JOINED AS SPECS
+                    //THIS ARE ONLY PEOPLE JOINED AS SPECS (invisible staff included - chatting is
+                    //their choice to show up); everyone sees it, tagged [SPEC].
                     //Already dead players can still type both chats
-                    const spectators = this.game.playerBarn.players.filter(p => p.spectator);
-                    for(const s of spectators){
-                        s.sendMsg(net.MsgType.KillFeed, msg1)
-                    }
+                    this.game.broadcastMsg(net.MsgType.KillFeed, msg1);
                     this.logChat(originalMsg, false, false, undefined, 2);
                     this.player.chatCooldown = 3;
                     return;

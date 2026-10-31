@@ -56,6 +56,7 @@ export interface JoinTokenData {
     customLoadout?: CustomLoadoutConfig;
     admin: boolean;
     roleTag: RoleTag;
+    clanTag?: { tag: string; color: number } | null;
     /** Invisible spectator (staff via the dashboard), see Player.stealth. */
     stealth?: boolean;
     groupData: {
@@ -965,6 +966,7 @@ export class Game {
                 customLoadout: token.customLoadout,
                 admin: token.admin,
                 roleTag: token.roleTag,
+                clanTag: token.clanTag,
             });
         }
     }
@@ -989,6 +991,7 @@ export class Game {
                 customLoadout: token.customLoadout,
                 admin: token.admin,
                 roleTag: token.roleTag,
+                clanTag: token.clanTag,
                 // staff watching from the dashboard: invisible (see Player.stealth)
                 stealth: token.stealth === true,
             });
@@ -1021,6 +1024,7 @@ export class Game {
                     customLoadout: token.customLoadout,
                     admin: token.admin,
                     roleTag: token.roleTag,
+                    clanTag: token.clanTag,
                 });
             }
         }
@@ -1073,6 +1077,24 @@ export class Game {
      * full lobby too: two players fighting undisturbed count, a third-partied kill
      * doesn't. Accounts only (no guests, bots, spectators).
      */
+    /** Players the anti-cheat flagged in this game (sus list) and everyone's scores
+     *  (dashboard Anti-Cheat tab), for save_game. */
+    antiCheatFlags(): SaveGameBody["antiCheat"] {
+        const key = (p: Player) => p.userId ?? `guest:${p.matchDataId}`;
+        const flags = this.playerBarn.players.flatMap((p) => {
+            const note = p.cheatMonitor?.report();
+            return note ? [{ userId: key(p), note }] : [];
+        });
+        const scores = this.playerBarn.players.flatMap((p) => {
+            const summary = p.cheatMonitor?.summary();
+            if (!summary) return [];
+            const { scores, maxRatio, ...details } = summary;
+            return [{ userId: key(p), name: p.name, maxRatio, scores: scores as Record<string, number>, details }];
+        });
+        if (!flags.length && !scores.length) return undefined;
+        return { gameId: this.id, mapId: this.map.mapId, flags, scores };
+    }
+
     recordDuel(winner: Player, loser: Player) {
         if (this.map.mapId !== MapId.Local || this.advancedSettings) return;
         if (!winner.userId || !loser.userId || winner.userId === loser.userId) return;
@@ -1299,6 +1321,8 @@ export class Game {
                     duels: this.duels.length
                         ? { gameId: this.id, mapId, entries: this.duels }
                         : undefined,
+                    antiCheat: this.antiCheatFlags(),
+                    isPrivate: this.isPrivate,
                 },
             });
         } catch (err) {

@@ -42,6 +42,7 @@ import {
     offersTable,
     usersTable,
 } from "./schema";
+import { addTradeEvent } from "./tradeEvents";
 
 const PAGE_SIZE = 30;
 
@@ -245,6 +246,7 @@ export async function buyListing(
                     sellerId: marketListingsTable.sellerId,
                     sellerSlug: marketListingsTable.sellerSlug,
                     price: marketListingsTable.price,
+                    type: marketListingsTable.type,
                 });
             if (!listing) throw new MarketError("unavailable");
             if (listing.sellerId === buyerId) throw new MarketError("own_listing");
@@ -333,6 +335,7 @@ export async function buyListing(
                     balanceAfter: sellerBal?.balance ?? 0,
                 },
             ]);
+            await addTradeEvent(tx, listing.sellerId, "sold", listing.type, listing.price, buyerSlug);
 
             return buyerBal.balance;
         });

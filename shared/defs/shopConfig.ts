@@ -34,7 +34,7 @@ export function isAllowedItem(type: string): boolean {
  * levels of Golden Fries), scaling up from there.
  */
 
-export type ShopCategory = "emote" | "outfit" | "particle" | "melee" | "death_effect";
+export type ShopCategory = "emote" | "outfit" | "particle" | "melee" | "death_effect" | "key";
 
 /** Base price per rarity (emote-level). */
 export const BASE_RARITY: Record<number, number> = {
@@ -53,6 +53,8 @@ export const CATEGORY_MULT: Record<ShopCategory, number> = {
     death_effect: 2.5,
     outfit: 3,
     melee: 4,
+    // keys have a fixed value (CrateKeyDef.value), see getItemPrice
+    key: 1,
 };
 
 /** Bundle (daily shop slot 1) gets 10% off the summed item prices. */
@@ -68,6 +70,11 @@ export const BUNDLE_DEATH_EFFECT_CHANCE = 0.25;
 /** When true, the daily shop is the SAME for every player (offers seeded by the day
  *  only). When false, each player gets their own deterministic daily shop. */
 export const SHARED_SHOP = false;
+
+/** Golden Fries a player gets for dumping (destroying) one of their items. A flat value,
+ *  so it also works as a price floor on the market: listings far below it get bought
+ *  up and dumped. */
+export const DUMP_VALUE = 50;
 
 /** Marketplace fee (Golden Fries sink). The buyer pays this on top of the seller's ask. */
 export const MARKET_FEE = 0.1;
@@ -102,6 +109,15 @@ export const OFFER_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Max simultaneous pending buy-offers a single player may have outstanding. */
 export const OFFER_MAX_OUTSTANDING = 10;
+
+/** A buy order ("Make offer" on any copy of an item) runs this long, then is refunded. */
+export const BUY_ORDER_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** Max open buy orders per player (one per item type). */
+export const BUY_ORDER_MAX_OPEN = 10;
+
+/** Trade events (notifications) older than this are dropped. */
+export const TRADE_EVENT_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 /**
  * Allowed ask-price range for listing `type` on the player marketplace, anchored to
@@ -143,6 +159,8 @@ export function getItemCategory(type: string): ShopCategory | null {
             return "particle";
         case "death_effect":
             return "death_effect";
+        case "crate_key":
+            return "key";
         default:
             return null;
     }
@@ -205,6 +223,9 @@ export function getShopWeight(
 export function getItemPrice(type: string): number {
     const category = getItemCategory(type);
     if (!category) return 0;
+    if (category === "key") {
+        return (GameObjectDefs.typeToDefSafe(type) as { value?: number }).value ?? 0;
+    }
 
     const rarity = getItemRarity(type);
     const base = BASE_RARITY[rarity];

@@ -56,3 +56,30 @@ test("A teammate who joins later still gets the pings that are on the map", () =
     game.netSync();
     expect(got.filter((e) => e.isPing)).toHaveLength(0);
 });
+
+test("A spectator switching to another team gets that team's pings", () => {
+    const game = createGame(TeamMode.Duo, "main");
+    const a = game.playerBarn.addTestPlayer({});
+    const b = game.playerBarn.addTestPlayer({});
+    ping(a, "ping_coming", 100, 120);
+    ping(b, "ping_help", 50, 50);
+    game.netSync();
+
+    const spec = game.playerBarn.addTestPlayer({});
+    spec.spectating = a;
+    const got = captureEmotes(spec);
+    game.netSync();
+    expect(got.filter((e) => e.isPing).map((e) => e.type)).toStrictEqual(["ping_coming"]);
+
+    // same team again: nothing repeated
+    got.length = 0;
+    game.netSync();
+    expect(got.filter((e) => e.isPing)).toHaveLength(0);
+
+    // switched to the other team: its pings, once
+    spec.spectating = b;
+    game.netSync();
+    const pings = got.filter((e) => e.isPing);
+    expect(pings.map((e) => [e.type, e.playerId])).toStrictEqual([["ping_help", b.__id]]);
+    expect(pings[0].restoredLife).toBeGreaterThan(0);
+});

@@ -1,6 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import type { BlockedUser, FriendActionResponse } from "../../../../shared/types/user";
 import { db } from "./index";
+import { playerIcon, playerIconColumns } from "./playerIcon";
 import { resolveRoleTag } from "./roleTag";
 import { blocksTable, friendsTable, usersTable } from "./schema";
 
@@ -93,6 +94,7 @@ export async function getBlocked(userId: string): Promise<BlockedUser[]> {
             showAdminPrefix: usersTable.showAdminPrefix,
             showModPrefix: usersTable.showModPrefix,
             showPremiumPrefix: usersTable.showPremiumPrefix,
+            ...playerIconColumns,
         })
         .from(blocksTable)
         .innerJoin(usersTable, eq(usersTable.id, blocksTable.blockedId))
@@ -101,5 +103,6 @@ export async function getBlocked(userId: string): Promise<BlockedUser[]> {
         slug: r.slug,
         username: r.username || r.slug,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }

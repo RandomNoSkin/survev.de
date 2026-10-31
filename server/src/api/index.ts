@@ -34,6 +34,9 @@ import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { resolveRoleTag } from "./db/roleTag";
+import { crateOverrides } from "../../../shared/defs/crateConfig";
+import "./crateSettings";
+import { awardFinishedClanWeeks } from "./db/clanStats";
 import { CUSTOM_MAP_TEMPLATES } from "../../../shared/defs/customMap";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
@@ -41,6 +44,8 @@ import { spectateStream } from "./spectateFeed";
 import { startSuperAdmin } from "./superAdmin";
 import { expireOldListings } from "./db/market";
 import { expireOldOffers } from "./db/offers";
+import { expireBuyOrders } from "./db/buyOrders";
+import { pruneTradeEvents } from "./db/tradeEvents";
 import { grantCreatorItems } from "./db/creatorGrants";
 import { cleanupExpiredOAuthArtifacts } from "./db/oauth";
 import { backfillPassItemGrants } from "./db/passGrants";
@@ -120,6 +125,12 @@ app.get("/api/site_info", (c) => {
 // recomputed at boot and once a day by the midnight cron below.
 app.get("/api/cosmetic_stats", (c) => {
     return c.json(getCachedCosmeticStats(), 200);
+});
+
+// Crate loot settings from the moderation dashboard (pools + rarity weights), so the
+// client's drop-chance view matches what the server rolls.
+app.get("/api/crate_config", (c) => {
+    return c.json({ overrides: crateOverrides.get() }, 200);
 });
 
 /**
@@ -293,7 +304,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
     let userLoadout = user?.loadout;
     if (user) {
         try {
-            userLoadout = (await getOwnedLoadouts([user.id]))[0]?.loadout ?? userLoadout;
+            userLoadout = (await getOwnedLoadouts([user.id], { forGame: true }))[0]?.loadout ?? userLoadout;
         } catch (err) {
             server.logger.error(
                 "/api/find_game: Failed to validate loadout ownership",
@@ -585,6 +596,19 @@ setInterval(() => {
         .catch((err) => server.logger.error("Failed to settle auctions", err));
 }, 60 * 1000);
 
+// Refund buy orders that ran out, and drop old trade notifications.
+setInterval(
+    () => {
+        expireBuyOrders()
+            .then((n) => {
+                if (n > 0) server.logger.info(`Expired ${n} buy orders`);
+            })
+            .catch((err) => server.logger.error("Failed to expire buy orders", err));
+        pruneTradeEvents().catch((err) => server.logger.error("Failed to prune trade events", err));
+    },
+    10 * 60 * 1000,
+);
+
 // Expire buy-offers no one acted on within their TTL.
 setInterval(
     () => {
@@ -673,6 +697,15 @@ new Cron("0 0 * * *", async () => {
         server.logger.error("Failed to recompute cosmetic stats", err);
     }
 
+    // Sunday → Monday: pay last week's clan league (top 3 by rated win rate) into the
+    // clans' key pools. Idempotent, so running it every midnight is fine.
+    try {
+        const paid = await awardFinishedClanWeeks();
+        if (paid) server.logger.info(`Clan league: paid ${paid} weekly rewards`);
+    } catch (err) {
+        server.logger.error("Failed to pay the clan league rewards", err);
+    }
+
     // Recompute primary regions + region-scoped rating percentile tiers for the new day.
     try {
         await computeRatingTiers();
@@ -684,3 +717,8 @@ new Cron("0 0 * * *", async () => {
 server.logger.info(`Survev API Server v${version} - GIT ${GIT_VERSION}`);
 server.logger.info(`Listening on ${Config.apiServer.host}:${Config.apiServer.port}`);
 server.logger.info("Press Ctrl+C to exit.");
+
+// pays a clan league week that ended while the server was down (no-op otherwise)
+if (Config.database.enabled) {
+    void awardFinishedClanWeeks().catch((err) => server.logger.error("Failed to pay the clan league rewards", err));
+}

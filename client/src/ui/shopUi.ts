@@ -11,6 +11,15 @@ import type { MarketUi } from "./marketUi";
 import { MenuModal } from "./menuModal";
 import type { OwnersUi } from "./ownersUi";
 import type { PremiumUi } from "./premiumUi";
+import type { SocialUi } from "./socialUi";
+import type { TradeUi } from "./tradeUi";
+
+type ShopTab = "store" | "market" | "sell" | "trades";
+type StoreView = "deals" | "premium";
+type MarketView = "browse" | "auctions" | "wanted";
+type TradesView = "requests" | "offers" | "private" | "mine" | "orders";
+/** Old tab names other code still opens the shop with. */
+type LegacyTab = "daily" | "auction" | "owners" | "premium";
 
 /** Rarity index → colour (matches the loadout menu palette). */
 const RARITY_COLORS = ["#c5c5c5", "#c5c5c5", "#12ff00", "#00deff", "#f600ff", "#d96100"];
@@ -56,13 +65,17 @@ export class ShopUi {
     buying = false;
     /** The marketplace panel (the "Market" tab); set by main.ts. */
     marketUi: MarketUi | null = null;
-    /** The "Owners" tab (who owns a cosmetic); set by main.ts. */
+    /** The "Owners" view (who owns a cosmetic) - lives in Social now; set by main.ts. */
     ownersUi: OwnersUi | null = null;
+    socialUi: SocialUi | null = null;
+    /** Buy orders, Sell tab, Recently sold, notifications; set by main.ts. */
+    tradeUi: TradeUi | null = null;
     /** The "Auction" tab; set by main.ts. */
     auctionUi: AuctionUi | null = null;
     /** The "Premium" tab; set by main.ts. */
     premiumUi: PremiumUi | null = null;
-    tab: "daily" | "market" | "auction" | "owners" | "premium" = "daily";
+    tab: ShopTab = "store";
+    private view = "deals";
     private resetInterval: ReturnType<typeof setInterval> | null = null;
     /** Epoch ms of the next daily shop reset, as reported by the API server. */
     private resetTime = 0;
@@ -88,28 +101,37 @@ export class ShopUi {
         this.modal = new MenuModal($("#modal-shop"));
         this.modal.onShow(() => {
             this.startResetTimer();
-            this.selectTab("daily");
+            if (!this.openingAt) this.selectTab("store");
+            this.openingAt = false;
         });
         this.modal.onHide(() => {
             this.stopResetTimer();
             this.marketUi?.deactivate();
             this.auctionUi?.deactivate();
-            this.ownersUi?.deactivate();
             this.premiumUi?.deactivate();
             // A purchase/claim while open may have changed what's waiting — recheck badges.
             this.refreshShopBadges();
         });
 
         $("#modal-shop [data-shop-tab]").on("click", (e) => {
-            this.selectTab(
-                $(e.currentTarget).data("shop-tab") as
-                    | "daily"
-                    | "market"
-                    | "auction"
-                    | "owners"
-                    | "premium",
-            );
+            this.selectTab($(e.currentTarget).data("shop-tab") as ShopTab);
         });
+        $("#modal-shop [data-store-view]").on("click", (e) => {
+            this.selectTab("store", $(e.currentTarget).data("store-view") as StoreView);
+        });
+        $("#modal-shop [data-market-view]").on("click", (e) => {
+            this.selectTab("market", $(e.currentTarget).data("market-view") as MarketView);
+        });
+        $("#modal-shop [data-trades-view]").on("click", (e) => {
+            this.selectTab("trades", $(e.currentTarget).data("trades-view") as TradesView);
+        });
+        // the market's own sub-tab buttons now live in the Market / My Trades navs:
+        // switch views through here (MarketUi bound them to its own selectTab only)
+        $("#market-tab-browse, #market-tab-private, #market-tab-mine, #market-tab-offers").off("click");
+        $("#market-tab-browse").on("click", () => this.selectTab("market", "browse"));
+        $("#market-tab-offers").on("click", () => this.selectTab("trades", "offers"));
+        $("#market-tab-private").on("click", () => this.selectTab("trades", "private"));
+        $("#market-tab-mine").on("click", () => this.selectTab("trades", "mine"));
 
         // On login, light up the shop button/tabs if there's a new daily rotation or
         // private offers waiting (mirrors the loadout/social "new" alerts).
@@ -126,44 +148,118 @@ export class ShopUi {
         this.account.addEventListener("auctions", refreshTradeBadges);
     }
 
-    /** Switch between the Daily shop, the player Market, the Auction house, Owners, and Premium. */
-    selectTab(tab: "daily" | "market" | "auction" | "owners" | "premium") {
-        this.tab = tab;
+    /** True while open() lands on a specific tab (skips the default Store tab). */
+    private openingAt = false;
+
+    /**
+     * Shows a tab (Store / Market / Sell / My Trades) and one of its views. Old tab names
+     * still work: daily → Store, premium → Store · Premium, auction → Market · Auctions,
+     * owners → the Social panel's Owners tab.
+     */
+    selectTab(tab: ShopTab | LegacyTab, view?: string) {
+        if (tab === "owners") {
+            this.modal.hide();
+            this.socialUi?.openOwners();
+            return;
+        }
+        if (tab === "daily") tab = "store";
+        if (tab === "premium") [tab, view] = ["store", "premium"];
+        if (tab === "auction") [tab, view] = ["market", "auctions"];
+        const t: ShopTab = tab;
+        const v = view ?? (t === "store" ? "deals" : t === "market" ? "browse" : t === "trades" ? this.defaultTradesView() : "");
+        this.tab = t;
+        this.view = v;
+
         $("#modal-shop [data-shop-tab]").removeClass("shop-tab-active");
-        $(`#modal-shop [data-shop-tab='${tab}']`).addClass("shop-tab-active");
-        $("#shop-daily-offers").css("display", tab === "daily" ? "" : "none");
-        $("#shop-market").css("display", tab === "market" ? "block" : "none");
-        $("#shop-auction").css("display", tab === "auction" ? "block" : "none");
-        $("#shop-owners").css("display", tab === "owners" ? "block" : "none");
-        $("#shop-premium").css("display", tab === "premium" ? "block" : "none");
+        $(`#modal-shop [data-shop-tab='${t}']`).addClass("shop-tab-active");
 
-        if (tab !== "market") this.marketUi?.deactivate();
-        if (tab !== "auction") this.auctionUi?.deactivate();
-        if (tab !== "owners") this.ownersUi?.deactivate();
-        if (tab !== "premium") this.premiumUi?.deactivate();
+        const show = (sel: string, on: boolean) => $(sel).css("display", on ? "block" : "none");
+        const showNav = (sel: string, on: boolean) => $(sel).css("display", on ? "flex" : "none");
+        showNav("#shop-store-nav", t === "store");
+        $("#shop-daily-offers").css("display", t === "store" && v === "deals" ? "" : "none");
+        show("#shop-premium", t === "store" && v === "premium");
+        show("#shop-market-nav", t === "market");
+        const marketViews = ["browse", "offers", "private", "mine"];
+        show("#shop-market", (t === "market" && v === "browse") || (t === "trades" && marketViews.includes(v)));
+        show("#shop-auction", t === "market" && v === "auctions");
+        show("#shop-wanted", t === "market" && v === "wanted");
+        show("#shop-sell", t === "sell");
+        showNav("#shop-trades-nav", t === "trades");
+        show("#shop-requests", t === "trades" && v === "requests");
+        show("#shop-myorders", t === "trades" && v === "orders");
 
-        if (tab === "daily") {
-            this.refresh();
-        } else if (tab === "market") {
-            this.marketUi?.activate();
-            // Viewing the market clears the "new item" dot.
-            this.markMarketSeen();
-        } else if (tab === "auction") {
-            this.auctionUi?.activate();
-            // Viewing the auctions clears the "new bid" badge.
-            this.markAuctionSeen();
-        } else if (tab === "owners") {
-            this.ownersUi?.activate();
+        const usesMarket = $("#shop-market").css("display") !== "none";
+        if (!usesMarket) this.marketUi?.deactivate();
+        if (!(t === "market" && v === "auctions")) this.auctionUi?.deactivate();
+        if (!(t === "store" && v === "premium")) this.premiumUi?.deactivate();
+
+        if (t === "store") {
+            if (v === "premium") this.premiumUi?.activate();
+            else this.refresh();
+        } else if (t === "market") {
+            this.tradeUi?.loadRecent();
+            if (v === "browse") {
+                this.marketUi?.activate("browse");
+                // Viewing the market clears the "new item" dot.
+                this.markMarketSeen();
+            } else if (v === "auctions") {
+                this.auctionUi?.activate();
+                // Viewing the auctions clears the "new bid" badge.
+                this.markAuctionSeen();
+            } else {
+                this.tradeUi?.renderWanted();
+            }
+        } else if (t === "sell") {
+            this.tradeUi?.renderSell();
+        } else if (v === "requests") {
+            this.tradeUi?.renderRequests();
+        } else if (v === "orders") {
+            this.tradeUi?.renderMyOrders();
         } else {
-            this.premiumUi?.activate();
+            this.marketUi?.activate(v as "offers" | "private" | "mine");
+        }
+
+        // MarketUi.selectTab clears every .market-subtab - mark the current view again
+        const nav = t === "store" ? "#shop-store-nav" : t === "market" ? "#shop-market-nav" : t === "trades" ? "#shop-trades-nav" : "";
+        if (nav) {
+            $(`${nav} .market-subtab`).removeClass("market-subtab-active");
+            const sel: Record<string, string> = {
+                deals: "[data-store-view='deals']",
+                premium: "[data-store-view='premium']",
+                browse: "#market-tab-browse",
+                auctions: "[data-market-view='auctions']",
+                wanted: "[data-market-view='wanted']",
+                requests: "[data-trades-view='requests']",
+                offers: "#market-tab-offers",
+                private: "#market-tab-private",
+                mine: "#market-tab-mine",
+                orders: "[data-trades-view='orders']",
+            };
+            $(`${nav} ${sel[v] ?? ""}`).addClass("market-subtab-active");
         }
     }
 
-    /** Opens the shop directly on the Owners tab, optionally with a cosmetic preselected. */
+    /** My Trades opens where something is waiting. */
+    private defaultTradesView(): TradesView {
+        if (this.actionableOffersCount() > 0) return "offers";
+        if ((this.tradeUi?.pending.orders ?? 0) > 0) return "requests";
+        if (this.privateBadgeCount > 0) return "private";
+        return "requests";
+    }
+
+    /** Opens the shop on a tab/view (from toasts, the loadout menu, links). */
+    openAt(tab: ShopTab | LegacyTab, view?: string) {
+        if (!this.modal.isVisible()) {
+            this.openingAt = true;
+            this.open();
+        }
+        this.selectTab(tab, view);
+    }
+
+    /** Opens the Social panel's Owners tab, optionally with a cosmetic preselected. */
     openOwners(type?: string) {
-        this.open();
-        this.selectTab("owners");
-        if (type) this.ownersUi?.selectType(type);
+        this.modal.hide();
+        this.socialUi?.openOwners(type);
     }
 
     /** Runs a 1s countdown to the server-provided reset time (server-local midnight). */
@@ -270,12 +366,26 @@ export class ShopUi {
         return incoming + counters;
     }
 
-    /** Market tab badge = new public listings + offers needing attention (both live there). */
+    /** Market tab badge = new public listings; My Trades badge = what needs an answer
+     *  (offers, private listings for you, buy orders you could fill). */
     private renderMarketBadge() {
-        const total = this.marketNewCount + this.actionableOffersCount();
+        const total = this.marketNewCount;
         $("#shop-market-badge")
             .text(total > 0 ? String(total) : "")
             .css("display", total > 0 ? "inline-block" : "none");
+        this.renderTradesBadge();
+    }
+
+    renderTradesBadge() {
+        const orders = this.tradeUi?.pending.orders ?? 0;
+        const total = this.actionableOffersCount() + this.privateBadgeCount + orders;
+        $("#shop-trades-badge")
+            .text(total > 0 ? String(total) : "")
+            .css("display", total > 0 ? "inline-block" : "none");
+        $("#trades-requests-badge")
+            .text(orders > 0 ? String(orders) : "")
+            .css("display", orders > 0 ? "inline-block" : "none");
+        this.updateShopBtnAlert();
     }
 
     private seenAuctionBids(): number {
@@ -335,6 +445,7 @@ export class ShopUi {
             $("#shop-daily-dot").css("display") !== "none" ||
             $("#shop-market-badge").css("display") !== "none" ||
             $("#shop-auction-badge").css("display") !== "none" ||
+            $("#shop-trades-badge").css("display") !== "none" ||
             $("#market-private-badge").css("display") !== "none" ||
             $("#market-offers-badge").css("display") !== "none";
         $("#shop-btn-alert").css("display", lit ? "block" : "none");
@@ -483,7 +594,7 @@ export class ShopUi {
     /** The locked "⭐ Premium only" button on the Premium Daily offer links straight
      *  to the Premium tab so a non-Premium viewer can act on it immediately. */
     private openPremiumUpsell() {
-        this.selectTab("premium");
+        this.selectTab("store", "premium");
     }
 
     private renderItem(type: string): JQuery<HTMLElement> {

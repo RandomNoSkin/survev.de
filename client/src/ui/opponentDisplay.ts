@@ -370,6 +370,8 @@ export class LoadoutDisplay {
             groupId: 0,
             name: "",
             roleTag: null,
+            clanTag: "",
+            clanColor: 0,
             loadout: {
                 heal: this.loadout.heal,
                 boost: this.loadout.boost,

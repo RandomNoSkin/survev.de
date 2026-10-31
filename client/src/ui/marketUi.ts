@@ -1,4 +1,5 @@
 import $ from "jquery";
+import { CrateDefs, type CrateType } from "../../../shared/defs/crateConfig";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import {
     getItemCategory,
@@ -118,11 +119,15 @@ export class MarketUi {
         $("#market-sell-confirm").on("click", () => this.confirmSell());
     }
 
-    /** Called by ShopUi when the Market tab is selected; starts on the Browse view. */
-    activate() {
-        this.selectTab("browse");
+    /** Called by ShopUi when one of the market views is shown (Market → Buy now, or
+     *  My Trades → Offers / Private / My listings). */
+    activate(tab: MarketTab = "browse") {
+        this.selectTab(tab);
         this.startExpiryTimer();
     }
+
+    /** Set by ShopUi: the empty Buy-now view points at the Sell tab. */
+    onSellCta: (() => void) | null = null;
 
     /** Called by ShopUi when leaving the Market tab / closing the shop. */
     deactivate() {
@@ -231,7 +236,7 @@ export class MarketUi {
         return this.account.profile.goldenFries ?? 0;
     }
 
-    private selectTab(tab: MarketTab) {
+    selectTab(tab: MarketTab) {
         this.tab = tab;
         this.sellerSlug = "";
         $(".market-subtab").removeClass("market-subtab-active");
@@ -316,7 +321,14 @@ export class MarketUi {
                 return;
             }
             if (replace && res.listings.length === 0) {
-                this.body.html(`<div class="shop-status">${empty}</div>`);
+                if (this.tab === "browse" && !this.sellerSlug && !this.search && this.category === "" && this.rarity === "" && this.onSellCta) {
+                    // an empty market looks dead - say what to do instead
+                    const cta = $('<div class="trade-empty"><div>Nothing for sale right now.</div></div>');
+                    cta.append($('<div class="shop-buy-btn menu-option btn-darken trade-empty-btn">Sell one of your items</div>').on("click", () => this.onSellCta?.()));
+                    this.body.empty().append(cta);
+                } else {
+                    this.body.html(`<div class="shop-status">${empty}</div>`);
+                }
             }
             for (const l of res.listings) this.appendCard(this.renderListing(l));
             this.loadMoreEl.css("display", res.hasMore ? "block" : "none");
@@ -622,6 +634,9 @@ export class MarketUi {
         if (!source) return "Unknown";
         if (source === "market") return "Marketplace";
         if (source.startsWith("shop:")) return `Shop · ${source.slice(5)}`;
+        if (source.startsWith("crate:")) {
+            return CrateDefs[source.slice(6) as CrateType]?.name ?? "Crate";
+        }
         const def = GameObjectDefs.typeToDefSafe(source) as { name?: string } | undefined;
         return (
             this.localization.translate(`loadout-${source}`) ||

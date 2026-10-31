@@ -1,4 +1,5 @@
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
+import { CrateKeyDefs } from "../../../../shared/defs/gameObjects/crateKeyDefs";
 import { PassDefs } from "../../../../shared/defs/gameObjects/passDefs";
 import {
     _allowedCrosshairs,
@@ -25,6 +26,8 @@ const COSMETIC_CATALOG = {
     emote: _allowedEmotes,
     deathEffect: _allowedDeathEffects,
     crosshair: _allowedCrosshairs,
+    // crate keys: single grants only, "give all" skips them
+    crateKey: Object.keys(CrateKeyDefs),
 };
 
 /** type → readable name (from the game defs) for every grantable cosmetic. */
@@ -381,6 +384,53 @@ export const dashboardHtml = `<!DOCTYPE html>
 .lobby-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .lobby-actions .btn { flex: 1; }
 .gc-tag.live { color: #4caf50; }
+
+.ac-help { font-size: 12px; margin-bottom: 10px; }
+.crate-give { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.crate-give input, .crate-give select, .crate-ed input[type=text], .crate-ed input[type=number] { background: var(--surface3); border: 1px solid var(--border2); border-radius: 5px; color: var(--text); padding: 5px 8px; font-family: inherit; }
+#ck-amount { width: 70px; }
+#crate-editors { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.crate-ed { background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.crate-ed-head { display: flex; align-items: center; gap: 10px; }
+.crate-ed-head img { width: 44px; height: 44px; }
+.crate-ed-head .grow { flex: 1; }
+.crate-ed-title { font-size: 16px; font-weight: 700; color: #fff; }
+.crate-ed-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--surface3); color: var(--text-dim); margin-left: 6px; vertical-align: middle; }
+.crate-ed-tag.custom { background: #3a2a08; color: #f2c230; }
+.crate-weights { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.crate-w { display: flex; flex-direction: column; gap: 3px; font-size: 11px; }
+.crate-w input { width: 100%; box-sizing: border-box; }
+.crate-w .pct { font-weight: 700; }
+.crate-w .n { color: var(--text-dim); }
+.crate-fries-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; background: var(--surface3); border-radius: 6px; padding: 6px 8px; }
+.crate-fries-row img { width: 22px; height: 22px; }
+.crate-fries-row b { color: #f2c230; }
+.crate-fries-row input { width: 80px; }
+.crate-fries-row .fries-pct { font-weight: 700; margin-left: auto; color: #f2c230; }
+.crate-pool-mode { display: flex; gap: 14px; align-items: center; font-size: 12px; flex-wrap: wrap; }
+.crate-add { display: flex; gap: 6px; }
+.crate-add input { flex: 1; min-width: 0; }
+.crate-group-head { font-size: 11px; font-weight: 700; margin: 6px 0 3px; }
+.crate-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.crate-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; background: var(--surface3); border: 1px solid var(--border2); border-left-width: 3px; border-radius: 4px; padding: 2px 6px; }
+.crate-chip.off { opacity: .45; text-decoration: line-through; }
+.crate-chip button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; line-height: 1; padding: 0 0 0 2px; }
+.crate-chip button:hover { color: var(--red-t); }
+.crate-pool { max-height: 260px; overflow-y: auto; }
+.crate-ed-actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.crate-ed-actions .dirty { color: #f2c230; font-size: 11px; margin-right: auto; }
+
+.ac-sel { background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); padding: 6px 8px; font-family: inherit; font-size: 12px; }
+#ac-table th { white-space: nowrap; }
+#ac-table th.sortable { cursor: pointer; user-select: none; }
+#ac-table th.sortable:hover, #ac-table th.ac-sorted { color: var(--text); }
+#ac-table td.ac-score, #ac-table th.ac-score { text-align: center; white-space: nowrap; }
+#ac-table td.ac-score span { display: inline-block; min-width: 48px; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#ac-table .ac-score .lo { color: var(--text-dim); font-weight: 400; }
+#ac-table .ac-score .warm { background: rgba(230,162,60,.18); color: #e6a23c; }
+#ac-table .ac-score .hot { background: rgba(231,76,60,.2); color: #ff6b5b; }
+#ac-table tr.flagged td:first-child { box-shadow: inset 3px 0 0 #e74c3c; }
+#ac-table .ac-when { color: var(--text-dim); white-space: nowrap; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -409,9 +459,11 @@ export const dashboardHtml = `<!DOCTYPE html>
   <button class="tab-btn" data-tab="warnings"><span class="nav-icon">⚠</span>Warnings</button>
   <button class="tab-btn" data-tab="chatlog"><span class="nav-icon">💬</span>Chat Log</button>
   <button class="tab-btn" data-tab="lookup"><span class="nav-icon">🔍</span>Player / IP Lookup</button>
+  <button class="tab-btn" data-tab="anticheat"><span class="nav-icon">🛡</span>Anti-Cheat</button>
 
   <div class="nav-group" data-group="players">Players</div>
   <button class="tab-btn" data-tab="accounts"><span class="nav-icon">👤</span>Accounts</button>
+  <button class="tab-btn" data-tab="crates"><span class="nav-icon">📦</span>Crates</button>
   <button class="tab-btn" data-tab="xp"><span class="nav-icon">✦</span>XP Gain</button>
   <button class="tab-btn" data-tab="leaderboard"><span class="nav-icon">🏆</span>Leaderboard</button>
 
@@ -720,6 +772,37 @@ export const dashboardHtml = `<!DOCTYPE html>
       </tr></thead>
       <tbody id="accounts-tbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
     </table>
+  </div>
+
+  <!-- ════════════════ ANTI-CHEAT (admin-only: every score, flagged or not) ════════════════ -->
+  <div id="tab-anticheat" class="tab-pane">
+    <div class="toolbar" style="margin-bottom:8px;">
+      <select id="ac-days" class="ac-sel" title="Time window" onchange="loadAntiCheat()">
+        <option value="1">Last 24h</option><option value="7" selected>Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option>
+      </select>
+      <select id="ac-min" class="ac-sel" title="Minimum score" onchange="loadAntiCheat()">
+        <option value="0">All scores</option><option value="0.5">≥ 50 %</option><option value="1">Flagged only (≥ 100 %)</option>
+      </select>
+      <input id="ac-search" type="text" class="ac-sel" placeholder="Filter name or slug…" style="width:200px;flex:none;" oninput="renderAntiCheat()">
+      <button class="btn btn-gray" onclick="loadAntiCheat()">↻ Refresh</button>
+      <span id="ac-info" style="font-size:11px;color:var(--text-dim);">Loading…</span>
+    </div>
+    <div class="muted ac-help">One row per player and game. Each cheat column is the score in % of its threshold - 100 % = flagged as sus. Hover a cell for the raw value, click a column to sort.</div>
+    <div id="ac-list"><div class="loading">Loading…</div></div>
+  </div>
+
+  <!-- ════════════════ CRATES (admin-only: keys + loot pools) ════════════════ -->
+  <div id="tab-crates" class="tab-pane">
+    <div class="crate-give">
+      <b>Give keys</b>
+      <input id="ck-slug" type="text" placeholder="account slug" autocomplete="off">
+      <select id="ck-key"></select>
+      <input id="ck-amount" type="number" min="1" max="100" value="1">
+      <button class="btn btn-green" onclick="giveCrateKeys()">Give</button>
+    </div>
+    <div class="muted ac-help">Saved changes apply to every crate opened afterwards; players see the new drop chances the next time they open the Crates tab. Rarity is the live, ownership-based rarity, so an item can move to another group when the stats are recomputed (daily).</div>
+    <datalist id="crate-catalog"></datalist>
+    <div id="crate-editors"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- ════════════════ LOBBIES (admin-only: every open private lobby) ════════════════ -->
@@ -1278,6 +1361,12 @@ function switchTab(name) {
   } else if (name === 'lobbies') {
     closeSSE();
     loadLobbies();
+  } else if (name === 'anticheat') {
+    closeSSE();
+    loadAntiCheat();
+  } else if (name === 'crates') {
+    closeSSE();
+    loadCrates();
   } else {
     closeSSE();
   }
@@ -3753,6 +3842,289 @@ async function spectateGame(region, gameId, visible) {
   } catch (e) { toast('Spectate failed', true); }
 }
 
+// ── CRATES ───────────────────────────────────────────────────────────────────
+const CRATE_RARITIES = [[1, 'Common', '#c5c5c5'], [2, 'Uncommon', '#12ff00'], [3, 'Rare', '#00deff'], [4, 'Epic', '#f600ff'], [5, 'Mythic', '#d96100']];
+let crateData = null;
+// per crate: the unsaved edit { custom, pool, weights, dirty }
+const crateDraft = {};
+
+async function loadCrates() {
+  try {
+    crateData = await get('/api/crates');
+  } catch (e) {
+    document.getElementById('crate-editors').innerHTML = '<div class="empty">Could not load the crates.</div>';
+    return;
+  }
+  const keySel = document.getElementById('ck-key');
+  const keyWas = keySel.value;
+  keySel.innerHTML = crateData.keys.map(k => '<option value="' + esc(k.type) + '">' + esc(k.name) + '</option>').join('');
+  if (keyWas) keySel.value = keyWas;
+  crateData.byType = {};
+  for (const it of crateData.catalog) crateData.byType[it.type] = it;
+  const rn = { 1: 'Common', 2: 'Uncommon', 3: 'Rare', 4: 'Epic', 5: 'Mythic' };
+  document.getElementById('crate-catalog').innerHTML = crateData.catalog.map(it =>
+    '<option value="' + esc(it.name) + '">' + esc((rn[it.rarity] || '') + ' ' + it.category + ' · ' + it.type) + '</option>').join('');
+  for (const c of crateData.crates) {
+    crateDraft[c.type] = { custom: c.customPool, pool: c.pool.slice(), weights: Object.assign({}, c.weights), fries: Object.assign({}, c.fries), dirty: false };
+  }
+  document.getElementById('crate-editors').innerHTML = crateData.crates.map(renderCrateEditor).join('');
+}
+
+/** Chances of a draft - the same maths as the server (shared/defs/crateConfig.ts). */
+function crateDraftChances(d) {
+  const groups = {};
+  for (const t of new Set(d.custom ? d.pool : crateData.autoPool)) {
+    const it = crateData.byType[t];
+    if (!it || !(Number(d.weights[it.rarity]) > 0)) continue;
+    (groups[it.rarity] = groups[it.rarity] || []).push(t);
+  }
+  const friesW = Number(d.fries.weight) > 0 && Number(d.fries.max) > 0 ? Number(d.fries.weight) : 0;
+  let total = friesW;
+  for (const r in groups) total += Number(d.weights[r]);
+  const out = {};
+  for (const r in groups) out[r] = { n: groups[r].length, chance: total ? Number(d.weights[r]) / total : 0 };
+  out.fries = friesW && total ? friesW / total : 0;
+  return out;
+}
+
+function renderCrateEditor(c) {
+  const d = crateDraft[c.type];
+  const chances = crateDraftChances(d);
+  const weights = CRATE_RARITIES.map(([r, name, color]) => {
+    const ch = chances[r];
+    return '<label class="crate-w"><span style="color:' + color + '">' + name + '</span>'
+      + '<input type="number" min="0" max="100000" value="' + esc(d.weights[r] || 0) + '" data-weight="' + r + '">'
+      + '<span class="pct">' + (ch ? (ch.chance * 100).toFixed(1) + ' %' : '–') + '</span>'
+      + '<span class="n">' + (ch ? ch.n + (ch.n === 1 ? ' item' : ' items') : 'no items') + '</span></label>';
+  }).join('');
+  const pool = d.custom ? d.pool : crateData.autoPool;
+  const groups = CRATE_RARITIES.map(([r, name, color]) => {
+    const items = pool.filter(t => crateData.byType[t] && crateData.byType[t].rarity === r)
+      .sort((a, b) => crateData.byType[a].name.localeCompare(crateData.byType[b].name));
+    if (!items.length) return '';
+    const off = !(Number(d.weights[r]) > 0);
+    return '<div class="crate-group-head" style="color:' + color + '">' + name + ' · ' + items.length + (off ? ' · weight 0, never drops' : '') + '</div>'
+      + '<div class="crate-chips">' + items.map(t => '<span class="crate-chip' + (off ? ' off' : '') + '" style="border-left-color:' + color + '" title="' + esc(t) + '">'
+        + esc(crateData.byType[t].name)
+        + (d.custom ? '<button title="Remove" data-act="remove" data-item="' + esc(t) + '">×</button>' : '')
+        + '</span>').join('') + '</div>';
+  }).join('');
+  const unknown = d.custom ? d.pool.filter(t => !crateData.byType[t]) : [];
+  return '<div class="crate-ed" id="crate-ed-' + c.type + '" data-crate="' + c.type + '">'
+    + '<div class="crate-ed-head"><img src="' + esc(CLIENT_URL + '/' + c.img) + '" alt="">'
+    + '<div class="grow"><div class="crate-ed-title">' + esc(c.name)
+    + (c.customPool || c.customWeights ? '<span class="crate-ed-tag custom">edited</span>' : '<span class="crate-ed-tag">defaults</span>') + '</div>'
+    + '<div class="muted">Opened by keys of tier ' + c.tier + ' and up</div></div></div>'
+    + '<div><div class="muted" style="font-size:11px;margin-bottom:4px">Rarity weights - only the ratio matters, rarities without items are skipped</div><div class="crate-weights">' + weights + '</div></div>'
+    + '<div class="crate-fries-row"><img src="' + esc(CLIENT_URL + '/img/gui/golden-fries.svg') + '" alt=""><b>Golden Fries</b>'
+    + '<label>weight <input type="number" min="0" max="100000" value="' + esc(d.fries.weight) + '" data-fries="weight"></label>'
+    + '<label>amount <input type="number" min="0" value="' + esc(d.fries.min) + '" data-fries="min"></label>'
+    + '<label>to <input type="number" min="0" value="' + esc(d.fries.max) + '" data-fries="max"></label>'
+    + '<span class="fries-pct">' + (chances.fries ? (chances.fries * 100).toFixed(1) + ' %' : 'off') + '</span></div>'
+    + '<div class="crate-pool-mode"><b>Pool</b>'
+    + '<label><input type="radio" name="cpm-' + c.type + '" data-act="auto"' + (d.custom ? '' : ' checked') + '> Automatic: shop + started passes (' + crateData.autoPool.length + ')</label>'
+    + '<label><input type="radio" name="cpm-' + c.type + '" data-act="custom"' + (d.custom ? ' checked' : '') + '> Custom list (' + d.pool.length + ')</label></div>'
+    + (d.custom ? '<div class="crate-add"><input type="text" class="crate-add-input" list="crate-catalog" placeholder="Add an item - type a name…">'
+      + '<button class="btn btn-blue" data-act="add">+ Add</button>'
+      + '<button class="btn btn-gray" data-act="fill" title="Replace the list with the automatic pool">Fill from auto</button>'
+      + '<button class="btn btn-gray" data-act="clear">Clear</button></div>' : '')
+    + (unknown.length ? '<div class="muted" style="color:var(--red-t)">Not droppable, removed on save: ' + esc(unknown.join(', ')) + '</div>' : '')
+    + '<div class="crate-pool">' + (groups || '<div class="empty">No items.</div>') + '</div>'
+    + '<div class="crate-ed-actions">' + (d.dirty ? '<span class="dirty">unsaved changes</span>' : '')
+    + '<button class="btn btn-gray" data-act="reset">Reset to defaults</button>'
+    + '<button class="btn btn-green" data-act="save">Save</button></div>'
+    + '</div>';
+}
+
+function crateRerender(type) {
+  const c = crateData.crates.find(x => x.type === type);
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderCrateEditor(c);
+  document.getElementById('crate-ed-' + type).replaceWith(tmp.firstChild);
+}
+
+function crateAdd(type) {
+  const input = document.querySelector('#crate-ed-' + type + ' .crate-add-input');
+  const q = input.value.trim().toLowerCase();
+  if (!q) return;
+  const it = crateData.catalog.find(x => x.name.toLowerCase() === q || x.type.toLowerCase() === q)
+    || crateData.catalog.find(x => x.name.toLowerCase().includes(q));
+  if (!it) { toast('No droppable item matches "' + input.value + '"', true); return; }
+  const d = crateDraft[type];
+  if (d.pool.includes(it.type)) { toast(it.name + ' is already in the pool', true); return; }
+  d.pool.push(it.type);
+  d.dirty = true;
+  crateRerender(type);
+  document.querySelector('#crate-ed-' + type + ' .crate-add-input').focus();
+  toast('Added ' + it.name);
+}
+
+async function crateAction(type, act, el) {
+  const d = crateDraft[type];
+  const c = crateData.crates.find(x => x.type === type);
+  if (act === 'auto' || act === 'custom') {
+    d.custom = act === 'custom';
+    if (d.custom && !d.pool.length) d.pool = crateData.autoPool.slice();
+    d.dirty = true;
+  } else if (act === 'add') {
+    return crateAdd(type);
+  } else if (act === 'remove') {
+    d.pool = d.pool.filter(t => t !== el.dataset.item);
+    d.dirty = true;
+  } else if (act === 'fill') {
+    d.pool = crateData.autoPool.slice();
+    d.dirty = true;
+  } else if (act === 'clear') {
+    if (!confirm('Remove every item from this custom pool?')) return;
+    d.pool = [];
+    d.dirty = true;
+  } else if (act === 'save') {
+    if (d.custom && !d.pool.length) { toast('A custom pool needs at least one item', true); return; }
+    const isDefault = CRATE_RARITIES.every(([r]) => Number(d.weights[r] || 0) === Number(c.defaultWeights[r] || 0));
+    const friesDefault = ['weight', 'min', 'max'].every(k => Number(d.fries[k] || 0) === Number(c.defaultFries[k] || 0));
+    const fries = { weight: Number(d.fries.weight) || 0, min: Number(d.fries.min) || 0, max: Number(d.fries.max) || 0 };
+    if (fries.weight > 0 && fries.max < 1) { toast('Golden Fries need an amount above 0', true); return; }
+    try {
+      await post('/api/crates/save', { crate: type, pool: d.custom ? d.pool : null, weights: isDefault ? null : d.weights, fries: friesDefault ? null : fries });
+      toast(c.name + ' saved');
+      loadCrates();
+    } catch (e) { toast('Save failed: ' + e.message, true); }
+    return;
+  } else if (act === 'reset') {
+    if (!confirm('Reset ' + c.name + ' to the default pool and weights?')) return;
+    try {
+      await post('/api/crates/reset', { crate: type });
+      toast(c.name + ' reset');
+      loadCrates();
+    } catch (e) { toast('Reset failed: ' + e.message, true); }
+    return;
+  }
+  crateRerender(type);
+}
+
+document.getElementById('crate-editors').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.type === 'radio') return;
+  crateAction(el.closest('.crate-ed').dataset.crate, el.dataset.act, el);
+});
+document.getElementById('crate-editors').addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.type === 'radio' && el.dataset.act) crateAction(el.closest('.crate-ed').dataset.crate, el.dataset.act, el);
+});
+document.getElementById('crate-editors').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.classList.contains('crate-add-input')) crateAdd(e.target.closest('.crate-ed').dataset.crate);
+});
+// weights: update the numbers live, keep the focus in the input
+document.getElementById('crate-editors').addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.dataset.weight && !el.dataset.fries) return;
+  const type = el.closest('.crate-ed').dataset.crate;
+  const d = crateDraft[type];
+  if (el.dataset.weight) d.weights[el.dataset.weight] = Math.max(0, Number(el.value) || 0);
+  else d.fries[el.dataset.fries] = Math.max(0, Number(el.value) || 0);
+  d.dirty = true;
+  const ch = crateDraftChances(d);
+  document.querySelector('#crate-ed-' + type + ' .fries-pct').textContent = ch.fries ? (ch.fries * 100).toFixed(1) + ' %' : 'off';
+  const boxes = document.querySelectorAll('#crate-ed-' + type + ' .crate-w');
+  CRATE_RARITIES.forEach(([r], i) => {
+    boxes[i].querySelector('.pct').textContent = ch[r] ? (ch[r].chance * 100).toFixed(1) + ' %' : '–';
+    boxes[i].querySelector('.n').textContent = ch[r] ? ch[r].n + (ch[r].n === 1 ? ' item' : ' items') : 'no items';
+  });
+});
+// re-render on leaving a weight input so groups with weight 0 get struck through
+document.getElementById('crate-editors').addEventListener('focusout', (e) => {
+  if (e.target.dataset && e.target.dataset.weight) {
+    const type = e.target.closest('.crate-ed').dataset.crate;
+    setTimeout(() => { if (!document.activeElement || !document.activeElement.dataset.weight) crateRerender(type); }, 0);
+  }
+});
+
+async function giveCrateKeys() {
+  const slug = document.getElementById('ck-slug').value.trim();
+  const key = document.getElementById('ck-key').value;
+  const amount = Math.max(1, Math.min(100, parseInt(document.getElementById('ck-amount').value, 10) || 1));
+  if (!slug) { toast('Enter an account slug', true); return; }
+  try {
+    const r = await post('/api/crates/give-keys', { slug, key, amount });
+    const name = ((crateData && crateData.keys.find(k => k.type === key)) || {}).name || key;
+    toast(r.given + '× ' + name + ' → @' + slug);
+  } catch (e) { toast('Failed: ' + e.message, true); }
+}
+
+// ── ANTI-CHEAT ───────────────────────────────────────────────────────────────
+const AC_LABELS = { cheat_name: 'Cheat name', snap_aim: 'Silent aim', esp_track: 'ESP tracking', offscreen_aim: 'Offscreen aim', spinbot: 'Spinbot', touch_desktop: 'Touch on desktop' };
+
+async function loadAntiCheat() {
+  const days = document.getElementById('ac-days').value;
+  const min = document.getElementById('ac-min').value;
+  try {
+    const data = await get('/api/anticheat?days=' + days + '&minRatio=' + min);
+    renderAntiCheat(data);
+  } catch (e) {
+    document.getElementById('ac-list').innerHTML = '<div class="empty">Could not load the scores.</div>';
+  }
+}
+
+let acData = null;
+let acSort = { col: 'max', dir: -1 };
+
+function renderAntiCheat(data) {
+  if (data) acData = data;
+  if (!acData) return;
+  const th = acData.thresholds || {};
+  const keys = Object.keys(AC_LABELS).filter(k => k in th);
+  Object.keys(th).forEach(k => { if (!keys.includes(k)) keys.push(k); });
+  const pct = (r, k) => r.scores && r.scores[k] != null && th[k] ? r.scores[k] / th[k] * 100 : 0;
+  const q = document.getElementById('ac-search').value.trim().toLowerCase();
+  let rows = (acData.rows || []).filter(r => !q || [r.name, r.slug, r.username].some(v => v && String(v).toLowerCase().includes(q)));
+  const flagged = rows.filter(r => r.maxRatio >= 1).length;
+  document.getElementById('ac-info').textContent = rows.length + ' player-games · ' + flagged + ' flagged';
+  if (!rows.length) { document.getElementById('ac-list').innerHTML = '<div class="empty">No scores in this period.</div>'; return; }
+
+  const val = (r, c) => c === 'name' ? (r.name || '').toLowerCase() : c === 'slug' ? (r.slug || '~').toLowerCase()
+    : c === 'time' ? new Date(r.createdAt).getTime() : c === 'max' ? r.maxRatio : pct(r, c);
+  rows = rows.slice().sort((a, b) => { const x = val(a, acSort.col), y = val(b, acSort.col); return (x < y ? -1 : x > y ? 1 : 0) * acSort.dir; });
+
+  const head = (col, label, cls) => '<th class="sortable' + (cls ? ' ' + cls : '') + (acSort.col === col ? ' ac-sorted' : '') + '" data-col="' + col + '">'
+    + esc(label) + (acSort.col === col ? (acSort.dir < 0 ? ' ▼' : ' ▲') : '') + '</th>';
+  const detail = (r, k) => {
+    const d = r.details || {};
+    if (k === 'snap_aim' && d.shots) return d.snaps + '/' + d.shots + ' shots snapped';
+    if (k === 'esp_track' && d.espLongestMs) return 'longest track ' + (d.espLongestMs / 1000).toFixed(1) + ' s';
+    if (k === 'offscreen_aim' && d.offscreenLongestMs) return 'longest ' + (d.offscreenLongestMs / 1000).toFixed(1) + ' s';
+    return '';
+  };
+  const badge = p => '<span class="' + (p >= 100 ? 'hot' : p >= 50 ? 'warm' : 'lo') + '">' + p + ' %</span>';
+  const cell = (r, k) => {
+    if (!r.scores || r.scores[k] == null) return '<td class="ac-score"><span class="lo">–</span></td>';
+    const tip = r.scores[k] + ' / ' + th[k] + (detail(r, k) ? ' · ' + detail(r, k) : '');
+    return '<td class="ac-score" title="' + esc(tip) + '">' + badge(Math.round(pct(r, k))) + '</td>';
+  };
+
+  document.getElementById('ac-list').innerHTML = '<table class="data-table" id="ac-table"><thead><tr>'
+    + head('name', 'In-game name') + head('slug', 'Slug') + '<th>IP</th>'
+    + keys.map(k => head(k, AC_LABELS[k] || k, 'ac-score')).join('')
+    + head('max', 'Max', 'ac-score') + head('time', 'Time') + '<th>Game</th>'
+    + '</tr></thead><tbody>' + rows.map(r => '<tr' + (r.maxRatio >= 1 ? ' class="flagged"' : '') + '>'
+      + '<td><b>' + esc(r.name || '?') + '</b></td>'
+      + '<td>' + (r.slug ? navLink(hAccount(r.slug), '@' + esc(r.slug), { title: 'Open account' }) : '<span class="muted">guest</span>') + '</td>'
+      + '<td>' + (r.encodedIp ? ipLink(r.encodedIp) : '<span class="muted">–</span>') + '</td>'
+      + keys.map(k => cell(r, k)).join('')
+      + '<td class="ac-score">' + badge(Math.round(r.maxRatio * 100)) + '</td>'
+      + '<td class="ac-when">' + esc(new Date(r.createdAt).toLocaleString()) + '</td>'
+      + '<td class="ac-when" style="font-family:monospace">' + navLink(hGame(r.gameId), esc(String(r.gameId).slice(0, 8)), { title: r.gameId }) + '</td>'
+      + '</tr>').join('') + '</tbody></table>';
+}
+
+document.getElementById('ac-list').addEventListener('click', (e) => {
+  const h = e.target.closest('#ac-table th.sortable');
+  if (!h) return;
+  const col = h.dataset.col;
+  if (acSort.col === col) acSort.dir *= -1;
+  else acSort = { col, dir: col === 'name' || col === 'slug' ? 1 : -1 };
+  renderAntiCheat();
+});
+
 // ── LOBBIES ──────────────────────────────────────────────────────────────────
 let lobbiesTimer = null;
 
@@ -4760,7 +5132,7 @@ document.getElementById('chat-send-input').addEventListener('keydown', (e) => {
  * Games is read-only for them apart from raising a sus flag, and their Sus tab is their
  * own report list — the server scopes and gates both independently.
  */
-const MODERATOR_TABS = ['overview', 'servers', 'replays', 'xp', 'games', 'sus'];
+const MODERATOR_TABS = ['overview', 'servers', 'replays', 'xp', 'games', 'sus', 'anticheat'];
 
 (async () => {
   try {

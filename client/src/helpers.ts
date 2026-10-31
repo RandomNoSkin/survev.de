@@ -1,3 +1,4 @@
+import { clanTagColor } from "../../shared/utils/clan";
 import $ from "jquery";
 import type { MeleeDef } from "../../shared/defs/gameObjects/meleeDefs.ts";
 import type { OutfitDef } from "../../shared/defs/gameObjects/outfitDefs.ts";
@@ -115,8 +116,13 @@ export const helpers = {
     formatUsername: function(
         name = "",
         roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        /** the player's clan [TAG] (in-game player info), shown right before the name */
+        clan: { clanTag?: string; clanColor?: number } | null = null,
     ) {
-        const escaped = helpers.htmlEscape(name);
+        let escaped = helpers.htmlEscape(name);
+        if (clan?.clanTag) {
+            escaped = `<span class="username-clan-tag" style="color:${clanTagColor(clan.clanColor ?? 0)}">[${helpers.htmlEscape(clan.clanTag)}]</span> ${escaped}`;
+        }
         if (!roleTag) return escaped;
         const label =
             roleTag === "owner"
@@ -237,6 +243,7 @@ export const helpers = {
             case "boost_effect":
                 return `img/particles/${def.texture?.slice(0, -4)}.svg`;
             case "death_effect":
+            case "crate_key":
                 return `img/loot/${def.texture?.slice(0, -4)}.svg`;
             case "emote":
                 return `img/emotes/${def.texture.slice(0, -4)}.svg`;

@@ -11,6 +11,9 @@ export class KillFeedMsg implements AbstractMsg {
     cmd: string = "";
     args: string[] = [];
     roleTag: DisplayRoleTag = null;
+    /** The sender's clan [TAG] ("" = none) and its CLAN_TAG_COLORS index. */
+    clanTag: string = "";
+    clanColor: number = 0;
     /** Admin-chosen chat highlight ("#rrggbb"), empty for the channel default. */
     color: string = "";
 
@@ -27,6 +30,8 @@ export class KillFeedMsg implements AbstractMsg {
         }
         s.writeUint8(encodeRoleTag(this.roleTag));
         s.writeString(this.color);
+        s.writeString(this.clanTag, 6);
+        s.writeUint8(this.clanColor);
         s.writeBits(0,6)
 
     }
@@ -44,6 +49,8 @@ export class KillFeedMsg implements AbstractMsg {
         }
         this.roleTag = decodeRoleTag(s.readUint8());
         this.color = s.readString();
+        this.clanTag = s.readString(6);
+        this.clanColor = s.readUint8();
         s.readBits(6);
     }
 }

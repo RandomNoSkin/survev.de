@@ -35,10 +35,13 @@ import {
     usersTable,
     userXpTable,
     duelResultsTable,
+    gameModerationTable,
+    antiCheatScoresTable,
     userWeaponStatsDailyTable,
     weaponStatsDailyTable,
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
+import { addClanXp, recordClanStats } from "../../db/clanStats";
 import { getActiveChatBan, hashIp, isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
 import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, _allowedDeathEffects, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
@@ -360,6 +363,12 @@ export const PrivateRouter = new Hono<Context>()
             })),
         );
         await logPlayerIPs(matchData);
+        // weekly clan stats (public Comp / Local games only)
+        await recordClanStats(matchData, !!data.isPrivate).catch((err) =>
+            server.logger.error("save_game: failed to record clan stats", err),
+        );
+        // clan progress: the members' match XP
+        await addClanXp(matchData).catch((err) => server.logger.error("save_game: failed to add clan XP", err));
         if (data.cosmeticStats?.length) {
             await attributeCosmeticStats(data.cosmeticStats);
         }
@@ -380,6 +389,29 @@ export const PrivateRouter = new Hono<Context>()
                 );
             } catch (err) {
                 server.logger.warn("Failed to save duel results:", err);
+            }
+        }
+        if (data.antiCheat?.scores?.length) {
+            const { gameId, mapId, scores } = data.antiCheat;
+            try {
+                await db.insert(antiCheatScoresTable).values(
+                    scores.map((s) => ({ gameId, mapId: mapId ?? -1, ...s })),
+                );
+            } catch (err) {
+                server.logger.warn("Failed to save anti-cheat scores:", err);
+            }
+        }
+        if (data.antiCheat?.flags.length) {
+            const { gameId, flags } = data.antiCheat;
+            try {
+                // never overwrites what staff already set for that player and game
+                await db
+                    .insert(gameModerationTable)
+                    .values(flags.map((f) => ({ gameId, userId: f.userId, status: "sus", note: f.note, markedBy: "anticheat" })))
+                    .onConflictDoNothing();
+                server.logger.warn(`Anti-cheat flagged ${flags.length} player(s) in ${gameId}`);
+            } catch (err) {
+                server.logger.warn("Failed to save anti-cheat flags:", err);
             }
         }
         server.logger.info(`Saved game data for ${matchData[0].gameId}`);

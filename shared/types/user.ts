@@ -97,7 +97,12 @@ export type AccountSettings = {
     showAdminPrefix: boolean;
     showModPrefix: boolean;
     showPremiumPrefix: boolean;
+    /** Which tag shows before your name in games: role tag ([ADMIN]/[PREM]...), clan
+     *  tag, or both. "clan" falls back to the role tag for players without a clan. */
+    tagDisplay: TagDisplay;
 };
+
+export type TagDisplay = "both" | "role" | "clan";
 
 export const zSettingsRequest = z.object({
     offersDisabled: z.boolean().optional(),
@@ -107,6 +112,7 @@ export const zSettingsRequest = z.object({
     showAdminPrefix: z.boolean().optional(),
     showModPrefix: z.boolean().optional(),
     showPremiumPrefix: z.boolean().optional(),
+    tagDisplay: z.enum(["both", "role", "clan"]).optional(),
 });
 export type SettingsRequest = z.infer<typeof zSettingsRequest>;
 export type SettingsResponse = { success: boolean; settings: AccountSettings };
@@ -205,6 +211,35 @@ export type ShopResponse = {
 // Slots 0/1 are the daily rotation, 2/3 the weekly one, 4/5 the two Premium Daily offers.
 export const zBuyShopRequest = z.object({ slot: z.number().int().min(0).max(5) });
 export type BuyShopRequest = z.infer<typeof zBuyShopRequest>;
+//
+// CRATES (loadout lootboxes, opened with keys)
+//
+
+export const zOpenCrateRequest = z.object({ crate: z.string().max(32), key: z.string().max(64) });
+export type OpenCrateRequest = z.infer<typeof zOpenCrateRequest>;
+
+export const zDumpItemRequest = z.object({ itemId: z.number().int().positive() });
+export type DumpItemRequest = z.infer<typeof zDumpItemRequest>;
+
+export type DumpItemResponse = {
+    success: boolean;
+    /** "not_owned" | "not_dumpable" | "starter_item" | "listed" | "auctioned" | "error" */
+    error?: string;
+    fries?: number;
+    balance: number;
+};
+
+export type OpenCrateResponse = {
+    success: boolean;
+    /** "wrong_key" | "no_key" | "too_fast" | "empty_crate" | "error" */
+    error?: string;
+    item?: { id: number; type: string };
+    /** Set instead of `item` when the crate dropped Golden Fries. */
+    fries?: number;
+    balance?: number;
+    keyType?: string;
+};
+
 export type BuyShopResponse = {
     success: boolean;
     /** Set on failure: "already_purchased" | "insufficient_funds" | "invalid_slot" | "premium_required" | "error". */
@@ -314,7 +349,7 @@ export type CancelListingResponse = {
 };
 
 export const zMarketBrowseRequest = z.object({
-    category: z.enum(["outfit", "melee", "emote", "particle", "death_effect"]).optional(),
+    category: z.enum(["outfit", "melee", "emote", "particle", "death_effect", "key"]).optional(),
     rarity: z.number().int().min(0).max(5).optional(),
     sellerSlug: z.string().optional(),
     page: z.number().int().min(0).optional(),
@@ -488,6 +523,141 @@ export type OfferActionResponse = {
     balance?: number;
 };
 
+//
+// BUY ORDERS — "Make offer" on any copy of an item type. The buyer's fries (offer + fee)
+// are held right away; the first owner who sells gets the offer, the rest is refunded
+// when it's cancelled or runs out.
+//
+
+export type BuyOrder = {
+    orderId: number;
+    type: string;
+    /** what the seller receives */
+    amount: number;
+    /** what the buyer paid (amount + fee) */
+    total: number;
+    /** open | filled | cancelled | expired */
+    status: string;
+    buyerSlug: string;
+    buyerUsername: string;
+    buyerRoleTag: RoleTag;
+    /** who sold, once filled */
+    sellerSlug: string | null;
+    createdAt: number;
+    expiresAt: number;
+};
+
+export type BuyOrderListResponse = {
+    success: boolean;
+    /** the caller's own orders, newest first (open + the last closed ones) */
+    mine: BuyOrder[];
+    /** open orders for item types the caller owns a sellable copy of, best first */
+    forMyItems: BuyOrder[];
+};
+
+export const zCreateBuyOrderRequest = z.object({
+    type: z.string().min(1).max(64),
+    amount: z.number().int().min(1).max(MARKET_MAX_PRICE),
+});
+export type CreateBuyOrderRequest = z.infer<typeof zCreateBuyOrderRequest>;
+export type CreateBuyOrderResponse = {
+    success: boolean;
+    /** "not_tradeable" | "insufficient_funds" | "too_many" | "duplicate" | "error" */
+    error?: string;
+    balance?: number;
+    order?: BuyOrder;
+};
+
+export const zBuyOrderIdRequest = z.object({ orderId: z.number().int().positive() });
+export type BuyOrderIdRequest = z.infer<typeof zBuyOrderIdRequest>;
+
+export const zFillBuyOrderRequest = z.object({
+    orderId: z.number().int().positive(),
+    itemId: z.number().int().positive(),
+});
+export type FillBuyOrderRequest = z.infer<typeof zFillBuyOrderRequest>;
+
+export type BuyOrderActionResponse = {
+    success: boolean;
+    /** "not_found" | "gone" | "not_owned" | "wrong_item" | "listed" | "auctioned" | "blocked" | "own_order" | "error" */
+    error?: string;
+    balance?: number;
+};
+
+//
+// TRADE HISTORY — recent sales across the market, auctions, offers and buy orders.
+//
+
+export type TradeSale = {
+    type: string;
+    /** what the seller got (before the auction fee) */
+    price: number;
+    /** listing | auction | offer | order */
+    kind: string;
+    at: number;
+};
+
+export type TradePriceStats = {
+    /** last sale price */
+    last: number;
+    /** average over the last 30 days */
+    avg: number;
+    min: number;
+    max: number;
+    /** sales in the last 30 days */
+    count: number;
+};
+
+export const zTradeHistoryRequest = z.object({
+    /** price stats + history for this item type (otherwise just the recent feed) */
+    type: z.string().min(1).max(64).optional(),
+});
+export type TradeHistoryRequest = z.infer<typeof zTradeHistoryRequest>;
+export type TradeHistoryResponse = {
+    success: boolean;
+    /** the latest sales, newest first (of `type` when given) */
+    recent: TradeSale[];
+    /** price stats of `type` (null when it never sold) */
+    stats: TradePriceStats | null;
+};
+
+//
+// TRADE EVENTS — notifications ("your item sold", "you were outbid", ...)
+//
+
+export type TradeEventKind =
+    | "sold" // a listing of yours was bought
+    | "auction_sold" // your auction ended with a winner
+    | "auction_won" // you won an auction
+    | "outbid" // someone bid over you
+    | "offer_received" // an offer on one of your items
+    | "offer_accepted" // your offer was accepted
+    | "offer_declined"
+    | "offer_countered"
+    | "order_filled" // someone sold to your buy order
+    | "order_expired"; // your buy order ran out (refunded)
+
+export type TradeEvent = {
+    id: number;
+    kind: TradeEventKind;
+    type: string;
+    amount: number | null;
+    /** the other side (buyer, seller, bidder) */
+    otherSlug: string | null;
+    createdAt: number;
+};
+
+export type TradeEventsResponse = {
+    success: boolean;
+    /** unseen events, oldest first */
+    events: TradeEvent[];
+    /** things waiting for the player: incoming offers, counters, buy orders they can fill */
+    pending: { offers: number; ordersForMyItems: number; orderIds: number[] };
+};
+
+export const zSeenTradeEventsRequest = z.object({ ids: z.array(z.number().int().positive()).max(200) });
+export type SeenTradeEventsRequest = z.infer<typeof zSeenTradeEventsRequest>;
+
 /** The instance ids the player has equipped/selected — reported on game join so match
  *  stats attach to the exact owned copy. */
 export const zEquippedInstancesRequest = z.object({
@@ -526,7 +696,13 @@ export type ItemOwnersResponse = {
 };
 
 /** A user match for the gift-recipient picker. */
-export type UserSearchResult = { slug: string; username: string; roleTag: RoleTag };
+export type UserSearchResult = {
+    slug: string;
+    username: string;
+    roleTag: RoleTag;
+    /** the player icon (emote type) picked in their loadout; "" = none / private */
+    icon?: string;
+};
 
 export const zUserSearchRequest = z.object({
     query: z.string().trim().min(1).max(64),
@@ -607,7 +783,7 @@ export const zRoleTag = z.enum(["owner", "admin", "mod", "premium"]).nullable();
  */
 export type DisplayRoleTag = RoleTag | "bot";
 
-export type Friend = { slug: string; username: string; roleTag: RoleTag };
+export type Friend = { slug: string; username: string; roleTag: RoleTag; icon?: string };
 
 /** A live game a friend is currently in (region + gameId, to spectate). */
 export type LiveGame = { region: string; gameId: string };
@@ -617,10 +793,39 @@ export type FriendEntry = {
     slug: string;
     username: string;
     roleTag: RoleTag;
+    icon?: string;
     /** Epoch ms of their most recent finished game, or null if none. */
     lastGame: number | null;
     /** Set when they're currently in a spectatable live game. */
     live: LiveGame | null;
+    /** Has the site open right now (heartbeat within the last minute). */
+    online: boolean;
+};
+
+/** "Join my team / lobby" from a friend, handed out by the presence heartbeat. */
+export type TeamInvite = {
+    id: number;
+    fromSlug: string;
+    fromUsername: string;
+    fromRoleTag: RoleTag;
+    /** a team (party) code, or a private lobby code */
+    kind: "team" | "lobby";
+    code: string;
+    at: number;
+};
+
+export type PresenceResponse = { success: boolean; invites: TeamInvite[] };
+
+export const zInviteRequest = z.object({
+    slug: z.string().trim().min(1).max(64),
+    kind: z.enum(["team", "lobby"]),
+    code: z.string().regex(/^[0-9a-zA-Z-]{3,24}$/),
+});
+export type InviteRequest = z.infer<typeof zInviteRequest>;
+export type InviteResponse = {
+    success: boolean;
+    /** "not_friend" | "offline" | "error" */
+    error?: string;
 };
 
 /** A recently-played player, tagged as a teammate ("with") or an opponent ("against"). */
@@ -628,11 +833,12 @@ export type RecentPlayer = {
     slug: string;
     username: string;
     roleTag: RoleTag;
+    icon?: string;
     relation: "with" | "against";
 };
 
 /** An account the caller has blocked (shown in the Social panel's Blocked list). */
-export type BlockedUser = { slug: string; username: string; roleTag: RoleTag };
+export type BlockedUser = { slug: string; username: string; roleTag: RoleTag; icon?: string };
 
 export type FriendsResponse = {
     success: boolean;

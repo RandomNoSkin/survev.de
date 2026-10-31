@@ -44,3 +44,17 @@ test("canSpawn rejects a circular ground patch over the map edge", () => {
     expect(type).toBeTruthy();
     expect(game.map.canSpawn(type, v2.create(1, 1), 0)).toBe(false);
 });
+
+test("Rotated buildings in the middle of the map keep all their ground patches", () => {
+    const game = createGame(TeamMode.Solo, "main");
+    const type = "club_01";
+    const patchCount = (RawMapObjectDefs as Record<string, any>)[type].mapGroundPatches.length;
+    expect(patchCount).toBeGreaterThan(0);
+    const center = v2.create(game.map.width / 2, game.map.height / 2);
+    for (let ori = 0; ori < 4; ori++) {
+        const before = game.map.msg.groundPatches.length;
+        game.map.genBuilding(type, center, 0, ori);
+        // a rotation swaps the patch corners - that used to read as "off the map"
+        expect(game.map.msg.groundPatches.length - before).toBe(patchCount);
+    }
+});

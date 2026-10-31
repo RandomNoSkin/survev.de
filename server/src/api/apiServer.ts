@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { withClanTags } from "./db/clanTags";
 import type { UpgradeWebSocket } from "hono/ws";
 import type { GameViewMeta } from "../../../shared/net/replay.ts";
 import type { SiteInfoRes } from "../../../shared/types/api.ts";
@@ -354,6 +355,7 @@ export class ApiServer {
 
     async findGame(body: FindGamePrivateBody): Promise<FindGamePrivateRes> {
         if (body.region in this.regions) {
+            await withClanTags(body.playerData);
             return await this.regions[body.region].findGame(body);
         }
         return { error: "find_game_failed" };
@@ -361,6 +363,7 @@ export class ApiServer {
 
     async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<FindGamePrivateRes> {
         if (body.region in this.regions) {
+            await withClanTags([...body.teams.flat(), ...(body.spectators ?? [])]);
             return await this.regions[body.region].createPrivateGame(body);
         }
         return { error: "find_game_failed" };

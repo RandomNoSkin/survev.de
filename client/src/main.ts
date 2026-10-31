@@ -41,6 +41,7 @@ import { LoadoutDisplay } from "./ui/opponentDisplay";
 import { OwnersUi } from "./ui/ownersUi";
 import { Pass } from "./ui/pass";
 import { PremiumUi } from "./ui/premiumUi";
+import { TradeUi } from "./ui/tradeUi";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
 import { ShopUi } from "./ui/shopUi";
@@ -103,6 +104,7 @@ export class Application {
     ownersUi!: OwnersUi;
     auctionUi!: AuctionUi;
     premiumUi!: PremiumUi;
+    tradeUi!: TradeUi;
     socialUi!: SocialUi;
 
     pingTest = new PingTest();
@@ -155,6 +157,7 @@ export class Application {
     constructor() {
         this.account = new Account(this.config);
         this.loadoutMenu = new LoadoutMenu(this.account, this.localization);
+        this.loadoutMenu.crateUi.audioManager = this.audioManager;
         this.pass = new Pass(this.account, this.loadoutMenu, this.localization);
         this.profileUi = new ProfileUi(
             this.account,
@@ -166,12 +169,13 @@ export class Application {
         this.shopUi = new ShopUi(this.account, this.localization);
         this.shopUi.marketUi = this.marketUi;
         $("#golden-fries-shop-btn").on("click", () => this.shopUi.open());
-        // The shop's "Owners" tab (who owns a cosmetic); clicking an owner opens their
-        // storefront on the Market tab.
+        // "Owners" (who owns a cosmetic) lives in the Social panel; clicking an owner opens
+        // their storefront on the shop's Market tab.
         this.ownersUi = new OwnersUi(this.account, this.localization);
         this.shopUi.ownersUi = this.ownersUi;
         this.ownersUi.onOpenStorefront = (slug) => {
-            this.shopUi.selectTab("market");
+            this.socialUi.modal.hide();
+            this.shopUi.openAt("market", "browse");
             this.marketUi.openStorefront(slug);
         };
         // The Auction house tab (bid on / put up items).
@@ -182,6 +186,36 @@ export class Application {
         this.shopUi.premiumUi = this.premiumUi;
         // The Social panel (gift skins / Golden Fries), opened from the top-right button.
         this.socialUi = new SocialUi(this.account, this.localization);
+        this.socialUi.ownersUi = this.ownersUi;
+        this.shopUi.socialUi = this.socialUi;
+        // Buy orders ("Make offer"), the Sell tab, Recently sold and trade notifications.
+        this.tradeUi = new TradeUi(this.account, this.localization, this.marketUi, this.auctionUi);
+        this.shopUi.tradeUi = this.tradeUi;
+        this.tradeUi.isInGame = () => !!this.game?.connected;
+        this.tradeUi.onPending = () => this.shopUi.renderTradesBadge();
+        this.tradeUi.onOpenShop = (where) => {
+            if (where === "market") this.shopUi.openAt("market");
+            else if (where === "auctions") this.shopUi.openAt("market", "auctions");
+            else if (where === "requests" || where === "orders") this.shopUi.openAt("trades", where);
+            else this.shopUi.openAt("trades");
+        };
+        this.marketUi.onSellCta = () => this.shopUi.selectTab("sell");
+        // Social: invite friends to the team / private lobby you're in, join theirs.
+        this.socialUi.toast = (html, onClick) => this.tradeUi.toast(html, onClick);
+        this.socialUi.getInviteTarget = () => {
+            const code = (url: string) => url.replace(/^#/, "");
+            if (this.privateLobbyMenu.active && this.privateLobbyMenu.roomData.roomUrl && !this.privateLobbyMenu.publicSpectator) {
+                return { kind: "lobby", code: code(this.privateLobbyMenu.roomData.roomUrl) };
+            }
+            if (this.teamMenu.active && this.teamMenu.roomData.roomUrl) {
+                return { kind: "team", code: code(this.teamMenu.roomData.roomUrl) };
+            }
+            return null;
+        };
+        this.socialUi.onJoinInvite = (invite) => {
+            if (!this.active) return; // mid-game: the toast only shows in the menu anyway
+            this.tryJoinTeam(false, invite.code);
+        };
         this.profileUi.socialUi = this.socialUi;
         // Let the Social panel spectate a friend's current game.
         this.socialUi.onSpectate = (region, gameId) =>
@@ -612,9 +646,26 @@ export class Application {
             );
             if (storefrontParam) {
                 history.replaceState(null, "", window.location.pathname);
-                this.shopUi.open();
-                this.shopUi.selectTab("market");
+                this.shopUi.openAt("market", "browse");
                 this.marketUi.openStorefront(storefrontParam);
+            }
+
+            // A clan invite link (?clan=CODE): show it on the Social panel's Clans tab once
+            // logged in (a logged-out visitor sees the "log in" prompt there first).
+            const clanParam = new URLSearchParams(window.location.search).get("clan");
+            if (clanParam) {
+                history.replaceState(null, "", window.location.pathname);
+                const openClan = () => this.socialUi.openClanLink(clanParam);
+                if (this.account.loggedIn) {
+                    openClan();
+                } else {
+                    const onLogin = () => {
+                        this.account.removeEventListener("login", onLogin);
+                        openClan();
+                    };
+                    this.account.addEventListener("login", onLogin);
+                    if (!this.account.loggingIn) openClan();
+                }
             }
 
             SDK.gameLoadComplete();
@@ -1524,7 +1575,11 @@ export class Application {
                 }
                 if (this.loadoutDisplay.initialized) {
                     this.loadoutDisplay.show();
-                    this.loadoutDisplay.update(dt, this.hasFocus);
+                    // no idle animation (and its punch sounds) behind the crate opening
+                    this.loadoutDisplay.update(
+                        dt,
+                        this.hasFocus && !this.loadoutMenu.crateUi.overlayOpen,
+                    );
                 }
             } else {
                 this.loadoutDisplay.hide();

@@ -1,4 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
+import { clanTagColor } from "../../../shared/utils/clan";
 import type { LootDef } from "../../../shared/defs/gameObjectDefs.ts";
 import type { DeathEffectDef } from "../../../shared/defs/gameObjects/deathEffectDefs.ts";
 import type {
@@ -233,6 +234,9 @@ export class Player implements AbstractObject {
 
     container = new PIXI.Container();
     nameText = createPlayerNameText();
+    /** the clan [TAG] in its colour, left of the name (teammates only, like the name) */
+    clanText = createPlayerNameText();
+    private nameShown = "";
     auraContainer = new PIXI.Container();
     auraCircle = createSprite();
 
@@ -446,6 +450,7 @@ export class Player implements AbstractObject {
         this.container.addChild(this.bodyContainer);
 
         this.container.addChild(this.nameText);
+        this.container.addChild(this.clanText);
 
         this.auraContainer.addChild(this.auraCircle);
 
@@ -932,8 +937,24 @@ export class Player implements AbstractObject {
         const activeGroupId = playerBarn.getPlayerInfo(activeId).groupId;
         const playerInfo = playerBarn.getPlayerInfo(this.__id);
         const inSameGroup = playerInfo.groupId == activeGroupId;
-        this.nameText.text = playerInfo.name;
-        this.nameText.visible = !isActivePlayer && inSameGroup;
+        const showName = !isActivePlayer && inSameGroup;
+        this.nameText.visible = showName;
+        this.clanText.visible = showName && !!playerInfo.clanTag;
+        const shown = `${playerInfo.clanTag}|${playerInfo.clanColor}|${playerInfo.name}`;
+        if (shown !== this.nameShown) {
+            this.nameShown = shown;
+            this.nameText.text = playerInfo.name;
+            this.clanText.text = playerInfo.clanTag ? `[${playerInfo.clanTag}]` : "";
+            this.clanText.style.fill = parseInt(clanTagColor(playerInfo.clanColor).slice(1), 16);
+            // centre "[TAG] name" as a whole
+            const gap = 4;
+            const tagW = playerInfo.clanTag ? this.clanText.width + gap : 0;
+            this.nameText.anchor.set(0.5, 0.5);
+            this.nameText.x = tagW / 2;
+            this.clanText.anchor.set(1, 0.5);
+            this.clanText.x = tagW / 2 - this.nameText.width / 2 - gap;
+            this.clanText.y = this.nameText.y;
+        }
 
         // Locate nearby obstacles that may play interaction effects
         let insideObstacle: Obstacle | null = null;
@@ -3001,6 +3022,8 @@ export class PlayerBarn {
             groupId: info.groupId,
             name: info.name,
             roleTag: info.roleTag,
+            clanTag: info.clanTag,
+            clanColor: info.clanColor,
             nameTruncated: helpers.truncateString(
                 info.name || "",
                 "bold 16px arial",

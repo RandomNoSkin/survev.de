@@ -69,11 +69,29 @@ export interface SaveGameBody {
             userId?: string;
         }[];
     };
+    /** A private lobby game - doesn't count for the weekly clan stats. Optional for
+     *  backward-compat (older servers / locally-saved games count as public). */
+    isPrivate?: boolean;
     /** Clean 1v1 kills between two accounts (local mode) - profile "1v1" stats. */
     duels?: {
         gameId: string;
         mapId: number;
         entries: { winnerUserId: string; loserUserId: string; at: number }[];
+    };
+    /** Players the anti-cheat flagged (see game/antiCheat.ts) - become "sus" entries.
+     *  `userId` is the account, or the dashboard's guest key (`guest:<playerId>`). */
+    antiCheat?: {
+        gameId: string;
+        mapId?: number;
+        flags: { userId: string; note: string }[];
+        /** every player with any score, flagged or not (dashboard Anti-Cheat tab) */
+        scores?: {
+            userId: string;
+            name: string;
+            maxRatio: number;
+            scores: Record<string, number>;
+            details: { shots: number; snaps: number; espLongestMs: number; offscreenLongestMs?: number };
+        }[];
     };
 }
 
@@ -123,6 +141,8 @@ export interface GameData {
     stopped: boolean;
 }
 
+const zClanTag = z.object({ tag: z.string().max(6), color: z.number().int().min(0).max(255) }).nullable();
+
 export const zFindGamePrivateBody = z.object({
     region: z.string(),
     version: z.number(),
@@ -136,6 +156,8 @@ export const zFindGamePrivateBody = z.object({
             ip: z.string(),
             admin: z.boolean(),
             roleTag: zRoleTag,
+            /** [TAG] + colour of the player's clan (filled in by the API, see withClanTags) */
+            clanTag: zClanTag.optional(),
             loadout: loadoutSchema.optional(),
             customLoadout: zCustomLoadoutConfig.optional(),
             /** Staff watching from the dashboard: an invisible spectator (see Player.stealth). */
@@ -152,6 +174,7 @@ const zPrivateLobbyPlayerData = z.object({
     ip: z.string(),
     admin: z.boolean(),
     roleTag: zRoleTag,
+    clanTag: zClanTag.optional(),
     loadout: loadoutSchema.optional(),
     customLoadout: zCustomLoadoutConfig.optional(),
     /** An admin watching the lobby invisibly (see Player.stealth). */

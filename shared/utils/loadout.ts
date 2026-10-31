@@ -41,7 +41,25 @@ export const loadoutSchema = z.object({
         stroke: z.string(),
     }),
     emotes: z.array(z.string()).length(6),
+    /** Loadout categories (see RANDOM_SLOTS) the game server picks at random from the
+     *  player's items before every match. */
+    random: z.array(z.string()).max(12).default([]),
+    /** Cosmetic types never picked at random ("Random" button or every game). */
+    randomExclude: z.array(z.string()).max(1000).default([]),
 });
+
+/** Randomizable loadout category → the object type its cosmetics have. The keys are the
+ *  loadout menu's category names (`emote` = the whole emote wheel). */
+export const RANDOM_SLOTS: Record<string, string> = {
+    outfit: "outfit",
+    melee: "melee",
+    emote: "emote",
+    heal: "heal_effect",
+    boost: "boost_effect",
+    death_effect: "death_effect",
+    crosshair: "crosshair",
+    player_icon: "emote",
+};
 
 export type Loadout = z.infer<typeof loadoutSchema>;
 export type Crosshair = Loadout["crosshair"];
@@ -102,6 +120,8 @@ export const loadout = {
                 stroke: getFloat(mergedLoadout.crosshair.stroke, 0).toFixed(2),
             },
             emotes: [] as string[],
+            random: [...new Set((mergedLoadout.random ?? []).filter((k) => k in RANDOM_SLOTS))],
+            randomExclude: [...new Set((mergedLoadout.randomExclude ?? []).filter((t) => !!GameObjectDefs.typeToDefSafe(t)))],
         };
 
         const defaultEmotes = GameConfig.defaultEmoteLoadout.slice();
@@ -154,6 +174,39 @@ export const loadout = {
         return loadout.validate(newLoadout);
     },
     defaultLoadout: () => loadout.validate({} as Loadout),
+    /**
+     * Picks random cosmetics from `availableTypes` (owned + default unlocks) for the
+     * categories in `slots` (default: the loadout's own `random` list). Avoids the one
+     * already equipped when there's a choice, so "random" always visibly changes. Types in
+     * the loadout's `randomExclude` are never picked.
+     */
+    randomize: (userLoadout: Loadout, availableTypes: Iterable<string>, slots?: string[], rand = Math.random): Loadout => {
+        const out = loadout.validate(userLoadout);
+        const excluded = new Set(out.randomExclude);
+        const types = [...new Set(availableTypes)].filter((t) => !excluded.has(t));
+        const poolOf = (gameType: string) => types.filter((t) => GameObjectDefs.typeToDefSafe(t)?.type === gameType);
+        const pick = (pool: string[], current: string) => {
+            const choices = pool.length > 1 ? pool.filter((t) => t !== current) : pool;
+            return choices[Math.floor(rand() * choices.length)];
+        };
+        for (const slot of slots ?? out.random) {
+            const gameType = RANDOM_SLOTS[slot];
+            if (!gameType) continue;
+            const pool = poolOf(gameType);
+            if (!pool.length) continue;
+            if (slot === "emote") {
+                // a fresh wheel: up to 6 different emotes, shuffled
+                const shuffled = [...pool].sort(() => rand() - 0.5);
+                out.emotes = out.emotes.map((e, i) => shuffled[i] ?? e);
+            } else if (slot === "crosshair") {
+                out.crosshair = { ...out.crosshair, type: pick(pool, out.crosshair.type) };
+            } else {
+                const key = slot as "outfit" | "melee" | "heal" | "boost" | "death_effect" | "player_icon";
+                out[key] = pick(pool, out[key]);
+            }
+        }
+        return loadout.validate(out);
+    },
     modified: (a: Loadout, b: Loadout) => !deepEqual(a, b),
     getUserAvailableItems: (heroItems: Item[]) => {
         const items: typeof heroItems = [];
