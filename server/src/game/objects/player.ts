@@ -3597,6 +3597,7 @@ export class Player extends BaseGameObject {
             // re-checks advSpecAllowed before honoring SpectatorAdvancedMsg.
             joinedMsg.advancedSpectator = this.advSpecAllowed;
             this.advSpecAllowedSent = joinedMsg.advancedSpectator;
+            joinedMsg.spectator = this.spectator;
             this.sendMsg(net.MsgType.Joined, joinedMsg);
 
             const mapStream = game.map.mapStream.stream;

@@ -3544,8 +3544,8 @@ function renderSlugDetail(data, container) {
   \`;
 }
 
-const CHANNEL_LABELS = ['ALL', 'TEAM', 'SPEC'];
-const CHANNEL_COLORS = ['var(--text)', 'var(--green-t)', 'var(--text-dim)'];
+const CHANNEL_LABELS = ['ALL', 'TEAM', 'SPEC', 'ALL (SPEC)'];
+const CHANNEL_COLORS = ['var(--text)', 'var(--green-t)', 'var(--text-dim)', 'var(--text-dim)'];
 
 async function loadChatLog(query, by, btn) {
   const panel = document.getElementById('chat-log-panel');

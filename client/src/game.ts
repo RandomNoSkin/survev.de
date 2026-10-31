@@ -1727,6 +1727,7 @@ export class Game {
                 this.teamMode = msg.teamMode;
                 this.m_localId = msg.playerId;
                 this.m_isAdmin = msg.isAdmin;
+                this.chatUi.setSpectator(msg.spectator);
                 // In replay mode the advanced spectator (freecam / zoom / ESP) is always
                 // available — it runs purely client-side on the recorded objects.
                 this.m_advancedSpectatorAllowed =
@@ -2166,6 +2167,11 @@ export class Game {
                     switch (msg.chatType) {
                         case 1: {
                             color = "#00f7ff";
+                            break;
+                        }
+                        case 2: {
+                            // spectators among themselves
+                            color = "#c3a6ff";
                             break;
                         }
                     }

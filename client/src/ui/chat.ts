@@ -15,7 +15,9 @@ export class ChatUi {
     game: Game;
     inputHandler: InputHandler;
     chatShown = false;
-    chatType = 0; // 0 = all | 1 = team | 3 = spectator
+    chatType = 0; // 0 = all | 1 = team | 2 = spectators only (joined as a spectator)
+    /** Joined as a spectator: the channels are SPEC and ALL instead of ALL and TEAM. */
+    spectator = false;
     clientSideChatSlowdown = 0;
     /** Timestamp (performance.now()) of the last leaveChat() call - joinChat() refuses
      *  to reopen within REOPEN_COOLDOWN_MS of it, as a hard backstop against Enter
@@ -204,7 +206,21 @@ export class ChatUi {
         this.input.blur();
     }
 
+    /** From the Joined message: spectators start in their own SPEC channel. */
+    setSpectator(spectator: boolean) {
+        this.spectator = spectator;
+        this.chatType = spectator ? 2 : 0;
+        this.input.placeholder = spectator ? "[SPEC]" : "[ALL]";
+    }
+
     switchChat() {
+        if (this.spectator) {
+            // SPEC <-> ALL (in ALL they show up tagged as a spectator)
+            this.chatType = this.chatType === 2 ? 0 : 2;
+            this.input.placeholder = this.chatType === 2 ? "[SPEC]" : "[ALL]";
+            this.input.focus();
+            return;
+        }
         const currentChat = this.chatType;
         switch (currentChat) {
             case (0): {
