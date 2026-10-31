@@ -28,7 +28,7 @@ const BLOCKED_MSG = "You can't interact with this player.";
 /** How often an open menu tells the server "still here" (online status + invites). */
 const PRESENCE_MS = 20_000;
 
-type SocialTab = "friends" | "players" | "clans" | "league" | "owners";
+type SocialTab = "friends" | "players" | "clans" | "discover" | "league" | "owners";
 /** The gift sub-views, shown in place of a tab (Back returns to it). */
 type GiftView = "fries" | "cosmetics";
 
@@ -231,9 +231,11 @@ export class SocialUi {
         $("#social-friends").css("display", tab === "friends" ? "block" : "none");
         $("#social-players").css("display", tab === "players" ? "block" : "none");
         $("#social-clans").css("display", tab === "clans" ? "block" : "none");
+        $("#social-discover").css("display", tab === "discover" ? "block" : "none");
         $("#social-league").css("display", tab === "league" ? "block" : "none");
         $("#shop-owners").css("display", tab === "owners" ? "block" : "none");
         if (tab === "clans") this.clanUi.show();
+        if (tab === "discover") this.clanUi.showDiscover($("#social-discover"));
         if (tab === "league") this.clanUi.showLeague($("#social-league"));
         if (tab === "owners") this.ownersUi?.activate();
         else this.ownersUi?.deactivate();
@@ -256,7 +258,7 @@ export class SocialUi {
         this.view = view;
         this.closeMenu();
         this.stopFriendsPolling();
-        $("#social-friends, #social-players, #social-clans, #social-league, #shop-owners").css("display", "none");
+        $("#social-friends, #social-players, #social-clans, #social-discover, #social-league, #shop-owners").css("display", "none");
         $("#social-gift").css("display", "block");
         $("#social-fries-view").css("display", view === "fries" ? "block" : "none");
         $("#social-cosmetics-view").css("display", view === "cosmetics" ? "block" : "none");

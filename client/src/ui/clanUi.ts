@@ -27,7 +27,9 @@ import {
     type ClanWeek,
     type ClanWeekSummary,
     perGame,
+    type ClanListEntry,
     type ClanListResponse,
+    type ClanListSort,
     type ClanSummary,
     type MyClanResponse,
     normalizeClanName,
@@ -90,6 +92,9 @@ export class ClanUi {
     /** null = not editing; "create" / "edit" = the form is open. */
     private form: "create" | "edit" | null = null;
     private searchDebounce: ReturnType<typeof setTimeout> | null = null;
+    /** Discover tab: search text and order, kept while the menu stays open. */
+    private discover: { search: string; sort: ClanListSort } = { search: "", sort: "members" };
+    private discoverSeq = 0;
     private loadSeq = 0;
 
     constructor(private account: Account) {}
@@ -249,11 +254,12 @@ export class ClanUi {
             this.searchDebounce = setTimeout(load, 250);
         });
         wrap.append($('<div class="social-section-head">Clans</div>'), search, list);
+        wrap.append($('<div class="clan-muted clan-discover-hint">Find more clans - by tag, name or member - in the <b>Discover Clans</b> tab.</div>'));
         load();
         return wrap;
     }
 
-    private renderClanRow(c: ClanSummary) {
+    private renderClanRow(c: ClanSummary | ClanListEntry) {
         const row = $('<div class="social-row clan-row"></div>');
         ClanUi.banner(row, c.banner, c.tagColor, true);
         row.append(this.badge(c.icon, c.tag));
@@ -268,13 +274,108 @@ export class ClanUi {
                 text: `${c.members} ${c.members === 1 ? "member" : "members"} · owner ${c.ownerName || c.ownerSlug}`,
             }),
         );
+        if ("matched" in c && c.matched?.length) {
+            main.append($("<div/>", { class: "social-row-sub clan-row-matched", text: `👤 ${c.matched.join(", ")}` }));
+        }
         row.append(main);
+        if ("weekGames" in c) {
+            row.append(
+                $('<div class="clan-discover-stats"></div>').append(
+                    $("<div/>", { class: "clan-discover-level", text: `Lv ${clanLevel(c.xp).level}` }),
+                    $("<div/>", {
+                        class: `clan-discover-week${c.weekGames ? "" : " clan-discover-idle"}`,
+                        text: c.weekGames ? `${c.weekGames} games this week` : "no games this week",
+                    }),
+                    c.titles ? $("<div/>", { class: "clan-discover-week", text: `🏆 ${c.titles}× #1` }) : "",
+                ),
+            );
+        }
         row.addClass("clan-row-clickable").attr("title", "View clan");
         row.on("click", (e) => {
             if ($(e.target).closest(".shop-buy-btn").length) return;
             this.openClanPopup(c.id);
         });
         return row;
+    }
+
+    // ── Discover: every clan, searchable by tag, name or member ─────────────
+
+    private static readonly DISCOVER_SORTS: Array<[ClanListSort, string]> = [
+        ["members", "Biggest"],
+        ["active", "Most active"],
+        ["level", "Highest level"],
+        ["titles", "Most #1"],
+        ["newest", "Newest"],
+    ];
+
+    /** The Discover tab (Social): search + order + a paged clan list. */
+    showDiscover(root: JQuery<HTMLElement>) {
+        root.empty();
+        const search = $("<input/>", {
+            class: "market-search social-search",
+            type: "text",
+            placeholder: "🔍 Search clans by tag, name or member…",
+            autocomplete: "off",
+            maxlength: 32,
+        }).val(this.discover.search);
+        const seg = $('<div class="clan-seg clan-discover-sorts"></div>');
+        for (const [value, label] of ClanUi.DISCOVER_SORTS) {
+            const b = $("<div/>", { class: `clan-seg-btn${value === this.discover.sort ? " clan-seg-active" : ""}`, text: label });
+            b.on("click", () => {
+                if (this.discover.sort === value) return;
+                this.discover.sort = value;
+                seg.children().removeClass("clan-seg-active");
+                b.addClass("clan-seg-active");
+                load(0);
+            });
+            seg.append(b);
+        }
+        const info = $('<div class="clan-muted clan-week"></div>');
+        const list = $('<div class="social-list clan-list clan-discover-list"></div>');
+        const more = $("<div/>", { class: "shop-buy-btn menu-option btn-darken clan-discover-more", text: "Show more" }).hide();
+        const myId = this.clan?.id;
+
+        const load = (offset: number) => {
+            const seq = ++this.discoverSeq;
+            const q = this.discover.search;
+            if (!offset) list.html('<div class="shop-status">Loading…</div>');
+            more.hide();
+            this.post<ClanListResponse>(
+                "/api/user/clan/list",
+                { ...(q ? { search: q } : {}), sort: this.discover.sort, offset },
+                (res) => {
+                    if (seq !== this.discoverSeq) return;
+                    if (!offset) list.empty();
+                    if (!res) {
+                        list.append('<div class="shop-status">Couldn\'t load clans.</div>');
+                        return;
+                    }
+                    if (!offset && !res.clans.length) {
+                        list.append(`<div class="shop-status">${q ? "No clan or member matches that." : "No clans yet - be the first!"}</div>`);
+                    }
+                    for (const c of res.clans) {
+                        const row = this.renderClanRow(c);
+                        if (c.id === myId) row.addClass("clan-league-mine");
+                        list.append(row);
+                    }
+                    const shown = offset + res.clans.length;
+                    info.text(q && shown ? `${shown}${res.hasMore ? "+" : ""} ${shown === 1 ? "clan" : "clans"} for "${q}"` : "");
+                    more.toggle(res.hasMore).off("click").on("click", () => {
+                        more.text("Loading…");
+                        load(shown);
+                    });
+                    more.text("Show more");
+                },
+            );
+        };
+        search.on("input", () => {
+            this.discover.search = String(search.val() ?? "").trim();
+            if (this.searchDebounce) clearTimeout(this.searchDebounce);
+            this.searchDebounce = setTimeout(() => load(0), 250);
+        });
+        root.append(search, $('<div class="clan-league-filters"></div>').append(seg), info, list, more);
+        load(0);
+        window.setTimeout(() => search.trigger("focus"), 50);
     }
 
     // ── your clan ───────────────────────────────────────────────────────────
@@ -899,7 +1000,7 @@ export class ClanUi {
             wrap.append(ClanUi.goalBox(res.totals));
             wrap.append(this.memberStatsTable(res));
             wrap.append(
-                $(`<div class="clan-muted clan-stats-note">Only full public Comp lobbies count (${CLAN_MIN_LOBBY_PLAYERS} players), played while in the clan. Games from before joining count too, if the player was in no clan this week - after switching clans, only games from the join on count for the new one. Everything resets every Monday at 00:00.</div>`),
+                $(`<div class="clan-muted clan-stats-note">Only full public Comp lobbies count (${CLAN_MIN_LOBBY_PLAYERS} players), played while in the clan. Games where the clan is on more than one team don't count for it. Games from before joining count too, if the player was in no clan this week - after switching clans, only games from the join on count for the new one. Everything resets every Monday at 00:00.</div>`),
                 ClanUi.teamBonusNote(),
             );
         });
@@ -1035,7 +1136,7 @@ export class ClanUi {
             const details = $('<div class="clan-rewards-details"></div>').append(
                 $("<div/>", {
                     class: "clan-muted",
-                    text: `Every Sunday night the top 3 clans by rated win rate get a key pool, which the owner shares out among the members. The rated win rate is your win rate with ${CLAN_RATING_PRIOR_GAMES} average games added, so a few lucky games can't win it - consistent good play does, whatever the clan size. Only full public Comp lobbies count, and a clan needs ${CLAN_REWARD_MIN_ACTIVE} players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games to be ranked.`,
+                    text: `Every Sunday night the top 3 clans by rated win rate get a key pool, which the owner shares out among the members. The rated win rate is your win rate with ${CLAN_RATING_PRIOR_GAMES} average games added, so a few lucky games can't win it - consistent good play does, whatever the clan size. Only full public Comp lobbies count - not games where your clan is on more than one team - and a clan needs ${CLAN_REWARD_MIN_ACTIVE} players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games to be ranked.`,
                 }),
                 ClanUi.teamBonusNote(),
                 $("<div/>", {

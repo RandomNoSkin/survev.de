@@ -616,8 +616,8 @@ UserRouter.post("/clan/kick", validateParams(zClanSlugRequest), async (c) => {
 });
 
 UserRouter.post("/clan/list", validateParams(zClanListRequest), async (c) => {
-    const { search } = c.req.valid("json");
-    return c.json<ClanListResponse>({ clans: await listClans(search) }, 200);
+    const { search, sort, offset } = c.req.valid("json");
+    return c.json<ClanListResponse>(await listClans(search, sort, offset), 200);
 });
 
 UserRouter.post("/clan/create", validateParams(zClanEditRequest), async (c) => {

@@ -52,7 +52,7 @@ export function clanWeek(t = Date.now()): ClanWeek {
 }
 
 /** "YYYY-MM-DD" of the week's Monday - the `week` column. */
-function weekKey(t = Date.now()): string {
+export function weekKey(t = Date.now()): string {
     const d = new Date(clanWeek(t).start);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -114,14 +114,19 @@ export async function recordClanStats(
     if (!clanOf.size) return;
     // team bonus: how many members of the same clan were in each team
     const mates = new Map<string, number>();
+    const teamsOf = new Map<number, Set<number>>();
     for (const r of counted) {
         const clanId = clanOf.get(r.userId!);
         if (clanId === undefined) continue;
         const k = `${clanId}:${r.teamId}`;
         mates.set(k, (mates.get(k) ?? 0) + 1);
+        teamsOf.set(clanId, (teamsOf.get(clanId) ?? new Set()).add(r.teamId));
     }
+    // A clan on more than one team played against itself: the game doesn't count for it at
+    // all - else a clan could fill a lobby on both sides (a sure win + team bonus every
+    // game) or throw / team up between its own members. Other clans in it count normally.
     const values = counted
-        .filter((r) => clanOf.has(r.userId!))
+        .filter((r) => clanOf.has(r.userId!) && teamsOf.get(clanOf.get(r.userId!)!)!.size === 1)
         .map((r) => ({
             week,
             clanId: clanOf.get(r.userId!)!,
