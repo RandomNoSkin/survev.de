@@ -33,6 +33,7 @@ import { SDK } from "../sdk/sdk";
 import type { SiteInfo } from "../siteInfo";
 import type { CustomMapModal } from "./customMapModal";
 import type { LoadoutEditorModal } from "./loadoutEditorModal";
+import { decodeLobbySettings, encodeLobbySettings, type LobbyShareSettings } from "./lobbyShareCode";
 import type { WeaponStatsModal } from "./weaponStatsModal";
 
 /** A modal whose code (and instance) only loads the first time it's used - the
@@ -130,6 +131,10 @@ export class PrivateLobbyMenu {
     extraEmptyTeamIds = new Set<number>();
     /** When true, "Create Team" is limited to one empty slot at a time. When false, unlimited. Default true. */
     limitEmptyTeams = true;
+    /** What the leader typed into the lobby-code box (kept across re-renders). */
+    shareCodeDraft = "";
+    /** Result of the last lobby-code load, shown under the box. */
+    shareCodeStatus: { ok: boolean; text: string } | undefined;
     /** Set when joining as part of a "Create Team" handoff so the lobby groups us with our teammates. */
     importGroupId: string | undefined;
     /** Set when joining via a team-specific invite link/code (e.g. "ABC123-2") so the lobby places us directly into that team slot. */
@@ -1375,6 +1380,7 @@ export class PrivateLobbyMenu {
                 ),
             });
         }
+        tabs.push({ id: "lobbyCode", label: "Lobby Code" });
         return tabs;
     }
 
@@ -1417,6 +1423,9 @@ export class PrivateLobbyMenu {
                 break;
             case "advancedSettings":
                 this.settingsContent.append(this.renderAdvancedSettingsTab());
+                break;
+            case "lobbyCode":
+                this.settingsContent.append(this.renderShareCodeTab());
                 break;
         }
     }
@@ -1503,6 +1512,119 @@ export class PrivateLobbyMenu {
             );
         }
         return wrapper;
+    }
+
+    /** The lobby's settings as a shareable code (see lobbyShareCode.ts). */
+    lobbyShareSettings(): LobbyShareSettings {
+        const r = this.roomData;
+        return {
+            gameModeIdx: r.gameModeIdx,
+            playerLimit: r.playerLimit,
+            allowMembersJoinTeams: r.allowMembersJoinTeams,
+            joinAsSpectator: r.joinAsSpectator,
+            publicSpectating: r.publicSpectating,
+            advancedSettings: r.advancedSettings,
+            enabledArenaRoles: r.enabledArenaRoles,
+            customLoadoutEnabled: r.customLoadoutEnabled,
+            customLoadout: r.customLoadout,
+            extraCustomLoadouts: r.extraCustomLoadouts,
+            customMapEnabled: r.customMapEnabled,
+            customMap: r.customMap,
+            weaponStatsEnabled: r.weaponStatsEnabled,
+            weaponStats: r.weaponStats,
+            weaponStatsName: r.weaponStatsName,
+        };
+    }
+
+    /** Applies a pasted lobby code (leader only). Only known settings are taken, loadouts
+     *  are re-validated, and the server checks everything again (premium features etc). */
+    async loadShareCode(code: string) {
+        const s = await decodeLobbySettings(code);
+        if (!s) {
+            this.shareCodeStatus = { ok: false, text: "That isn't a valid lobby code." };
+            this.refreshUi();
+            return;
+        }
+        const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+        const r = this.roomData;
+        if (typeof s.gameModeIdx === "number" && r.enabledGameModeIdxs?.includes(s.gameModeIdx)) {
+            r.gameModeIdx = s.gameModeIdx;
+        }
+        r.playerLimit = typeof s.playerLimit === "number" ? s.playerLimit : undefined;
+        for (const key of [
+            "allowMembersJoinTeams",
+            "joinAsSpectator",
+            "publicSpectating",
+            "advancedSettings",
+            "customLoadoutEnabled",
+            "customMapEnabled",
+            "weaponStatsEnabled",
+        ] as const) {
+            const v = bool(s[key]);
+            if (v !== undefined) r[key] = v;
+        }
+        if (Array.isArray(s.enabledArenaRoles)) r.enabledArenaRoles = s.enabledArenaRoles.filter((x) => typeof x === "string");
+        const loadouts = this.sanitizeSavedSettings({ customLoadout: s.customLoadout, extraCustomLoadouts: s.extraCustomLoadouts });
+        if (loadouts?.customLoadout) r.customLoadout = loadouts.customLoadout;
+        if (loadouts?.extraCustomLoadouts) r.extraCustomLoadouts = loadouts.extraCustomLoadouts;
+        if (s.customMap) r.customMap = s.customMap;
+        if (s.weaponStats) r.weaponStats = s.weaponStats;
+        if (typeof s.weaponStatsName === "string") r.weaponStatsName = s.weaponStatsName;
+        this.sendMessage("setRoomProps", r);
+        this.shareCodeDraft = "";
+        this.shareCodeStatus = { ok: true, text: "Lobby settings loaded." };
+        this.refreshUi();
+    }
+
+    /** "Lobby Code" tab: this lobby's settings as a code to copy; the leader can paste one.
+     *  Everything stacked full-width (the content box only scrolls vertically). */
+    renderShareCodeTab() {
+        const box = $("<div/>", { class: "private-lobby-share-code" });
+        box.append($("<div/>", {
+            class: "private-lobby-setting-hint",
+            text: "Share your lobby setup - mode, player limit, loadouts, custom map, weapon stats and toggles. This is not an invite.",
+        }));
+
+        box.append($("<div/>", { class: "private-lobby-setting-label private-lobby-share-code-title", text: "This lobby's code" }));
+        const codeBox = $<HTMLTextAreaElement>("<textarea/>", {
+            class: "private-lobby-share-code-text",
+            readonly: true,
+            rows: 3,
+        });
+        codeBox.on("focus", () => codeBox.trigger("select"));
+        void encodeLobbySettings(this.lobbyShareSettings()).then((code) => codeBox.val(code));
+        const copy = $("<a/>", { class: "btn-game-menu btn-darken private-lobby-share-code-btn", text: "Copy code" });
+        copy.on("click", () => {
+            helpers.copyTextToClipboard(String(codeBox.val() ?? ""));
+            copy.text("Copied ✓");
+            setTimeout(() => copy.text("Copy code"), 1500);
+        });
+        box.append(codeBox, copy);
+
+        if (this.isLeader) {
+            box.append($("<div/>", { class: "private-lobby-setting-label private-lobby-share-code-title", text: "Load a code" }));
+            const input = $<HTMLTextAreaElement>("<textarea/>", {
+                class: "private-lobby-share-code-text",
+                rows: 3,
+                placeholder: "Paste a lobby code here",
+            });
+            input.val(this.shareCodeDraft);
+            input.on("input", () => {
+                this.shareCodeDraft = String(input.val() ?? "");
+            });
+            // typing in the box must not trigger game keybinds
+            input.on("keydown", (e) => e.stopPropagation());
+            const load = $("<a/>", { class: "btn-game-menu btn-darken private-lobby-share-code-btn", text: "Load" });
+            load.on("click", () => void this.loadShareCode(this.shareCodeDraft));
+            box.append(input, load);
+            if (this.shareCodeStatus) {
+                box.append($("<div/>", {
+                    class: `private-lobby-share-code-status${this.shareCodeStatus.ok ? "" : " private-lobby-share-code-error"}`,
+                    text: this.shareCodeStatus.text,
+                }));
+            }
+        }
+        return box;
     }
 
     /** Leader-adjustable player cap; the server keeps it at or above the players in teams. */

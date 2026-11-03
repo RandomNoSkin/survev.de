@@ -20,7 +20,9 @@ import {
     type ClanWeek,
     type ClanWeekSummary,
     perGame,
+    canLeadClan,
     ratedWinRate,
+    toClanRole,
 } from "../../../../shared/utils/clan";
 import { db } from "./index";
 import { computeMatchXp } from "./passReconcile";
@@ -328,7 +330,7 @@ export async function getClanStats(clanId: number): Promise<ClanStatsResponse> {
                 slug: m.slug,
                 username: m.username,
                 icon: playerIcon(m),
-                role: (m.role === "owner" || m.role === "lieutenant" ? m.role : "member") as ClanRole,
+                role: toClanRole(m.role),
                 stats: byUser.get(m.userId) ?? empty(),
             }))
             .sort((a, b) => b.stats.wins - a.stats.wins || b.stats.games - a.stats.games),
@@ -506,13 +508,16 @@ export async function getClanPool(clanId: number): Promise<Record<string, number
     return Object.fromEntries(rows.map((r) => [r.keyType, r.amount]));
 }
 
-/** Owner hands `amount` pool keys of `keyType` to a member (themselves included). */
-export async function giveFromPool(ownerId: string, slug: string, keyType: string, amount: number): Promise<ClanActionResponse> {
+/** Owner or co-owner hands `amount` pool keys of `keyType` to a member (themselves included). */
+export async function giveFromPool(actorId: string, slug: string, keyType: string, amount: number): Promise<ClanActionResponse> {
     if (!getKeyDef(keyType)) return { success: false, error: "not_found" };
     try {
         await db.transaction(async (tx) => {
-            const [clan] = await tx.select({ id: clansTable.id }).from(clansTable).where(eq(clansTable.ownerId, ownerId));
-            if (!clan) throw new Error("not_owner");
+            const [clan] = await tx
+                .select({ id: clanMembersTable.clanId, role: clanMembersTable.role })
+                .from(clanMembersTable)
+                .where(eq(clanMembersTable.userId, actorId));
+            if (!clan || !canLeadClan(toClanRole(clan.role))) throw new Error("not_owner");
             const [target] = await tx
                 .select({ id: usersTable.id })
                 .from(usersTable)

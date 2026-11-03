@@ -136,11 +136,21 @@ class Region {
      * Lists replay recordings stored on this region's game server (from each game's
      * meta.json). `limit` keeps the game host from reading its whole archive off disk.
      */
-    async listReplays(limit?: number): Promise<any[]> {
+    /** `from` / `to` (ms) limit it to games started in that window (see listRecordings). */
+    async listReplays(limit?: number, from?: number, to?: number): Promise<any[]> {
         const data = await this.fetch<{ recordings: any[] }>("api/dashboard/replays", {
             limit,
+            from,
+            to,
         });
         return data?.recordings ?? [];
+    }
+
+    /** Tells this region's game server which games' recordings to keep forever
+     *  (the full list of tagged games - see syncReplayKeeps). */
+    async setReplayKeeps(gameIds: string[]): Promise<boolean> {
+        const data = await this.fetch<{ kept?: number }>("api/dashboard/replay_keep", { gameIds });
+        return typeof data?.kept === "number";
     }
 
     /** Fetches one specific game's recording meta from this region's game server,

@@ -183,3 +183,121 @@ test("In a real game: tracking an enemy inside a house from outside", () => {
         vi.useRealTimers();
     }
 });
+
+describe("offscreen aim with lead / never seen / far band", () => {
+    test("an aimbot leading an enemy who strafes off the screen", () => {
+        // 40 units out, strafing up/down at 12 u/s; bullets at 100 u/s -> ~0.4 s lead (~7 degrees)
+        const mon = new CheatMonitor({ isMobile: false, name: "Player" });
+        const viewer = esp(1, { zoom: 28 });
+        const enemy = esp(2);
+        for (let ms = 0; ms <= 30_000; ms += 50) {
+            const vy = Math.cos(ms / 1500) > 0 ? 12 : -12;
+            enemy.pos = v2.create(40, Math.sin(ms / 1500) * 10);
+            enemy.moveVel = v2.create(0, vy);
+            const lead = 40 / 100;
+            const a = Math.atan2(enemy.pos.y + vy * lead, 40);
+            viewer.dir = v2.create(Math.cos(a), Math.sin(a));
+            mon.onTick(viewer, [viewer, enemy], 1_000_000 + ms, 100);
+        }
+        expect(mon.flagged).toContain("offscreen_aim");
+    });
+
+    test("an enemy the client only knows from the grid cells beyond 45 units still counts", () => {
+        const mon = new CheatMonitor({ isMobile: false, name: "Player" });
+        const enemy = esp(2);
+        const viewer = esp(1, { zoom: 28, visibleObjects: new Set([enemy]) as never });
+        for (let ms = 0; ms <= 30_000; ms += 50) {
+            enemy.pos = v2.create(40, 25 - ms / 5000);
+            const a = Math.atan2(enemy.pos.y, enemy.pos.x);
+            viewer.dir = v2.create(Math.cos(a), Math.sin(a));
+            mon.onTick(viewer, [viewer, enemy], 1_000_000 + ms);
+        }
+        expect(mon.flagged).toContain("offscreen_aim");
+    });
+
+    test("an enemy the client doesn't get: nothing", () => {
+        const mon = new CheatMonitor({ isMobile: false, name: "Player" });
+        const enemy = esp(2);
+        const viewer = esp(1, { zoom: 28, visibleObjects: new Set([{}]) as never });
+        for (let ms = 0; ms <= 30_000; ms += 50) {
+            enemy.pos = v2.create(31.5 - ms / 15000, 0);
+            viewer.dir = v2.create(1, 0);
+            mon.onTick(viewer, [viewer, enemy], 1_000_000 + ms);
+        }
+        expect(mon.summary()).toBeUndefined();
+    });
+
+    test("an enemy shown on the map by their role: nothing", () => {
+        const mon = runOffscreen((ms) => ({ x: 31.5 - ms / 15000, y: 0 }), (b) => b, 30);
+        expect(mon.flagged).toContain("offscreen_aim");
+        const mon2 = new CheatMonitor({ isMobile: false, name: "Player" });
+        const viewer = esp(1, { zoom: 28 });
+        const enemy = esp(2, { mapIndicator: {} });
+        for (let ms = 0; ms <= 30_000; ms += 50) {
+            enemy.pos = v2.create(31.5 - ms / 15000, 0);
+            viewer.dir = v2.create(1, 0);
+            mon2.onTick(viewer, [viewer, enemy], 1_000_000 + ms);
+        }
+        expect(mon2.scores.offscreen_aim).toBe(0);
+    });
+});
+
+describe("offscreen_hit", () => {
+    /** enemy at `pos` (on the screen until `seenUntil` ms), then `hits` hits of `damage`, `everyMs` apart */
+    function hits(opts: { pos: { x: number; y: number }; seenUntil?: number; hits: number; damage: number; everyMs: number; lastShotAt?: number }) {
+        const mon = new CheatMonitor({ isMobile: false, name: "Player" });
+        const viewer = esp(1, { zoom: 28 });
+        const enemy = esp(2);
+        let now = 1_000_000;
+        // a few seconds of ticks before the hits start
+        for (let ms = 0; ms <= 6000; ms += 50, now += 50) {
+            enemy.pos = ms < (opts.seenUntil ?? -1) ? v2.create(10, 0) : v2.create(opts.pos.x, opts.pos.y);
+            mon.onTick(viewer, [viewer, enemy], now);
+        }
+        enemy.lastShotAt = opts.lastShotAt ?? 0;
+        for (let i = 0; i < opts.hits; i++, now += opts.everyMs) {
+            mon.onTick(viewer, [viewer, enemy], now);
+            mon.onBulletHit(viewer, enemy, opts.damage, now);
+        }
+        return mon;
+    }
+
+    test("two SV-98 hits on an enemy who never was on the screen", () => {
+        const mon = hits({ pos: { x: 33, y: 0 }, hits: 2, damage: 80, everyMs: 1500 });
+        expect(mon.flagged).toContain("offscreen_hit");
+        expect(mon.report()).toMatch(/offscreen_hit \(score 160 dmg, 2 hits\)/);
+        expect(mon.summary()!.offscreenHits).toBe(2);
+    });
+
+    test("an AK spray landing on an enemy off the screen", () => {
+        const mon = hits({ pos: { x: 33, y: 0 }, hits: 8, damage: 13.5, everyMs: 100 });
+        expect(mon.flagged).toContain("offscreen_hit");
+    });
+
+    test("one lucky blind shot: scores, but no flag", () => {
+        const mon = hits({ pos: { x: 33, y: 0 }, hits: 1, damage: 80, everyMs: 0 });
+        expect(mon.scores.offscreen_hit).toBe(80);
+        expect(mon.flagged).toStrictEqual([]);
+    });
+
+    test("an enemy on the screen: nothing", () => {
+        const mon = hits({ pos: { x: 25, y: 0 }, hits: 10, damage: 80, everyMs: 500 });
+        expect(mon.scores.offscreen_hit).toBe(0);
+    });
+
+    test("an enemy who just walked off the screen: nothing", () => {
+        // on screen until 4.5 s, hits from 6 s (1.5 s later)
+        const mon = hits({ pos: { x: 33, y: 0 }, seenUntil: 4500, hits: 2, damage: 80, everyMs: 500 });
+        expect(mon.scores.offscreen_hit).toBe(0);
+    });
+
+    test("an enemy who keeps shooting: nothing", () => {
+        const mon = hits({ pos: { x: 33, y: 0 }, hits: 10, damage: 80, everyMs: 500, lastShotAt: Number.MAX_SAFE_INTEGER });
+        expect(mon.scores.offscreen_hit).toBe(0);
+    });
+
+    test("barely off the screen (half a body peeking in): nothing", () => {
+        const mon = hits({ pos: { x: 29.5, y: 0 }, hits: 10, damage: 80, everyMs: 500 });
+        expect(mon.scores.offscreen_hit).toBe(0);
+    });
+});

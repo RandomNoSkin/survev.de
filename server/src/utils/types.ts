@@ -87,7 +87,7 @@ export interface SaveGameBody {
             name: string;
             maxRatio: number;
             scores: Record<string, number>;
-            details: { shots: number; snaps: number; espLongestMs: number; offscreenLongestMs?: number };
+            details: { shots: number; snaps: number; espLongestMs: number; offscreenLongestMs?: number; offscreenHits?: number };
         }[];
     };
 }

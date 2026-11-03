@@ -199,6 +199,8 @@ test("Update Msg", () => {
         curWeapIdx: 0,
         spectatorCountDirty: true,
         spectatorCount: util.randomInt(0, 255),
+        aimDirty: true,
+        aimLen: util.random(0, net.Constants.MouseMaxDist),
     };
 
     inMsg.gasDirty = true;
@@ -256,6 +258,7 @@ test("Update Msg", () => {
         },
         health: expect.closeTo(inMsg.activePlayerData.health, 0),
         boost: expect.closeTo(inMsg.activePlayerData.boost, 0),
+        aimLen: expect.closeTo(inMsg.activePlayerData.aimLen, 0),
     });
 
     expect(outMsg.gasData).toStrictEqual({

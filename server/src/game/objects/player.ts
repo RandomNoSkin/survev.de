@@ -747,6 +747,7 @@ export class PlayerBarn {
             player.inventoryDirty = false;
             player.weapsDirty = false;
             player.spectatorCountDirty = false;
+            player.aimDirty = false;
             player.activeIdDirty = false;
             player.groupStatusDirty = false;
             if (flushPlayerStatus) {
@@ -987,6 +988,9 @@ export class Player extends BaseGameObject {
     inventoryDirty = true;
     weapsDirty = true;
     spectatorCountDirty = false;
+    /** cursor distance for spectators / replays (see LocalData.aimLen), sent when it changes */
+    aimLen = 0;
+    aimDirty = false;
     activeIdDirty = true;
     hasFiredFlare = false;
     flareTimer = 0;
@@ -1154,6 +1158,13 @@ export class Player extends BaseGameObject {
 
     get activeWeapon() {
         return this.weaponManager.activeWeapon;
+    }
+
+    /** speed of the active gun's bullets (anti-cheat lead), undefined without a gun out */
+    get activeBulletSpeed(): number | undefined {
+        const def = GameObjectDefs.typeToDefSafe(this.activeWeapon) as GunDef | undefined;
+        if (def?.type !== "gun") return undefined;
+        return (GameObjectDefs.typeToDefSafe(def.bulletType) as { speed?: number } | undefined)?.speed;
     }
 
     private _disconnected = false;
@@ -2368,7 +2379,7 @@ export class Player extends BaseGameObject {
     update(dt: number): void {
         // ESP: aim following enemies this player can't see (see antiCheat.ts)
         if (this.cheatMonitor && !this.dead) {
-            const flagged = this.cheatMonitor.onTick(this, this.game.playerBarn.livingPlayers, Date.now());
+            const flagged = this.cheatMonitor.onTick(this, this.game.playerBarn.livingPlayers, Date.now(), this.activeBulletSpeed);
             if (flagged) {
                 this.game.logger.warn(`Anti-cheat: ${this.name} (${this.userId ?? "guest"}) flagged for ${flagged}`);
             }
@@ -3727,6 +3738,8 @@ export class Player extends BaseGameObject {
                 weapons: player.weapons,
                 spectatorCountDirty: true,
                 spectatorCount: player.spectatorCount,
+                aimDirty: true,
+                aimLen: player.aimLen,
             };
             this.startedSpectating = false;
         } else {
@@ -4082,6 +4095,11 @@ export class Player extends BaseGameObject {
                 playerSource.bulletHits++;
                 const gun = params.gameSourceType!;
                 playerSource.weaponHits.set(gun, (playerSource.weaponHits.get(gun) ?? 0) + 1);
+                // hitting someone off the screen (see antiCheat.ts) - overkill doesn't count
+                const flagged = playerSource.cheatMonitor?.onBulletHit(playerSource, this, Math.min(params.amount ?? 0, this.health), Date.now());
+                if (flagged) {
+                    this.game.logger.warn(`Anti-cheat: ${playerSource.name} (${playerSource.userId ?? "guest"}) flagged for ${flagged}`);
+                }
             }
         }
 
@@ -4256,9 +4274,10 @@ export class Player extends BaseGameObject {
 
         if (betterStats) {
             // Collect stats for all players
+            const ranks = this.game.modeManager.currentRanks();
             const allPlayerStats = this.game.playerBarn.players.filter((p) => !p.stealth).map((player) => ({
                 playerId: player.playerId,
-                rank: player.rank,
+                rank: ranks.get(player) ?? player.rank,
                 timeAlive: player.timeAlive,
                 kills: player.kills,
                 assists: player.assists,
@@ -5335,6 +5354,10 @@ export class Player extends BaseGameObject {
         this.touchMoveDir = v2.normalizeSafe(msg.touchMoveDir);
         this.touchMoveLen = msg.touchMoveLen;
         this.toMouseLen = msg.toMouseLen;
+        if (msg.toMouseLen !== this.aimLen) {
+            this.aimLen = msg.toMouseLen;
+            this.aimDirty = true;
+        }
 
         this.shootHold = msg.shootHold;
 
@@ -6830,9 +6853,18 @@ export class Player extends BaseGameObject {
     }
 
     sendMsg(type: net.MsgType, msg: net.AbstractMsg, bytes = 128): void {
-        const stream = new net.MsgStream(new ArrayBuffer(bytes));
-        stream.serializeMsg(type, msg);
-        this.sendData(stream.getBuffer());
+        // `bytes` is a guess - a message that doesn't fit (a long chat line with name,
+        // colour and clan tag easily passes 128 bytes) retries with a bigger buffer
+        for (let size = bytes; ; size *= 4) {
+            try {
+                const stream = new net.MsgStream(new ArrayBuffer(size));
+                stream.serializeMsg(type, msg);
+                this.sendData(stream.getBuffer());
+                return;
+            } catch (err) {
+                if (size >= 65536) throw err;
+            }
+        }
     }
 
     sendData(buffer: Uint8Array): void {

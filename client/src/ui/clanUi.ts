@@ -32,10 +32,15 @@ import {
     type ClanListSort,
     type ClanSummary,
     type MyClanResponse,
+    CLAN_ROLE_RANK,
+    type ClanRole,
+    canLeadClan,
     normalizeClanName,
     normalizeClanTag,
     validateClan,
 } from "../../../shared/utils/clan";
+
+const ROLE_NAMES: Record<ClanRole, string> = { owner: "Owner", coowner: "Co-owner", lieutenant: "Lieutenant", member: "Member" };
 import { getKeyTypes } from "../../../shared/defs/crateConfig";
 import { loadout } from "../../../shared/utils/loadout";
 import type { Account } from "../account";
@@ -132,7 +137,7 @@ export class ClanUi {
         this.mine = res;
         this.clan = res.clan;
         const c = res.clan;
-        const poolKeys = c?.myRole === "owner" ? Object.values(c.pool).reduce((a, b) => a + b, 0) : 0;
+        const poolKeys = c && canLeadClan(c.myRole) ? Object.values(c.pool).reduce((a, b) => a + b, 0) : 0;
         this.onBadge(c ? (c.manage?.requests.length ?? 0) + (poolKeys > 0 ? 1 : 0) : res.invites.length);
     }
 
@@ -399,14 +404,17 @@ export class ClanUi {
             ),
         );
         const actions = $('<div class="clan-actions"></div>');
-        if (c.myRole === "owner") {
+        if (canLeadClan(c.myRole)) {
             const edit = $('<div class="shop-buy-btn menu-option btn-darken">Edit</div>');
             edit.on("click", () => {
                 this.form = "edit";
                 this.render();
             });
+            actions.append(edit);
+        }
+        // only the owner disbands; everyone else (co-owners too) can leave
+        if (c.myRole === "owner") {
             actions.append(
-                edit,
                 this.armedButton("Disband", "Really disband? Click again", "clan-danger-btn", () =>
                     this.post<ClanActionResponse>("/api/user/clan/disband", {}, () => this.load()),
                 ),
@@ -447,7 +455,7 @@ export class ClanUi {
             }
             wrap.append(tabs);
             if (this.clanTab === "management" && manage) {
-                wrap.append(this.renderOwnerPanel(manage, c.myRole === "owner"));
+                wrap.append(this.renderOwnerPanel(manage, canLeadClan(c.myRole)));
                 return wrap;
             }
             if (this.clanTab === "stats") {
@@ -461,27 +469,29 @@ export class ClanUi {
         wrap.append($(`<div class="social-section-head">Members <span class="social-count">${c.members}</span></div>`));
         const list = $('<div class="social-list"></div>');
         for (const m of c.memberList) {
-            const roleName = m.role === "owner" ? "Owner" : m.role === "lieutenant" ? "Lieutenant" : "Member";
+            const roleName = ROLE_NAMES[m.role];
             const row = this.personRow(m, `${roleName} · joined ${new Date(m.joinedAt).toLocaleDateString()}`);
             const right = $('<div class="clan-row-buttons"></div>');
             if (m.role !== "member") {
                 right.append($("<div/>", { class: `clan-role-badge clan-role-${m.role}`, text: roleName }));
             }
-            if (c.myRole === "owner" && m.role !== "owner") {
-                right.append(
-                    m.role === "lieutenant"
-                        ? this.smallButton("Demote", "clan-grey-btn", () =>
-                              this.act("/api/user/clan/role", { slug: m.slug, role: "member" }),
-                          )
-                        : this.smallButton("Make lieutenant", "", () =>
-                              this.act("/api/user/clan/role", { slug: m.slug, role: "lieutenant" }, (r) => {
-                                  if (r?.success) this.flash(`${m.username || m.slug} is now a lieutenant.`);
-                              }),
-                          ),
-                );
+            // owner / co-owners change the roles of those below them; only the owner names co-owners
+            const myRank = CLAN_ROLE_RANK[c.myRole];
+            const theirRank = CLAN_ROLE_RANK[m.role];
+            if (canLeadClan(c.myRole) && theirRank < myRank) {
+                const setRole = (role: ClanRole, label: string, cls = "") =>
+                    this.smallButton(label, cls, () =>
+                        this.act("/api/user/clan/role", { slug: m.slug, role }, (r) => {
+                            if (r?.success) this.flash(`${m.username || m.slug} is now ${role === "member" ? "a member" : `a ${ROLE_NAMES[role].toLowerCase()}`}.`);
+                        }),
+                    );
+                if (CLAN_ROLE_RANK.coowner > theirRank && CLAN_ROLE_RANK.coowner < myRank) right.append(setRole("coowner", "Make co-owner"));
+                if (m.role === "member") right.append(setRole("lieutenant", "Make lieutenant"));
+                if (m.role === "coowner") right.append(setRole("lieutenant", "Demote", "clan-grey-btn"));
+                if (m.role === "lieutenant") right.append(setRole("member", "Demote", "clan-grey-btn"));
             }
-            // the owner kicks anyone, lieutenants only regular members
-            const canKick = m.role !== "owner" && (c.myRole === "owner" || (c.myRole === "lieutenant" && m.role === "member"));
+            // kicking goes down the ladder: owner > co-owner > lieutenant > member
+            const canKick = myRank >= CLAN_ROLE_RANK.lieutenant && theirRank < myRank;
             if (canKick) {
                 right.append(
                     this.armedButton("Kick", "Kick?", "clan-small-btn clan-danger-btn", () =>
@@ -505,8 +515,8 @@ export class ClanUi {
                 ClanUi.keyList(c.pool),
             ),
         );
-        if (c.myRole !== "owner") {
-            box.append($('<div class="clan-muted">Keys your clan won in the weekly league. The owner shares them out.</div>'));
+        if (!canLeadClan(c.myRole)) {
+            box.append($('<div class="clan-muted">Keys your clan won in the weekly league. The owner and co-owners share them out.</div>'));
             return box;
         }
         box.append($('<div class="clan-muted">Keys your clan won in the weekly league - share them out however you think is fair.</div>'));
@@ -540,23 +550,26 @@ export class ClanUi {
         return (GameObjectDefs.typeToDefSafe(type) as { name?: string })?.name ?? type;
     }
 
-    /** A player row: their icon (or initial), name and a status line. */
+    /** A player row: their icon (or initial), name and a status line. Clicking the icon or
+     *  name opens their profile (the buttons on the right keep their own clicks). */
     private personRow(p: { slug: string; username: string; icon: string }, sub: string) {
         const row = $('<div class="social-row"></div>');
         const svg = p.icon ? helpers.getSvgFromGameType(p.icon) : "";
-        row.append(
-            svg
-                ? $('<div class="social-avatar social-avatar-icon"></div>').css("background-image", `url(${svg})`)
-                : $('<div class="social-avatar clan-member-initial"></div>').text(
-                      (p.username || p.slug).trim()[0]?.toUpperCase() ?? "?",
-                  ),
+        const avatar = svg
+            ? $('<div class="social-avatar social-avatar-icon"></div>').css("background-image", `url(${svg})`)
+            : $('<div class="social-avatar clan-member-initial"></div>').text(
+                  (p.username || p.slug).trim()[0]?.toUpperCase() ?? "?",
+              );
+        const main = $('<div class="social-row-main"></div>').append(
+            $("<div/>", { class: "social-row-name", text: p.username || p.slug }),
+            $("<div/>", { class: "social-row-sub", text: sub }),
         );
-        row.append(
-            $('<div class="social-row-main"></div>').append(
-                $("<div/>", { class: "social-row-name", text: p.username || p.slug }),
-                $("<div/>", { class: "social-row-sub", text: sub }),
-            ),
-        );
+        for (const el of [avatar, main]) {
+            el.addClass("clan-profile-link")
+                .attr("title", "Open profile")
+                .on("click", () => window.open(`/stats/?slug=${encodeURIComponent(p.slug)}`, "_blank"));
+        }
+        row.append(avatar, main);
         return row;
     }
 
@@ -678,7 +691,7 @@ export class ClanUi {
         box.append($('<div class="clan-box-title clan-box-title-spaced">Invite link</div>'));
         box.append(
             $(
-                `<div class="clan-muted">Anyone with the link can ask to join - you${isOwner ? " (and your lieutenants)" : " and the owner"} accept or decline each request here.</div>`,
+                `<div class="clan-muted">Anyone with the link can ask to join - you${isOwner ? " (and the other clan leads)" : " and the owner"} accept or decline each request here.</div>`,
             ),
         );
         const linkRow = $('<div class="clan-link-row"></div>');
@@ -824,14 +837,45 @@ export class ClanUi {
 
     // ── weekly stats (full Comp games) ───────────────────────────────────
 
-    /** "Mon 26 Oct – Sun 1 Nov · resets in 1d 4h" */
-    private weekLabel(w: ClanWeek): string {
+    /** "Mon 26 Oct – Sun 1 Nov · resets in 1d 4h" - the "resets in" part counts down live
+     *  (see tickResetCountdowns). */
+    private weekLabel(w: ClanWeek): JQuery<HTMLElement> {
         const fmt = (t: number) =>
             new Date(t).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-        const left = Math.max(0, w.end - Date.now());
+        ClanUi.startResetCountdowns();
+        return $("<span/>").append(
+            `${fmt(w.start)} – ${fmt(w.end - 1)} · resets in `,
+            $("<span/>", { class: "clan-reset-in", "data-end": w.end, text: ClanUi.resetIn(w.end) }),
+        );
+    }
+
+    /** "1d 4h", "4h" - minutes only in the last hour ("23m"), seconds in the last minute ("42s"). */
+    private static resetIn(end: number): string {
+        const left = Math.max(0, end - Date.now());
         const d = Math.floor(left / 86_400_000);
         const h = Math.floor((left % 86_400_000) / 3_600_000);
-        return `${fmt(w.start)} – ${fmt(w.end - 1)} · resets in ${d > 0 ? `${d}d ` : ""}${h}h`;
+        if (d > 0) return `${d}d ${h}h`;
+        if (h > 0) return `${h}h`;
+        const m = Math.floor(left / 60_000);
+        return m > 0 ? `${m}m` : `${Math.floor(left / 1000)}s`;
+    }
+
+    private static resetTimer: ReturnType<typeof setInterval> | undefined;
+
+    /** Ticks every shown countdown once a second; stops by itself once none is on screen. */
+    private static startResetCountdowns() {
+        if (ClanUi.resetTimer) return;
+        ClanUi.resetTimer = setInterval(() => {
+            const els = $(".clan-reset-in");
+            if (!els.length) {
+                clearInterval(ClanUi.resetTimer);
+                ClanUi.resetTimer = undefined;
+                return;
+            }
+            els.each((_, el) => {
+                $(el).text(ClanUi.resetIn(Number(el.dataset.end)));
+            });
+        }, 1000);
     }
 
     private static fmtDmg(s: ClanModeStats) {
@@ -966,7 +1010,7 @@ export class ClanUi {
             body.empty();
             for (const m of sorted) {
                 const tr = $("<tr></tr>");
-                const role = m.role === "owner" ? "Owner" : m.role === "lieutenant" ? "Lieutenant" : "Member";
+                const role = ROLE_NAMES[m.role];
                 const who = this.personRow(m, role);
                 tr.append($("<td/>").append(who.addClass("clan-stats-person")));
                 for (const v of [String(m.stats.games), String(m.stats.wins), ClanUi.fmtWins(m.stats), ClanUi.fmtDmg(m.stats)]) {
@@ -996,7 +1040,7 @@ export class ClanUi {
                 wrap.append('<div class="shop-status">Couldn\'t load the stats.</div>');
                 return;
             }
-            wrap.append($("<div/>", { class: "clan-muted clan-week", text: `This week: ${this.weekLabel(res.week)}` }));
+            wrap.append($("<div/>", { class: "clan-muted clan-week" }).append("This week: ", this.weekLabel(res.week)));
             wrap.append(ClanUi.goalBox(res.totals));
             wrap.append(this.memberStatsTable(res));
             wrap.append(
@@ -1054,7 +1098,7 @@ export class ClanUi {
                 if (tab === "overview") {
                     const list = $('<div class="social-list"></div>');
                     for (const m of c.memberList) {
-                        const roleName = m.role === "owner" ? "Owner" : m.role === "lieutenant" ? "Lieutenant" : "Member";
+                        const roleName = ROLE_NAMES[m.role];
                         const row = this.personRow(m, `${roleName} · joined ${new Date(m.joinedAt).toLocaleDateString()}`);
                         if (m.role !== "member") {
                             row.append($("<div/>", { class: `clan-role-badge clan-role-${m.role}`, text: roleName }));
@@ -1063,7 +1107,7 @@ export class ClanUi {
                     }
                     body.append(list);
                 } else {
-                    body.append($("<div/>", { class: "clan-muted clan-week", text: `This week: ${this.weekLabel(stats.week)}` }));
+                    body.append($("<div/>", { class: "clan-muted clan-week" }).append("This week: ", this.weekLabel(stats.week)));
                     body.append(this.memberStatsTable(stats));
                 }
             };
@@ -1178,7 +1222,7 @@ export class ClanUi {
             }
             const needs = metric === "winrate" || metric === "damage" ? ` · clans need ${res.minGames} games to be ranked` : "";
             const avg = metric === "rated" ? ` · league average ${(res.leagueAverage * 100).toFixed(1)}%` : "";
-            info.text(`This week (Comp): ${this.weekLabel(res.week)}${needs}${avg}`);
+            info.empty().append("This week (Comp): ", this.weekLabel(res.week), `${needs}${avg}`);
             const myId = this.clan?.id;
             const fmt = (e: ClanLeagueEntry) =>
                 metric === "damage"
@@ -1324,7 +1368,10 @@ export class ClanUi {
                 () => pick(""),
             ),
         );
-        for (const type of this.ownedEmotes()) {
+        const emotes = this.ownedEmotes();
+        // a co-owner may not own the emote the clan uses - it stays pickable all the same
+        if (editing && this.clan!.icon && !emotes.includes(this.clan!.icon)) emotes.unshift(this.clan!.icon);
+        for (const type of emotes) {
             const name = (GameObjectDefs.typeToDefSafe(type) as { name?: string })?.name ?? type;
             picker.append(
                 $("<div/>", { class: "clan-icon-option", "data-icon": type, title: name })

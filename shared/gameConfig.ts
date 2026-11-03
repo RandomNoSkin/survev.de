@@ -232,7 +232,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1041,
+    protocolVersion: 1042,
     Action,
     Anim,
     DamageType,
@@ -399,6 +399,38 @@ export const GameConfig = {
                     start: "2026-08-27T23:59:00",
                     end: "2026-08-31T23:59:59",
                     boost: 4,
+                },
+            },
+            pass_survivr4: {
+                "Weekend 1": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo"],
+                    start: "2026-11-06T00:00:00",
+                    end: "2026-11-08T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 2": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo", "two_vs_two"],
+                    start: "2026-11-13T00:00:00",
+                    end: "2026-11-15T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 3": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo"],
+                    start: "2026-11-20T00:00:00",
+                    end: "2026-11-22T23:59:59",
+                    boost: 2,
+                },
+                "Scrims Weekend 3": {
+                    maps: ["scrims"],
+                    start: "2026-11-20T00:00:00",
+                    end: "2026-11-22T23:59:59",
+                    boost: 3,
+                },
+                "Weekend 4": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo", "two_vs_two"],
+                    start: "2026-11-27T00:00:00",
+                    end: "2026-11-29T23:59:59",
+                    boost: 2,
                 },
             },
         } as Record<

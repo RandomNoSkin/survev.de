@@ -21,6 +21,8 @@ const SPECTATED_COLOR = 0x66ff7a;
 const NADE_COLOR = 0xffcc33;
 // Colour for the followed player's vision-radius ring.
 const VISION_COLOR = 0x66ccff;
+// The followed player's crosshair (where their cursor is).
+const CROSSHAIR_COLOR = 0xff3b3b;
 
 // Default / clamp range for the requested culling-zoom radius (sent to the
 // server). Kept in sync with the server-side clamp in player.ts.
@@ -46,6 +48,7 @@ export interface AdvSpecSettings {
     enemyLabels: boolean;
     nadeEsp: boolean;
     visionRadius: boolean;
+    crosshair: boolean;
     layer: number;
     zoomLevel: number;
 }
@@ -62,6 +65,7 @@ export function defaultAdvSpecSettings(): AdvSpecSettings {
         enemyLabels: false,
         nadeEsp: false,
         visionRadius: false,
+        crosshair: false,
         layer: 0,
         zoomLevel: DEFAULT_ZOOM,
     };
@@ -107,6 +111,8 @@ export class AdvancedSpectator {
     nadeEsp = false;
     // Ring around the followed player showing their current scope's view radius.
     visionRadius = false;
+    // The followed player's crosshair: their aim direction at their cursor distance.
+    crosshair = false;
 
     /** Render layer the spectator is viewing (0 = surface, 1 = underground). */
     layer = 0;
@@ -148,6 +154,7 @@ export class AdvancedSpectator {
             enemyLabels: this.enemyLabels,
             nadeEsp: this.nadeEsp,
             visionRadius: this.visionRadius,
+            crosshair: this.crosshair,
             layer: this.layer,
             zoomLevel: this.zoomLevel,
         };
@@ -169,6 +176,7 @@ export class AdvancedSpectator {
         if (typeof s.enemyLabels === "boolean") this.enemyLabels = s.enemyLabels;
         if (typeof s.nadeEsp === "boolean") this.nadeEsp = s.nadeEsp;
         if (typeof s.visionRadius === "boolean") this.visionRadius = s.visionRadius;
+        if (typeof s.crosshair === "boolean") this.crosshair = s.crosshair;
         if (typeof s.layer === "number") this.layer = s.layer;
         if (typeof s.zoomLevel === "number")
             this.zoomLevel = math.clamp(s.zoomLevel, MIN_ZOOM, MAX_ZOOM);
@@ -221,7 +229,7 @@ export class AdvancedSpectator {
 
         if (
             !this.enabled
-            || (!this.espLines && !this.enemyLabels && !this.nadeEsp && !this.visionRadius)
+            || (!this.espLines && !this.enemyLabels && !this.nadeEsp && !this.visionRadius && !this.crosshair)
         ) {
             this.container.visible = false;
             return;
@@ -259,6 +267,24 @@ export class AdvancedSpectator {
                     halfWidthScreen * 2,
                     halfHeightScreen * 2,
                 );
+            }
+        }
+
+        if (this.crosshair) {
+            // only the followed player's: the server sends the cursor distance just for
+            // the player whose view this is (their own stream, which replays record)
+            const followed = playerBarn.getPlayerById(activeId);
+            if (followed && !followed.m_netData.m_dead) {
+                const aim = v2.add(followed.m_visualPos, v2.mul(followed.m_visualDir, followed.m_localData.m_aimLen));
+                const p = camera.m_pointToScreen(aim);
+                const r = 9;
+                const gap = 3;
+                this.espGfx.lineStyle(2, CROSSHAIR_COLOR, 0.95);
+                this.espGfx.drawCircle(p.x, p.y, r);
+                this.espGfx.moveTo(p.x - r - 5, p.y).lineTo(p.x - gap, p.y);
+                this.espGfx.moveTo(p.x + gap, p.y).lineTo(p.x + r + 5, p.y);
+                this.espGfx.moveTo(p.x, p.y - r - 5).lineTo(p.x, p.y - gap);
+                this.espGfx.moveTo(p.x, p.y + gap).lineTo(p.x, p.y + r + 5);
             }
         }
 

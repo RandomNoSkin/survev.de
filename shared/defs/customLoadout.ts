@@ -91,6 +91,8 @@ export const CUSTOM_LOADOUT_AMMOS = [
     "308sub",
     "45acp",
     "flare",
+    // Scrap Metal (building / repairing), carried like ammo
+    "construction_item",
 ] as const;
 export const CUSTOM_LOADOUT_PERKS = Object.keys(PerkDefs).filter(
     (k) => GameObjectDefs.typeToDefSafe(k)?.type === "perk",

@@ -68,3 +68,16 @@ test("JoinedMsg carries the spectator flag", () => {
     back.deserialize(stream.stream);
     expect(back.spectator).toBe(true);
 });
+
+test("a long chat line still reaches every spectator and team mate (no buffer overflow)", () => {
+    const game = createGame(TeamMode.Squad, "comp");
+    const spec = game.playerBarn.addTestPlayer({});
+    const other = game.playerBarn.addTestPlayer({});
+    for (const s of [spec, other]) s.spectator = true;
+    spec.name = "A".repeat(16);
+    spec.clanTag = "ABCDE";
+    spec.chat = new Chat(spec, game, false);
+    const got = vi.spyOn(other, "sendData");
+    spec.chat.handleChatMessage(chatMsg("x".repeat(300), 2));
+    expect(got).toHaveBeenCalledTimes(1);
+});

@@ -199,10 +199,8 @@ export class UiManager {
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");
     advTransparentButton = $("#btn-adv-transparent");
-    advTransparentCollapseButton = $("#btn-adv-transparent-collapse");
+    // Zone / Foliage: only shown while Transparent is on
     advTransparentSublist = $("#ui-spectate-transparent-sublist");
-    // Starts collapsed, same as the outer Options list (advCollapsed).
-    advTransparentCollapsed = true;
     advZoneTransparentButton = $("#btn-adv-zone-transparent");
     advFoliageTransparentButton = $("#btn-adv-foliage-transparent");
     advEnemiesMapButton = $("#btn-adv-enemies-map");
@@ -210,6 +208,9 @@ export class UiManager {
     advLabelsButton = $("#btn-adv-labels");
     advNadesButton = $("#btn-adv-nades");
     advVisionButton = $("#btn-adv-vision");
+    advCrosshairButton = $("#btn-adv-crosshair");
+    advOverlaysAllButton = $("#btn-adv-overlays-all");
+    advOverlaysNoneButton = $("#btn-adv-overlays-none");
 
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
@@ -493,9 +494,6 @@ export class UiManager {
         this.advTransparentButton.off("click.advspec").on("click.advspec", () => {
             this.toggleTransparent();
         });
-        this.advTransparentCollapseButton.off("click.advspec").on("click.advspec", () => {
-            this.toggleTransparentCollapse();
-        });
         this.advZoneTransparentButton.off("click.advspec").on("click.advspec", () => {
             this.toggleZoneTransparent();
         });
@@ -516,6 +514,15 @@ export class UiManager {
         });
         this.advVisionButton.off("click.advspec").on("click.advspec", () => {
             this.toggleVisionRadius();
+        });
+        this.advCrosshairButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleCrosshair();
+        });
+        this.advOverlaysAllButton.off("click.advspec").on("click.advspec", () => {
+            this.setAllOverlays(true);
+        });
+        this.advOverlaysNoneButton.off("click.advspec").on("click.advspec", () => {
+            this.setAllOverlays(false);
         });
         // Collapse only hides the option list; the enabled features keep running.
         this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
@@ -2007,6 +2014,10 @@ export class UiManager {
                     if (stats.playerId == this.game.m_localId) {
                         playerRow.addClass("active-player");
                     }
+                    // the whole team (yourself included) gets a side bar in team modes
+                    if (teamMode > TeamMode.Solo && playerInfo.teamId == teamId) {
+                        playerRow.addClass("teammate-player");
+                    }
 
                     tableRowsContainer.append(playerRow);
                 }
@@ -2429,11 +2440,15 @@ export class UiManager {
         this.updateAdvancedSpectatorUi();
     }
 
-    // Same purely-visual, not-persisted collapse pattern as toggleCollapse() (the
-    // outer Options list) - only hides/shows the Zone/Foliage sub-buttons, doesn't
-    // touch their enabled state.
-    toggleTransparentCollapse() {
-        this.advTransparentCollapsed = !this.advTransparentCollapsed;
+    /** The "all" / "none" links of the Overlays group: every overlay on or off at once. */
+    setAllOverlays(on: boolean) {
+        const advSpec = this.game.m_advSpec;
+        advSpec.espLines = on;
+        advSpec.enemyLabels = on;
+        advSpec.nadeEsp = on;
+        advSpec.visionRadius = on;
+        advSpec.crosshair = on;
+        this.saveAdvSpec();
         this.updateAdvancedSpectatorUi();
     }
 
@@ -2463,6 +2478,12 @@ export class UiManager {
 
     toggleVisionRadius() {
         this.game.m_advSpec.visionRadius = !this.game.m_advSpec.visionRadius;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
+    toggleCrosshair() {
+        this.game.m_advSpec.crosshair = !this.game.m_advSpec.crosshair;
         this.saveAdvSpec();
         this.updateAdvancedSpectatorUi();
     }
@@ -2519,14 +2540,10 @@ export class UiManager {
         this.advZoomButton.toggleClass("active", advSpec.zoom);
         this.advLayerButton.toggleClass("active", advSpec.layer === 1);
         this.advTransparentButton.toggleClass("active", advSpec.transparentSurfaces);
-        // Same "shown when enabled, hidden/shown by its own collapse flag" pattern as
-        // specAdvancedList/advCollapsed above, just scoped to this one sub-group.
+        // Zone / Foliage refine Transparent, so they're only there while it's on
         this.advTransparentSublist.css(
             "display",
-            advSpec.enabled && !this.advTransparentCollapsed ? "block" : "none",
-        );
-        this.advTransparentCollapseButton.html(
-            this.advTransparentCollapsed ? "▸ Sub-Options" : "▾ Sub-Options",
+            advSpec.enabled && advSpec.transparentSurfaces ? "grid" : "none",
         );
         this.advZoneTransparentButton.toggleClass("active", advSpec.zoneTransparency);
         this.advFoliageTransparentButton.toggleClass("active", advSpec.foliageTransparency);
@@ -2535,6 +2552,7 @@ export class UiManager {
         this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
         this.advNadesButton.toggleClass("active", advSpec.nadeEsp);
         this.advVisionButton.toggleClass("active", advSpec.visionRadius);
+        this.advCrosshairButton.toggleClass("active", advSpec.crosshair);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {

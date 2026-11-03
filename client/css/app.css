@@ -2598,6 +2598,7 @@ a:active {
 #private-lobby-settings-content {
   flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -11906,6 +11907,46 @@ input [type="image"]:focus {
   font-size: 12px;
 }
 
+/* "Lobby Code" tab (copy / paste a lobby setup) - stacked full-width, no sideways scrolling */
+.private-lobby-share-code {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.private-lobby-share-code-title {
+  margin-top: 6px;
+}
+
+.private-lobby-share-code-text {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  resize: none;
+  width: 100%;
+  word-break: break-all;
+}
+
+.private-lobby-share-code-btn {
+  margin: 0;
+}
+
+.private-lobby-share-code-status {
+  color: #8fe07a;
+  font-size: 12px;
+}
+
+.private-lobby-share-code-error {
+  color: #ff7a6b;
+}
+
 .private-lobby-player-limit {
   align-items: center;
   display: flex;
@@ -13726,6 +13767,17 @@ img.custom-map-loot-icon {
 .clan-role-badge.clan-role-lieutenant {
   color: #7fd3ff;
   border-color: #7fd3ff;
+}
+.clan-role-badge.clan-role-coowner {
+  color: #ffb36b;
+  border-color: #ffb36b;
+}
+/* clan member rows: icon + name open the player's profile */
+.clan-profile-link {
+  cursor: pointer;
+}
+.social-row-main.clan-profile-link:hover .social-row-name {
+  text-decoration: underline;
 }
 .clan-row-buttons .clan-role-badge {
   margin-left: 0;

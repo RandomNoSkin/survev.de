@@ -707,7 +707,15 @@ export async function getRecordingMeta(gameId: string): Promise<GameRecordingInf
  *
  * @param limit Maximum recordings to return. Omit for the full archive.
  */
-export async function listRecordings(limit = Infinity): Promise<GameRecordingInfo[]> {
+/**
+ * Recordings newest first, at most `limit`. With `range` (ms timestamps) only games that
+ * started inside it - and only the day dirs (UTC dates) it touches are read, so an older
+ * window isn't cut off by `limit` filling up with newer days first.
+ */
+export async function listRecordings(
+    limit = Infinity,
+    range?: { from?: number; to?: number },
+): Promise<GameRecordingInfo[]> {
     const root = recordingsRoot();
     const out: GameRecordingInfo[] = [];
     let days: string[];
@@ -717,9 +725,15 @@ export async function listRecordings(limit = Infinity): Promise<GameRecordingInf
         return out; // dir doesn't exist yet
     }
     days.sort().reverse();
+    const from = range?.from ?? -Infinity;
+    const to = range?.to ?? Infinity;
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
     for (const day of days) {
         if (out.length >= limit) break;
+        // day dirs are the UTC date the game started on (see the writer)
+        const dayStart = Date.parse(`${day}T00:00:00Z`);
+        if (!Number.isNaN(dayStart) && (dayStart > to || dayStart + DAY_MS <= from)) continue;
         const dayDir = path.join(root, day);
         let games: string[];
         try {
@@ -727,7 +741,8 @@ export async function listRecordings(limit = Infinity): Promise<GameRecordingInf
         } catch {
             continue;
         }
-        out.push(...(await readDayMetas(dayDir, games)));
+        const metas = await readDayMetas(dayDir, games);
+        out.push(...(range ? metas.filter((m) => m.startTs >= from && m.startTs <= to) : metas));
     }
 
     out.sort((a, b) => b.startTs - a.startTs);
@@ -866,9 +881,42 @@ export async function readMapFile(gameId: string): Promise<GameMapFile | null> {
 
 const lastCleanup = new Map<string, number>();
 
+/**
+ * Games the retention cleanup never deletes: the ones staff tagged (sus reports and
+ * other moderation flags). The API pushes the full list regularly (see setKeptReplays);
+ * it's also saved next to the recordings tree so a restart keeps it before the next push.
+ */
+let keptGames: Set<string> | undefined;
+
+function keptGamesFile(): string {
+    return `${recordingsRoot()}-keep.json`;
+}
+
+function getKeptGames(): Set<string> {
+    if (!keptGames) {
+        try {
+            keptGames = new Set(JSON.parse(fs.readFileSync(keptGamesFile(), "utf8")) as string[]);
+        } catch {
+            keptGames = new Set();
+        }
+    }
+    return keptGames;
+}
+
+/** Replaces the kept-games list (the API's full, current set of tagged game ids). */
+export async function setKeptReplays(gameIds: string[]): Promise<void> {
+    keptGames = new Set(gameIds);
+    try {
+        await fs.promises.writeFile(keptGamesFile(), JSON.stringify([...keptGames]));
+    } catch {
+        /* still applies in memory until the next restart */
+    }
+}
+
 /** Enforces age + total-size caps on one recordings tree by deleting the oldest game
- *  dirs. Throttled per tree. */
-async function cleanupRetention(root: string): Promise<void> {
+ *  dirs - except kept (tagged) games, which also don't count towards the size budget.
+ *  Throttled per tree. */
+export async function cleanupRetention(root: string): Promise<void> {
     const now = Date.now();
     if (now - (lastCleanup.get(root) ?? 0) < 60_000) return; // at most once a minute
     lastCleanup.set(root, now);
@@ -878,6 +926,7 @@ async function cleanupRetention(root: string): Promise<void> {
 
     try {
         const entries: { dir: string; mtime: number; size: number }[] = [];
+        const kept = getKeptGames();
         const days = await fs.promises.readdir(root);
         for (const day of days) {
             const dayDir = path.join(root, day);
@@ -888,6 +937,7 @@ async function cleanupRetention(root: string): Promise<void> {
                 continue;
             }
             for (const gameId of games) {
+                if (kept.has(gameId)) continue;
                 const gameDir = path.join(dayDir, gameId);
                 const size = await dirSize(gameDir);
                 let mtime = 0;

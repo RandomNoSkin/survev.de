@@ -1706,7 +1706,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     banner: z.number().int().min(0).max(63).optional(),
                 }),
                 z.object({ action: z.literal("kick"), slug: z.string().min(1).max(64) }),
-                z.object({ action: z.literal("role"), slug: z.string().min(1).max(64), role: z.enum(["owner", "lieutenant", "member"]) }),
+                z.object({ action: z.literal("role"), slug: z.string().min(1).max(64), role: z.enum(["owner", "coowner", "lieutenant", "member"]) }),
                 z.object({ action: z.literal("reset_link") }),
                 z.object({ action: z.literal("pool"), key: z.string(), amount: z.number().int().min(0).max(1000) }),
                 z.object({ action: z.literal("reset_week"), slug: z.string().min(1).max(64).optional() }),
@@ -1793,9 +1793,27 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ? Math.min(limitParam, 5000)
             : REPLAY_LIST_DEFAULT_LIMIT;
 
+        // Optional time window (the tab's date filter): the host then reads only those
+        // days, so an older day isn't pushed out of the limit by newer games.
+        const fromParam = Number(c.req.query("from"));
+        const toParam = Number(c.req.query("to"));
+        const from = Number.isFinite(fromParam) && c.req.query("from") ? fromParam : undefined;
+        const to = Number.isFinite(toParam) && c.req.query("to") ? toParam : undefined;
+
+        // A full game id: look that one game up directly in every region (no recent-games
+        // cap - an older game on a busy region is never among the newest N).
+        const gameIdParam = c.req.query("gameId")?.trim().toLowerCase();
+        const byGameId = gameIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(gameIdParam)
+            ? gameIdParam
+            : undefined;
+
         const regions = await Promise.all(
             Object.entries(server.regions).map(async ([regionId, region]) => {
-                const recordings = await region.listReplays(limit).catch(() => []);
+                if (byGameId) {
+                    const meta = await region.getReplayMeta(byGameId).catch(() => null);
+                    return { regionId, recordings: meta ? [meta] : [] };
+                }
+                const recordings = await region.listReplays(limit, from, to).catch(() => []);
                 return { regionId, recordings };
             }),
         );

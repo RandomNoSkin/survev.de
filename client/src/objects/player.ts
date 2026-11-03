@@ -379,6 +379,8 @@ export class Player implements AbstractObject {
             loadedThrowable?: string;
         }>;
         m_spectatorCount: number;
+        /** cursor distance of this player (spectating / replays), see LocalData.aimLen */
+        m_aimLen: number;
     };
 
     throwableStatePrev!: string;
@@ -537,6 +539,7 @@ export class Player implements AbstractObject {
             m_inventory: {},
             m_weapons: [],
             m_spectatorCount: 0,
+            m_aimLen: 0,
         };
 
         this.playAnim(Anim.None, -1);
@@ -690,6 +693,9 @@ export class Player implements AbstractObject {
         }
         if (data.spectatorCountDirty) {
             this.m_localData.m_spectatorCount = data.spectatorCount;
+        }
+        if (data.aimDirty) {
+            this.m_localData.m_aimLen = data.aimLen;
         }
 
         // Zoom more quickly when changing scopes

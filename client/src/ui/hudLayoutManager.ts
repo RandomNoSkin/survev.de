@@ -183,6 +183,35 @@ export class HudLayoutManager {
         return this.config.get("hudGlobalOpacity") ?? 1;
     }
 
+    private getGridSize(): number {
+        return this.config.get("hudGridSize") ?? 0;
+    }
+
+    /** The grid drawn over the screen while editing (see `hudGridSize`); pointer-events
+     *  none, lines from the viewport's top-left so they match where things snap. */
+    private applyGrid() {
+        let overlay = document.getElementById("hud-grid-overlay");
+        const size = this.getGridSize();
+        if (!this.editModeActive || size <= 0) {
+            overlay?.remove();
+            return;
+        }
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "hud-grid-overlay";
+            document.body.appendChild(overlay);
+        }
+        overlay.style.setProperty("--hud-grid", `${size}px`);
+    }
+
+    /** Snaps a drag delta so the element's top-left corner (at `start` when the drag
+     *  began) lands on the grid. Alt held, or no grid: unchanged. */
+    private snapDelta(delta: number, start: number, e: PointerEvent): number {
+        const size = this.getGridSize();
+        if (size <= 0 || e.altKey) return delta;
+        return Math.round((start + delta) / size) * size - start;
+    }
+
     private elementTransform(dx: number, dy: number, scale: number, baseTransform?: string): string {
         const parts: string[] = [];
         if (baseTransform) parts.push(baseTransform);
@@ -209,6 +238,8 @@ export class HudLayoutManager {
             let startDx = 0;
             let startDy = 0;
             let dragScale = 1;
+            let startLeft = 0;
+            let startTop = 0;
 
             el.addEventListener("pointerdown", (e) => {
                 if (!this.editModeActive) return;
@@ -221,6 +252,9 @@ export class HudLayoutManager {
                 startDx = cfg.dx;
                 startDy = cfg.dy;
                 dragScale = cfg.scale * this.getGlobalScale();
+                const rect = el.getBoundingClientRect();
+                startLeft = rect.left;
+                startTop = rect.top;
                 el.setPointerCapture(e.pointerId);
             });
             el.addEventListener("pointermove", (e) => {
@@ -229,16 +263,16 @@ export class HudLayoutManager {
                 // would write to localStorage on every pixel of movement) - the final
                 // position is persisted once, on release. Scale is carried through
                 // unchanged (frozen at drag start) so dragging never visually resets it.
-                const dx = startDx + (e.clientX - startX);
-                const dy = startDy + (e.clientY - startY);
+                const dx = startDx + this.snapDelta(e.clientX - startX, startLeft, e);
+                const dy = startDy + this.snapDelta(e.clientY - startY, startTop, e);
                 el.style.transform = this.elementTransform(dx, dy, dragScale, def.baseTransform);
                 if (def.id === "minimap") this.onMinimapDrag?.({ dx, dy });
             });
             const endDrag = (e: PointerEvent) => {
                 if (!dragging) return;
                 dragging = false;
-                const dx = startDx + (e.clientX - startX);
-                const dy = startDy + (e.clientY - startY);
+                const dx = startDx + this.snapDelta(e.clientX - startX, startLeft, e);
+                const dy = startDy + this.snapDelta(e.clientY - startY, startTop, e);
                 this.updateElementConfig(def.id, { dx, dy });
                 if (def.id === "minimap") this.onMinimapDrag?.(null);
             };
@@ -352,6 +386,7 @@ export class HudLayoutManager {
     setEditMode(active: boolean) {
         this.editModeActive = active;
         document.body.classList.toggle("hud-edit-mode", active);
+        this.applyGrid();
         // the team overview only exists while the big map is open - show example
         // teammates while editing so it can be placed at all
         this.applyEditView();
@@ -683,6 +718,33 @@ export class HudLayoutManager {
      *  inside #ui-hud-settings-list itself (see renderSettingsPanel) rather than as
      *  static rows above it, so it scrolls along with the list instead of needing the
      *  panel's fixed height re-tuned by hand every time one of these is added. */
+    /** Grid: off / 10 / 20 / 40 px (see `hudGridSize`). */
+    private buildGridRow(): HTMLElement {
+        const row = document.createElement("div");
+        row.id = "hud-grid-row";
+        row.className = "hud-settings-row hud-global-slider-row";
+        const labelEl = document.createElement("span");
+        labelEl.className = "hud-settings-label";
+        labelEl.textContent = "Snap to Grid";
+        labelEl.title = "Hold Alt while dragging to place freely";
+        row.appendChild(labelEl);
+        const select = document.createElement("select");
+        select.className = "hud-grid-select";
+        for (const [value, text] of [[0, "Off"], [10, "10 px"], [20, "20 px"], [40, "40 px"]] as const) {
+            const opt = document.createElement("option");
+            opt.value = String(value);
+            opt.textContent = text;
+            select.appendChild(opt);
+        }
+        select.value = String(this.getGridSize());
+        select.addEventListener("change", () => {
+            this.config.set("hudGridSize", Number(select.value));
+            this.applyGrid();
+        });
+        row.appendChild(select);
+        return row;
+    }
+
     private buildGlobalSliderRow(
         id: string,
         label: string,
@@ -787,6 +849,7 @@ export class HudLayoutManager {
                 () => this.getGlobalOpacity(),
                 (v) => this.config.set("hudGlobalOpacity", v),
             ));
+            list.appendChild(this.buildGridRow());
             const inView = new Set(VIEW_ELEMENTS[this.editView]);
             for (const def of HUD_ELEMENTS) {
                 if (inView.has(def.id)) list.appendChild(this.buildSettingsRow(def));

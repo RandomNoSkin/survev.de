@@ -12,11 +12,12 @@ import { util } from "../../shared/utils/util.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { Config } from "./config.ts";
 
+// pnpm stressTest [botCount] [gameModeIdx]  e.g. "pnpm stressTest 7 2" (7 clients into comp squads)
 const config = {
     address: Config.gameServer.apiServerUrl,
     region: Config.gameServer.thisRegion,
-    gameModeIdx: 0,
-    botCount: 79,
+    gameModeIdx: Number(process.argv[3]) || 0,
+    botCount: Number(process.argv[2]) || 79,
     joinDelay: 100,
 };
 

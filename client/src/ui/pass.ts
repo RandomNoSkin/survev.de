@@ -171,31 +171,35 @@ export class Pass {
         const passType = GameConfig.serverSettings.currentPass;
         const events = GameConfig.serverSettings.xpBoostEvents?.[passType];
         const now = Date.now();
-        let activeEvent: { name: string; boost: number; maps: string[] } | null = null;
+        const activeEvents: { name: string; boost: number; maps: string[] }[] = [];
         if (events) {
             for (const [name, ev] of Object.entries(events)) {
                 if (now >= new Date(ev.start).getTime() && now <= new Date(ev.end).getTime()) {
-                    activeEvent = { name, boost: ev.boost, maps: ev.maps };
-                    break;
+                    activeEvents.push({ name, boost: ev.boost, maps: ev.maps });
                 }
             }
         }
-        if (activeEvent) {
+        if (activeEvents.length > 0) {
             const mapToL10nKey: Record<string, string> = {
                 local:      "index-play-1v1-solo",
                 comp:       "index-play-comp-squad",
                 two_vs_two: "index-play-2v2-duo",
                 scrims:     "index-play-scrims-solo",
             };
-            const mapNames = activeEvent.maps
-                .map((m) => {
-                    const l10nKey = mapToL10nKey[m];
-                    if (l10nKey) return this.localization.translate(l10nKey) || m;
-                    return (MapDefs[m as keyof typeof MapDefs] as any)?.desc?.buttonText ?? m;
-                })
-                .join(", ");
             const onWord = this.localization.translate("pass-xp-boost-on") || "on";
-            $("#pass-xp-boost-text").text(`${activeEvent.name}: ${activeEvent.boost}× XP ${onWord} ${mapNames}`);
+            const text = activeEvents
+                .map((ev) => {
+                    const mapNames = ev.maps
+                        .map((m) => {
+                            const l10nKey = mapToL10nKey[m];
+                            if (l10nKey) return this.localization.translate(l10nKey) || m;
+                            return (MapDefs[m as keyof typeof MapDefs] as any)?.desc?.buttonText ?? m;
+                        })
+                        .join(", ");
+                    return `${ev.name}: ${ev.boost}× XP ${onWord} ${mapNames}`;
+                })
+                .join(" | ");
+            $("#pass-xp-boost-text").text(text);
             $("#pass-xp-boost").css("display", "block");
         } else {
             $("#pass-xp-boost").css("display", "none");

@@ -15,6 +15,7 @@ import { GameProcessManager } from "./game/gameProcessManager";
 import {
     getRecordingMeta,
     listRecordings,
+    setKeptReplays,
     readDamageFile,
     readMapFile,
     readRecordingFile,
@@ -1023,16 +1024,49 @@ app.post("/api/dashboard/replays", (res, req) => {
         return;
     }
 
-    readPostedJSON<{ limit?: number }>(
+    readPostedJSON<{ limit?: number; from?: number; to?: number }>(
         res,
         async (body) => {
             if (res.aborted) return;
             const limit = typeof body?.limit === "number" && body.limit > 0
                 ? body.limit
                 : undefined;
-            const recordings = await listRecordings(limit);
+            const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+            const from = num(body?.from);
+            const to = num(body?.to);
+            const recordings = await listRecordings(limit, from !== undefined || to !== undefined ? { from, to } : undefined);
             if (res.aborted) return;
             returnJson(res, { recordings });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** The API's full list of tagged game ids, whose recordings retention must keep
+ *  (see setKeptReplays). */
+app.post("/api/dashboard/replay_keep", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON<{ gameIds?: unknown }>(
+        res,
+        async (body) => {
+            if (res.aborted) return;
+            if (!Array.isArray(body?.gameIds) || !body.gameIds.every((id) => typeof id === "string")) {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            await setKeptReplays(body.gameIds as string[]);
+            if (res.aborted) return;
+            returnJson(res, { kept: body.gameIds.length });
         },
         () => {
             if (!res.aborted) returnJson(res, { error: "body error" });

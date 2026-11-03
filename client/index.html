@@ -693,20 +693,37 @@
             <div id="ui-spectate-advanced-options" class="ui-bg-standard" style="display: none;">
               <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">▾ Options</a>
               <div id="ui-spectate-advanced-list">
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-freecam">Freecam</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zoom">Zoom</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-layer">Underground</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-transparent">Transparent Surfaces</a>
-                <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-transparent-collapse">▸ Sub-Options</a>
-                <div id="ui-spectate-transparent-sublist" style="display: none;">
-                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zone-transparent">Transparent Zone</a>
-                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-foliage-transparent">Transparent Foliage</a>
+                <div class="spectate-adv-section">Camera</div>
+                <div class="spectate-adv-grid">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-freecam">Freecam</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zoom">Zoom</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-layer">Underground</a>
                 </div>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-enemies-map">Enemies on Map</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-esp">ESP Lines</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-labels">Player Info</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-nades">Grenade Info</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-vision">Vision Radius</a>
+                <div class="spectate-adv-section">View</div>
+                <div class="spectate-adv-grid">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-transparent" title="Transparent roofs and surfaces">Transparent</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-enemies-map">Enemies on Map</a>
+                </div>
+                <!-- only while Transparent is on -->
+                <div class="spectate-adv-grid spectate-adv-subgrid" id="ui-spectate-transparent-sublist" style="display: none;">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zone-transparent">↳ Zone</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-foliage-transparent">↳ Foliage</a>
+                </div>
+                <div class="spectate-adv-section">
+                  Overlays
+                  <span class="spectate-adv-section-links">
+                    <span class="spectate-adv-link" id="btn-adv-overlays-all">all</span>
+                    ·
+                    <span class="spectate-adv-link" id="btn-adv-overlays-none">none</span>
+                  </span>
+                </div>
+                <div class="spectate-adv-grid">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-esp">ESP Lines</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-labels">Player Info</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-nades">Grenades</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-vision">Vision</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-crosshair">Crosshair</a>
+                </div>
               </div>
             </div>
             <div id="ui-spectate-stats" class="ui-bg-standard">
