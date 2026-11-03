@@ -696,27 +696,26 @@ export class Application {
         const passType = GameConfig.serverSettings.currentPass;
         const events = (GameConfig.serverSettings.xpBoostEvents as any)?.[passType];
         const now = Date.now();
-        let activeMaps: string[] = [];
-        let activeBoost = 2;
+        // map name -> boost; first matching event wins, same as the server
+        const activeBoosts: Record<string, number> = {};
         if (events) {
             for (const ev of Object.values(events) as any[]) {
                 if (
                     now >= new Date(ev.start).getTime() &&
                     now <= new Date(ev.end).getTime()
                 ) {
-                    activeMaps = ev.maps;
-                    activeBoost = ev.boost;
-                    break;
+                    for (const m of ev.maps) activeBoosts[m] ??= ev.boost;
                 }
             }
         }
         $(".xp-boost-badge").remove();
-        if (!loggedIn || activeMaps.length === 0) return;
+        if (!loggedIn || Object.keys(activeBoosts).length === 0) return;
 
         const modes = this.siteInfo.getModesForSelectedRegion();
         for (let i = 0; i < 3; i++) {
             const mode = modes[i];
-            if (!mode?.enabled || !activeMaps.includes(mode.mapName)) continue;
+            if (!mode?.enabled || !(mode.mapName in activeBoosts)) continue;
+            const activeBoost = activeBoosts[mode.mapName];
             const btnEl = document.getElementById(`btn-start-mode-${i}`);
             if (!btnEl || !$(btnEl).is(":visible")) continue;
             const r = btnEl.getBoundingClientRect();

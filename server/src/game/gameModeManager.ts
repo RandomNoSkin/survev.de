@@ -138,6 +138,32 @@ export class GameModeManager {
         }
     }
 
+    /**
+     * Ranks as they stand right now, for the end screen. Same order as the saved match
+     * data (death order, see getPlayersSortedByRank) - `player.rank` is the alive count
+     * at the moment of death, which repeats when players join after someone died.
+     * A player whose player / group / team is still in the game gets 0 (not decided
+     * yet, "#?" on the client), or 1 once they're the last one left.
+     */
+    currentRanks(): Map<Player, number> {
+        const stillIn = (p: Player) => {
+            switch (this.mode) {
+                case GameMode.Solo:
+                    return !p.dead;
+                case GameMode.Team:
+                    return !!p.group && p.group.livingPlayers.length > 0;
+                case GameMode.Faction:
+                    return !!p.team && p.team.livingPlayers.length > 0;
+            }
+        };
+        const decided = this.aliveCount() <= 1;
+        const ranks = new Map<Player, number>();
+        for (const { player, rank } of this.getPlayersSortedByRank()) {
+            ranks.set(player, !player.spectator && stillIn(player) ? (decided ? 1 : 0) : rank);
+        }
+        return ranks;
+    }
+
     /** true if game needs to end */
     handleGameEnd(): boolean {
         if (!this.game.started || this.aliveCount() > 1) return false;

@@ -67,11 +67,25 @@ export const zClanCodeRequest = z.object({ code: z.string().min(4).max(32) });
 export const zClanLinkRequest = z.object({ regenerate: z.boolean().optional() });
 export const zClanRoleRequest = z.object({
     slug: z.string().min(1).max(64),
-    role: z.enum(["lieutenant", "member"]),
+    role: z.enum(["coowner", "lieutenant", "member"]),
 });
 
-/** owner: everything; lieutenant: invite, accept requests, kick regular members. */
-export type ClanRole = "owner" | "lieutenant" | "member";
+/** owner: everything; coowner: everything but disbanding the clan and naming co-owners;
+ *  lieutenant: invite, accept requests, kick regular members. */
+export type ClanRole = "owner" | "coowner" | "lieutenant" | "member";
+
+/** Higher outranks lower: kicking and changing roles only ever goes down the ladder. */
+export const CLAN_ROLE_RANK: Record<ClanRole, number> = { owner: 3, coowner: 2, lieutenant: 1, member: 0 };
+
+/** A role as stored (text column) -> ClanRole, unknown values as "member". */
+export function toClanRole(role: string): ClanRole {
+    return role === "owner" || role === "coowner" || role === "lieutenant" ? role : "member";
+}
+
+/** Owner and co-owners run the clan (edit it, share out the pool, change roles). */
+export function canLeadClan(role: ClanRole): boolean {
+    return CLAN_ROLE_RANK[role] >= CLAN_ROLE_RANK.coowner;
+}
 
 export interface ClanMember {
     slug: string;

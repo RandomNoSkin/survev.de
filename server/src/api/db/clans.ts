@@ -22,8 +22,11 @@ import {
     type ClanPendingPlayer,
     type ClanSummary,
     type MyClanResponse,
+    CLAN_ROLE_RANK,
+    canLeadClan,
     normalizeClanName,
     normalizeClanTag,
+    toClanRole,
     validateClan,
 } from "../../../../shared/utils/clan";
 import { checkForBadWords } from "../../utils/serverHelpers";
@@ -69,7 +72,7 @@ async function iconAllowed(tx: Tx, userId: string, icon: string): Promise<boolea
 }
 
 /** Validates name / tag / icon and checks they're free (other than `clanId`'s own). */
-async function checkFields(tx: Tx, userId: string, req: ClanEditRequest, clanId?: number) {
+async function checkFields(tx: Tx, userId: string, req: ClanEditRequest, clanId?: number, currentIcon?: string) {
     const name = normalizeClanName(req.name);
     const tag = normalizeClanTag(req.tag);
     const invalid = validateClan(name, tag);
@@ -90,7 +93,8 @@ async function checkFields(tx: Tx, userId: string, req: ClanEditRequest, clanId?
     if (checkForBadWords(name) || checkForBadWords(tag) || clanTextBlocked(name) || clanTextBlocked(tag)) {
         throw new ClanError("bad_words");
     }
-    if (!(await iconAllowed(tx, userId, req.icon))) throw new ClanError("bad_icon");
+    // an unchanged icon stays (a co-owner editing the name needn't own the owner's emote)
+    if (req.icon !== currentIcon && !(await iconAllowed(tx, userId, req.icon))) throw new ClanError("bad_icon");
     const clash = await tx
         .select({ id: clansTable.id, name: clansTable.name, tag: clansTable.tag })
         .from(clansTable)
@@ -155,13 +159,13 @@ export async function createClan(userId: string, req: ClanEditRequest): Promise<
     }
 }
 
-/** Owner only: new name / tag / icon. */
+/** Owner or co-owner: new name / tag / icon / colour / banner. */
 export async function updateClan(userId: string, req: ClanEditRequest): Promise<ClanActionResponse> {
     try {
         await db.transaction(async (tx) => {
-            const [clan] = await tx.select({ id: clansTable.id }).from(clansTable).where(eq(clansTable.ownerId, userId));
-            if (!clan) throw new ClanError("not_owner");
-            const fields = await checkFields(tx, userId, req, clan.id);
+            const clan = await leaderClan(tx, userId);
+            const [cur] = await tx.select({ icon: clansTable.icon }).from(clansTable).where(eq(clansTable.id, clan.id));
+            const fields = await checkFields(tx, userId, req, clan.id, cur?.icon);
             await tx.update(clansTable).set(fields).where(eq(clansTable.id, clan.id));
         });
         return { success: true };
@@ -232,7 +236,7 @@ async function pendingClans(userId: string, kind: "invite" | "request"): Promise
     return rows.map(toSummary);
 }
 
-/** A clan's members: owner first, then lieutenants, then by join date. */
+/** A clan's members: owner first, then co-owners, lieutenants, then by join date. */
 async function membersOf(clanId: number): Promise<ClanMember[]> {
     const rows = await db
         .select({
@@ -247,6 +251,7 @@ async function membersOf(clanId: number): Promise<ClanMember[]> {
         .where(eq(clanMembersTable.clanId, clanId))
         .orderBy(
             desc(sql`${clanMembersTable.role} = 'owner'`),
+            desc(sql`${clanMembersTable.role} = 'coowner'`),
             desc(sql`${clanMembersTable.role} = 'lieutenant'`),
             asc(clanMembersTable.joinedAt),
         );
@@ -254,7 +259,7 @@ async function membersOf(clanId: number): Promise<ClanMember[]> {
         slug: r.slug,
         username: r.username,
         icon: playerIcon(r),
-        role: r.role === "owner" ? "owner" : r.role === "lieutenant" ? "lieutenant" : "member",
+        role: toClanRole(r.role),
         joinedAt: r.joinedAt.getTime(),
     }));
 }
@@ -297,7 +302,7 @@ export async function getMyClan(userId: string): Promise<MyClanResponse> {
     const details: ClanDetails = {
         ...toSummary(summary),
         memberList: await membersOf(m.clanId),
-        myRole: ownerId === userId ? "owner" : m.role === "lieutenant" ? "lieutenant" : "member",
+        myRole: ownerId === userId ? "owner" : toClanRole(m.role) === "owner" ? "member" : toClanRole(m.role),
         weekStats: await getClanWeekTotals(m.clanId),
         pool: await getClanPool(m.clanId),
     };
@@ -374,16 +379,7 @@ export async function listClans(
 
 // ── Joining: invites (owner → player) and link requests (player → owner) ──────
 
-async function ownedClan(tx: Tx, ownerId: string) {
-    const [clan] = await tx
-        .select({ id: clansTable.id, inviteCode: clansTable.inviteCode })
-        .from(clansTable)
-        .where(eq(clansTable.ownerId, ownerId));
-    if (!clan) throw new ClanError("not_owner");
-    return clan;
-}
-
-/** The clan the user runs: as owner, or as a lieutenant (invite, accept, kick). */
+/** The clan the user helps run: as owner, co-owner or lieutenant (invite, accept, kick). */
 async function managedClan(tx: Tx, userId: string) {
     const [r] = await tx
         .select({
@@ -394,8 +390,15 @@ async function managedClan(tx: Tx, userId: string) {
         .from(clanMembersTable)
         .innerJoin(clansTable, eq(clansTable.id, clanMembersTable.clanId))
         .where(eq(clanMembersTable.userId, userId));
-    if (!r || (r.role !== "owner" && r.role !== "lieutenant")) throw new ClanError("not_owner");
-    return r;
+    if (!r || toClanRole(r.role) === "member") throw new ClanError("not_owner");
+    return { ...r, role: toClanRole(r.role) };
+}
+
+/** The clan the user leads: as owner or co-owner (edit, pool, roles). */
+async function leaderClan(tx: Tx, userId: string) {
+    const clan = await managedClan(tx, userId);
+    if (!canLeadClan(clan.role)) throw new ClanError("not_owner");
+    return clan;
 }
 
 /** Whether the clan's owner has blocked the player - then they can't get in at all. */
@@ -530,13 +533,13 @@ function newInviteCode(): string {
     return s;
 }
 
-/** The clan's invite-link code (made on first use, lieutenants too); only the owner may
- *  `regenerate` it, which kills the old link. */
+/** The clan's invite-link code (made on first use, lieutenants too); only the owner and
+ *  co-owners may `regenerate` it, which kills the old link. */
 export async function getInviteCode(actorId: string, regenerate = false): Promise<ClanLinkResponse> {
     try {
         const code = await db.transaction(async (tx) => {
             const clan = await managedClan(tx, actorId);
-            if (regenerate && clan.role !== "owner") throw new ClanError("no_permission");
+            if (regenerate && !canLeadClan(clan.role)) throw new ClanError("no_permission");
             if (clan.inviteCode && !regenerate) return clan.inviteCode;
             const code = newInviteCode();
             await tx.update(clansTable).set({ inviteCode: code }).where(eq(clansTable.id, clan.id));
@@ -620,7 +623,7 @@ export function leaveClan(userId: string) {
     });
 }
 
-/** Removes a member: the owner can kick anyone, a lieutenant only regular members. */
+/** Removes a member ranked below the actor (owner > co-owner > lieutenant > member). */
 export function kickMember(actorId: string, slug: string) {
     return run(async (tx) => {
         const clan = await managedClan(tx, actorId);
@@ -631,19 +634,25 @@ export function kickMember(actorId: string, slug: string) {
             .from(clanMembersTable)
             .where(and(eq(clanMembersTable.userId, target.id), eq(clanMembersTable.clanId, clan.id)));
         if (!m) throw new ClanError("not_member");
-        if (m.role === "owner" || (m.role === "lieutenant" && clan.role !== "owner")) {
-            throw new ClanError("no_permission");
-        }
+        if (CLAN_ROLE_RANK[toClanRole(m.role)] >= CLAN_ROLE_RANK[clan.role]) throw new ClanError("no_permission");
         await tx.delete(clanMembersTable).where(eq(clanMembersTable.userId, target.id));
     });
 }
 
-/** Owner only: makes a member a lieutenant, or back to a regular member. */
-export function setMemberRole(ownerId: string, slug: string, role: "lieutenant" | "member") {
+/** Owner or co-owner: sets a lower-ranked member's role. Only the owner names co-owners
+ *  (or demotes them). */
+export function setMemberRole(actorId: string, slug: string, role: "coowner" | "lieutenant" | "member") {
     return run(async (tx) => {
-        const clan = await ownedClan(tx, ownerId);
+        const clan = await leaderClan(tx, actorId);
+        if (CLAN_ROLE_RANK[role] >= CLAN_ROLE_RANK[clan.role]) throw new ClanError("no_permission");
         const target = await userBySlug(tx, slug);
-        if (target.id === ownerId) throw new ClanError("self");
+        if (target.id === actorId) throw new ClanError("self");
+        const [m] = await tx
+            .select({ role: clanMembersTable.role })
+            .from(clanMembersTable)
+            .where(and(eq(clanMembersTable.userId, target.id), eq(clanMembersTable.clanId, clan.id)));
+        if (!m) throw new ClanError("not_member");
+        if (CLAN_ROLE_RANK[toClanRole(m.role)] >= CLAN_ROLE_RANK[clan.role]) throw new ClanError("no_permission");
         const changed = await tx
             .update(clanMembersTable)
             .set({ role })
@@ -765,8 +774,9 @@ export function adminKickMember(clanId: number, slug: string) {
     });
 }
 
-/** Makes a member lieutenant / member, or the new owner (the old owner becomes lieutenant). */
-export function adminSetRole(clanId: number, slug: string, role: "owner" | "lieutenant" | "member") {
+/** Makes a member co-owner / lieutenant / member, or the new owner (the old owner becomes
+ *  co-owner). */
+export function adminSetRole(clanId: number, slug: string, role: "owner" | "coowner" | "lieutenant" | "member") {
     return run(async (tx) => {
         const clan = await adminClan(tx, clanId);
         const m = await adminMember(tx, clanId, slug);
@@ -775,7 +785,7 @@ export function adminSetRole(clanId: number, slug: string, role: "owner" | "lieu
             await tx.update(clanMembersTable).set({ role }).where(eq(clanMembersTable.userId, m.id));
             return;
         }
-        await tx.update(clanMembersTable).set({ role: "lieutenant" }).where(eq(clanMembersTable.userId, clan.ownerId));
+        await tx.update(clanMembersTable).set({ role: "coowner" }).where(eq(clanMembersTable.userId, clan.ownerId));
         await tx.update(clanMembersTable).set({ role: "owner" }).where(eq(clanMembersTable.userId, m.id));
         await tx.update(clansTable).set({ ownerId: m.id }).where(eq(clansTable.id, clanId));
     });

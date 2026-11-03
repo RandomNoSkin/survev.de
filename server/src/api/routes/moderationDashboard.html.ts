@@ -1449,11 +1449,41 @@ function replayFetchLimit() {
   return document.getElementById('replays-limit').value === 'all' ? 5000 : 200;
 }
 
+/** The search box's text when it is a complete game id, else null. */
+function replaySearchGameId() {
+  const q = document.getElementById('replays-search').value.trim().toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(q) ? q : null;
+}
+/** The game id the current list was fetched for (null = the normal list). */
+let loadedReplayGameId = null;
+
+/** The date filter's window as [lo, hi] ms, or null without a date. */
+function replayWindow() {
+  const dateVal = document.getElementById('replays-date').value;
+  const target = dateVal ? Date.parse(dateVal) : NaN;
+  if (isNaN(target)) return null;
+  const win = document.getElementById('replays-window').value;
+  if (win === 'day') {
+    const d = new Date(target);
+    const lo = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return { target, lo, hi: lo + 24 * 60 * 60 * 1000 };
+  }
+  const ms = Number(win) * 60 * 1000;
+  return { target, lo: target - ms, hi: target + ms };
+}
+
 async function loadReplays() {
   const container = document.getElementById('replays-container');
   container.innerHTML = '<div class="loading">Loading…</div>';
   try {
-    const data = await get('/api/replays?limit=' + replayFetchLimit());
+    // with a date set the server reads just that window - otherwise only the newest
+    // games per region come back, and a busy region's older days never show up
+    // a full game id is looked up directly (any age, any region); else the date window
+    const id = replaySearchGameId();
+    const w = replayWindow();
+    const range = id ? '&gameId=' + id : w ? '&from=' + w.lo + '&to=' + w.hi : '';
+    const data = await get('/api/replays?limit=' + replayFetchLimit() + range);
+    loadedReplayGameId = id;
     replaysData = data.regions ?? [];
     renderReplays();
   } catch (e) {
@@ -1465,22 +1495,11 @@ function renderReplays() {
   const container = document.getElementById('replays-container');
   const q = document.getElementById('replays-search').value.trim().toLowerCase();
 
-  // Optional date/time window: keep recordings whose startTs falls near the entered time.
-  const dateVal = document.getElementById('replays-date').value;
-  const target = dateVal ? Date.parse(dateVal) : NaN;
-  let lo = -Infinity, hi = Infinity;
-  if (!isNaN(target)) {
-    const win = document.getElementById('replays-window').value;
-    if (win === 'day') {
-      const d = new Date(target);
-      lo = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-      hi = lo + 24 * 60 * 60 * 1000;
-    } else {
-      const ms = Number(win) * 60 * 1000;
-      lo = target - ms;
-      hi = target + ms;
-    }
-  }
+  // Optional date/time window: keep recordings whose startTs falls near the entered time
+  // (not for a game id lookup - that one game is wanted whenever it was played).
+  const w = loadedReplayGameId ? null : replayWindow();
+  const target = w ? w.target : NaN;
+  const lo = w ? w.lo : -Infinity, hi = w ? w.hi : Infinity;
 
   // Flatten region → games, filtered by the search box + (optional) time window.
   const games = [];
@@ -1637,9 +1656,13 @@ async function watchReplay(region, gameId, playerId, protocolVersion, isCurrentP
 }
 
 document.getElementById('replays-refresh-btn').addEventListener('click', loadReplays);
-document.getElementById('replays-search').addEventListener('input', renderReplays);
-document.getElementById('replays-date').addEventListener('change', renderReplays);
-document.getElementById('replays-window').addEventListener('change', renderReplays);
+// typing / removing a full game id switches between the direct lookup and the normal list
+document.getElementById('replays-search').addEventListener('input', () => {
+  if (replaySearchGameId() !== loadedReplayGameId) loadReplays(); else renderReplays();
+});
+// the time window is fetched from the server (see loadReplays), so changing it refetches
+document.getElementById('replays-date').addEventListener('change', loadReplays);
+document.getElementById('replays-window').addEventListener('change', loadReplays);
 // "Show all" needs data the bounded fetch didn't load, so it refetches; the fixed sizes
 // are a pure display cut of what's already here.
 document.getElementById('replays-limit').addEventListener('change', function () {
@@ -1647,7 +1670,7 @@ document.getElementById('replays-limit').addEventListener('change', function () 
 });
 document.getElementById('replays-date-clear').addEventListener('click', () => {
   document.getElementById('replays-date').value = '';
-  renderReplays();
+  loadReplays();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4096,7 +4119,7 @@ async function giveCrateKeys() {
 }
 
 // ── ANTI-CHEAT ───────────────────────────────────────────────────────────────
-const AC_LABELS = { cheat_name: 'Cheat name', snap_aim: 'Silent aim', esp_track: 'ESP tracking', offscreen_aim: 'Offscreen aim', spinbot: 'Spinbot', touch_desktop: 'Touch on desktop' };
+const AC_LABELS = { cheat_name: 'Cheat name', snap_aim: 'Silent aim', esp_track: 'ESP tracking', offscreen_aim: 'Offscreen aim', offscreen_hit: 'Offscreen hits', spinbot: 'Spinbot', touch_desktop: 'Touch on desktop' };
 
 async function loadAntiCheat() {
   const days = document.getElementById('ac-days').value;
@@ -4136,6 +4159,7 @@ function renderAntiCheat(data) {
     if (k === 'snap_aim' && d.shots) return d.snaps + '/' + d.shots + ' shots snapped';
     if (k === 'esp_track' && d.espLongestMs) return 'longest track ' + (d.espLongestMs / 1000).toFixed(1) + ' s';
     if (k === 'offscreen_aim' && d.offscreenLongestMs) return 'longest ' + (d.offscreenLongestMs / 1000).toFixed(1) + ' s';
+    if (k === 'offscreen_hit' && d.offscreenHits) return d.offscreenHits + ' hits on offscreen enemies (score = damage)';
     return '';
   };
   const badge = p => '<span class="' + (p >= 100 ? 'hot' : p >= 50 ? 'warm' : 'lo') + '">' + p + ' %</span>';
@@ -4258,7 +4282,7 @@ function renderClanDetail() {
   const weekStats = {};
   (st.members || []).forEach(m => { weekStats[m.slug] = m.stats; });
   const roleSel = (m) => '<select class="ac-sel cl-role" data-slug="' + esc(m.slug) + '"' + (m.role === 'owner' ? ' disabled' : '') + '>'
-    + ['member', 'lieutenant', 'owner'].map(r => '<option value="' + r + '"' + (r === m.role ? ' selected' : '') + '>' + r + '</option>').join('') + '</select>';
+    + ['member', 'lieutenant', 'coowner', 'owner'].map(r => '<option value="' + r + '"' + (r === m.role ? ' selected' : '') + '>' + r + '</option>').join('') + '</select>';
   const pend = (list) => list.length ? list.map(p => navLink(hAccount(p.slug), '@' + esc(p.slug), { title: 'Open account' }) + ' <span class="muted">' + esc(new Date(p.at).toLocaleDateString()) + '</span>').join(' · ') : '<span class="muted">none</span>';
   const keyName = (t) => ((clanMeta.keys.find(k => k.type === t)) || {}).name || t;
 
@@ -4344,7 +4368,7 @@ document.getElementById('clan-modal-body').addEventListener('change', async (e) 
   const sel = e.target.closest('.cl-role');
   if (!sel) return;
   const slug = sel.dataset.slug, role = sel.value;
-  if (role === 'owner' && !confirm('Make @' + slug + ' the owner? The current owner becomes a lieutenant.')) { renderClanDetail(); return; }
+  if (role === 'owner' && !confirm('Make @' + slug + ' the owner? The current owner becomes a co-owner.')) { renderClanDetail(); return; }
   await clanAction({ action: 'role', slug, role }, '@' + slug + ' is now ' + role);
   refreshClanViews();
 });

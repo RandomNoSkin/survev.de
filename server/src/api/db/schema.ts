@@ -805,7 +805,7 @@ export const antiCheatScoresTable = pgTable(
         // worst score / its threshold - 1 and up means it was flagged
         maxRatio: real("max_ratio").notNull(),
         scores: json("scores").$type<Record<string, number>>().notNull(),
-        details: json("details").$type<{ shots: number; snaps: number; espLongestMs: number; offscreenLongestMs?: number }>().notNull(),
+        details: json("details").$type<{ shots: number; snaps: number; espLongestMs: number; offscreenLongestMs?: number; offscreenHits?: number }>().notNull(),
     },
     (table) => [
         index("idx_anticheat_scores_created").on(table.createdAt),

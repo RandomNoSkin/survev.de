@@ -53,6 +53,11 @@ function serializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
         s.writeUint8(data.spectatorCount);
     }
 
+    // cursor distance (the direction is the player's `dir`): where their crosshair is,
+    // for spectators and replays
+    s.writeBoolean(data.aimDirty);
+    if (data.aimDirty) s.writeFloat(data.aimLen, 0, Constants.MouseMaxDist, 8);
+
     s.writeAlignToNextByte();
 }
 
@@ -106,6 +111,10 @@ function deserializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
     data.spectatorCountDirty = s.readBoolean();
     if (data.spectatorCountDirty) {
         data.spectatorCount = s.readUint8();
+    }
+    data.aimDirty = s.readBoolean();
+    if (data.aimDirty) {
+        data.aimLen = s.readFloat(0, Constants.MouseMaxDist, 8);
     }
     s.readAlignToNextByte();
 }
@@ -908,6 +917,8 @@ export interface LocalData {
         loadedThrowable?: string;
     }>;
     spectatorCount: number;
+    /** distance from the player to their cursor, world units (see InputMsg.toMouseLen) */
+    aimLen: number;
 }
 
 export interface LocalDataWithDirty extends LocalData {
@@ -923,6 +934,7 @@ export interface LocalDataWithDirty extends LocalData {
     inventoryDirty: boolean;
     weapsDirty: boolean;
     spectatorCountDirty: boolean;
+    aimDirty: boolean;
 }
 
 // the non-optional properties are used by both server and client

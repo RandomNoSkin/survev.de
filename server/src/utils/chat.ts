@@ -109,6 +109,8 @@ export class Chat{
             this.player.sendMsg(net.MsgType.KillFeed, msg1);
             return;
         }
+            // same cap as the chat input (maxlength) - a modified client could send more
+            if(!this.isAdmin && msg.string.length > 100) msg.string = msg.string.slice(0, 100);
          const chatType = msg.chatType;
             const originalMsg = msg.string;
             //this only allows for philipp or if run locally
@@ -296,7 +298,8 @@ export class Chat{
             msg.args.push("3000");
             this.game.broadcastMsg(net.MsgType.KillFeed, msg);
         },
-        // /spawnbot [difficulty] [count]  e.g. "/spawnbot hard 2"
+        // /spawnbot [difficulty] [count] [team]  e.g. "/spawnbot hard 2", "/spawnbot normal 3 team"
+        // ("team": into your own group, as teammates - team modes only)
         spawnbot: async (args) => {
             if (!Config.debug.allowEditMsg && !(await this.isOwner())) {
                 this.sendCmdFeedback("Only the owner can spawn bots", "#ff4444");
@@ -311,7 +314,13 @@ export class Chat{
                 parseBotDifficulty(args[0]) ?? Config.bots.defaultDifficulty;
             const requested = Math.max(1, Math.min(Number(args[1]) || 1, 8));
 
-            const spawned = this.game.botBarn.spawn(requested, difficulty);
+            const asTeammates = args[2]?.toLowerCase() === "team";
+            if (asTeammates && !this.player.group) {
+                this.sendCmdFeedback("No team to join - teammate bots need a duo/squad game", "#ff4444");
+                return;
+            }
+
+            const spawned = this.game.botBarn.spawn(requested, difficulty, asTeammates ? this.player.group : undefined);
 
             if (!spawned.length) {
                 this.sendCmdFeedback(
@@ -322,7 +331,7 @@ export class Chat{
             }
 
             this.sendCmdFeedback(
-                `Spawned ${spawned.length} ${difficulty} bot${spawned.length > 1 ? "s" : ""}: ${spawned
+                `Spawned ${spawned.length} ${difficulty} ${asTeammates ? "teammate " : ""}bot${spawned.length > 1 ? "s" : ""}: ${spawned
                     .map((p) => p.name)
                     .join(", ")}`,
                 "#7ddba6",

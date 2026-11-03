@@ -169,6 +169,7 @@ import {
 } from "../../db/offers";
 import { grantPassItems } from "../../db/passGrants";
 import { buyPremium, grantPremiumPassXp, isPremiumActive } from "../../db/premium";
+import { grantPremiumRewards } from "../../db/premiumRewards";
 import { grantPremiumUnlocks } from "../../db/premiumUnlocks";
 import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
 import {
@@ -653,6 +654,7 @@ UserRouter.post("/premium/buy", async (c) => {
         try {
             await grantPremiumPassXp(user.id);
             await grantPremiumUnlocks(user.id);
+            await grantPremiumRewards(user.id);
         } catch (err) {
             server.logger.error("premium/buy: failed to grant bonus pass XP/unlocks", err);
         }

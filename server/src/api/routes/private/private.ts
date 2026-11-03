@@ -20,6 +20,7 @@ import {
 } from "../../../utils/types";
 import type { Context } from "../..";
 import { server } from "../../apiServer";
+import { scheduleReplayKeepSync } from "../../db/gameModeration";
 import {
     databaseEnabledMiddleware,
     privateMiddleware,
@@ -409,6 +410,7 @@ export const PrivateRouter = new Hono<Context>()
                     .insert(gameModerationTable)
                     .values(flags.map((f) => ({ gameId, userId: f.userId, status: "sus", note: f.note, markedBy: "anticheat" })))
                     .onConflictDoNothing();
+                scheduleReplayKeepSync();
                 server.logger.warn(`Anti-cheat flagged ${flags.length} player(s) in ${gameId}`);
             } catch (err) {
                 server.logger.warn("Failed to save anti-cheat flags:", err);

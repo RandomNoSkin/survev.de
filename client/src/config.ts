@@ -205,6 +205,9 @@ const defaultConfig = {
      *  HudElementConfig) - the "fade everything at once" switch, as opposed to each
      *  element's own opacity slider. */
     hudGlobalOpacity: 1,
+    /** HUD editor grid, px (0 = off): drawn while editing, dragged elements snap their
+     *  top-left corner to it (hold Alt to place freely). */
+    hudGridSize: 0,
     /** Renders the loop via a non-vsync setTimeout(0) instead of PIXI's default
      *  requestAnimationFrame ticker, to exceed the monitor's refresh rate (see
      *  Game#setRenderLoopMode in main.ts). Off by default: rAF/vsync stays the norm. */

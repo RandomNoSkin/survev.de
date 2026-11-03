@@ -671,6 +671,28 @@ body.hud-edit-mode .hud-drag-wrapper.hud-view-hidden {
   flex: 1;
 }
 
+/* HUD editor grid (HudLayoutManager#applyGrid) - only exists while editing with a grid */
+#hud-grid-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: var(--hud-grid, 20px) var(--hud-grid, 20px);
+}
+
+.hud-grid-select {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 13px;
+}
+
 .hud-settings-label {
   flex: 1;
   min-width: 0;
@@ -2019,9 +2041,72 @@ body.hud-preview-mode #hud-preview-backdrop {
   display: inline-block;
   padding: 8px 8px 0px 8px;
   text-align: center;
-  width: 192px;
+  width: 232px;
   margin-top: 4px;
   vertical-align: top;
+}
+
+/* Advanced spectator options: Camera / View / Overlays groups of compact two-column chips */
+#ui-spectate-advanced-list {
+  padding-bottom: 8px;
+}
+
+.spectate-adv-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 6px 2px 4px;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: left;
+}
+
+.spectate-adv-section-links {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: normal;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.spectate-adv-link {
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.spectate-adv-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.spectate-adv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.spectate-adv-subgrid {
+  margin-top: 4px;
+}
+
+#ui-spectate-advanced-list a.spectate-adv-toggle {
+  height: 28px;
+  line-height: 26px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#ui-spectate-advanced-list .spectate-adv-subgrid a.spectate-adv-toggle {
+  height: 24px;
+  line-height: 22px;
+  font-size: 12px;
+  opacity: 0.9;
 }
 
 #ui-spectate-options a.active {
@@ -6474,6 +6559,16 @@ span.ui-stats-header-value {
   background: rgb(112, 112, 110);
 }
 
+/* your team on the battle result (team modes) */
+.ui-stats-row.teammate-player {
+  box-shadow: inset 6px 0 0 #3fa7ff;
+  background: rgba(63, 167, 255, 0.18);
+}
+
+.ui-stats-row.teammate-player.active-player {
+  background: rgba(63, 167, 255, 0.32);
+}
+
 .ui-stats-row.header {
   background: transparent;
   font-weight: bold;
@@ -6573,7 +6668,149 @@ span.ui-stats-header-value {
   }
 
   #ui-stats-options {
-    bottom: 40px; 
+    bottom: 40px;
+  }
+}
+
+/* Battle result: title, header, scrolling rows and the buttons stacked in a column,
+   so the buttons sit below the list instead of floating over the players */
+.ui-stats-table-container {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  max-height: 85vh;
+  padding: 16px 8px;
+  box-sizing: border-box;
+  width: 70%;
+  max-width: 1300px;
+}
+
+.ui-stats-table-container .ui-stats-title {
+  flex: none;
+  margin-bottom: 8px;
+}
+
+.ui-stats-table-container .ui-stats-row {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+/* rows keep their height (it used to come from the wrapped name) */
+.ui-stats-table-container .ui-stats-table-rows .ui-stats-row {
+  min-height: 88px;
+  box-sizing: border-box;
+}
+
+.ui-stats-table-container .ui-stats-row.header {
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.ui-stats-table-container .ui-stats-row.header .ui-stats-col {
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.ui-stats-table-container .ui-stats-col:first-child {
+  margin-left: 0;
+}
+
+/* name gets the room: one line, cut off with … instead of wrapping */
+.ui-stats-table-container .ui-stats-col.name,
+.ui-stats-table-container .ui-stats-col.player-tittle {
+  flex: 3;
+  min-width: 0;
+}
+
+.ui-stats-table-container .ui-stats-col.player-tittle {
+  text-align: left;
+  padding-left: 10px;
+}
+
+.ui-stats-table-container .ui-stats-col.name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 8px 10px;
+}
+
+.ui-stats-table-container .ui-stats-table-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* 4 players visible (88px row + 8px gap), the rest scrolls */
+  max-height: 384px;
+  padding-right: 4px;
+}
+
+.ui-stats-table-container .ui-stats-table-rows::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ui-stats-table-container .ui-stats-table-rows::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.ui-stats-table-container #ui-stats-options {
+  flex: none;
+  position: static;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-height: 0;
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  transform: none;
+}
+
+.ui-stats-table-container #ui-stats-options .menu-option {
+  position: static;
+  transform: none;
+  left: auto;
+  margin: 0;
+  width: 180px;
+}
+
+/* appended last in ui.ts, but it's the main button: keep it on the left as before */
+.ui-stats-table-container #ui-stats-options .ui-stats-restart {
+  order: -1;
+}
+
+@media screen and (max-width: 850px) {
+  .ui-stats-table-container {
+    width: 80%;
+    max-height: 92vh;
+    padding: 10px 4px;
+  }
+
+  .ui-stats-table-container .ui-stats-row {
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+
+  .ui-stats-table-container .ui-stats-table-rows .ui-stats-row {
+    min-height: 64px;
+  }
+
+  .ui-stats-table-container .ui-stats-table-rows {
+    max-height: 288px;
+  }
+
+  .ui-stats-table-container .ui-stats-row.header .ui-stats-col {
+    font-size: 13px;
+  }
+
+  .ui-stats-table-container #ui-stats-options {
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .ui-stats-table-container #ui-stats-options .menu-option {
+    width: 100px;
   }
 }
 

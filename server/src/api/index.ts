@@ -61,6 +61,8 @@ import { PrivateRouter } from "./routes/private/private";
 import { StatsRouter } from "./routes/stats/StatsRouter";
 import { AuthRouter } from "./routes/user/AuthRouter";
 import { UserRouter } from "./routes/user/UserRouter";
+import { grantPremiumFeaturesToActive } from "./db/premiumRewards";
+import { syncReplayKeeps } from "./db/gameModeration";
 
 export type Context = {
     Variables: {
@@ -630,6 +632,23 @@ const sweepBans = () =>
     );
 setTimeout(sweepBans, 15 * 1000);
 setInterval(sweepBans, 5 * 60 * 1000);
+
+// Tells the game hosts which replays are tagged (sus reports etc), so retention keeps
+// them - at start (once regions had time to register) and every 10 minutes.
+const syncKeptReplays = () =>
+    syncReplayKeeps().catch((err) => server.logger.warn("Failed to sync kept replays", err));
+setTimeout(syncKeptReplays, 30 * 1000);
+setInterval(syncKeptReplays, 10 * 60 * 1000);
+
+// Pays accounts with active Premium every per-purchase reward / premium unlock they
+// don't have yet (see premiumRewards.ts) - so a deploy that adds one pays it out.
+setTimeout(() => {
+    grantPremiumFeaturesToActive()
+        .then(({ users, items }) => {
+            if (items > 0) server.logger.info(`Granted ${items} premium items to ${users} premium accounts`);
+        })
+        .catch((err) => server.logger.error("Failed to grant premium features", err));
+}, 20 * 1000);
 
 // One-time backfill of pass item grants for existing accounts (no-op after the
 // first run). Must finish before requests are served so the new grant logic doesn't

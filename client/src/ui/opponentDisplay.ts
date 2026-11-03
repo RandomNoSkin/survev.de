@@ -160,6 +160,8 @@ export class LoadoutDisplay {
             healthDirty: true,
             inventoryDirty: false,
             spectatorCountDirty: false,
+            aimDirty: false,
+            aimLen: 0,
             spectatorCount: 0,
             zoomDirty: false,
             zoom: 0,

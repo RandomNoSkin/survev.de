@@ -1,10 +1,26 @@
 import { Config } from "../../config.ts";
 import type { Game } from "../game.ts";
+import type { Group } from "../group.ts";
 import type { Player } from "../objects/player.ts";
 import { BotBrain } from "./botBrain.ts";
 import type { BotDifficulty } from "./botDefs.ts";
 import { buildNavGraph } from "./nav/navBuilder.ts";
 import type { NavGraph } from "./nav/navGraph.ts";
+
+/** Watchdog: per-tick bot pass cost, sampled over WATCHDOG_SAMPLES ticks... */
+const WATCHDOG_SAMPLES = 100;
+/** ...minus the worst few (a GC pause or a disk hiccup isn't the brains' fault) */
+const WATCHDOG_DROP_WORST = 5;
+/** above this (ms, trimmed average) the think rates are halved, once */
+const SLOW_MS = 3;
+/** above this the brains pause for PAUSE_MS and come back at half the think rate */
+const OVERLOAD_MS = 8;
+const PAUSE_MS = 10_000;
+/** one pass this slow pauses them right away (a 13 s tick froze a comp game once -
+ *  the brains aren't built for BR-scale maps yet) */
+const EMERGENCY_MS = 250;
+/** think rates never drop below this share of the tier's */
+const MIN_THINK_RATE_SCALE = 0.125;
 
 /**
  * Owns every server-side bot in one game: spawning, the per-tick brain pass and the
@@ -17,10 +33,10 @@ export class BotBarn {
     readonly bots: Player[] = [];
 
     /** Rolling self-measurement, in ms, used by the overload watchdog. */
-    private tickCostSum = 0;
-    private tickCostSamples = 0;
-    /** Set once the watchdog gives up, so bots stop thinking but stay in the match. */
-    private disabled = false;
+    private tickCosts: number[] = [];
+    /** performance.now() until which the watchdog paused the brains (bots stay in
+     *  the match, they just stop thinking for a moment) */
+    private pausedUntil = 0;
     private warnedSlow = false;
 
     /** Built lazily on the first spawn, once, for the whole match - see
@@ -42,9 +58,10 @@ export class BotBarn {
 
     /**
      * Spawn up to `count` bots. Returns the players actually created - fewer than
-     * requested when `maxBotsPerGame` is hit.
+     * requested when `maxBotsPerGame` is hit. With `group` they join it (teammates of
+     * whoever is in it), otherwise each gets its own.
      */
-    spawn(count: number, difficulty: BotDifficulty): Player[] {
+    spawn(count: number, difficulty: BotDifficulty, group?: Group): Player[] {
         if (!this.enabled) return [];
 
         this.ensureNavGraph();
@@ -56,7 +73,7 @@ export class BotBarn {
         for (let i = 0; i < toSpawn; i++) {
             let player: Player;
             try {
-                player = this.game.playerBarn.addBotPlayer({ difficulty });
+                player = this.game.playerBarn.addBotPlayer({ difficulty, group });
             } catch (err) {
                 this.game.logger.error("Failed to spawn bot", err);
                 break;
@@ -94,6 +111,7 @@ export class BotBarn {
         if (!this.enabled || !this.bots.length) return;
 
         const started = performance.now();
+        const paused = started < this.pausedUntil;
 
         // Dead bots stay in the match - kill feed, dead bodies, loot drops and rank all
         // have to behave normally - but they stop being driven.
@@ -104,41 +122,56 @@ export class BotBarn {
                 this.bots.splice(i, 1);
                 continue;
             }
-            if (this.disabled) continue;
+            if (paused) continue;
 
             bot.botBrain?.update(dt);
         }
 
-        this.sampleTickCost(performance.now() - started);
+        if (!paused) this.sampleTickCost(performance.now() - started);
     }
 
     /**
-     * Watchdog. Production runs on a 2-core box where one runaway subsystem has taken
-     * the server down before, so the bot pass polices its own cost: first it slows the
-     * brains down, then it switches them off entirely rather than degrade the match for
-     * the humans in it.
+     * Watchdog. One runaway subsystem has taken a server down before, so the bot pass
+     * polices its own cost: when it's slow the brains think less often, when it's
+     * overloaded they pause for a moment and come back thinking even less often -
+     * rather than degrade the match for the humans in it. Judged on the trimmed
+     * average, so a single stall (GC, disk) doesn't count.
      */
     private sampleTickCost(ms: number): void {
-        this.tickCostSum += ms;
-        if (++this.tickCostSamples < 100) return;
+        this.tickCosts.push(ms);
+        if (ms > EMERGENCY_MS) {
+            this.tickCosts = [];
+            this.pause(`one bot pass took ${ms.toFixed(0)}ms`);
+            return;
+        }
+        if (this.tickCosts.length < WATCHDOG_SAMPLES) return;
 
-        const avg = this.tickCostSum / this.tickCostSamples;
-        this.tickCostSum = 0;
-        this.tickCostSamples = 0;
+        const sorted = this.tickCosts.sort((a, b) => a - b).slice(0, -WATCHDOG_DROP_WORST);
+        this.tickCosts = [];
+        const avg = sorted.reduce((a, b) => a + b, 0) / sorted.length;
 
-        if (avg > 4) {
-            this.disabled = true;
-            for (const bot of this.bots) bot.botBrain = undefined;
-            this.game.logger.error(
-                `Bot brains disabled: ${avg.toFixed(2)}ms/tick average exceeds the 4ms budget`,
-            );
-        } else if (avg > 1.5 && !this.warnedSlow) {
+        if (avg > OVERLOAD_MS) {
+            this.pause(`${avg.toFixed(2)}ms/tick exceeds the ${OVERLOAD_MS}ms budget`);
+        } else if (avg > SLOW_MS && !this.warnedSlow) {
             this.warnedSlow = true;
+            this.thinkRateScale = Math.max(MIN_THINK_RATE_SCALE, this.thinkRateScale * 0.5);
             this.game.logger.warn(
                 `Bot thinking is slow (${avg.toFixed(2)}ms/tick), halving think rates`,
             );
-            this.thinkRateScale *= 0.5;
         }
+    }
+
+    private pause(why: string): void {
+        this.pausedUntil = performance.now() + PAUSE_MS;
+        // stand still instead of running / firing on the last inputs while paused
+        for (const bot of this.bots) {
+            bot.moveLeft = bot.moveRight = bot.moveUp = bot.moveDown = false;
+            bot.shootStart = bot.shootHold = false;
+        }
+        this.thinkRateScale = Math.max(MIN_THINK_RATE_SCALE, this.thinkRateScale * 0.5);
+        this.game.logger.error(
+            `Bot brains paused for ${PAUSE_MS / 1000}s: ${why} (think rate now ${this.thinkRateScale * 100}%)`,
+        );
     }
 
     /** Multiplier applied to every tier's `thinkHz`; lowered by the watchdog. Read
