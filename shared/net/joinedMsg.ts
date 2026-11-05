@@ -1,4 +1,4 @@
-import type { TeamMode } from "../gameConfig.ts";
+import { GameMode, type TeamMode } from "../gameConfig.ts";
 import type { AbstractMsg, BitStream } from "./net.ts";
 
 export class JoinedMsg implements AbstractMsg {
@@ -11,6 +11,10 @@ export class JoinedMsg implements AbstractMsg {
     advancedSpectator = false;
     /** Joined as a spectator: the chat offers SPEC (spectators only) and ALL. */
     spectator = false;
+    /** The rules of this match (Gun Game, ...). */
+    gameMode = GameMode.Standard;
+    /** Game types the GameMode needs on the client (Gun Game: the match's weapon ladder). */
+    modeTypes: string[] = [];
 
     serialize(s: BitStream) {
         /* STRIP_FROM_PROD_CLIENT:START */
@@ -24,6 +28,11 @@ export class JoinedMsg implements AbstractMsg {
         s.writeArray(this.emotes, 8, (emote) => {
             s.writeGameType(emote);
         });
+
+        s.writeUint8(this.gameMode);
+        s.writeArray(this.modeTypes, 8, (type) => {
+            s.writeGameType(type);
+        });
         /* STRIP_FROM_PROD_CLIENT:END */
     }
 
@@ -36,6 +45,11 @@ export class JoinedMsg implements AbstractMsg {
         this.spectator = s.readBoolean();
 
         this.emotes = s.readArray(8, () => {
+            return s.readGameType();
+        });
+
+        this.gameMode = s.readUint8();
+        this.modeTypes = s.readArray(8, () => {
             return s.readGameType();
         });
     }

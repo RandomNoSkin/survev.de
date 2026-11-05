@@ -450,6 +450,7 @@ export class PlayerBarn {
             this.game.broadcastMsg(net.MsgType.JoinFeed, joinFeedMsg);
         }
         this.game.pluginManager.emit("playerJoin", player);
+        if (!player.spectator) this.game.rules?.onJoin?.(player);
 
         this.game.updateData();
         player.chat = new Chat(player, player.game, player.isAdmin);
@@ -3609,6 +3610,8 @@ export class Player extends BaseGameObject {
             joinedMsg.advancedSpectator = this.advSpecAllowed;
             this.advSpecAllowedSent = joinedMsg.advancedSpectator;
             joinedMsg.spectator = this.spectator;
+            joinedMsg.gameMode = game.gameMode;
+            joinedMsg.modeTypes = game.rules?.joinedPayload?.() ?? [];
             this.sendMsg(net.MsgType.Joined, joinedMsg);
 
             const mapStream = game.map.mapStream.stream;
@@ -3687,7 +3690,12 @@ export class Player extends BaseGameObject {
         // invisible staff spectators are only ever sent to themselves (other clients
         // don't know them - no player info - and would choke on the object)
         for (const obj of newVisibleObjects) {
-            if (obj.__type === ObjectType.Player && (obj as Player).stealth && obj !== this) {
+            if (
+                obj.__type === ObjectType.Player
+                && obj !== this
+                // ...and players a GameMode hides for now (Gun Game: waiting to respawn)
+                && ((obj as Player).stealth || game.rules?.isHidden?.(obj as Player))
+            ) {
                 newVisibleObjects.delete(obj);
             }
         }
@@ -3903,8 +3911,10 @@ export class Player extends BaseGameObject {
 
         if (playerBarn.killLeaderDirty || this._firstUpdate) {
             updateMsg.killLeaderDirty = true;
-            updateMsg.killLeaderId = playerBarn.killLeader?.__id ?? 0;
-            updateMsg.killLeaderKills = playerBarn.killLeader?.kills ?? 0;
+            // a GameMode can show its own leader + score (Gun Game: highest level)
+            const modeLeader = game.rules?.leader?.();
+            updateMsg.killLeaderId = modeLeader ? modeLeader.player.__id : (playerBarn.killLeader?.__id ?? 0);
+            updateMsg.killLeaderKills = modeLeader ? modeLeader.score : (playerBarn.killLeader?.kills ?? 0);
         }
 
         msgStream.serializeMsg(net.MsgType.Update, updateMsg);
@@ -4059,6 +4069,7 @@ export class Player extends BaseGameObject {
 
     damage(params: DamageParams) {
         if (this.debug.godMode) return;
+        if (this.game.rules?.isProtected?.(this)) return;
         if (this._health < 0) this._health = 0;
         if (this.dead) return;
         if (this.downed && this.downedDamageTicker > 0) return;
@@ -5328,6 +5339,7 @@ export class Player extends BaseGameObject {
         if (this.dead) return;
         if (this.game.map.perkMode && !this.role) return;
         if (this.game.map.arenaMode && !this.role) return;
+        if (this.game.rules?.blocksInput?.(this)) return;
 
         // cheat signals (sus flags only, see antiCheat.ts) - real players only
         if (!this.bot && !this.spectator) {

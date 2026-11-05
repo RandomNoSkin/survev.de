@@ -2,7 +2,7 @@ import type { WebSocket } from "uWebSockets.js";
 import { type ChildProcess, fork } from "child_process";
 import { randomUUID } from "crypto";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
-import type { TeamMode } from "../../../shared/gameConfig";
+import { GameMode, type TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import { util } from "../../../shared/utils/util";
 import { Config } from "../config";
@@ -42,6 +42,7 @@ class GameProcess implements GameData {
     publicSpectating = true;
     creating = false;
     teamMode: TeamMode = 1;
+    gameMode: GameMode = GameMode.Standard;
     mapName = "";
     id = "";
     aliveCount = 0;
@@ -127,6 +128,7 @@ class GameProcess implements GameData {
                     this.isPrivate = msg.isPrivate;
                     this.publicSpectating = msg.publicSpectating;
                     this.teamMode = msg.teamMode;
+                    this.gameMode = msg.gameMode;
                     this.mapName = msg.mapName;
                     if (this.id !== msg.id) {
                         this.manager.processById.delete(this.id);
@@ -221,6 +223,7 @@ class GameProcess implements GameData {
         });
         this.id = id;
         this.teamMode = config.teamMode;
+        this.gameMode = config.gameMode ?? GameMode.Standard;
         this.mapName = config.mapName;
         this.stopped = false;
         this.creating = true;
@@ -533,6 +536,7 @@ export class GameProcessManager implements GameManager {
                     (proc.canJoin || proc.creating) &&
                     proc.avaliableSlots > 0 &&
                     proc.teamMode === body.teamMode &&
+                    proc.gameMode === (body.gameMode ?? GameMode.Standard) &&
                     proc.mapName === body.mapName
                 );
             })
@@ -543,6 +547,7 @@ export class GameProcessManager implements GameManager {
         if (!game) {
             game = this.newGame({
                 teamMode: body.teamMode,
+                gameMode: body.gameMode,
                 mapName: body.mapName as keyof typeof MapDefs,
             });
         }
@@ -616,10 +621,13 @@ export class GameProcessManager implements GameManager {
     async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
         const game = this.newGame({
             teamMode: body.teamMode,
+            gameMode: body.gameMode,
             mapName: body.mapName as keyof typeof MapDefs,
             maxPlayers: body.maxPlayers,
             rulesMapName: body.rulesMapName,
             weaponStats: body.weaponStats,
+            xpEnabled: body.xpEnabled,
+            mapScale: body.mapScale,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
             advancedSettings: body.advancedSettings,

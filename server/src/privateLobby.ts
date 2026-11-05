@@ -11,6 +11,8 @@ import type { CustomLoadoutConfig } from "../../shared/defs/customLoadout";
 import { validateCustomMap } from "../../shared/defs/customMap";
 import { validateWeaponStats, WEAPON_STATS_NAME_MAX_LEN } from "../../shared/defs/weaponStats";
 import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
+import { gunGameMapScale } from "../../shared/defs/gunGameDefs";
+import { GameMode, TeamMode } from "../../shared/gameConfig";
 import type { FindGameError } from "../../shared/types/api";
 import type { RoleTag } from "../../shared/types/user";
 import {
@@ -63,7 +65,7 @@ function sanitizeLoadoutName(loadout: CustomLoadoutConfig): CustomLoadoutConfig 
     return loadout;
 }
 
-class Player {
+export class Player {
     room?: Room;
 
     name = "Player";
@@ -119,6 +121,8 @@ class Player {
     encodedIp: string;
     admin: boolean;
     premium: boolean;
+    /** a site owner (account flag, not the display tag) - for the owner lobby settings */
+    owner: boolean;
     /** The lobby member list's display tag - resolved once at connection time from the
      *  full account row (see PrivateLobbyMenu#onOpen), independent of `admin`/`premium`
      *  above (which stay as-is: they feed FindGamePrivateBody for the actual game join,
@@ -133,9 +137,11 @@ class Player {
         admin = false,
         premium = false,
         roleTag: RoleTag = null,
+        owner = false,
     ) {
         this.admin = admin;
         this.premium = premium;
+        this.owner = owner;
         this.roleTag = roleTag;
         this.encodedIp = hashIp(ip);
         // disconnect if didn't join a room in 5 seconds
@@ -170,7 +176,7 @@ const PENDING_JOIN_TIMEOUT_MS = 4000;
 /** See onMsg; keep in sync with the client check (privateLobby.ts). */
 const MAX_LOBBY_MSG_BYTES = 256 * 1024;
 
-class Room {
+export class Room {
     players: Player[] = [];
     /** Admins watching invisibly: get the state and join matches as invisible spectators,
      *  but aren't members - nobody else sees them, and they can't change anything. */
@@ -599,6 +605,13 @@ class Room {
         this.setProps(pending.props);
     }
 
+    /** Team size / count for the selected mode - solo while Gun Game is on. */
+    private applyModeSize() {
+        const mode = (this.privateLobbyMenu.server.modesByRegion[this.data.region] ?? [])[this.data.gameModeIdx];
+        this.data.teamSize = this.data.gunGame ? TeamMode.Solo : (mode?.teamMode ?? TeamMode.Solo);
+        this.data.teamCount = Math.max(1, Math.floor(this.data.maxPlayers / this.data.teamSize));
+    }
+
     setProps(props: ClientRoomData) {
         const previousGameModeIdx = this.data.gameModeIdx;
 
@@ -621,7 +634,11 @@ class Room {
         this.data.gameModeIdx = gameModeIdx;
 
         const mode = modes[gameModeIdx];
-        const mapDef = MapDefs[mode.mapName as keyof typeof MapDefs] as MapDef;
+        const owner = !!this.leader?.owner;
+        this.data.gunGame = owner && !!props.gunGame;
+        this.data.xpEnabled = owner && typeof props.xpEnabled === "boolean" ? props.xpEnabled : undefined;
+        // Gun Game plays on its own map, everyone for themselves
+        const mapDef = (this.data.gunGame ? MapDefs.gungame : MapDefs[mode.mapName as keyof typeof MapDefs]) as MapDef;
 
         // player limit: the leader may move the mode's capacity, but never below the
         // players already in teams (nobody gets pushed out by it); a mode switch
@@ -641,11 +658,7 @@ class Room {
         this.data.playerLimit = playerLimit;
         this.data.modeMaxPlayers = modeMax;
         this.data.maxPlayers = playerLimit ?? modeMax;
-        this.data.teamSize = mode.teamMode;
-        this.data.teamCount = Math.max(
-            1,
-            Math.floor(this.data.maxPlayers / this.data.teamSize),
-        );
+        this.applyModeSize();
 
         // Arena-mode maps describe a pool of selectable roles (e.g. Sniper/Medic);
         // the leader can narrow that pool down to the ones they want played.
@@ -956,9 +969,14 @@ class Room {
         const customLoadoutEnabled =
             this.data.advancedSettings && this.data.customLoadoutEnabled;
 
+        const gunGame = !!this.data.gunGame && !!this.leader?.owner;
         const res = await this.privateLobbyMenu.server.createPrivateGame({
-            mapName: mode.mapName,
-            teamMode: mode.teamMode,
+            mapName: gunGame ? "gungame" : mode.mapName,
+            teamMode: gunGame ? TeamMode.Solo : mode.teamMode,
+            gameMode: gunGame ? GameMode.GunGame : mode.gameMode,
+            xpEnabled: this.leader?.owner ? this.data.xpEnabled : undefined,
+            // Gun Game: the map grows / shrinks with the player limit
+            mapScale: gunGame ? gunGameMapScale(this.data.maxPlayers) : undefined,
             region,
             version: data.version,
             teams,
@@ -973,8 +991,9 @@ class Room {
                 this.data.advancedSettings && this.data.weaponStatsEnabled && this.leaderHasPremium()
                     ? this.data.weaponStats
                     : undefined,
+            // Gun Game brings its own map
             customMap:
-                this.data.advancedSettings && this.data.customMapEnabled && this.leaderHasPremium()
+                !gunGame && this.data.advancedSettings && this.data.customMapEnabled && this.leaderHasPremium()
                     ? this.data.customMap
                     : undefined,
         });
@@ -1080,6 +1099,14 @@ class Room {
         if (!premium && this.leader) {
             this.data.customMapEnabled = false;
             this.data.weaponStatsEnabled = false;
+        }
+        // owner settings (Gun Game, XP) only while a site owner leads the lobby
+        const owner = !!this.leader?.owner;
+        this.data.leaderOwner = owner;
+        if (!owner && this.leader && (this.data.gunGame || this.data.xpEnabled !== undefined)) {
+            this.data.gunGame = false;
+            this.data.xpEnabled = undefined;
+            this.applyModeSize();
         }
     }
 
@@ -1232,6 +1259,7 @@ export class PrivateLobbyMenu {
                 let userId: string | null = null;
                 let admin = false;
                 let premium = false;
+                let owner = false;
                 let roleTag: RoleTag = null;
                 const sessionId = getCookie(c, "session") ?? null;
 
@@ -1241,12 +1269,14 @@ export class PrivateLobbyMenu {
                         userId = account.user?.id || null;
                         admin = account.user?.admin ?? false;
                         premium = isPremiumActive(account.user?.premiumUntil ?? null);
+                        owner = account.user?.owner ?? false;
                         roleTag = account.user ? resolveRoleTag(account.user) : null;
 
                         if (account.user?.banned) {
                             userId = null;
                             admin = false;
                             premium = false;
+                            owner = false;
                             roleTag = null;
                         }
                     } catch (err) {
@@ -1291,6 +1321,7 @@ export class PrivateLobbyMenu {
                             admin,
                             premium,
                             roleTag,
+                            owner,
                         );
                     },
 
@@ -1335,8 +1366,9 @@ export class PrivateLobbyMenu {
         admin: boolean,
         premium: boolean,
         roleTag: RoleTag = null,
+        owner = false,
     ) {
-        const player = new Player(ws, this, userId, ip, admin, premium, roleTag);
+        const player = new Player(ws, this, userId, ip, admin, premium, roleTag, owner);
         ws.raw!.player = player;
 
         let players = this.playersByIp.get(player.encodedIp);

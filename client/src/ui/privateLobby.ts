@@ -8,6 +8,7 @@ import {
     validateCustomLoadout,
 } from "../../../shared/defs/customLoadout";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
+import { gunGameMapScale } from "../../../shared/defs/gunGameDefs";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import { GameObjectDefs } from "../../../shared/defs/register";
 import { GameConfig } from "../../../shared/gameConfig";
@@ -1501,7 +1502,36 @@ export class PrivateLobbyMenu {
                 },
             ),
         );
-        if (this.roomData.advancedSettings) {
+        // owner settings: only the leader sees them, and only while they're a site owner
+        // (leaderOwner) - other members don't, even in an owner's lobby. The server
+        // enforces it either way.
+        if (this.roomData.leaderOwner && this.isLeader) {
+            wrapper.append(
+                this.renderSettingRow(
+                    "Gun Game (own map, free-for-all)",
+                    !!this.roomData.gunGame,
+                    this.isLeader,
+                    () => {
+                        this.roomData.gunGame = !this.roomData.gunGame;
+                        this.sendMessage("setRoomProps", this.roomData);
+                        this.refreshUi();
+                    },
+                ),
+            );
+            wrapper.append(
+                this.renderSettingRow(
+                    "Matches earn XP",
+                    this.lobbyEarnsXp(),
+                    this.isLeader,
+                    () => {
+                        this.roomData.xpEnabled = !this.lobbyEarnsXp();
+                        this.sendMessage("setRoomProps", this.roomData);
+                        this.refreshUi();
+                    },
+                ),
+            );
+        }
+        if (!this.lobbyEarnsXp()) {
             wrapper.append(
                 $("<div/>", {
                     class: "private-lobby-advanced-settings-warning",
@@ -1512,6 +1542,11 @@ export class PrivateLobbyMenu {
             );
         }
         return wrapper;
+    }
+
+    /** XP: the owner's setting if there is one, else none with Advanced Settings. */
+    lobbyEarnsXp(): boolean {
+        return this.roomData.xpEnabled ?? !this.roomData.advancedSettings;
     }
 
     /** The lobby's settings as a shareable code (see lobbyShareCode.ts). */
@@ -1641,6 +1676,13 @@ export class PrivateLobbyMenu {
             class: "private-lobby-setting-hint",
             text: this.roomData.playerLimit !== undefined ? ` (mode: ${modeMax})` : "",
         }));
+        // Gun Game sizes its map to the player limit
+        if (this.roomData.gunGame) {
+            label.append($("<span/>", {
+                class: "private-lobby-setting-hint",
+                text: ` · map size ${Math.round(gunGameMapScale(value) * 100)}%`,
+            }));
+        }
         row.append(label);
 
         const set = (v: number) => {

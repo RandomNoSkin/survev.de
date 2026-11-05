@@ -306,6 +306,7 @@ export enum MsgType {
     PickupExtra,
     AdvancedSpectatorAllowed,
     TeamInfo,
+    ModeStandings,
 }
 
 export enum PickupMsgType {
@@ -350,6 +351,7 @@ export { PickupExtraMsg } from "./pickupExtraMsg.ts";
 export { AdvancedSpectatorAllowedMsg } from "./advancedSpectatorAllowedMsg.ts";
 export { TEAM_INFO_HEALS, TEAM_INFO_SCOPES, type TeamInfoPlayer, TeamInfoMsg } from "./teamInfoMsg.ts";
 export { MapMsg } from "./mapMsg.ts";
+export { ModeStandingsMsg } from "./modeStandingsMsg.ts";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg.ts";
 export { RoleSelectMsg } from "./roleSelectMsg.ts";
 export { ArenaRolesMsg } from "./arenaRolesMsg.ts";

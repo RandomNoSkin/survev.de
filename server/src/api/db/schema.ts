@@ -18,7 +18,7 @@ import {
     uuid,
 } from "drizzle-orm/pg-core";
 import { table } from "node:console";
-import { TeamMode } from "../../../../shared/gameConfig.ts";
+import { GameMode, TeamMode } from "../../../../shared/gameConfig.ts";
 import type { ImpactBreakdown } from "../../../../shared/impactScore.ts";
 import type { OAuthAppStatus, OAuthScope } from "../../../../shared/types/oauth.ts";
 import { ItemStatus, type Loadout, loadout } from "../../../../shared/utils/loadout.ts";
@@ -382,6 +382,9 @@ export const matchDataTable = pgTable(
             .default([]),
         role: text("role").notNull().default(""),
         teamMode: integer("team_mode").$type<TeamMode>().notNull(),
+        // the rules the match was played by (GameMode): stats that compare players
+        // across maps only count Standard games
+        gameMode: integer("game_mode").$type<GameMode>().notNull().default(GameMode.Standard),
         teamCount: integer("team_count").notNull(),
         teamTotal: integer("team_total").notNull(),
         teamId: integer("team_id").notNull(),

@@ -375,6 +375,15 @@
           <div id="ui-chat-button"></div>
         </div>
         <div id="ui-top-left" class="js-ui-hud-show click-through">
+          <!-- Gun Game: top 3 + the watched player's step (instead of the teammates, there are none) -->
+          <div id="hud-wrap-gunGameLevel" class="js-ui-mobile-map-hidden hud-drag-wrapper">
+            <div id="ui-gungame-level-box" class="ui-bg-standard" style="display: none;">
+              <div class="ui-gungame-title">Gun Game</div>
+              <div id="ui-gungame-top"></div>
+              <div id="ui-gungame-level"></div>
+              <div id="ui-gungame-next"></div>
+            </div>
+          </div>
           <div id="ui-team" class="js-ui-mobile-map-hidden hud-drag-wrapper">
             <div class="ui-team-member ui-bg-standard" data-id="0">
               <div class="ui-team-member-name"></div>
@@ -1011,6 +1020,8 @@
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-1" data-l10n="index-play-duo">Play Duo</a>
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-2" data-l10n="index-play-squad">Play Squad</a>
                 </div>
+                <!-- a 4th mode (e.g. Gun Game), hidden unless the region has one -->
+                <a class="btn-green btn-darken menu-option" id="btn-start-mode-3" data-l10n="index-play-gungame-solo" style="display: none;">Play Gun Game</a>
                 <div class="btns-double-row">
                   <a class="btn-darken menu-option btn-team-option" id="btn-join-team" data-l10n="index-join-team">Join Team</a>
                   <a class="btn-darken menu-option btn-team-option" id="btn-create-team" data-l10n="index-create-team">Create Team</a>

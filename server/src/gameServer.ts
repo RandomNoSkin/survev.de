@@ -7,7 +7,7 @@ import path from "node:path";
 import { App, SSLApp, type WebSocket } from "uWebSockets.js";
 import { version } from "../../package.json";
 import { MapDefs } from "../../shared/defs/mapDefs";
-import { GameConfig, TeamMode } from "../../shared/gameConfig";
+import { GameConfig, GameMode, TeamMode } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { Config } from "./config";
 import { SingleThreadGameManager } from "./game/gameManager";
@@ -84,6 +84,11 @@ function isValidTeamMode(teamMode: number): teamMode is TeamMode {
         .includes(teamMode);
 }
 
+/** Absent = Standard; anything else must be a known GameMode. */
+function isValidGameMode(gameMode: number | undefined): boolean {
+    return gameMode === undefined || Object.values(GameMode).includes(gameMode);
+}
+
 class GameServer {
     readonly logger = new ServerLogger("GameServer");
 
@@ -131,12 +136,18 @@ class GameServer {
             } as any;
         }
 
+        if (!isValidGameMode(data.gameMode)) {
+            this.logger.warn(`/api/find_game: Invalid gameMode: ${data.gameMode}`);
+            return { error: "invalid_team_mode" } as any;
+        }
+
         const gameId = await this.manager.findGame({
             region: data.region,
             version: data.version,
             autoFill: data.autoFill,
             mapName: data.mapName,
             teamMode: data.teamMode,
+            gameMode: data.gameMode,
             playerData: data.playerData,
         });
 
@@ -210,6 +221,7 @@ class GameServer {
                     ? data.mapName
                     : undefined,
             teamMode: data.teamMode,
+            gameMode: isValidGameMode(data.gameMode) ? data.gameMode : undefined,
             teams: data.teams,
             spectators: data.spectators,
             arenaRoles: data.arenaRoles,
@@ -218,6 +230,8 @@ class GameServer {
             customLoadoutEnabled: data.customLoadoutEnabled,
             publicSpectating: data.publicSpectating,
             customMap: data.customMap,
+            xpEnabled: data.xpEnabled,
+            mapScale: data.mapScale,
         });
 
         return {

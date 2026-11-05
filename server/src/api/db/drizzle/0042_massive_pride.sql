@@ -1,0 +1,1 @@
+ALTER TABLE "match_data" ADD COLUMN "game_mode" integer DEFAULT 0 NOT NULL;

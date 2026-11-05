@@ -79,4 +79,5 @@ tests/logs/
 dist-archive/
 server/bot-debug.jsonl
 /server/recordings-bot-test
+/server/recordings-keep.json
 server/bot-debug.old.jsonl

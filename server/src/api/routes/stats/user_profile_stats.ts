@@ -30,6 +30,9 @@ function matchWhere(userId: string, from: number | null, to: number, teamMode?: 
     if (from !== null) conds.push(sql`created_at >= to_timestamp(${from / 1000})`);
     if (teamMode !== undefined) conds.push(sql`team_mode = ${teamMode}`);
     if (mapId !== undefined) conds.push(sql`map_id = ${mapId}`);
+    // across all maps only battle royale games count - a Gun Game's dozens of kills
+    // would skew every average (its own map still shows it when picked)
+    else conds.push(sql`game_mode = 0`);
     return sql.join(conds, sql` AND `);
 }
 

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import NanoTimer from "nanotimer";
 import { platform } from "os";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
+import { GameMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import { Config } from "../config";
 import { gameLogger } from "../utils/betterLogger";
@@ -219,6 +220,7 @@ export class SingleThreadGameManager implements GameManager {
                 return (
                     game.canJoin &&
                     game.teamMode === body.teamMode &&
+                    game.gameMode === (body.gameMode ?? GameMode.Standard) &&
                     game.mapName === body.mapName
                 );
             })
@@ -229,6 +231,7 @@ export class SingleThreadGameManager implements GameManager {
         if (!game) {
             game = await this.newGame({
                 teamMode: body.teamMode,
+                gameMode: body.gameMode,
                 mapName: body.mapName as keyof typeof MapDefs,
             });
         }
@@ -245,10 +248,13 @@ export class SingleThreadGameManager implements GameManager {
     async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
         const game = await this.newGame({
             teamMode: body.teamMode,
+            gameMode: body.gameMode,
             mapName: body.mapName as keyof typeof MapDefs,
             maxPlayers: body.maxPlayers,
             rulesMapName: body.rulesMapName,
             weaponStats: body.weaponStats,
+            xpEnabled: body.xpEnabled,
+            mapScale: body.mapScale,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
             advancedSettings: body.advancedSettings,

@@ -8,6 +8,9 @@ import { device } from "./device.ts";
 import { prefetchKey, takePrefetch } from "./prefetch.ts";
 import type { Localization } from "./ui/localization.ts";
 
+/** Mode buttons in the main menu (#btn-start-mode-0..3). */
+const MODE_BUTTON_COUNT = 4;
+
 export class SiteInfo {
     info = {} as SiteInfoRes;
     loaded = false;
@@ -258,7 +261,7 @@ export class SiteInfo {
         // so refresh them regardless of whether the async site_info has loaded yet.
         this.renderRegionSelection();
         if (this.loaded) {
-            for (let i = 0; i < 3; i++) {
+            for (let i = 0; i < MODE_BUTTON_COUNT; i++) {
                 const btn = $(`#btn-start-mode-${i}`);
                 btn.removeClass("btn-custom-mode-no-indent btn-custom-mode-main");
                 btn.css("background-image", "");
