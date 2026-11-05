@@ -226,6 +226,8 @@ export class MapGrid<T extends GridCollider = GridCollider> {
 export class GameMap {
     game: Game;
 
+    /** Map size factor from the game config (see ServerGameConfig.mapScale). */
+    sizeScale = 1;
     width: number;
     height: number;
     scale: "large" | "small";
@@ -361,8 +363,10 @@ export class GameMap {
         const scale = (this.scale = game.teamMode > TeamMode.Duo ? "large" : "small");
 
         const mapConfig = mapDef.mapGen.map;
-        this.width = mapConfig.baseWidth * mapConfig.scale[scale] + mapConfig.extension;
-        this.height = mapConfig.baseHeight * mapConfig.scale[scale] + mapConfig.extension;
+        // a lobby can size the map (Gun Game: to its player limit); objects follow the area
+        this.sizeScale = game.config.mapScale ?? 1;
+        this.width = mapConfig.baseWidth * mapConfig.scale[scale] * this.sizeScale + mapConfig.extension;
+        this.height = mapConfig.baseHeight * mapConfig.scale[scale] * this.sizeScale + mapConfig.extension;
 
         this.bounds = collider.createAabb(
             v2.create(0, 0),
@@ -980,10 +984,13 @@ export class GameMap {
             });
         }
 
+        // objects scale with the area of a resized map (see sizeScale)
+        const areaScale = this.sizeScale * this.sizeScale;
         for (const randomSpawns of mapGen.randomSpawns) {
             const spawns = [...randomSpawns.spawns];
             let spawnAmount = randomSpawns.choose;
             spawnAmount +=  util.randomInt(0, randomSpawns.chooseMore ?? 0);
+            if (areaScale !== 1) spawnAmount = Math.min(spawns.length, Math.max(1, Math.round(spawnAmount * areaScale)));
             for (let i = 0; i < spawnAmount; i++) {
                 const idx = util.randomInt(0, spawns.length - 1);
                 const type = spawns.splice(idx, 1)[0];
@@ -1004,6 +1011,7 @@ export class GameMap {
                     count = Math.random() < count.odds ? 1 : 0;
                 }
             }
+            if (areaScale !== 1 && count > 1) count = Math.round(count * areaScale);
             const def = MapObjectDefs.typeToDef(type);
 
             if (def.terrain?.bridge || mapGen.importantSpawns.includes(type)) {

@@ -341,6 +341,7 @@ class Room {
         const res = await this.teamMenu.server.findGame({
             mapName: mode.mapName,
             teamMode: mode.teamMode,
+            gameMode: mode.gameMode,
             autoFill: this.data.autoFill,
             region: region,
             version: data.version,

@@ -1,7 +1,7 @@
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
-import { GameConfig, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
+import { GameConfig, GameMode, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { ObjectType } from "../../shared/net/objectSerializeFns";
 import { loadout as loadoutHelper } from "../../shared/utils/loadout";
@@ -1725,6 +1725,7 @@ export class Game {
                 msg.deserialize(stream);
                 this.onJoin();
                 this.teamMode = msg.teamMode;
+                this.m_uiManager.setGunGameLadder(msg.gameMode === GameMode.GunGame ? msg.modeTypes : null);
                 this.m_localId = msg.playerId;
                 this.m_isAdmin = msg.isAdmin;
                 this.chatUi.setSpectator(msg.spectator);
@@ -2233,6 +2234,12 @@ export class Game {
                         assistCountText,
                     );
                 }
+                break;
+            }
+            case net.MsgType.ModeStandings: {
+                const msg = new net.ModeStandingsMsg();
+                msg.deserialize(stream);
+                this.m_uiManager.setModeStandings(msg.entries);
                 break;
             }
             case net.MsgType.TeamInfo: {

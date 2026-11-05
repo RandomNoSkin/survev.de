@@ -15,6 +15,7 @@ import { Desert } from "./maps/desertDefs.ts";
 import { Faction } from "./maps/factionDefs.ts";
 import { factionPotato } from "./maps/factionPotatoDefs.ts";
 import { Halloween } from "./maps/halloweenDefs.ts";
+import { GunGame } from "./maps/gunGameDefs.ts";
 import { Local } from "./maps/localDefs.ts";
 import { MainSpring } from "./maps/mainSpringDefs.ts";
 import { MainSummer } from "./maps/mainSummerDefs.ts";
@@ -69,6 +70,7 @@ const _MapDefs = {
     beach: Beach,
     comp: Comp,
     local: Local,
+    gungame: GunGame,
     scrims: Scrims,
     two_vs_two: TwoVsTwo,
     four_vs_four: FourVsFour,

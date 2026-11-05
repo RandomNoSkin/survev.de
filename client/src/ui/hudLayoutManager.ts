@@ -68,6 +68,7 @@ export const HUD_ELEMENTS: HudElementDef[] = [
     { id: "minimap", wrapperId: "ui-map-wrapper", label: "Minimap", hasClickAction: false },
     { id: "killfeed", wrapperId: "ui-killfeed", label: "Killfeed", hasClickAction: false },
     { id: "killLeader", wrapperId: "hud-wrap-killLeader", label: "Kill Leader Banner", hasClickAction: false },
+    { id: "gunGameLevel", wrapperId: "hud-wrap-gunGameLevel", label: "Gun Game Standings", hasClickAction: false },
     {
         id: "spectatorBar",
         wrapperId: "ui-spectate-options",
@@ -102,12 +103,13 @@ export const HUD_VIEWS: Array<{ id: HudView; label: string }> = [
 ];
 const GAME_ELEMENTS = [
     "healthBar", "boostBar", "weaponSlots", "scopeRow", "lootRow", "ammoCounter", "gearRow", "perkRow",
-    "minimap", "killfeed", "killLeader", "aliveCount", "fpsCounter", "pingCounter", "hpNumeric", "adrenalineNumeric",
+    "minimap", "killfeed", "killLeader", "gunGameLevel", "aliveCount", "fpsCounter", "pingCounter", "hpNumeric",
+    "adrenalineNumeric",
 ];
 const VIEW_ELEMENTS: Record<HudView, string[]> = {
     game: GAME_ELEMENTS,
     team: [...GAME_ELEMENTS, "teamHealthBars"],
-    spectator: ["spectatorBar", "teamHealthBars", "minimap", "killfeed", "killLeader", "aliveCount", "fpsCounter", "pingCounter"],
+    spectator: ["spectatorBar", "teamHealthBars", "minimap", "killfeed", "killLeader", "gunGameLevel", "aliveCount", "fpsCounter", "pingCounter"],
     map: ["teamOverview", "aliveCount", "killfeed"],
 };
 

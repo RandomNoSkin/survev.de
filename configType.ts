@@ -1,5 +1,5 @@
 import type { MapDefKey } from "./shared/defs/mapDefs.ts";
-import type { TeamMode } from "./shared/gameConfig.ts";
+import type { GameMode, TeamMode } from "./shared/gameConfig.ts";
 import type { ProxyDef } from "./shared/types/api.ts";
 import type { DeepPartial } from "./shared/utils/util.ts";
 import type { Vec2 } from "./shared/utils/v2.ts";
@@ -192,6 +192,10 @@ export interface ConfigType {
          * The team mode, "Solo", "Duo" or "Squad" are the only supported values
          */
         teamMode: TeamMode;
+        /**
+         * The rules (Standard battle royale, Gun Game, ...) - see GameMode. Default Standard.
+         */
+        gameMode?: GameMode;
         /**
          * Enables / disables the mode, will apply a "disabled" effect to the button client-side
          */

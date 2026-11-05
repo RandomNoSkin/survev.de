@@ -142,6 +142,17 @@ export class UiManager {
     announcement = $("#ui-announcement");
     killLeaderName = $("#ui-kill-leader-name");
     killLeaderCount = $("#ui-kill-leader-count");
+    /** Gun Game: this match's weapon ladder (null in every other mode) */
+    gunGameLadder: string[] | null = null;
+    gunGameLevel = -1;
+    gunGameBox = $("#ui-gungame-level-box");
+    gunGameLevelText = $("#ui-gungame-level");
+    gunGameNextText = $("#ui-gungame-next");
+    gunGameTop = $("#ui-gungame-top");
+    /** ModeStandingsMsg: everyone's step, best first */
+    modeStandings: Array<{ playerId: number; score: number }> = [];
+    /** the watched player and their place, last drawn (redraw only on change) */
+    gunGameDrawn = "";
     mapContainer = $("#ui-map-container");
     mapContainerBottom = 52;
     mapInfo = $("#ui-map-info");
@@ -809,6 +820,8 @@ export class UiManager {
         factionMode: boolean,
     ) {
         const localPlayer = player;
+
+        if (this.gunGameLadder) this.updateGunGameLevel(player, playerBarn);
 
         if (this.weapsDirty) {
             this.resetWeapSlotStyling();
@@ -2627,7 +2640,61 @@ export class UiManager {
             ? this.localization.translate("game-waiting-for-hunted")
             : this.localization.translate("game-waiting-for-new-leader");
         this.killLeaderName.html(valid ? playerName : waitTxt);
-        this.killLeaderCount.html(valid ? kills : 0);
+        // Gun Game: the leader is the highest step, and the number is that step
+        const count = valid ? kills : 0;
+        this.killLeaderCount.html(this.gunGameLadder ? `Lv ${count}` : String(count));
+    }
+
+    /** Gun Game: the match's weapon ladder (from the JoinedMsg), or null for any other mode. */
+    setGunGameLadder(ladder: string[] | null) {
+        this.gunGameLadder = ladder?.length ? ladder : null;
+        this.gunGameLevel = -1;
+        this.gunGameDrawn = "";
+        this.modeStandings = [];
+        this.gunGameBox.css("display", this.gunGameLadder ? "block" : "none");
+    }
+
+    /** ModeStandingsMsg - redrawn on the next frame. */
+    setModeStandings(entries: Array<{ playerId: number; score: number }>) {
+        this.modeStandings = entries;
+        this.gunGameDrawn = "";
+    }
+
+    /** Top 3 + "Level 4 / 13 · #5" and what the next kill gives. The level is read off
+     *  the weapon the watched player holds (their gun, or the melee on the last step);
+     *  the place comes from the standings. */
+    private updateGunGameLevel(player: Player, playerBarn: PlayerBarn) {
+        const ladder = this.gunGameLadder!;
+        const weapons = player.m_localData.m_weapons;
+        const level = ladder.indexOf(weapons[0]?.type || weapons[2]?.type || "");
+        if (level < 0) return;
+        const place = this.modeStandings.findIndex((e) => e.playerId === player.__id) + 1;
+        // names resolved here, not on arrival: a player who just joined may not be known yet
+        const top = this.modeStandings.slice(0, 3).map((e) => ({
+            ...e,
+            name: playerBarn.getPlayerName(e.playerId, player.__id, true),
+        }));
+        const key = `${player.__id}|${level}|${place}|${top.map((e) => `${e.name}:${e.score}`).join(",")}`;
+        if (key === this.gunGameDrawn) return;
+        this.gunGameDrawn = key;
+        this.gunGameLevel = level;
+
+        this.gunGameTop.empty();
+        top.forEach((e, i) => {
+            this.gunGameTop.append(
+                $("<div/>", { class: `ui-gungame-row${e.playerId === player.__id ? " ui-gungame-row-self" : ""}` }).append(
+                    $("<span/>", { class: "ui-gungame-place", text: `${i + 1}.` }),
+                    $("<span/>", { class: "ui-gungame-name", text: e.name }),
+                    $("<span/>", { class: "ui-gungame-score", text: `Lv ${e.score}` }),
+                ),
+            );
+        });
+
+        const name = (type: string) => (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name ?? type;
+        this.gunGameLevelText.text(`Level ${level + 1} / ${ladder.length}${place ? ` · #${place}` : ""}`);
+        this.gunGameNextText.text(
+            level + 1 < ladder.length ? `Next: ${name(ladder[level + 1])}` : `Win with the ${name(ladder[level])}!`,
+        );
     }
 
     displayMapLarge(clear?: boolean) {

@@ -15,6 +15,7 @@ import {
     DEFAULT_CUSTOM_LOADOUT,
 } from "../../../shared/defs/customLoadout";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
+import { type GunCategory as SharedGunCategory, gunCategory } from "../../../shared/defs/gunCategories";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { skinLabel, weaponSkinBase, weaponVariantLabel } from "../../../shared/defs/weaponStats";
 import { GameConfig, type InventoryItem } from "../../../shared/gameConfig";
@@ -23,7 +24,7 @@ import type { Localization } from "./localization";
 
 type Section = "weapons" | "armor" | "scopes" | "ammo" | "throwables" | "heals" | "perks";
 type WeaponSlot = 0 | 1 | 2;
-type GunCategory = "all" | "rifle" | "smg" | "shotgun" | "sniper" | "pistol" | "special";
+type GunCategory = "all" | SharedGunCategory;
 
 const SECTIONS: { id: Section; label: string }[] = [
     { id: "weapons", label: "Weapons" },
@@ -47,18 +48,6 @@ const GUN_CATEGORIES: { id: GunCategory; label: string }[] = [
 
 const SLOT_LABELS = ["Primary", "Secondary", "Melee"];
 
-/** Buckets guns the way players think about them; gun defs only carry ammo/fire mode. */
-function gunCategory(type: string): GunCategory {
-    const def = GunDefs[type] as GunDef & { pistol?: boolean; isLauncher?: boolean };
-    const ammo = def.ammo as string;
-    if (def.isLauncher || ["flare", "potato_ammo", "bugle_ammo"].includes(ammo)) return "special";
-    if (def.pistol) return "pistol";
-    if (ammo === "12gauge") return "shotgun";
-    if (ammo === "9mm" || ammo === "45acp") {
-        return def.fireMode === "single" && ammo === "45acp" ? "sniper" : "smg";
-    }
-    return def.fireMode === "single" ? "sniper" : "rifle";
-}
 
 function levelOf(type: string) {
     return Number.parseInt((type || "x0").slice(-1), 10) || 0;

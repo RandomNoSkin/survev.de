@@ -309,6 +309,13 @@
       "when": 1793393060022,
       "tag": "0041_wakeful_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1793892895732,
+      "tag": "0042_massive_pride",
+      "breakpoints": true
     }
   ]
 }

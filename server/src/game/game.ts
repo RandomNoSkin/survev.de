@@ -4,7 +4,7 @@ import path from "node:path";
 import { type CustomLoadoutConfig, showsPlayersOnMap } from "../../../shared/defs/customLoadout";
 import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/gameConfig.ts";
-import { DamageType, GameConfig, TeamMode } from "../../../shared/gameConfig";
+import { DamageType, GameConfig, GameMode, TeamMode } from "../../../shared/gameConfig";
 import { computeImpactScore } from "../../../shared/impactScore.ts";
 import * as net from "../../../shared/net/net";
 import type { RoleTag } from "../../../shared/types/user";
@@ -26,6 +26,8 @@ import {
 } from "../utils/types";
 import { BotBarn } from "./bot/botBarn.ts";
 import { GameModeManager } from "./gameModeManager";
+import { createModeRules } from "./modes";
+import type { ModeRules } from "./modes/modeRules";
 import { Grid } from "./grid";
 import { GameMap } from "./map";
 import { AirdropBarn } from "./objects/airdrop";
@@ -88,6 +90,10 @@ export class Game {
     hasEverStarted = false;
     id: string;
     teamMode: TeamMode;
+    /** The rules this match is played by; anything but Standard has `rules`. */
+    gameMode: GameMode;
+    /** The GameMode's rules module (see modes/); undefined = standard battle royale. */
+    rules?: ModeRules;
     mapName: string;
     isTeamMode: boolean;
     /** Isolated match created from a private lobby; excluded from public matchmaking, see `canJoin`. */
@@ -218,6 +224,7 @@ export class Game {
         this.weaponStats = new GameWeaponStats(config.weaponStats);
 
         this.teamMode = config.teamMode;
+        this.gameMode = config.gameMode ?? GameMode.Standard;
         this.mapName = config.mapName;
         this.isTeamMode = this.teamMode !== TeamMode.Solo;
         this.isPrivate = config.isPrivate ?? false;
@@ -257,6 +264,7 @@ export class Game {
         this.recorder = new GameRecorder(this);
 
         this.modeManager = new GameModeManager(this);
+        this.rules = createModeRules(this);
 
         if (this.map.factionMode) {
             for (let i = 1; i <= this.map.mapDef.gameMode.factions!; i++) {
@@ -315,7 +323,7 @@ export class Game {
             this.started = this.modeManager.isGameStarted();
             if (this.started) {
                 this.hasEverStarted = true;
-                this.gas.advanceGasStage();
+                if (!this.rules?.skipsGas) this.gas.advanceGasStage();
                 // custom map airdrops run on their own timer, not on gas circles
                 const airdrops = this.map.customMap?.airdrops;
                 if (airdrops?.mode === "custom") {
@@ -367,8 +375,13 @@ export class Game {
         // Update modules
         //
         this.profiler.addSample("gas");
-        this.gas.update(dt);
+        if (!this.rules?.skipsGas) this.gas.update(dt);
         this.profiler.endSample();
+
+        this.rules?.update?.(dt);
+        // a mode's own end (Gun Game: the winning melee kill, the time limit) isn't a
+        // death, so nothing else would ask - check every tick (cheap, idempotent)
+        if (this.rules?.checkGameEnd) this.checkGameOver();
 
         // Before `players` on purpose: intents written here are consumed by
         // `playerBarn.update` in the same tick, exactly as a real InputMsg that arrived
@@ -1030,11 +1043,18 @@ export class Game {
         }
     }
 
+    /** Whether the match earns XP: what a lobby's owner set (`xpEnabled`), else none
+     *  with Advanced Settings. */
+    get earnsXp(): boolean {
+        return this.config.xpEnabled ?? !this.advancedSettings;
+    }
+
     updateData() {
         this.sendData?.({
             type: ProcessMsgType.UpdateData,
             id: this.id,
             teamMode: this.teamMode,
+            gameMode: this.gameMode,
             mapName: this.mapName,
             canJoin: this.canJoin,
             isPrivate: this.isPrivate,
@@ -1186,7 +1206,8 @@ export class Game {
             {} as Record<string, number>,
         );
 
-        const mapId = this.advancedSettings ? MapId.Custom : this.map.mapId;
+        // no XP = saved as MapId.Custom (see earnsXp)
+        const mapId = this.earnsXp ? this.map.mapId : MapId.Custom;
 
         // Impact score only applies to team modes, and only on maps that opt in
         // (MapDef.gameMode.impactWeight, 0/unset = disabled).
@@ -1236,6 +1257,7 @@ export class Game {
                 // advanced game stats page can show each loadout + its worth.
                 equippedCosmetics: player.equippedCosmetics,
                 teamMode: this.teamMode,
+                gameMode: this.gameMode,
                 teamCount: player.group?.players.length ?? 1,
                 teamTotal: teamTotal,
                 teamId: player.teamId,
@@ -1300,7 +1322,9 @@ export class Game {
                     }),
                 ),
             );
-        const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length
+        // battle royale only: a GameMode deals out weapons itself (Gun Game: a random
+        // ladder with endless ammo), which says nothing about how good a gun is
+        const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length && this.gameMode === GameMode.Standard
             ? { mapId, teamMode: this.teamMode, entries: weaponStatsEntries }
             : undefined;
 

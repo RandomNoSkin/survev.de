@@ -74,6 +74,12 @@ export interface RoomData {
     weaponStatsName?: string;
     /** Server-set: the leader may use the Premium lobby features (custom map, custom weapon stats). */
     leaderPremium?: boolean;
+    /** Server-set: the leader is a site owner - may use the owner settings below. */
+    leaderOwner?: boolean;
+    /** Owner only: play Gun Game (its own map, free-for-all) instead of the selected mode. */
+    gunGame?: boolean;
+    /** Owner only: whether matches earn XP. Undefined = the default (no XP with Advanced Settings). */
+    xpEnabled?: boolean;
 }
 
 //
@@ -233,6 +239,8 @@ export const zClientRoomData = z.object({
     weaponStats: z.any().optional(),
     weaponStatsName: z.string().optional(),
     playerLimit: z.number().optional(),
+    gunGame: z.boolean().optional(),
+    xpEnabled: z.boolean().optional(),
 });
 
 export type ClientRoomData = z.infer<typeof zClientRoomData>;

@@ -1,4 +1,5 @@
 import { and, eq, gte, lt, max, type SQL, sql, sum } from "drizzle-orm";
+import { GameMode } from "../../../../shared/gameConfig.ts";
 import { statsMonth } from "../../../../shared/statsPeriods.ts";
 import {
     ALL_MAPS,
@@ -79,9 +80,10 @@ export async function userStatsSqlQuery(
             .where(
                 and(
                     eq(matchDataTable.userId, userId),
+                    // all maps: battle royale games only (a Gun Game would skew the averages)
                     mapIdFilter !== ALL_MAPS
                         ? eq(matchDataTable.mapId, parseInt(mapIdFilter))
-                        : undefined,
+                        : eq(matchDataTable.gameMode, GameMode.Standard),
                     monthRange
                         ? and(
                               gte(matchDataTable.createdAt, new Date(monthRange.start)),

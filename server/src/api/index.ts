@@ -320,6 +320,7 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
         version: body.version,
         mapName: mode.mapName,
         teamMode: mode.teamMode,
+        gameMode: mode.gameMode,
         autoFill: true,
         playerData: [
             {

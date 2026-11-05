@@ -72,6 +72,7 @@ export class Application {
     playMode0Btn = $("#btn-start-mode-0");
     playMode1Btn = $("#btn-start-mode-1");
     playMode2Btn = $("#btn-start-mode-2");
+    playMode3Btn = $("#btn-start-mode-3");
     spectatorModeBtn = $("#btn-spectator-menu");
     muteBtns = $(".btn-sound-toggle");
     aimLineBtn = $("#btn-game-aim-line");
@@ -343,6 +344,11 @@ export class Application {
             this.playMode2Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
                     this.tryQuickStartGame(2);
+                });
+            });
+            this.playMode3Btn.on("click", () => {
+                SDK.requestMidGameAd(() => {
+                    this.tryQuickStartGame(3);
                 });
             });
             this.spectatorModeBtn.on("click", () => {
@@ -712,7 +718,7 @@ export class Application {
         if (!loggedIn || Object.keys(activeBoosts).length === 0) return;
 
         const modes = this.siteInfo.getModesForSelectedRegion();
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
             const mode = modes[i];
             if (!mode?.enabled || !(mode.mapName in activeBoosts)) continue;
             const activeBoost = activeBoosts[mode.mapName];
@@ -1020,16 +1026,20 @@ export class Application {
         this.serverWarning.html(this.errorMessage);
 
         const updateButton = (ele: JQuery<HTMLElement>, gameModeIdx: number) => {
+            // a mode button the region doesn't use (yet) has no l10n key
+            const l10n = ele.data("l10n");
+            if (this.quickPlayPendingModeIdx !== gameModeIdx && !l10n) return;
             ele.html(
                 this.quickPlayPendingModeIdx === gameModeIdx
                     ? '<div class="ui-spinner"></div>'
-                    : this.localization.translate(ele.data("l10n")),
+                    : this.localization.translate(l10n),
             );
         };
 
         updateButton(this.playMode0Btn, 0);
         updateButton(this.playMode1Btn, 1);
         updateButton(this.playMode2Btn, 2);
+        updateButton(this.playMode3Btn, 3);
     }
 
     private menuAssetsRequested = false;

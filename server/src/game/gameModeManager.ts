@@ -10,7 +10,8 @@ import type { Game } from "./game";
 import type { DamageParams } from "./objects/gameObject";
 import { Player } from "./objects/player";
 
-enum GameMode {
+/** How players are grouped (not the rules - that's Game.gameMode / Game.rules). */
+enum TeamLayout {
     /** default solos, any map besides factions */
     Solo,
     /** default duos or squads, any map besides factions */
@@ -21,7 +22,7 @@ enum GameMode {
 
 export class GameModeManager {
     readonly game: Game;
-    readonly mode: GameMode;
+    readonly mode: TeamLayout;
     readonly isSolo: boolean;
 
     constructor(game: Game) {
@@ -33,16 +34,16 @@ export class GameModeManager {
             game.map.factionMode,
         ].findIndex((isMode) => isMode);
 
-        this.isSolo = this.mode === GameMode.Solo;
+        this.isSolo = this.mode === TeamLayout.Solo;
     }
 
     aliveCount(): number {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return this.game.playerBarn.livingPlayers.length;
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return this.game.playerBarn.getAliveGroups().length;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 return this.game.playerBarn.getAliveTeams().length;
         }
     }
@@ -51,14 +52,14 @@ export class GameModeManager {
     // instead it will await 10 seconds for the second player to not be able to despawn before starting
     cantDespawnAliveCount(): number {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return this.game.playerBarn.livingPlayers.filter((p) => !p.canDespawn())
                     .length;
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return this.game.playerBarn.getAliveGroups().filter((group) => {
                     return group.players.filter((p) => !p.canDespawn()).length > 0;
                 }).length;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 return this.game.playerBarn.getAliveTeams().filter((team) => {
                     return team.players.filter((p) => !p.canDespawn()).length;
                 }).length;
@@ -70,8 +71,18 @@ export class GameModeManager {
         // invisible staff spectators get no entry at all (not ranked, not saved)
         const players = this.game.playerBarn.players.filter((p) => !p.stealth);
 
+        // a GameMode with its own standings (e.g. Gun Game: by level) ranks them itself
+        const ranking = this.game.rules?.ranking?.();
+        if (ranking) {
+            const ranked = ranking.map((player, idx) => ({ player, rank: idx + 1 }));
+            for (const player of players) {
+                if (player.spectator) ranked.push({ player, rank: 999 });
+            }
+            return ranked;
+        }
+
         switch (this.mode) {
-            case GameMode.Solo: {
+            case TeamLayout.Solo: {
                 // Rank only real participants. Spectators must NOT take up a rank slot:
                 // a mid-game spectator has killedIndex = Infinity, so it sorts to the
                 // front (next to the winner) and would shift every dead player's
@@ -86,12 +97,12 @@ export class GameModeManager {
                 }
                 return ranked;
             }
-            case GameMode.Team:
-            case GameMode.Faction: {
+            case TeamLayout.Team:
+            case TeamLayout.Faction: {
                 // the logic is basically the exact same for both
                 // just uses team instead of group on faction...
 
-                const key = this.mode === GameMode.Faction ? "teams" : "groups";
+                const key = this.mode === TeamLayout.Faction ? "teams" : "groups";
 
                 // calculate each group killed index
                 // by basing it on the last player to die killed index
@@ -146,13 +157,17 @@ export class GameModeManager {
      * yet, "#?" on the client), or 1 once they're the last one left.
      */
     currentRanks(): Map<Player, number> {
+        // modes with their own standings: those ARE the current ranks (nobody's out)
+        if (this.game.rules?.ranking) {
+            return new Map(this.getPlayersSortedByRank().map(({ player, rank }) => [player, rank]));
+        }
         const stillIn = (p: Player) => {
             switch (this.mode) {
-                case GameMode.Solo:
+                case TeamLayout.Solo:
                     return !p.dead;
-                case GameMode.Team:
+                case TeamLayout.Team:
                     return !!p.group && p.group.livingPlayers.length > 0;
-                case GameMode.Faction:
+                case TeamLayout.Faction:
                     return !!p.team && p.team.livingPlayers.length > 0;
             }
         };
@@ -166,10 +181,11 @@ export class GameModeManager {
 
     /** true if game needs to end */
     handleGameEnd(): boolean {
+        if (this.game.rules?.checkGameEnd) return this.game.rules.checkGameEnd();
         if (!this.game.started || this.aliveCount() > 1) return false;
         if (this.aliveCount() === 0) return true;
         switch (this.mode) {
-            case GameMode.Solo: {
+            case TeamLayout.Solo: {
                 const winner = this.game.playerBarn.livingPlayers[0];
                 winner.rank = 1;
                 winner.addGameOverMsg(winner.teamId);
@@ -179,7 +195,7 @@ export class GameModeManager {
                 this.sendSpectatorsGameOver(winner.teamId);
                 return true;
             }
-            case GameMode.Team: {
+            case TeamLayout.Team: {
                 const winner = this.game.playerBarn.getAliveGroups()[0];
                 for (const player of winner.players) {
                     player.rank = 1;
@@ -193,7 +209,7 @@ export class GameModeManager {
                 this.sendSpectatorsGameOver(winner.id);
                 return true;
             }
-            case GameMode.Faction: {
+            case TeamLayout.Faction: {
                 const winner = this.game.playerBarn.getAliveTeams()[0];
                 for (const player of winner.livingPlayers) {
                     player.rank = 1;
@@ -212,7 +228,7 @@ export class GameModeManager {
      * spectating and then disconnect to the menu when the game stops — instead of
      * showing the end-of-match stats screen.
      */
-    private sendSpectatorsGameOver(winningId: number): void {
+    sendSpectatorsGameOver(winningId: number): void {
         for (const spec of this.game.playerBarn.players.filter((p) => p.spectator)) {
             spec.addGameOverMsg(winningId);
         }
@@ -225,11 +241,11 @@ export class GameModeManager {
 
     updateAliveCounts(aliveCounts: number[]): void {
         switch (this.mode) {
-            case GameMode.Solo:
-            case GameMode.Team:
+            case TeamLayout.Solo:
+            case TeamLayout.Team:
                 aliveCounts.push(this.game.aliveCount);
                 break;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 const numFactions = this.game.map.mapDef.gameMode.factions!;
                 for (let i = 0; i < numFactions; i++) {
                     aliveCounts.push(this.game.playerBarn.teams[i].livingPlayers.length);
@@ -247,33 +263,33 @@ export class GameModeManager {
      */
     getAlivePlayersContext(): Player[][] {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return [this.game.playerBarn.livingPlayers];
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return this.game.playerBarn.groups.map((g) => g.livingPlayers);
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 return this.game.playerBarn.teams.map((t) => t.livingPlayers);
         }
     }
 
     getPlayerStatusPlayers(player: Player): Player[] {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return [];
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return player.group!.players;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 return this.game.playerBarn.players;
         }
     }
 
     getPlayerAlivePlayersContext(player: Player): Player[] {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return !player.dead ? [player] : [];
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return player.group!.livingPlayers;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 return player.team!.livingPlayers;
         }
     }
@@ -305,22 +321,22 @@ export class GameModeManager {
 
     showStatsMsg(player: Player): boolean {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return false;
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return !player.group!.allDeadOrDisconnected && this.aliveCount() > 1;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 return this.aliveCount() > 1;
         }
     }
 
     getGameoverPlayers(player: Player): Player[] {
         switch (this.mode) {
-            case GameMode.Solo:
+            case TeamLayout.Solo:
                 return [player];
-            case GameMode.Team:
+            case TeamLayout.Team:
                 return player.group!.players;
-            case GameMode.Faction:
+            case TeamLayout.Faction:
                 const redLeader = this.game.playerBarn.teams[TeamColor.Red - 1].leader;
                 const blueLeader = this.game.playerBarn.teams[TeamColor.Blue - 1].leader;
                 const highestKiller = this.game.playerBarn.players.filter((p) => !p.stealth).reduce(
@@ -378,6 +394,8 @@ export class GameModeManager {
     }
 
     handlePlayerDeath(player: Player, params: DamageParams): void {
+        // a GameMode may replace the death (Gun Game: respawn)
+        if (this.game.rules?.handleDeath?.(player, params)) return;
         if (this.isSolo) {
             if(params.source === player && player.lastDamagedBy != undefined){
                 params.killCreditSource = player.lastDamagedBy;
@@ -385,7 +403,7 @@ export class GameModeManager {
             }
             player.kill(params);
         } else {
-            const group = this.mode === GameMode.Faction ? player.team! : player.group!;
+            const group = this.mode === TeamLayout.Faction ? player.team! : player.group!;
 
             const playerSource =
                 params.source?.__type === ObjectType.Player

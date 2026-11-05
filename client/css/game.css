@@ -2325,6 +2325,65 @@ body.hud-preview-mode #hud-preview-backdrop {
   font-size: 24px;
 }
 
+/* Gun Game: top 3 + the watched player's step, top left where teammates would be
+   (UiManager#updateGunGameLevel) */
+#ui-gungame-level-box {
+  color: white;
+  width: 220px;
+  padding: 6px 10px;
+  border-radius: 5px;
+}
+
+.ui-gungame-title {
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 4px;
+}
+
+.ui-gungame-row {
+  display: flex;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.ui-gungame-row-self {
+  color: #ffe11a;
+}
+
+.ui-gungame-place {
+  width: 18px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.ui-gungame-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-gungame-score {
+  font-weight: bold;
+}
+
+#ui-gungame-level {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+#ui-gungame-next {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
 #ui-kill-leader-icon {
   background-color: rgba(0, 0, 0, 0.4);
   background-image: url(/img/gui/crosshair.svg);

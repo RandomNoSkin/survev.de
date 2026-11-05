@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
-import { TeamMode } from "../../../shared/gameConfig";
+import { type GameMode, TeamMode } from "../../../shared/gameConfig";
 import type { FindGameError } from "../../../shared/types/api";
 import { PRIVATE_LOBBY_PLAYER_LIMIT_MAX, zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
 import { type CustomMapConfig, validateCustomMap } from "../../../shared/defs/customMap";
@@ -95,6 +95,8 @@ export interface SaveGameBody {
 export interface ServerGameConfig {
     readonly mapName: keyof typeof MapDefs;
     readonly teamMode: TeamMode;
+    /** The rules (Gun Game, ...); default Standard (see GameMode, server/src/game/modes). */
+    readonly gameMode?: GameMode;
     /** Isolated match created from a private lobby: hidden from public matchmaking (see `Game.canJoin`). */
     readonly isPrivate?: boolean;
     /** Arena-mode role pool the private lobby leader narrowed down to; restricts `Game.arenaRoles` when set. */
@@ -116,11 +118,18 @@ export interface ServerGameConfig {
     readonly rulesMapName?: string;
     /** Private lobbies: weapon stat changes (Advanced Settings). */
     readonly weaponStats?: WeaponStats;
+    /** Private lobbies (owner setting): whether the match earns XP; undefined = no XP
+     *  with Advanced Settings, XP otherwise. */
+    readonly xpEnabled?: boolean;
+    /** Map size factor (side length; the map's objects scale with the area). Default 1.
+     *  Gun Game lobbies size their map to the player limit. */
+    readonly mapScale?: number;
 }
 
 export interface GameData {
     id: string;
     teamMode: TeamMode;
+    gameMode: GameMode;
     mapName: string;
     canJoin: boolean;
     /** Isolated match created from a private lobby; joined via tokens, not public matchmaking (see `canJoin`). */
@@ -146,6 +155,8 @@ export const zFindGamePrivateBody = z.object({
     autoFill: z.boolean(),
     mapName: z.string(),
     teamMode: z.number(),
+    /** GameMode; absent = Standard */
+    gameMode: z.number().int().min(0).max(255).optional(),
     playerData: z.array(
         z.object({
             token: z.string(),
@@ -184,6 +195,8 @@ export const zFindPrivateLobbyGameBody = z.object({
     version: z.number(),
     mapName: z.string(),
     teamMode: z.number(),
+    /** GameMode; absent = Standard */
+    gameMode: z.number().int().min(0).max(255).optional(),
     teams: z.array(z.array(zPrivateLobbyPlayerData)),
     /** Spectators joining the lobby — each gets its own join token so the game server can authenticate them. */
     spectators: z.array(zPrivateLobbyPlayerData).optional(),
@@ -207,6 +220,10 @@ export const zFindPrivateLobbyGameBody = z.object({
     rulesMapName: z.string().optional(),
     /** Mirrors `RoomData.weaponStats` when enabled; clamped by validateWeaponStats. */
     weaponStats: z.any().optional().transform((v) => (v ? validateWeaponStats(v) : undefined)),
+    /** Mirrors `RoomData.xpEnabled` (owner setting). */
+    xpEnabled: z.boolean().optional(),
+    /** Map size factor (Gun Game lobbies: from the player limit). */
+    mapScale: z.number().min(0.5).max(2).optional(),
 });
 
 export type FindPrivateLobbyGameBody = z.infer<typeof zFindPrivateLobbyGameBody>;

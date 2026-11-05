@@ -191,6 +191,7 @@ export enum MapId {
     CompSolo = 15,
     Local = 16,
     Custom = 17,
+    GunGame = 18,
 }
 
 export enum Plane {
@@ -222,6 +223,16 @@ export enum TeamMode {
     Squad = 4,
 }
 
+/**
+ * The rules a match is played by, independent of the team size (`TeamMode`): Standard
+ * is the normal battle royale; the others are run by a ModeRules module on the server
+ * (see server/src/game/modes/). Sent as a uint8.
+ */
+export enum GameMode {
+    Standard = 0,
+    GunGame = 1,
+}
+
 export enum FactionTeam {
     Red = 1,
     Blue = 2,
@@ -232,7 +243,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1042,
+    protocolVersion: 1043,
     Action,
     Anim,
     DamageType,
@@ -248,6 +259,11 @@ export const GameConfig = {
         [TeamMode.Solo]: "solo",
         [TeamMode.Duo]: "duo",
         [TeamMode.Squad]: "squad",
+    },
+    GameMode,
+    GameModeToString: {
+        [GameMode.Standard]: "standard",
+        [GameMode.GunGame]: "gungame",
     },
     FactionTeam,
     WeaponSlot,
