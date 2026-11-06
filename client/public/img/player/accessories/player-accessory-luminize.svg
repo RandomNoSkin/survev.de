@@ -1,0 +1,63 @@
+<svg width="142" height="166" viewBox="0 0 142 166" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wingBladeTopLum" x1="55" y1="70" x2="85" y2="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#EBE3FA"/>
+      <stop offset="0.8" stop-color="#C5AAFA"/>
+      <stop offset="1" stop-color="#84FFFF"/>
+    </linearGradient>
+    <linearGradient id="wingBladeBotLum" x1="55" y1="96" x2="85" y2="162" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#EBE3FA"/>
+      <stop offset="0.8" stop-color="#C5AAFA"/>
+      <stop offset="1" stop-color="#84FFFF"/>
+    </linearGradient>
+    <clipPath id="hairClipLum">
+      <path d="M38 83 C38 52, 54 36, 78 38 C90 39, 100 48, 104 60 C98 56, 88 56, 82 60 C92 64, 100 73, 102 83 C100 93, 92 102, 82 106 C88 110, 98 110, 104 106 C100 118, 90 127, 78 128 C54 130, 38 114, 38 83 Z"/>
+    </clipPath>
+  </defs>
+
+  <path d="M68 70 C76 52, 88 36, 102 24 C94 20, 82 27, 72 40 C64 50, 62 62, 68 70 Z" fill="#F7F5FD" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M60 66 C68 44, 82 22, 98 8 C88 6, 74 15, 64 32 C54 44, 54 58, 60 66 Z" fill="#F7F5FD" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M50 62 C58 36, 72 14, 90 2 C76 4, 60 17, 48 38 C40 52, 42 62, 50 62 Z" fill="url(#wingBladeTopLum)" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+  <path d="M66 74 C54 68, 44 56, 42 42 C42 32, 48 24, 58 18 C52 30, 54 44, 64 54 C68 58, 72 62, 76 66 Z" fill="#E4E8F4" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+  <path d="M68 96 C76 114, 88 130, 102 142 C94 146, 82 139, 72 126 C64 116, 62 104, 68 96 Z" fill="#F7F5FD" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M60 100 C68 122, 82 144, 98 158 C88 160, 74 151, 64 134 C54 122, 54 108, 60 100 Z" fill="#F7F5FD" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M50 104 C58 130, 72 152, 90 164 C76 162, 60 149, 48 128 C40 114, 42 104, 50 104 Z" fill="url(#wingBladeBotLum)" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+  <path d="M66 92 C54 98, 44 110, 42 124 C42 134, 48 142, 58 148 C52 136, 54 122, 64 112 C68 108, 72 104, 76 100 Z" fill="#E4E8F4" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+
+  <path d="M38 83 C38 52, 54 36, 78 38 C90 39, 100 48, 104 60 C98 56, 88 56, 82 60 C92 64, 100 73, 102 83 C100 93, 92 102, 82 106 C88 110, 98 110, 104 106 C100 118, 90 127, 78 128 C54 130, 38 114, 38 83 Z" fill="#F07896"/>
+  <path d="M20 20 H58 C48 50 48 116 58 146 H20 Z" fill="#D35A7B" clip-path="url(#hairClipLum)"/>
+  <path d="M46 64 C54 52, 68 47, 82 50" stroke="#FFBDCE" stroke-width="3" stroke-linecap="round"/>
+  <path d="M46 102 C54 114, 68 119, 82 116" stroke="#FFBDCE" stroke-width="3" stroke-linecap="round"/>
+  <path d="M38 83 C38 52, 54 36, 78 38 C90 39, 100 48, 104 60 C98 56, 88 56, 82 60 C92 64, 100 73, 102 83 C100 93, 92 102, 82 106 C88 110, 98 110, 104 106 C100 118, 90 127, 78 128 C54 130, 38 114, 38 83 Z" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+
+  <g transform="translate(68, 83) rotate(180) translate(-68, -83)">
+    <path d="M52 50 C48 42, 55 35, 62 38 C66 33, 73 36, 75 42 C79 39, 85 45, 81 52 Z" fill="#FFFFFF" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M52 116 C48 124, 55 131, 62 128 C66 133, 73 130, 75 124 C79 127, 85 121, 81 114 Z" fill="#FFFFFF" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+
+    <polygon points="74,77 96,48 103,66 84,81" fill="#5E6EB2" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M80 72 L97 53 M83 76 L100 60" stroke="#3F4C8A" stroke-width="1.8"/>
+    <polygon points="74,89 96,118 103,100 84,85" fill="#5E6EB2" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M80 94 L97 113 M83 90 L100 106" stroke="#3F4C8A" stroke-width="1.8"/>
+
+    <polygon points="60,79 84,42 93,62 70,82" fill="#8C9CE2" stroke="black" stroke-width="3.2" stroke-linejoin="round"/>
+    <circle cx="87" cy="58" r="2.4" fill="#FFFFFF" stroke="black" stroke-width="1.4"/>
+    <polygon points="60,87 84,124 93,104 70,84" fill="#8C9CE2" stroke="black" stroke-width="3.2" stroke-linejoin="round"/>
+    <circle cx="87" cy="108" r="2.4" fill="#FFFFFF" stroke="black" stroke-width="1.4"/>
+
+    <path d="M58 79 C46 67, 40 44, 52 36 C62 30, 75 42, 73 58 C71 68, 65 76, 58 79 Z" fill="#8C9CE2" stroke="black" stroke-width="3.6" stroke-linejoin="round"/>
+    <path d="M58 87 C46 99, 40 122, 52 130 C62 136, 75 124, 73 108 C71 98, 65 90, 58 87 Z" fill="#8C9CE2" stroke="black" stroke-width="3.6" stroke-linejoin="round"/>
+
+    <path d="M56 74 C49 61, 48 48, 54 41" stroke="#DCE5FF" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M60 75 C57 63, 59 50, 66 45" stroke="#5262A8" stroke-width="2" stroke-linecap="round"/>
+    <path d="M56 92 C49 105, 48 118, 54 125" stroke="#DCE5FF" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M60 91 C57 103, 59 116, 66 121" stroke="#5262A8" stroke-width="2" stroke-linecap="round"/>
+
+    <path d="M66 83 C59 76, 48 70, 48 77 C48 80, 51 82, 54 83 C51 84, 48 86, 48 89 C48 96, 59 90, 66 83 Z" fill="#E4E8F4" stroke="black" stroke-width="2.8" stroke-linejoin="round"/>
+    <circle cx="56" cy="83" r="5.2" fill="#F6EFE4" stroke="black" stroke-width="2.2"/>
+    <circle cx="57.5" cy="84.5" r="1.6" fill="#FFFFFF"/>
+
+    <polygon points="66,83 73,80.5 76,74 79,80.5 86,83 79,85.5 76,92 73,85.5" fill="#FFFFFF" stroke="black" stroke-width="2.2" stroke-linejoin="round"/>
+  </g>
+</svg>

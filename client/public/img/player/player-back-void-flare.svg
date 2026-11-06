@@ -1,0 +1,41 @@
+<svg width="149" height="149" viewBox="0 0 149 149" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="packAccentEcl" x1="28" y1="30" x2="120" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF3360"/>
+      <stop offset="0.5" stop-color="#B81442"/>
+      <stop offset="1" stop-color="#55123A"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M74.9126 140.744C111.639 140.744 141.415 110.971 141.417 74.2441C141.42 37.5172 111.649 7.74414 74.9219 7.74414C38.1949 7.74414 8.41979 37.5172 8.41722 74.2441C8.41465 110.971 38.1856 140.744 74.9126 140.744Z" fill="#1B1726"/>
+
+  <path d="M132.925 78.1581C134.873 45.911 110.311 18.188 78.0643 16.2371C45.8173 14.2863 18.0962 38.8463 16.1476 71.0935C14.199 103.341 38.7608 131.064 71.0078 133.015C103.255 134.965 130.976 110.405 132.925 78.1581Z" stroke="url(#packAccentEcl)" stroke-width="5"/>
+
+  <g transform="translate(37.19 97.82) rotate(148)">
+    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(32.2 86.63) rotate(164)">
+    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(30.5 74.5) rotate(180)">
+    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(32.2 62.37) rotate(196)">
+    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(37.19 51.18) rotate(212)">
+    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
+  </g>
+
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M13.5471 74.6083C13.5471 108.294 40.8525 135.598 74.5273 135.601C108.202 135.604 135.508 108.305 135.508 74.6185C135.508 40.9324 108.202 13.6288 74.5273 13.626C40.8525 13.6232 13.5471 40.9223 13.5471 74.6083ZM74.5273 146.613C34.7592 146.61 2.52734 114.368 2.52734 74.6074C2.52734 34.8466 34.7592 2.61011 74.5273 2.61343C114.296 2.61674 146.527 34.8586 146.527 74.6194C146.527 114.38 114.296 146.617 74.5273 146.613Z" fill="black"/>
+</svg>
