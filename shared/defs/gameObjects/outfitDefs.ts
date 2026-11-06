@@ -3023,6 +3023,52 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 9065728,
         },
     }),
+    outfitLuminize: defineOutfitSkin("outfitBase", {
+        name: "Luminize",
+        noDropOnDeath: true,
+        rarity: Rarity.Mythic,
+        lore: "Wings of pearl and light.",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-luminize.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-luminize.img",
+            footTint: 0xd9d3ee,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-back-luminize.img",
+            frontSpritePos: { x: -7, y: 0 },
+            frontSprite: "player-accessory-luminize.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xb9aef8,
+        },
+    }),
+
+    outfitVoidFlare: defineOutfitSkin("outfitBase", {
+        name: "Void Flare",
+        noDropOnDeath: true,
+        rarity: Rarity.Mythic,
+        lore: "Wings of crimson night.",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-void-flare.img",
+            handTint: 0xffffff,
+            handSprite: "player-hands-void-flare.img",
+            footTint: 0x22212a,
+            footSprite: "player-feet-01.img",
+            backpackTint: 0xffffff,
+            backpackSprite: "player-back-void-flare.img",
+            frontSpritePos: { x: -7, y: 0 },
+            frontSprite: "player-accessory-void-flare.img",
+            chestInnerOutline: [3, 4],
+        },
+        lootImg: {
+            sprite: "loot-shirt-outfitBase.img",
+            tint: 0xf03a62,
+        },
+    }),
 };
 
 export const OutfitDefs = { ...BaseDefs, ...SkinDefs };

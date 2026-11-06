@@ -1,0 +1,20 @@
+<svg width="134" height="134" viewBox="0 0 134 134" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="bodyClipLum">
+      <circle cx="67" cy="67" r="66.5"/>
+    </clipPath>
+  </defs>
+
+  <circle cx="67" cy="67" r="66.5" fill="#F2EEFC"/>
+
+  <g clip-path="url(#bodyClipLum)">
+    <path d="M52 2 C76 1, 102 12, 116 32 C102 36, 80 34, 60 25 Z" fill="#E2E6F2" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M52 132 C76 133, 102 122, 116 102 C102 98, 80 100, 60 109 Z" fill="#E2E6F2" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M72 10 C86 12, 98 18, 104 26 L94 27 C86 21, 78 18, 68 16 Z" fill="#84FFFF" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M72 124 C86 122, 98 116, 104 108 L94 107 C86 113, 78 116, 68 118 Z" fill="#84FFFF" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+
+    <path d="M84 36 C104 40, 118 51, 126 67 C118 83, 104 94, 84 98 C92 82, 92 52, 84 36 Z" fill="#E4DEF5" stroke="black" stroke-width="3" stroke-linejoin="round"/>
+    <polygon points="100,67 110,58 121,67 110,76" fill="#84FFFF" stroke="black" stroke-width="2.4" stroke-linejoin="round"/>
+    <circle cx="110.5" cy="67" r="2.4" fill="#FFFFFF"/>
+  </g>
+</svg>
