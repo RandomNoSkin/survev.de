@@ -40,6 +40,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             { mapName: "local", teamMode: TeamMode.Solo, enabled: true },
             { mapName: "two_vs_two", teamMode: TeamMode.Duo, enabled: true },
             { mapName: "comp", teamMode: TeamMode.Squad, enabled: true },
+            //{ mapName: "gungame", teamMode: 1, gameMode: 1, enabled: true },
         ],
         clientTheme: "main",
         passType: "pass_survivr1",

@@ -1598,7 +1598,10 @@ export class Game {
         if (msg.activePlayerData.weapsDirty) {
             this.m_uiManager.weapsDirty = true;
         }
-        if (this.m_spectating) {
+        // Gun Game: watching the killer until the respawn (~2 s) is no real spectating -
+        // keep the normal HUD instead of opening the spectate menu
+        const gunGameKillCam = !!this.m_uiManager.gunGameLadder && !this.m_replayMode;
+        if (this.m_spectating && !gunGameKillCam) {
             this.m_uiManager.setSpectateTarget(
                 this.m_activeId,
                 this.m_localId,
@@ -2239,7 +2242,12 @@ export class Game {
             case net.MsgType.ModeStandings: {
                 const msg = new net.ModeStandingsMsg();
                 msg.deserialize(stream);
-                this.m_uiManager.setModeStandings(msg.entries);
+                this.m_uiManager.setModeStandings(msg.entries, {
+                    phase: msg.phase,
+                    players: msg.players,
+                    needed: msg.needed,
+                    seconds: msg.seconds,
+                });
                 break;
             }
             case net.MsgType.TeamInfo: {

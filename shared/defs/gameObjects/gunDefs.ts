@@ -4995,6 +4995,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_m249: defineGunSkin("m249", {
         name: "M249 [+]",
         backpackFed: true,
+        maxClip: 0,
         upgraded: undefined,
         modifiedSound: "m249_01",
         lootImg: {

@@ -3701,7 +3701,10 @@ export class Player extends BaseGameObject {
         }
         // client crashes if active player is not visible
         // so make sure its always added to visible objects
-        newVisibleObjects.add(this);
+        // (a player a GameMode hides while they watch someone - Gun Game: their killer
+        // until the respawn - doesn't see their own body standing around either)
+        if (player === this || !game.rules?.isHidden?.(this)) newVisibleObjects.add(this);
+        else newVisibleObjects.delete(this);
         newVisibleObjects.add(player);
 
         for (const obj of this.visibleObjects) {

@@ -129,6 +129,8 @@ export interface ClanDetails extends ClanSummary {
     weekStats: ClanWeekSummary;
     /** league keys waiting to be handed out by the owner */
     pool: Record<string, number>;
+    /** the same keys by the week they were won in (newest first) */
+    poolWeeks: ClanPoolWeek[];
     /** Owner and lieutenants: the invite link and the pending joins. */
     manage?: {
         inviteCode: string | null;
@@ -217,13 +219,84 @@ export const CLAN_WEEK_REWARDS: Record<number, Record<string, number>> = {
     3: { key_soviet: 1, key_wooden: 4 },
 };
 
-export const zClanIdOptRequest = z.object({ clanId: z.number().int().positive().optional() });
-export const zClanLeagueRequest = z.object({ metric: z.enum(["rated", "wins", "winrate", "damage"]) });
+/** A clan week by its Monday, "YYYY-MM-DD" (see weekKey on the server); none = this week. */
+const zClanWeekKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
+export const zClanIdOptRequest = z.object({ clanId: z.number().int().positive().optional(), week: zClanWeekKey });
+export const zClanLeagueRequest = z.object({ metric: z.enum(["rated", "wins", "winrate", "damage"]), week: zClanWeekKey });
+
+/** How many past weeks the stats / league can be looked at for. */
+export const CLAN_HISTORY_WEEKS = 26;
 export const zClanPoolGiveRequest = z.object({
     slug: z.string().min(1).max(64),
     keyType: z.string().min(1).max(64),
     amount: z.number().int().min(1).max(100),
+    /** take them from this league week's keys (null: the older keys of no known week);
+     *  none: oldest first */
+    week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
+
+export const zClanPoolDistributeRequest = z.object({
+    /** the league week the keys come out of (null: the older keys of no known week) */
+    week: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    gifts: z
+        .array(z.object({ slug: z.string().min(1).max(64), keyType: z.string().min(1).max(64), amount: z.number().int().min(1).max(100) }))
+        .min(1)
+        .max(200),
+});
+
+export interface ClanKeyGift {
+    slug: string;
+    keyType: string;
+    amount: number;
+}
+
+/**
+ * The suggested way to share out a week's keys: the players with
+ * CLAN_REWARD_MIN_GAMES_EACH+ games that week, best win rate first (more games first on
+ * a tie), get one key each in turn - the best keys first - and with more keys than
+ * players it goes round again from the top. `keyTypes`: best first.
+ */
+export function suggestKeyDistribution(
+    players: Array<{ slug: string; games: number; wins: number }>,
+    keys: Record<string, number>,
+    keyTypes: string[],
+): ClanKeyGift[] {
+    const ranked = players
+        .filter((p) => p.games >= CLAN_REWARD_MIN_GAMES_EACH)
+        .sort((a, b) => perGame(b.wins, b.games) - perGame(a.wins, a.games) || b.games - a.games);
+    if (!ranked.length) return [];
+    const gifts = new Map<string, ClanKeyGift>();
+    let turn = 0;
+    for (const keyType of keyTypes) {
+        for (let i = 0; i < (keys[keyType] ?? 0); i++) {
+            const slug = ranked[turn++ % ranked.length].slug;
+            const id = `${slug}|${keyType}`;
+            const gift = gifts.get(id) ?? { slug, keyType, amount: 0 };
+            gift.amount++;
+            gifts.set(id, gift);
+        }
+    }
+    return [...gifts.values()];
+}
+
+/** Keys of the pool still waiting, by the league week they were won in. */
+export interface ClanPoolWeek {
+    /** the week's key; null: keys of no known week (older, or added by an admin) */
+    week: string | null;
+    /** the league place that week (0 for null) */
+    rank: number;
+    keys: Record<string, number>;
+}
+
+/** A league week the clan won keys in: what it got, what's left, who got what. */
+export interface ClanWeekReward {
+    rank: number;
+    /** won that week */
+    keys: Record<string, number>;
+    /** of those, still in the pool */
+    left: Record<string, number>;
+    gifts: { slug: string; username: string; keyType: string; amount: number; at: number }[];
+}
 
 export interface ClanModeStats {
     games: number;
@@ -256,18 +329,34 @@ export interface ClanWeek {
     end: number;
 }
 
-export interface ClanStatsResponse {
+/** Which week a stats / league response is about, and which others can be picked. */
+export interface ClanWeekChoice {
     week: ClanWeek;
-    /** everything played for the clan this week (also by players who left since) */
+    /** the week's key ("YYYY-MM-DD" of its Monday) */
+    weekKey: string;
+    /** it's the running week */
+    current: boolean;
+    /** the weeks there's data for (newest first, the running week always included) */
+    weeks: string[];
+}
+
+export interface ClanStatsResponse extends ClanWeekChoice {
+    /** everything played for the clan that week (also by players who left since) */
     totals: ClanWeekSummary;
-    /** current members, with what they played for the clan this week */
+    /** this week: current members; a past week: everyone who played for the clan then */
     members: {
         slug: string;
         username: string;
         icon: string;
         role: ClanRole;
         stats: ClanModeStats;
+        /** played for the clan that week, not in it anymore */
+        former?: boolean;
+        /** keys they got out of that week's league reward (own clan only) */
+        keys?: number;
     }[];
+    /** own clan, a week it won league keys in */
+    reward?: ClanWeekReward;
 }
 
 /** A clan as anyone can look at it (league / clan list popup). */
@@ -288,8 +377,7 @@ export interface ClanLeagueEntry extends ClanWeekSummary {
     value: number;
 }
 
-export interface ClanLeagueResponse {
-    week: ClanWeek;
+export interface ClanLeagueResponse extends ClanWeekChoice {
     minGames: number;
     /** ranked; for "rated" only the clans that can get rewards */
     entries: ClanLeagueEntry[];

@@ -1349,6 +1349,27 @@ export const clanWeekRewardsTable = pgTable(
     ],
 );
 
+// Keys handed out of a clan's reward pool, with the league week they were won in (null:
+// keys of no known week - from before this log, or added by an admin), so the owner can
+// share out each week among the players of that week and see who got what.
+export const clanKeyGiftsTable = pgTable(
+    "clan_key_gifts",
+    {
+        id: serial("id").primaryKey(),
+        clanId: integer("clan_id")
+            .notNull()
+            .references(() => clansTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+        week: text("week"),
+        // who got the keys / who gave them (no FK: the log outlives deleted accounts)
+        userId: text("user_id").notNull(),
+        giverId: text("giver_id").notNull(),
+        keyType: text("key_type").notNull(),
+        amount: integer("amount").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [index("clan_key_gifts_clan_idx").on(table.clanId, table.week)],
+);
+
 // Weekly activity goals that were paid (one row per week and clan) - the lock against
 // paying twice. Tier 1-3 = average games per active player reached 50 / 100 / 150.
 export const clanWeekGoalsTable = pgTable(

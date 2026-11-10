@@ -978,12 +978,12 @@ export class WeaponManager {
         // backpackFed guns (e.g. M249 / "M249 [+]") feed from backpack ammo, so
         // without the endless_ammo/arena perk they still need inventory ammo to
         // fire; with infinite ammo they fire freely even on an empty clip/backpack.
-        if (
-            weapon.ammo <= 0 &&
-            (!itemDef.backpackFed ||
-                (!isInfinite &&
-                    !this.player.invManager.has(itemDef.ammo as InventoryItem)))
-        ) {
+        // (a backpack-fed gun's clip doesn't count: it never goes down, so ammo that
+        // got into it - an upgrade used to fill it - meant endless shots)
+        const outOfAmmo = itemDef.backpackFed
+            ? !isInfinite && !this.player.invManager.has(itemDef.ammo as InventoryItem)
+            : weapon.ammo <= 0;
+        if (outOfAmmo) {
             return;
         }
 
@@ -2246,11 +2246,21 @@ export class WeaponManager {
         }
 
         this.player.invManager.take("construction_item", cost);
-        this.player.weaponManager.setWeapon(
-            playerCurWeapIdx,
-            weapon.upgraded.gun,
-            upgradedWeaponDef.maxClip,
-        );
+        if (upgradedWeaponDef.backpackFed) {
+            // feeds from the backpack (M249 [+]): no free full clip - what was loaded
+            // goes back into the backpack
+            const loaded = this.weapons[playerCurWeapIdx].ammo;
+            if (loaded > 0 && this.player.invManager.isValid(upgradedWeaponDef.ammo)) {
+                this.player.invManager.giveAndDrop(upgradedWeaponDef.ammo, loaded);
+            }
+            this.player.weaponManager.setWeapon(playerCurWeapIdx, weapon.upgraded.gun, 0);
+        } else {
+            this.player.weaponManager.setWeapon(
+                playerCurWeapIdx,
+                weapon.upgraded.gun,
+                upgradedWeaponDef.maxClip,
+            );
+        }
 
         pickupMsg.type = net.PickupMsgType.WeaponUpgraded;
         this.player.msgsToSend.push({

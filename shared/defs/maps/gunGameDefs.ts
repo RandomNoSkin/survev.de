@@ -6,8 +6,8 @@ import { Local } from "./localDefs";
 
 /**
  * Gun Game (GameMode.GunGame): a free-for-all with respawns. The rules live in
- * server/src/game/modes/gunGame.ts; this is the map - built like the 1v1 arena but
- * bigger (330 x 330, about twice its area and a third of comp's), without role
+ * server/src/game/modes/gunGame.ts; this is the map - built like the 1v1 arena and,
+ * for 10 players, as big (210 x 210) - without role
  * picking, loot or airdrops, and joinable for most of the match.
  */
 const mapDef: PartialMapDef = {
@@ -40,7 +40,8 @@ const mapDef: PartialMapDef = {
 
         // respawns: at least about a screen away from everyone alive (the 1v1 arena
         // spawns anywhere; the battle royale default of 400 doesn't fit this map)
-        minSpawnRad: 70,
+        // (respawns pick spots near this distance or a bit beyond, see GunGame#spawnPos)
+        minSpawnRad: 40,
 
         xpMultiplier: {
             kill: 0.15,
@@ -56,8 +57,8 @@ const mapDef: PartialMapDef = {
     },
     mapGen: {
         map: {
-            baseWidth: 330,
-            baseHeight: 330,
+            baseWidth: 210,
+            baseHeight: 210,
             scale: { small: 1, large: 1 },
             extension: 0,
             shoreInset: 3,
@@ -96,18 +97,18 @@ const mapDef: PartialMapDef = {
                 tree_01: 30,
             },
         ],
-        // ~2.3x the 1v1 arena's, for ~2.5x the area (a bit more open)
+        // about the 1v1 arena's, same size
         fixedSpawns: [
             {
-                stone_01: 100,
-                barrel_01: 12,
-                silo_01: 2,
-                tree_01: 130,
-                container_01: 2,
-                container_02: 4,
-                container_03: 2,
-                container_04: 4,
-                outhouse_01: 6,
+                stone_01: 43,
+                barrel_01: 5,
+                silo_01: 1,
+                tree_01: 56,
+                container_01: 1,
+                container_02: 2,
+                container_03: 1,
+                container_04: 1,
+                outhouse_01: 2,
                 stone_01_indestructible: 2,
             },
         ],
@@ -128,15 +129,15 @@ const mapDef: PartialMapDef = {
             },
             {
                 spawns: ["bank_01", "greenhouse_01", "saloon_structure_01"],
-                choose: 3,
+                choose: 2,
             },
             {
                 spawns: ["warehouse_01", "house_red_01", "house_red_02", "barn_01", "barn_02"],
-                choose: 4,
+                choose: 2,
             },
             {
                 spawns: ["teahouse_complex_01su", "shack_01", "shack_01", "shack_01", "shack_01"],
-                choose: 5,
+                choose: 3,
             },
         ],
         spawnReplacements: [{}],
