@@ -405,8 +405,12 @@ export class Bullet {
 
         this.checkForCollisions(posOld);
 
-        // Check if bullet has reached the maximun distance
-        if (math.eqAbs(this.distanceTraveled, this.distance, 0.001)) {
+        // Check if bullet has reached the maximun distance - also when its own path (from
+        // startPos) is used up: a bounced bullet carries the distance travelled before the
+        // bounce (initialDistanceTraveled), so with a short clipped distance (a USAS shot
+        // aimed at a barrel: just the bit left to the cursor) the total never matched and
+        // the bullet stood still forever instead of exploding
+        if (math.eqAbs(this.distanceTraveled, this.distance, 0.001) || distLeft - moveDist <= 0.001) {
             this.alive = false;
             // Explosive rounds peter out
             if (this.onHitFx === "explosion_rounds") {

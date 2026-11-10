@@ -1,3 +1,4 @@
+import { ModePhase } from "../../../shared/net/modeStandingsMsg";
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
@@ -117,6 +118,8 @@ export class UiManager {
     topLeft = $("#ui-top-left");
     waitingForPlayers = true;
     waitingText = $("#ui-waiting-text");
+    /** its original content ("Waiting for players..."), Gun Game's warmup replaces it */
+    waitingTextHtml = this.waitingText.html();
     spectating = false;
     prevSpectatorCount = 0;
     spectatorCount = 0;
@@ -151,6 +154,8 @@ export class UiManager {
     gunGameTop = $("#ui-gungame-top");
     /** ModeStandingsMsg: everyone's step, best first */
     modeStandings: Array<{ playerId: number; score: number }> = [];
+    /** ModeStandingsMsg: warmup / countdown / running, and its seconds */
+    modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, seconds: 0 };
     /** the watched player and their place, last drawn (redraw only on change) */
     gunGameDrawn = "";
     mapContainer = $("#ui-map-container");
@@ -836,7 +841,10 @@ export class UiManager {
             mode: gas.mode,
             time: timeLeft,
         };
-        if (this.gasState.mode != gasState.mode || this.gasState.time != gasState.time) {
+        if (
+            !this.gunGameLadder
+            && (this.gasState.mode != gasState.mode || this.gasState.time != gasState.time)
+        ) {
             this.gasState = gasState;
             const gasMoving = this.gasState.mode == GasMode.Moving;
             this.mapInfo.removeClass("icon-pulse");
@@ -2651,13 +2659,45 @@ export class UiManager {
         this.gunGameLevel = -1;
         this.gunGameDrawn = "";
         this.modeStandings = [];
+        this.modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, seconds: 0 };
         this.gunGameBox.css("display", this.gunGameLadder ? "block" : "none");
+        // the warmup text / match clock replaced the normal ones - back for other games
+        this.waitingText.html(this.waitingTextHtml);
+        this.gasState = {} as typeof this.gasState;
+        this.mapInfo.removeClass("icon-pulse");
     }
 
     /** ModeStandingsMsg - redrawn on the next frame. */
-    setModeStandings(entries: Array<{ playerId: number; score: number }>) {
+    setModeStandings(
+        entries: Array<{ playerId: number; score: number }>,
+        status: { phase: ModePhase; players: number; needed: number; seconds: number },
+    ) {
+        const started = this.modeStatus.phase !== ModePhase.Running && status.phase === ModePhase.Running;
         this.modeStandings = entries;
+        this.modeStatus = status;
         this.gunGameDrawn = "";
+
+        // warmup / countdown in the top center (where "Waiting for players" goes)
+        if (status.phase === ModePhase.Running) {
+            this.setWaitingForPlayers(false);
+        } else {
+            this.waitingText
+                .text(
+                    status.phase === ModePhase.Waiting
+                        ? `Warmup - waiting for players (${status.players}/${status.needed})`
+                        : `Gun Game starts in ${status.seconds}...`,
+                )
+                .css("display", "block");
+            this.waitingForPlayers = true;
+        }
+        if (started) this.displayAnnouncement("Gun Game started!");
+
+        // the match clock where the gas timer goes
+        const seconds = status.phase === ModePhase.Running ? status.seconds : 0;
+        this.gasTimer.html(
+            status.phase === ModePhase.Running ? `${Math.floor(seconds / 60)}:${`0${seconds % 60}`.slice(-2)}` : "--:--",
+        );
+        this.mapInfo.toggleClass("icon-pulse", status.phase === ModePhase.Running && seconds <= 60);
     }
 
     /** Top 3 + "Level 4 / 13 · #5" and what the next kill gives. The level is read off
@@ -2665,16 +2705,39 @@ export class UiManager {
      *  the place comes from the standings. */
     private updateGunGameLevel(player: Player, playerBarn: PlayerBarn) {
         const ladder = this.gunGameLadder!;
-        const weapons = player.m_localData.m_weapons;
-        const level = ladder.indexOf(weapons[0]?.type || weapons[2]?.type || "");
-        if (level < 0) return;
-        const place = this.modeStandings.findIndex((e) => e.playerId === player.__id) + 1;
+        // whose level: your own while you play - also during the kill cam after a death,
+        // when `player` is your killer - else (staff spectator) the watched player
+        const localId = this.game.m_localId;
+        const playing = !this.game.m_replayMode && this.modeStandings.some((e) => e.playerId === localId);
+        const watchedId = playing ? localId : player.__id;
+        // the level from the server's standings; until they arrive, from the held weapon
+        const placeIdx = this.modeStandings.findIndex((e) => e.playerId === watchedId);
+        let level = placeIdx >= 0 ? this.modeStandings[placeIdx].score - 1 : -1;
+        if (level < 0 && watchedId === player.__id) {
+            const weapons = player.m_localData.m_weapons;
+            // (the gun may sit in slot 2 after a slot swap)
+            level = ladder.indexOf(weapons[0]?.type || weapons[1]?.type || weapons[2]?.type || "");
+        }
+        if (this.modeStatus.phase !== ModePhase.Running) {
+            const { phase, players, needed, seconds } = this.modeStatus;
+            const key = `warmup|${phase}|${players}|${needed}|${seconds}`;
+            if (key === this.gunGameDrawn) return;
+            this.gunGameDrawn = key;
+            this.gunGameTop.empty();
+            this.gunGameLevelText.text("Warmup");
+            this.gunGameNextText.text(
+                phase === ModePhase.Waiting ? `Waiting for players ${players}/${needed}` : `Starts in ${seconds}s`,
+            );
+            return;
+        }
+        if (level < 0 || level >= ladder.length) return;
+        const place = placeIdx + 1;
         // names resolved here, not on arrival: a player who just joined may not be known yet
         const top = this.modeStandings.slice(0, 3).map((e) => ({
             ...e,
             name: playerBarn.getPlayerName(e.playerId, player.__id, true),
         }));
-        const key = `${player.__id}|${level}|${place}|${top.map((e) => `${e.name}:${e.score}`).join(",")}`;
+        const key = `${watchedId}|${level}|${place}|${top.map((e) => `${e.name}:${e.score}`).join(",")}`;
         if (key === this.gunGameDrawn) return;
         this.gunGameDrawn = key;
         this.gunGameLevel = level;
@@ -2682,7 +2745,7 @@ export class UiManager {
         this.gunGameTop.empty();
         top.forEach((e, i) => {
             this.gunGameTop.append(
-                $("<div/>", { class: `ui-gungame-row${e.playerId === player.__id ? " ui-gungame-row-self" : ""}` }).append(
+                $("<div/>", { class: `ui-gungame-row${e.playerId === watchedId ? " ui-gungame-row-self" : ""}` }).append(
                     $("<span/>", { class: "ui-gungame-place", text: `${i + 1}.` }),
                     $("<span/>", { class: "ui-gungame-name", text: e.name }),
                     $("<span/>", { class: "ui-gungame-score", text: `Lv ${e.score}` }),

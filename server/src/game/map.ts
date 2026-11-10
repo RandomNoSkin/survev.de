@@ -226,16 +226,17 @@ export class MapGrid<T extends GridCollider = GridCollider> {
 export class GameMap {
     game: Game;
 
-    /** Map size factor from the game config (see ServerGameConfig.mapScale). */
+    /** Map size factor from the game config (see ServerGameConfig.mapScale); size
+     *  fields below are set by applySize. */
     sizeScale = 1;
-    width: number;
-    height: number;
+    width!: number;
+    height!: number;
     scale: "large" | "small";
-    center: Vec2;
-    bounds: AABB;
+    center!: Vec2;
+    bounds!: AABB;
 
-    grassInset: number;
-    shoreInset: number;
+    grassInset!: number;
+    shoreInset!: number;
 
     mapDef: MapDef;
     mapId: MapId;
@@ -251,8 +252,8 @@ export class GameMap {
 
     mapStream = new MsgStream(new ArrayBuffer(1 << 16));
 
-    grassBounds: AABB;
-    beachBounds: AABB;
+    grassBounds!: AABB;
+    beachBounds!: AABB;
 
     seed!: number;
     msg!: net.MapMsg;
@@ -362,16 +363,8 @@ export class GameMap {
 
         const scale = (this.scale = game.teamMode > TeamMode.Duo ? "large" : "small");
 
-        const mapConfig = mapDef.mapGen.map;
         // a lobby can size the map (Gun Game: to its player limit); objects follow the area
-        this.sizeScale = game.config.mapScale ?? 1;
-        this.width = mapConfig.baseWidth * mapConfig.scale[scale] * this.sizeScale + mapConfig.extension;
-        this.height = mapConfig.baseHeight * mapConfig.scale[scale] * this.sizeScale + mapConfig.extension;
-
-        this.bounds = collider.createAabb(
-            v2.create(0, 0),
-            v2.create(this.width, this.height),
-        );
+        this.applySize(game.config.mapScale ?? 1);
         this.factionMode = !!this.mapDef.gameMode.factionMode;
         this.perkMode = !!this.mapDef.gameMode.perkMode;
         // Custom Loadout replaces every player's spawn items; arena roles (which assign
@@ -383,6 +376,26 @@ export class GameMap {
         this.desertMode = !!this.mapDef.gameMode.desertMode;
         this.potatoMode = !!this.mapDef.gameMode.potatoMode;
         this.sniperMode = !!this.mapDef.gameMode.sniperMode;
+    }
+
+    /** Width, height and the bounds for a size factor (see sizeScale). A change only
+     *  takes effect with the next generation - see regenerate(). */
+    applySize(sizeScale: number) {
+        const mapConfig = this.mapDef.mapGen.map;
+        this.sizeScale = sizeScale;
+        this.width = mapConfig.baseWidth * mapConfig.scale[this.scale] * sizeScale + mapConfig.extension;
+        this.height = mapConfig.baseHeight * mapConfig.scale[this.scale] * sizeScale + mapConfig.extension;
+        // the game's object grid is made once - never bigger than it covers
+        const grid = this.game.grid;
+        if (grid) {
+            this.width = Math.min(this.width, (grid.width + 1) * grid.cellSize);
+            this.height = Math.min(this.height, (grid.height + 1) * grid.cellSize);
+        }
+
+        this.bounds = collider.createAabb(
+            v2.create(0, 0),
+            v2.create(this.width, this.height),
+        );
 
         this.center = v2.create(this.width / 2, this.height / 2);
         this.grassInset = mapConfig.grassInset;
@@ -534,7 +547,8 @@ export class GameMap {
         this.mapStream.serializeMsg(MsgType.Map, this.msg);
     }
 
-    regenerate(seed?: number) {
+    /** A fresh map (optionally another size, see applySize) - sent to everyone. */
+    regenerate(seed?: number, sizeScale?: number) {
         for (const obj of this.game.objectRegister.objects) {
             if (!obj) continue;
             // destroy everything :3
@@ -551,6 +565,7 @@ export class GameMap {
             }
         }
 
+        if (sizeScale !== undefined) this.applySize(sizeScale);
         this.init(seed);
 
         for (const player of this.game.playerBarn.players) {

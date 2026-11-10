@@ -1,7 +1,8 @@
-import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { getKeyDef } from "../../../../shared/defs/crateConfig";
 import { MapId } from "../../../../shared/gameConfig";
 import {
+    CLAN_HISTORY_WEEKS,
     CLAN_LEAGUE_MIN_GAMES,
     CLAN_MIN_LOBBY_PLAYERS,
     CLAN_REWARD_MIN_ACTIVE,
@@ -16,7 +17,10 @@ import {
     type ClanLeagueResponse,
     type ClanModeStats,
     type ClanRole,
+    type ClanKeyGift,
+    type ClanPoolWeek,
     type ClanStatsResponse,
+    type ClanWeekReward,
     type ClanWeek,
     type ClanWeekSummary,
     perGame,
@@ -28,6 +32,7 @@ import { db } from "./index";
 import { computeMatchXp } from "./passReconcile";
 import { playerIcon, playerIconColumns } from "./playerIcon";
 import {
+    clanKeyGiftsTable,
     clanKeyPoolTable,
     clanMembersTable,
     clansTable,
@@ -57,6 +62,41 @@ export function clanWeek(t = Date.now()): ClanWeek {
 export function weekKey(t = Date.now()): string {
     const d = new Date(clanWeek(t).start);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** The week of a `weekKey`, if it's a real one (a Monday, not in the future). */
+export function weekFromKey(key: string): ClanWeek | null {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+    if (!m) return null;
+    const start = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+    const week = clanWeek(start);
+    if (week.start !== start || weekKey(start) !== key || start > Date.now()) return null;
+    return week;
+}
+
+/** The weeks there are stats for (of one clan, or of any), newest first, the running
+ *  week always included - CLAN_HISTORY_WEEKS at most. */
+async function weeksWithStats(clanId?: number): Promise<string[]> {
+    const rows = await db
+        .selectDistinct({ week: clanWeekStatsTable.week })
+        .from(clanWeekStatsTable)
+        .where(
+            and(
+                eq(clanWeekStatsTable.mode, MODE),
+                clanId === undefined ? undefined : eq(clanWeekStatsTable.clanId, clanId),
+            ),
+        )
+        .orderBy(desc(clanWeekStatsTable.week))
+        .limit(CLAN_HISTORY_WEEKS + 1);
+    const current = weekKey();
+    return [current, ...rows.map((r) => r.week).filter((w) => w !== current)].slice(0, CLAN_HISTORY_WEEKS + 1);
+}
+
+/** The week a request asks for (none / an invalid one: the running week). */
+function pickWeek(key: string | undefined): { week: ClanWeek; key: string; current: boolean } {
+    const week = key ? weekFromKey(key) : null;
+    if (!week || !key) return { week: clanWeek(), key: weekKey(), current: true };
+    return { week, key, current: key === weekKey() };
 }
 
 /**
@@ -302,9 +342,11 @@ export async function getClanWeekTotals(clanId: number): Promise<ClanWeekSummary
     return summarize(await weekRows(clanId), await leagueAverage(weekKey()));
 }
 
-/** This week's stats of a clan: the summary and each current member's own numbers. */
-export async function getClanStats(clanId: number): Promise<ClanStatsResponse> {
-    const rows = await weekRows(clanId);
+/** A week's stats of a clan (default: this week): the summary and each player's own
+ *  numbers - this week every current member, a past week everyone who played for it. */
+export async function getClanStats(clanId: number, weekKeyReq?: string, ownClan = false): Promise<ClanStatsResponse> {
+    const { week, key, current } = pickWeek(weekKeyReq);
+    const rows = await weekRows(clanId, key);
     const byUser = new Map<string, ClanModeStats>();
     for (const r of rows) {
         const u = byUser.get(r.userId) ?? empty();
@@ -322,18 +364,49 @@ export async function getClanStats(clanId: number): Promise<ClanStatsResponse> {
         .from(clanMembersTable)
         .innerJoin(usersTable, eq(usersTable.id, clanMembersTable.userId))
         .where(eq(clanMembersTable.clanId, clanId));
+    const list: ClanStatsResponse["members"] = (current ? members : members.filter((m) => byUser.has(m.userId))).map((m) => ({
+        slug: m.slug,
+        username: m.username,
+        icon: playerIcon(m),
+        role: toClanRole(m.role),
+        stats: byUser.get(m.userId) ?? empty(),
+    }));
+    // a past week: also the players who left since
+    if (!current) {
+        const memberIds = new Set(members.map((m) => m.userId));
+        const formerIds = [...byUser.keys()].filter((id) => !memberIds.has(id));
+        if (formerIds.length) {
+            const former = await db
+                .select({ id: usersTable.id, slug: usersTable.slug, username: usersTable.username, ...playerIconColumns })
+                .from(usersTable)
+                .where(inArray(usersTable.id, formerIds));
+            for (const u of former) {
+                list.push({
+                    slug: u.slug,
+                    username: u.username,
+                    icon: playerIcon(u),
+                    role: "member",
+                    stats: byUser.get(u.id) ?? empty(),
+                    former: true,
+                });
+            }
+        }
+    }
+    // own clan, a week with league keys: what it got, and who got how many of them
+    const reward = ownClan && !current ? await weekReward(clanId, key) : undefined;
+    if (reward) {
+        const bySlug = new Map<string, number>();
+        for (const g of reward.gifts) bySlug.set(g.slug, (bySlug.get(g.slug) ?? 0) + g.amount);
+        for (const m of list) m.keys = bySlug.get(m.slug) ?? 0;
+    }
     return {
-        week: clanWeek(),
-        totals: summarize([...byUser.values()], await leagueAverage(weekKey())),
-        members: members
-            .map((m) => ({
-                slug: m.slug,
-                username: m.username,
-                icon: playerIcon(m),
-                role: toClanRole(m.role),
-                stats: byUser.get(m.userId) ?? empty(),
-            }))
-            .sort((a, b) => b.stats.wins - a.stats.wins || b.stats.games - a.stats.games),
+        week,
+        weekKey: key,
+        current,
+        weeks: await weeksWithStats(clanId),
+        totals: summarize([...byUser.values()], await leagueAverage(key)),
+        members: list.sort((a, b) => b.stats.wins - a.stats.wins || b.stats.games - a.stats.games),
+        reward,
     };
 }
 
@@ -392,12 +465,13 @@ async function titlesOf(clanIds: number[]): Promise<Map<number, number>> {
 }
 
 /**
- * This week's league in one of four views. "rated" (smoothed win rate) is the one that
+ * A week's league (default: this week) in one of four views. "rated" (smoothed win rate) is the one that
  * pays: only clans with CLAN_REWARD_MIN_ACTIVE members of CLAN_REWARD_MIN_GAMES_EACH+
  * games are ranked there, the rest is listed as unranked.
  */
-export async function getClanLeague(metric: ClanLeagueMetric): Promise<ClanLeagueResponse> {
-    const all = await weekSummaries(weekKey());
+export async function getClanLeague(metric: ClanLeagueMetric, weekKeyReq?: string): Promise<ClanLeagueResponse> {
+    const { week, key, current } = pickWeek(weekKeyReq);
+    const all = await weekSummaries(key);
     const titles = await titlesOf(all.map((c) => c.id));
     const value = (c: ClanWeekSummary) =>
         metric === "rated"
@@ -419,11 +493,14 @@ export async function getClanLeague(metric: ClanLeagueMetric): Promise<ClanLeagu
         ranked = entries.filter((e) => e.games >= CLAN_LEAGUE_MIN_GAMES).sort((a, b) => b.value - a.value || b.games - a.games);
     }
     return {
-        week: clanWeek(),
+        week,
+        weekKey: key,
+        current,
+        weeks: await weeksWithStats(),
         minGames: CLAN_LEAGUE_MIN_GAMES,
         entries: ranked.slice(0, 100),
         unranked: unranked.slice(0, 50),
-        leagueAverage: await leagueAverage(weekKey()),
+        leagueAverage: await leagueAverage(key),
     };
 }
 
@@ -499,18 +576,121 @@ export async function awardFinishedClanWeeks(): Promise<number> {
     return (await awardClanWeek(lastWeek)) + (await awardClanGoals(lastWeek));
 }
 
+type Tx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 /** The clan's undistributed keys, by key type. */
-export async function getClanPool(clanId: number): Promise<Record<string, number>> {
-    const rows = await db
+export async function getClanPool(clanId: number, tx: Tx = db): Promise<Record<string, number>> {
+    const rows = await tx
         .select({ keyType: clanKeyPoolTable.keyType, amount: clanKeyPoolTable.amount })
         .from(clanKeyPoolTable)
         .where(and(eq(clanKeyPoolTable.clanId, clanId), gte(clanKeyPoolTable.amount, 1)));
     return Object.fromEntries(rows.map((r) => [r.keyType, r.amount]));
 }
 
-/** Owner or co-owner hands `amount` pool keys of `keyType` to a member (themselves included). */
-export async function giveFromPool(actorId: string, slug: string, keyType: string, amount: number): Promise<ClanActionResponse> {
-    if (!getKeyDef(keyType)) return { success: false, error: "not_found" };
+/** Keys of a clan handed out per league week and key type (the log, see clanKeyGiftsTable). */
+async function givenByWeek(clanId: number, tx: Tx = db): Promise<Map<string, Record<string, number>>> {
+    const rows = await tx
+        .select({ week: clanKeyGiftsTable.week, keyType: clanKeyGiftsTable.keyType, n: sql<number>`sum(${clanKeyGiftsTable.amount})` })
+        .from(clanKeyGiftsTable)
+        .where(and(eq(clanKeyGiftsTable.clanId, clanId), isNotNull(clanKeyGiftsTable.week)))
+        .groupBy(clanKeyGiftsTable.week, clanKeyGiftsTable.keyType);
+    const out = new Map<string, Record<string, number>>();
+    for (const r of rows) {
+        const w = out.get(r.week!) ?? {};
+        w[r.keyType] = Number(r.n);
+        out.set(r.week!, w);
+    }
+    return out;
+}
+
+/**
+ * The pool split by the league week its keys were won in, newest first: each week's
+ * reward minus what was given out of it. The pool itself is what counts, so it's
+ * shared out over the weeks newest first (keys given before the log existed, or an
+ * admin's changes, come off the oldest weeks); whatever is left over has no week.
+ */
+export async function getClanPoolWeeks(clanId: number, tx: Tx = db): Promise<ClanPoolWeek[]> {
+    const left = await getClanPool(clanId, tx);
+    const rewards = await tx
+        .select({ week: clanWeekRewardsTable.week, rank: clanWeekRewardsTable.rank, keys: clanWeekRewardsTable.keys })
+        .from(clanWeekRewardsTable)
+        .where(eq(clanWeekRewardsTable.clanId, clanId))
+        .orderBy(desc(clanWeekRewardsTable.week));
+    const given = await givenByWeek(clanId, tx);
+    const out: ClanPoolWeek[] = [];
+    for (const r of rewards) {
+        const keys: Record<string, number> = {};
+        for (const [type, won] of Object.entries(r.keys)) {
+            const open = Math.max(0, won - (given.get(r.week)?.[type] ?? 0));
+            const n = Math.min(open, left[type] ?? 0);
+            if (n > 0) {
+                keys[type] = n;
+                left[type] -= n;
+            }
+        }
+        if (Object.keys(keys).length) out.push({ week: r.week, rank: r.rank, keys });
+    }
+    const rest = Object.fromEntries(Object.entries(left).filter(([, n]) => n > 0));
+    if (Object.keys(rest).length) out.push({ week: null, rank: 0, keys: rest });
+    return out;
+}
+
+/** What the clan won in the league in `week` (if anything): the keys, what's left, who got what. */
+async function weekReward(clanId: number, week: string): Promise<ClanWeekReward | undefined> {
+    const [reward] = await db
+        .select({ rank: clanWeekRewardsTable.rank, keys: clanWeekRewardsTable.keys })
+        .from(clanWeekRewardsTable)
+        .where(and(eq(clanWeekRewardsTable.clanId, clanId), eq(clanWeekRewardsTable.week, week)));
+    if (!reward) return undefined;
+    const pool = await getClanPoolWeeks(clanId);
+    const gifts = await db
+        .select({
+            slug: usersTable.slug,
+            username: usersTable.username,
+            keyType: clanKeyGiftsTable.keyType,
+            amount: clanKeyGiftsTable.amount,
+            at: clanKeyGiftsTable.createdAt,
+        })
+        .from(clanKeyGiftsTable)
+        .leftJoin(usersTable, eq(usersTable.id, clanKeyGiftsTable.userId))
+        .where(and(eq(clanKeyGiftsTable.clanId, clanId), eq(clanKeyGiftsTable.week, week)))
+        .orderBy(desc(clanKeyGiftsTable.createdAt));
+    return {
+        rank: reward.rank,
+        keys: reward.keys,
+        left: pool.find((p) => p.week === week)?.keys ?? {},
+        gifts: gifts.map((g) => ({
+            slug: g.slug ?? "",
+            username: g.username ?? "(deleted)",
+            keyType: g.keyType,
+            amount: g.amount,
+            at: g.at.getTime(),
+        })),
+    };
+}
+
+/**
+ * Owner or co-owner hands `amount` pool keys of `keyType` to a member (themselves
+ * included) - out of `week`'s league keys (null: the ones of no known week), or, without
+ * a week, oldest first. Logged per week (clanKeyGiftsTable).
+ */
+export function giveFromPool(
+    actorId: string,
+    slug: string,
+    keyType: string,
+    amount: number,
+    week?: string | null,
+): Promise<ClanActionResponse> {
+    return giveManyFromPool(actorId, [{ slug, keyType, amount }], week);
+}
+
+/** Several gifts out of the pool at once (the suggested distribution) - all or none. */
+export async function giveManyFromPool(
+    actorId: string,
+    gifts: ClanKeyGift[],
+    week?: string | null,
+): Promise<ClanActionResponse> {
+    if (gifts.some((g) => !getKeyDef(g.keyType))) return { success: false, error: "not_found" };
     try {
         await db.transaction(async (tx) => {
             const [clan] = await tx
@@ -518,32 +698,62 @@ export async function giveFromPool(actorId: string, slug: string, keyType: strin
                 .from(clanMembersTable)
                 .where(eq(clanMembersTable.userId, actorId));
             if (!clan || !canLeadClan(toClanRole(clan.role))) throw new Error("not_owner");
-            const [target] = await tx
-                .select({ id: usersTable.id })
-                .from(usersTable)
-                .innerJoin(clanMembersTable, eq(clanMembersTable.userId, usersTable.id))
-                .where(and(eq(usersTable.slug, slug.trim().toLowerCase()), eq(clanMembersTable.clanId, clan.id)));
-            if (!target) throw new Error("not_member");
-            const [left] = await tx
-                .update(clanKeyPoolTable)
-                .set({ amount: sql`${clanKeyPoolTable.amount} - ${amount}` })
-                .where(
-                    and(
-                        eq(clanKeyPoolTable.clanId, clan.id),
-                        eq(clanKeyPoolTable.keyType, keyType),
-                        gte(clanKeyPoolTable.amount, amount),
-                    ),
-                )
-                .returning({ amount: clanKeyPoolTable.amount });
-            if (!left) throw new Error("not_enough_keys");
-            const now = Date.now();
-            await tx.insert(itemsTable).values(
-                Array.from({ length: amount }, () => ({ userId: target.id, type: keyType, source: "clan_reward", timeAcquired: now })),
-            );
+            for (const g of gifts) await giveInTx(tx, clan.id, actorId, g.slug, g.keyType, g.amount, week);
         });
         return { success: true };
     } catch (err) {
         const code = err instanceof Error ? err.message : "error";
         return { success: false, error: ["not_owner", "not_member", "not_enough_keys"].includes(code) ? code : "error" };
     }
+}
+
+/** One gift out of the pool, inside a transaction: the keys, the pool, the log. */
+async function giveInTx(
+    tx: Tx,
+    clanId: number,
+    actorId: string,
+    slug: string,
+    keyType: string,
+    amount: number,
+    week?: string | null,
+): Promise<void> {
+    const [target] = await tx
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .innerJoin(clanMembersTable, eq(clanMembersTable.userId, usersTable.id))
+        .where(and(eq(usersTable.slug, slug.trim().toLowerCase()), eq(clanMembersTable.clanId, clanId)));
+    if (!target) throw new Error("not_member");
+    // which weeks the keys come out of
+    const buckets = (await getClanPoolWeeks(clanId, tx))
+        .filter((b) => week === undefined || b.week === week)
+        .reverse(); // oldest first
+    const parts: { week: string | null; n: number }[] = [];
+    let need = amount;
+    for (const b of buckets) {
+        const n = Math.min(need, b.keys[keyType] ?? 0);
+        if (n <= 0) continue;
+        parts.push({ week: b.week, n });
+        need -= n;
+        if (!need) break;
+    }
+    if (need > 0) throw new Error("not_enough_keys");
+    const [left] = await tx
+        .update(clanKeyPoolTable)
+        .set({ amount: sql`${clanKeyPoolTable.amount} - ${amount}` })
+        .where(
+            and(
+                eq(clanKeyPoolTable.clanId, clanId),
+                eq(clanKeyPoolTable.keyType, keyType),
+                gte(clanKeyPoolTable.amount, amount),
+            ),
+        )
+        .returning({ amount: clanKeyPoolTable.amount });
+    if (!left) throw new Error("not_enough_keys");
+    const now = Date.now();
+    await tx.insert(itemsTable).values(
+        Array.from({ length: amount }, () => ({ userId: target.id, type: keyType, source: "clan_reward", timeAcquired: now })),
+    );
+    await tx.insert(clanKeyGiftsTable).values(
+        parts.map((p) => ({ clanId: clanId, week: p.week, userId: target.id, giverId: actorId, keyType, amount: p.n })),
+    );
 }

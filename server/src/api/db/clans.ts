@@ -30,7 +30,7 @@ import {
     validateClan,
 } from "../../../../shared/utils/clan";
 import { checkForBadWords } from "../../utils/serverHelpers";
-import { adoptWeekStats, getClanPool, getClanStats, getClanWeekTotals, weekKey } from "./clanStats";
+import { adoptWeekStats, getClanPool, getClanPoolWeeks, getClanStats, getClanWeekTotals, weekKey } from "./clanStats";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { playerIcon, playerIconColumns } from "./playerIcon";
@@ -305,6 +305,7 @@ export async function getMyClan(userId: string): Promise<MyClanResponse> {
         myRole: ownerId === userId ? "owner" : toClanRole(m.role) === "owner" ? "member" : toClanRole(m.role),
         weekStats: await getClanWeekTotals(m.clanId),
         pool: await getClanPool(m.clanId),
+        poolWeeks: await getClanPoolWeeks(m.clanId),
     };
     if (details.myRole !== "member") {
         details.manage = {

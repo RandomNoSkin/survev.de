@@ -1,3 +1,4 @@
+import { GUN_GAME_MAP_SCALE_MAX } from "../../../shared/defs/gunGameDefs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -73,6 +74,8 @@ const DUEL_WINDOW_MS = 15_000;
 
 export class Game {
     started = false;
+    /** Private lobbies: how many players the lobby sent (see addGroupedJoinTokens). */
+    expectedPlayers = 0;
     stopped = false;
     allowJoin = false;
     over = false;
@@ -242,7 +245,11 @@ export class Game {
         this.showPlayerPositions = showsPlayersOnMap(this.customLoadout);
 
         this.map = new GameMap(this);
-        this.grid = new Grid(this.map.width, this.map.height);
+        // Gun Game makes a new map for the player count after its warmup: room for the biggest
+        const gridScale = config.gameMode === GameMode.GunGame
+            ? Math.max(1, GUN_GAME_MAP_SCALE_MAX / this.map.sizeScale)
+            : 1;
+        this.grid = new Grid(this.map.width * gridScale, this.map.height * gridScale);
         this.objectRegister = new ObjectRegister(this.grid);
 
         this.playerBarn = new PlayerBarn(this);
@@ -320,7 +327,7 @@ export class Game {
         }
 
         if (!this.started && !this.preventStart) {
-            this.started = this.modeManager.isGameStarted();
+            this.started = this.rules?.canStart ? this.rules.canStart() : this.modeManager.isGameStarted();
             if (this.started) {
                 this.hasEverStarted = true;
                 if (!this.rules?.skipsGas) this.gas.advanceGasStage();
@@ -1020,6 +1027,7 @@ export class Game {
     addGroupedJoinTokens(teams: FindGamePrivateBody["playerData"][]) {
         for (const tokens of teams) {
             if (!tokens.length) continue;
+            this.expectedPlayers += tokens.length;
 
             const groupData = {
                 playerCount: tokens.length,

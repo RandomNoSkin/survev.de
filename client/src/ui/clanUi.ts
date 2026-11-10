@@ -25,8 +25,10 @@ import {
     type ClanStatsResponse,
     type ClanViewResponse,
     type ClanWeek,
+    type ClanWeekChoice,
     type ClanWeekSummary,
     perGame,
+    suggestKeyDistribution,
     type ClanListEntry,
     type ClanListResponse,
     type ClanListSort,
@@ -90,8 +92,12 @@ export class ClanUi {
     /** Sub-tab of your clan's page (kept across the reloads after an action). */
     private clanTab: "overview" | "stats" | "management" = "overview";
     private leagueMetric: ClanLeagueMetric = "rated";
+    /** the league week being looked at (undefined: the running one) */
+    private leagueWeek: string | undefined;
     /** Sort of the member stats table (Stats tab and clan popup). */
-    private statsSort: { key: "games" | "wins" | "winrate" | "damage"; desc: boolean } = { key: "wins", desc: true };
+    private statsSort: { key: "games" | "wins" | "winrate" | "damage" | "keys"; desc: boolean } = { key: "wins", desc: true };
+    /** the week the own clan's Stats tab shows (undefined: the running one) */
+    private statsWeek: string | undefined;
     /** Count for the tab badge: invites to me, or join requests to my clan. */
     onBadge: (count: number) => void = () => {};
     /** null = not editing; "create" / "edit" = the form is open. */
@@ -108,6 +114,7 @@ export class ClanUi {
     show() {
         this.form = null;
         this.clanTab = "overview";
+        this.statsWeek = undefined;
         this.load();
     }
 
@@ -506,7 +513,8 @@ export class ClanUi {
         return wrap;
     }
 
-    /** League keys the clan won, waiting for the owner to share them out. */
+    /** League keys the clan won, waiting for the owner to share them out - by the week
+     *  they were won in (Stats → that week gives them to the players of that week). */
     private renderPool(c: ClanDetails) {
         const box = $('<div class="clan-card clan-pool"></div>');
         box.append(
@@ -515,11 +523,38 @@ export class ClanUi {
                 ClanUi.keyList(c.pool),
             ),
         );
+        if (c.poolWeeks.length) {
+            const weeks = $('<div class="clan-pool-weeks"></div>');
+            for (const w of c.poolWeeks) {
+                const row = $('<div class="clan-pool-week"></div>').append(
+                    $("<span/>", {
+                        class: "clan-pool-week-label",
+                        text: w.week ? `${ClanUi.weekKeyLabel(w.week)} · #${w.rank}` : "Older keys",
+                    }),
+                    ClanUi.keyList(w.keys),
+                );
+                if (w.week) {
+                    row.addClass("clan-row-clickable")
+                        .attr("title", "Who played that week - give them their keys")
+                        .on("click", () => {
+                            this.statsWeek = w.week!;
+                            this.clanTab = "stats";
+                            this.render();
+                        });
+                }
+                weeks.append(row);
+            }
+            box.append(weeks);
+        }
         if (!canLeadClan(c.myRole)) {
             box.append($('<div class="clan-muted">Keys your clan won in the weekly league. The owner and co-owners share them out.</div>'));
             return box;
         }
-        box.append($('<div class="clan-muted">Keys your clan won in the weekly league - share them out however you think is fair.</div>'));
+        box.append(
+            $(
+                '<div class="clan-muted">Keys your clan won in the weekly league - share them out however you think is fair. Click a week to see who played then and give them its keys; the form below takes the oldest keys first.</div>',
+            ),
+        );
         const form = $('<div class="clan-pool-form"></div>');
         const member = $('<select class="market-select clan-pool-select"></select>');
         for (const m of c.memberList) member.append($("<option/>", { value: m.slug, text: m.username || m.slug }));
@@ -839,13 +874,45 @@ export class ClanUi {
 
     /** "Mon 26 Oct – Sun 1 Nov · resets in 1d 4h" - the "resets in" part counts down live
      *  (see tickResetCountdowns). */
-    private weekLabel(w: ClanWeek): JQuery<HTMLElement> {
+    private weekLabel(w: ClanWeek, current = true): JQuery<HTMLElement> {
         const fmt = (t: number) =>
             new Date(t).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+        if (!current) return $("<span/>", { text: `${fmt(w.start)} – ${fmt(w.end - 1)} · finished` });
         ClanUi.startResetCountdowns();
         return $("<span/>").append(
             `${fmt(w.start)} – ${fmt(w.end - 1)} · resets in `,
             $("<span/>", { class: "clan-reset-in", "data-end": w.end, text: ClanUi.resetIn(w.end) }),
+        );
+    }
+
+    /** "Mon 26 Oct – Sun 1 Nov" of a week key ("YYYY-MM-DD" of its Monday). */
+    private static weekKeyLabel(key: string): string {
+        const [y, m, d] = key.split("-").map(Number);
+        const start = new Date(y, m - 1, d);
+        const end = new Date(y, m - 1, d + 6);
+        const fmt = (t: Date) => t.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+        return `${fmt(start)} – ${fmt(end)}`;
+    }
+
+    /** The week line of the stats / league: a picker of the weeks with data ("This week"
+     *  first), then the week's dates (and the live reset countdown for the running one). */
+    private weekHeader(res: ClanWeekChoice, onPick: (week: string) => void, suffix = ""): JQuery<HTMLElement> {
+        const select = $('<select class="clan-week-select" title="Look at another week"></select>');
+        for (const key of res.weeks) {
+            select.append(
+                $("<option/>", {
+                    value: key,
+                    text: key === res.weeks[0] ? "This week" : ClanUi.weekKeyLabel(key),
+                    selected: key === res.weekKey,
+                }),
+            );
+        }
+        select.on("change", () => onPick(String(select.val())));
+        return $('<div class="clan-muted clan-week"></div>').append(
+            res.weeks.length > 1 ? select : $("<span/>", { text: res.current ? "This week" : ClanUi.weekKeyLabel(res.weekKey) }),
+            ": ",
+            this.weekLabel(res.week, res.current),
+            suffix,
         );
     }
 
@@ -984,20 +1051,27 @@ export class ClanUi {
             ["winrate", "Wins/G"],
             ["damage", "Dmg/G"],
         ];
+        // a week with league keys: how many each player got out of them
+        const withKeys = !!res.reward;
+        if (withKeys) columns.push(["keys", "Keys"]);
+        else if (this.statsSort.key === "keys") this.statsSort = { key: "wins", desc: true };
         const body = $("<tbody></tbody>");
-        const value = (s: ClanModeStats, key: typeof this.statsSort.key) =>
+        const keysOf = new Map(res.members.map((m) => [m.slug, m.keys ?? 0]));
+        const value = (s: ClanModeStats & { slug?: string }, key: typeof this.statsSort.key) =>
             key === "games"
                 ? s.games
                 : key === "wins"
                   ? s.wins
                   : key === "winrate"
                     ? perGame(s.wins, s.games)
-                    : perGame(s.damage, s.games);
+                    : key === "keys"
+                      ? (keysOf.get(s.slug ?? "") ?? 0)
+                      : perGame(s.damage, s.games);
         const fill = () => {
             const { key, desc } = this.statsSort;
             const sorted = [...res.members].sort((a, b) => {
                 if (!a.stats.games !== !b.stats.games) return a.stats.games ? -1 : 1;
-                const d = value(a.stats, key) - value(b.stats, key);
+                const d = value({ ...a.stats, slug: a.slug }, key) - value({ ...b.stats, slug: b.slug }, key);
                 return (desc ? -d : d) || b.stats.games - a.stats.games;
             });
             headRow.find("th[data-key]").each((_, th) => {
@@ -1010,12 +1084,14 @@ export class ClanUi {
             body.empty();
             for (const m of sorted) {
                 const tr = $("<tr></tr>");
-                const role = ROLE_NAMES[m.role];
+                const role = m.former ? "left the clan" : ROLE_NAMES[m.role];
                 const who = this.personRow(m, role);
+                if (m.former) who.addClass("clan-stats-former");
                 tr.append($("<td/>").append(who.addClass("clan-stats-person")));
                 for (const v of [String(m.stats.games), String(m.stats.wins), ClanUi.fmtWins(m.stats), ClanUi.fmtDmg(m.stats)]) {
                     tr.append($("<td/>", { text: v }));
                 }
+                if (withKeys) tr.append($("<td/>", { text: m.keys ? `🔑 ${m.keys}` : "–" }));
                 body.append(tr);
             }
         };
@@ -1032,15 +1108,154 @@ export class ClanUi {
         return $('<div class="clan-stats-table-wrap"></div>').append(table);
     }
 
+    /** A week the clan won league keys in: the keys, what's left, who got how many - and
+     *  for owner / co-owners, giving the rest to the players of that week. */
+    private rewardBox(c: ClanDetails, res: ClanStatsResponse, reward: NonNullable<ClanStatsResponse["reward"]>) {
+        const box = $('<div class="clan-card clan-pool clan-week-reward"></div>');
+        const leftCount = Object.values(reward.left).reduce((a, b) => a + b, 0);
+        box.append(
+            $('<div class="clan-pool-head"></div>').append(
+                $("<div/>", { class: "clan-box-title", text: `🏆 League #${reward.rank} that week` }),
+                ClanUi.keyList(reward.keys),
+            ),
+            $('<div class="clan-muted"></div>').append(
+                leftCount ? $("<span/>").append("Still in the pool: ", ClanUi.keyList(reward.left)) : "All of these keys are given out ✓",
+            ),
+        );
+        if (reward.gifts.length) {
+            const list = $('<div class="clan-gift-list"></div>');
+            for (const g of reward.gifts) {
+                list.append(
+                    $('<div class="clan-gift"></div>').append(
+                        $("<span/>", { class: "clan-gift-who", text: g.username || g.slug }),
+                        $("<span/>", { text: ` ${g.amount}× ${this.keyName(g.keyType)}` }),
+                        $("<span/>", { class: "clan-muted", text: ` · ${new Date(g.at).toLocaleDateString()}` }),
+                    ),
+                );
+            }
+            box.append($('<div class="clan-box-subtitle">Given out</div>'), list);
+        }
+        if (!canLeadClan(c.myRole) || !leftCount) return box;
+
+        // give out the rest: the players of that week, best win rate first (more games first on a tie)
+        const form = $('<div class="clan-pool-form"></div>');
+        const member = $('<select class="market-select clan-pool-select"></select>');
+        const winRate = (s: ClanModeStats) => perGame(s.wins, s.games);
+        const players = res.members
+            .filter((m) => !m.former && m.stats.games > 0)
+            .sort((a, b) => winRate(b.stats) - winRate(a.stats) || b.stats.games - a.stats.games);
+        for (const m of players) {
+            const keys = m.keys ? ` · ${m.keys} ${m.keys === 1 ? "key" : "keys"} so far` : "";
+            member.append(
+                $("<option/>", {
+                    value: m.slug,
+                    text: `${m.username || m.slug} - ${(winRate(m.stats) * 100).toFixed(0)}% win rate (${m.stats.wins}/${m.stats.games})${keys}`,
+                }),
+            );
+        }
+        if (!players.length) return box;
+        const key = $('<select class="market-select clan-pool-select"></select>');
+        for (const type of getKeyTypes().slice().reverse()) {
+            const n = reward.left[type] ?? 0;
+            if (n > 0) key.append($("<option/>", { value: type, text: `${this.keyName(type)} (${n} left)` }));
+        }
+        const amount = $('<input type="number" min="1" value="1" class="market-search clan-pool-amount">');
+        const give = this.smallButton("Give", "", () => {
+            const slug = String(member.val() ?? "");
+            const keyType = String(key.val() ?? "");
+            const n = Math.max(1, Math.floor(Number(amount.val()) || 1));
+            this.act("/api/user/clan/pool/give", { slug, keyType, amount: n, week: res.weekKey }, (r) => {
+                if (r?.success) {
+                    const who = players.find((m) => m.slug === slug);
+                    this.flash(`Gave ${n}× ${this.keyName(keyType)} to ${who?.username || slug}.`);
+                    if (slug === this.account.profile.slug) this.account.loadProfile();
+                }
+            });
+        });
+        form.append(member, key, amount, give);
+        box.append(form);
+        box.append(this.suggestBox(res, reward));
+        return box;
+    }
+
+    /** "Distribute by win rate": a preview of the suggested split, then one click to give it all. */
+    private suggestBox(res: ClanStatsResponse, reward: NonNullable<ClanStatsResponse["reward"]>) {
+        const wrap = $('<div class="clan-suggest"></div>');
+        const players = res.members
+            .filter((m) => !m.former)
+            .map((m) => ({ slug: m.slug, games: m.stats.games, wins: m.stats.wins }));
+        const plan = suggestKeyDistribution(players, reward.left, getKeyTypes().slice().reverse());
+        const start = this.smallButton("Suggest split", "", () => {
+            start.remove();
+            if (!plan.length) {
+                wrap.append(
+                    $("<div/>", { class: "clan-muted", text: `Nobody in the clan played ${CLAN_REWARD_MIN_GAMES_EACH}+ games that week.` }),
+                );
+                return;
+            }
+            const names = new Map(res.members.map((m) => [m.slug, m]));
+            const byPlayer = new Map<string, Record<string, number>>();
+            for (const g of plan) {
+                const keys = byPlayer.get(g.slug) ?? {};
+                keys[g.keyType] = (keys[g.keyType] ?? 0) + g.amount;
+                byPlayer.set(g.slug, keys);
+            }
+            const list = $('<div class="clan-gift-list"></div>');
+            for (const [slug, keys] of byPlayer) {
+                const m = names.get(slug)!;
+                list.append(
+                    $('<div class="clan-gift clan-suggest-row"></div>').append(
+                        $("<span/>", { class: "clan-gift-who", text: m.username || slug }),
+                        $("<span/>", {
+                            class: "clan-muted",
+                            text: ` ${(perGame(m.stats.wins, m.stats.games) * 100).toFixed(0)}% (${m.stats.wins}/${m.stats.games})`,
+                        }),
+                        ClanUi.keyList(keys),
+                    ),
+                );
+            }
+            const skipped = res.members.filter((m) => !m.former && m.stats.games > 0 && m.stats.games < CLAN_REWARD_MIN_GAMES_EACH);
+            wrap.append(
+                $('<div class="clan-box-subtitle">Suggested</div>'),
+                $("<div/>", {
+                    class: "clan-muted",
+                    text: `Best win rate first, the best keys first, round and round - players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games that week.${skipped.length ? ` Left out (fewer games): ${skipped.map((m) => m.username || m.slug).join(", ")}.` : ""}`,
+                }),
+                list,
+                $('<div class="clan-pool-form"></div>').append(
+                    this.armedButton("Give all", "Sure? Give all", "clan-small-btn", () => {
+                        this.act("/api/user/clan/pool/distribute", { week: res.weekKey, gifts: plan }, (r) => {
+                            if (r?.success) {
+                                this.flash(`Shared out ${plan.reduce((a, g) => a + g.amount, 0)} keys among ${byPlayer.size} players.`);
+                                if (byPlayer.has(this.account.profile.slug)) this.account.loadProfile();
+                            }
+                        });
+                    }),
+                    this.smallButton("Cancel", "", () => wrap.replaceWith(this.suggestBox(res, reward))),
+                ),
+            );
+        });
+        wrap.append(start);
+        return wrap;
+    }
+
     private renderStats(c: ClanDetails) {
         const wrap = $('<div class="clan-stats"><div class="shop-status">Loading…</div></div>');
-        this.post<ClanStatsResponse>("/api/user/clan/stats", { clanId: c.id }, (res) => {
+        const week = this.statsWeek;
+        this.post<ClanStatsResponse>("/api/user/clan/stats", { clanId: c.id, week }, (res) => {
+            if (week !== this.statsWeek) return;
             wrap.empty();
             if (!res) {
                 wrap.append('<div class="shop-status">Couldn\'t load the stats.</div>');
                 return;
             }
-            wrap.append($("<div/>", { class: "clan-muted clan-week" }).append("This week: ", this.weekLabel(res.week)));
+            wrap.append(
+                this.weekHeader(res, (w) => {
+                    this.statsWeek = w === res.weeks[0] ? undefined : w;
+                    wrap.replaceWith(this.renderStats(c));
+                }),
+            );
+            if (res.reward) wrap.append(this.rewardBox(c, res, res.reward));
             wrap.append(ClanUi.goalBox(res.totals));
             wrap.append(this.memberStatsTable(res));
             wrap.append(
@@ -1107,8 +1322,19 @@ export class ClanUi {
                     }
                     body.append(list);
                 } else {
-                    body.append($("<div/>", { class: "clan-muted clan-week" }).append("This week: ", this.weekLabel(stats.week)));
-                    body.append(this.memberStatsTable(stats));
+                    const weekStats = (s: ClanStatsResponse) => {
+                        const box = $("<div/>");
+                        box.append(
+                            this.weekHeader(s, (w) => {
+                                this.post<ClanStatsResponse>("/api/user/clan/stats", { clanId: c.id, week: w }, (next) => {
+                                    if (next) box.replaceWith(weekStats(next));
+                                });
+                            }),
+                            this.memberStatsTable(s),
+                        );
+                        return box;
+                    };
+                    body.append(weekStats(stats));
                 }
             };
             for (const [id, label] of [
@@ -1213,8 +1439,9 @@ export class ClanUi {
             root.append(rewards);
         }
         root.append(list);
-        this.post<ClanLeagueResponse>("/api/user/clan/league", { metric }, (res) => {
-            if (metric !== this.leagueMetric) return;
+        const week = this.leagueWeek;
+        this.post<ClanLeagueResponse>("/api/user/clan/league", { metric, week }, (res) => {
+            if (metric !== this.leagueMetric || week !== this.leagueWeek) return;
             list.empty();
             if (!res) {
                 list.append('<div class="shop-status">Couldn\'t load the league.</div>');
@@ -1222,7 +1449,17 @@ export class ClanUi {
             }
             const needs = metric === "winrate" || metric === "damage" ? ` · clans need ${res.minGames} games to be ranked` : "";
             const avg = metric === "rated" ? ` · league average ${(res.leagueAverage * 100).toFixed(1)}%` : "";
-            info.empty().append("This week (Comp): ", this.weekLabel(res.week), `${needs}${avg}`);
+            info.replaceWith(
+                this.weekHeader(
+                    res,
+                    (w) => {
+                        this.leagueWeek = w === res.weeks[0] ? undefined : w;
+                        this.showLeague(root);
+                    },
+                    ` (Comp)${needs}${avg}`,
+                ),
+            );
+            const thatWeek = res.current ? "this week" : "that week";
             const myId = this.clan?.id;
             const fmt = (e: ClanLeagueEntry) =>
                 metric === "damage"
@@ -1263,20 +1500,20 @@ export class ClanUi {
                 list.append(
                     `<div class="shop-status">${
                         metric === "rated"
-                            ? "No clan qualifies yet this week."
+                            ? `No clan ${res.current ? "qualifies yet" : "qualified"} ${thatWeek}.`
                             : metric === "wins"
-                              ? "No clan has played yet this week."
-                              : `No clan has ${res.minGames} games yet this week.`
+                              ? `No clan ${res.current ? "has played yet" : "played"} ${thatWeek}.`
+                              : `No clan ${res.current ? "has" : "had"} ${res.minGames} games ${thatWeek}.`
                     }</div>`,
                 );
             }
             res.entries.forEach((e, i) => list.append(row(e, i + 1)));
             if (res.unranked.length) {
                 list.append(
-                    $(`<div class="social-section-head">Not ranked yet <span class="social-count">${res.unranked.length}</span></div>`),
+                    $(`<div class="social-section-head">${res.current ? "Not ranked yet" : "Not ranked"} <span class="social-count">${res.unranked.length}</span></div>`),
                     $("<div/>", {
                         class: "clan-muted clan-empty",
-                        text: `These clans need ${CLAN_REWARD_MIN_ACTIVE} players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games this week.`,
+                        text: `These clans ${res.current ? "need" : "didn't have"} ${CLAN_REWARD_MIN_ACTIVE} players with ${CLAN_REWARD_MIN_GAMES_EACH}+ games ${thatWeek}.`,
                     }),
                 );
                 for (const e of res.unranked) list.append(row(e, null));

@@ -11,6 +11,9 @@ import type { Player } from "../objects/player";
 export interface ModeRules {
     /** No gas (and no gas-driven planes / roles) at all. */
     readonly skipsGas?: boolean;
+    /** Whether the match may start (and its clock run) - instead of the usual "two
+     *  players are in" (Gun Game: after its warmup). */
+    canStart?(): boolean;
     /** A (non-spectator) player just joined. */
     onJoin?(player: Player): void;
     /** A player's health hit 0. Return true when the mode took care of it - then
