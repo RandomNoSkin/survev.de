@@ -1,0 +1,55 @@
+<svg width="142" height="166" viewBox="0 0 142 166" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="wingBladeTopEcl" x1="52" y1="64" x2="108" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#14151F"/>
+      <stop offset="0.4" stop-color="#221C35"/>
+      <stop offset="0.72" stop-color="#9E1638"/>
+      <stop offset="1" stop-color="#FF3864"/>
+    </linearGradient>
+    <linearGradient id="wingBladeBotEcl" x1="52" y1="102" x2="108" y2="154" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#14151F"/>
+      <stop offset="0.4" stop-color="#221C35"/>
+      <stop offset="0.72" stop-color="#9E1638"/>
+      <stop offset="1" stop-color="#FF3864"/>
+    </linearGradient>
+    <clipPath id="hairClipEcl">
+      <path d="M38 83 C38 52, 54 36, 78 38 C90 39, 100 48, 104 60 C98 56, 88 56, 82 60 C92 64, 100 73, 102 83 C100 93, 92 102, 82 106 C88 110, 98 110, 104 106 C100 118, 90 127, 78 128 C54 130, 38 114, 38 83 Z"/>
+    </clipPath>
+  </defs>
+
+  <path d="M68 70 C76 52, 88 36, 102 24 C94 20, 82 27, 72 40 C64 50, 62 62, 68 70 Z" fill="#2E3052" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M60 66 C68 44, 84 20, 102 8 C92 6, 76 15, 64 32 C54 44, 54 58, 60 66 Z" fill="#2E3052" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M50 62 C58 34, 76 12, 98 2 C82 4, 64 17, 48 38 C40 52, 42 62, 50 62 Z" fill="url(#wingBladeTopEcl)" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+  <path d="M88 6 C94 10, 97 16, 97 22" stroke="#FF5C82" stroke-width="2" stroke-linecap="round"/>
+  <path d="M66 74 C54 68, 44 56, 42 42 C42 32, 48 24, 58 18 C52 30, 54 44, 64 54 C68 58, 72 62, 76 66 Z" fill="#282A3A" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+  <path d="M68 96 C76 114, 88 130, 102 142 C94 146, 82 139, 72 126 C64 116, 62 104, 68 96 Z" fill="#2E3052" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M60 100 C68 122, 84 146, 102 158 C92 160, 76 151, 64 134 C54 122, 54 108, 60 100 Z" fill="#2E3052" stroke="black" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M50 104 C58 132, 76 154, 98 164 C82 162, 64 149, 48 128 C40 114, 42 104, 50 104 Z" fill="url(#wingBladeBotEcl)" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+  <path d="M88 160 C94 156, 97 150, 97 144" stroke="#FF5C82" stroke-width="2" stroke-linecap="round"/>
+  <path d="M66 92 C54 98, 44 110, 42 124 C42 134, 48 142, 58 148 C52 136, 54 122, 64 112 C68 108, 72 104, 76 100 Z" fill="#282A3A" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+
+  <path d="M38 83 C38 52, 54 36, 78 38 C90 39, 100 48, 104 60 C98 56, 88 56, 82 60 C92 64, 100 73, 102 83 C100 93, 92 102, 82 106 C88 110, 98 110, 104 106 C100 118, 90 127, 78 128 C54 130, 38 114, 38 83 Z" fill="#EE7290"/>
+  <path d="M20 20 H58 C48 50 48 116 58 146 H20 Z" fill="#CC4F70" clip-path="url(#hairClipEcl)"/>
+  <path d="M46 64 C54 52, 68 47, 82 50" stroke="#FFB8C8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M46 102 C54 114, 68 119, 82 116" stroke="#FFB8C8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M38 83 C38 52, 54 36, 78 38 C90 39, 100 48, 104 60 C98 56, 88 56, 82 60 C92 64, 100 73, 102 83 C100 93, 92 102, 82 106 C88 110, 98 110, 104 106 C100 118, 90 127, 78 128 C54 130, 38 114, 38 83 Z" stroke="black" stroke-width="3.8" stroke-linejoin="round"/>
+
+  <g transform="translate(74, 50) scale(1.45)">
+    <path d="M-6 -2 L-12 -12 L-4 -8 Z" fill="#D21E45" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M4 -2 L10 -12 L2 -8 Z" fill="#D21E45" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M0 0 C-4 -6, -12 -7, -13 -2 C-14 3, -6 6, 0 0 Z" fill="#1C1D29" stroke="black" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M0 0 C4 -6, 12 -7, 13 -2 C14 3, 6 6, 0 0 Z" fill="#1C1D29" stroke="black" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M-9 -3 C-7 -4, -4 -3, -2 0" stroke="#525672" stroke-width="1.3" stroke-linecap="round"/>
+    <path d="M9 -3 C7 -4, 4 -3, 2 0" stroke="#525672" stroke-width="1.3" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="3" fill="#D21E45" stroke="black" stroke-width="1.6"/>
+  </g>
+  <g transform="translate(74, 116) scale(1.45)">
+    <path d="M-6 2 L-12 12 L-4 8 Z" fill="#D21E45" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M4 2 L10 12 L2 8 Z" fill="#D21E45" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M0 0 C-4 6, -12 7, -13 2 C-14 -3, -6 -6, 0 0 Z" fill="#1C1D29" stroke="black" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M0 0 C4 6, 12 7, 13 2 C14 -3, 6 -6, 0 0 Z" fill="#1C1D29" stroke="black" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M-9 3 C-7 4, -4 3, -2 0" stroke="#525672" stroke-width="1.3" stroke-linecap="round"/>
+    <path d="M9 3 C7 4, 4 3, 2 0" stroke="#525672" stroke-width="1.3" stroke-linecap="round"/>
+    <circle cx="0" cy="0" r="3" fill="#D21E45" stroke="black" stroke-width="1.6"/>
+  </g>
+</svg>
