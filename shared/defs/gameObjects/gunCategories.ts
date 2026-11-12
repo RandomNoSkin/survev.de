@@ -1,4 +1,4 @@
-import { type GunDef, GunDefs } from "./gameObjects/gunDefs";
+import { type GunDef, GunDefs } from "./gunDefs";
 
 /** How players think about guns; gun defs themselves only carry ammo / fire mode. */
 export type GunCategory = "rifle" | "smg" | "shotgun" | "sniper" | "pistol" | "special";

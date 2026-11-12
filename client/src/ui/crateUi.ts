@@ -10,9 +10,9 @@ import {
     getKeyDef,
     getKeyTypes,
     keyOpensCrate,
-} from "../../../shared/defs/crateConfig";
+} from "../../../shared/defs/shop/crateConfig";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
-import { getItemRarity } from "../../../shared/defs/shopConfig";
+import { getItemRarity } from "../../../shared/defs/shop/shopConfig";
 import type { Account } from "../account";
 import type { AudioManager } from "../audioManager";
 import { api } from "../api";

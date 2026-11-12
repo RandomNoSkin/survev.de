@@ -1,6 +1,6 @@
 import $ from "jquery";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
-import { getItemCategory, getItemRarity } from "../../../shared/defs/shopConfig";
+import { getItemCategory, getItemRarity } from "../../../shared/defs/shop/shopConfig";
 import type {
     BlockedUser,
     Friend,

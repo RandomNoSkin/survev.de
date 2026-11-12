@@ -27,7 +27,7 @@ import { Building } from "./objects/building";
 import { Obstacle } from "./objects/obstacle";
 import type { Player } from "./objects/player";
 import { Structure } from "./objects/structure";
-import { applyLobbyRules, CUSTOM_MAP_COLORS, CUSTOM_MAP_LIMITS, type CustomMapConfig, type CustomMapObjectLoot } from "../../../shared/defs/customMap";
+import { applyLobbyRules, CUSTOM_MAP_COLORS, CUSTOM_MAP_LIMITS, type CustomMapConfig, type CustomMapObjectLoot } from "../../../shared/defs/lobby/customMap";
 import { applyCustomMap, customSpawnOnGrass } from "./customMap";
 import { RiverCreator } from "./riverCreator";
 

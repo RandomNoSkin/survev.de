@@ -218,8 +218,10 @@ import {
 import { openCrate } from "../../db/crates";
 import { dumpItem } from "../../db/dump";
 import { buyShopOffer, getShopForUser } from "../../db/shop";
-import { isCrateType } from "../../../../../shared/defs/crateConfig";
+import { isCrateType } from "../../../../../shared/defs/shop/crateConfig";
 import { signReplayToken } from "../../replayToken";
+import { getArenaProfile, saveArenaLoadout, saveArenaStreaks } from "../../db/arena";
+import { type ArenaProfileResponse, zArenaLoadoutRequest, zArenaStreaks } from "../../../../../shared/utils/arena";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
@@ -581,6 +583,25 @@ UserRouter.post("/clan/role", validateParams(zClanRoleRequest), async (c) => {
     const user = c.get("user")!;
     const { slug, role } = c.req.valid("json");
     return c.json<ClanActionResponse>(await setMemberRole(user.id, slug, role), 200);
+});
+
+/** The arena menu: level, kills per weapon, unlocks, the saved loadouts. */
+UserRouter.post("/arena", async (c) => {
+    const user = c.get("user")!;
+    return c.json<ArenaProfileResponse>(await getArenaProfile(user.id), 200);
+});
+
+/** Saves one arena loadout slot (locked items fall back to the default's). */
+UserRouter.post("/arena/loadout", validateParams(zArenaLoadoutRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slot, loadout } = c.req.valid("json");
+    return c.json({ loadout: await saveArenaLoadout(user.id, slot, loadout) }, 200);
+});
+
+/** Saves the kill streak picks (locked variants fall back to the defaults). */
+UserRouter.post("/arena/streaks", validateParams(zArenaStreaks), async (c) => {
+    const user = c.get("user")!;
+    return c.json({ streaks: await saveArenaStreaks(user.id, c.req.valid("json")) }, 200);
 });
 
 /** Any clan as other players see it (league / clan list popup). */

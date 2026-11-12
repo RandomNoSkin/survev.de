@@ -43,7 +43,7 @@ import {
 } from "../../../shared/utils/clan";
 
 const ROLE_NAMES: Record<ClanRole, string> = { owner: "Owner", coowner: "Co-owner", lieutenant: "Lieutenant", member: "Member" };
-import { getKeyTypes } from "../../../shared/defs/crateConfig";
+import { getKeyTypes } from "../../../shared/defs/shop/crateConfig";
 import { loadout } from "../../../shared/utils/loadout";
 import type { Account } from "../account";
 import { helpers } from "../helpers";

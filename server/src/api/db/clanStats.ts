@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
-import { getKeyDef } from "../../../../shared/defs/crateConfig";
+import { getKeyDef } from "../../../../shared/defs/shop/crateConfig";
 import { MapId } from "../../../../shared/gameConfig";
 import {
     CLAN_HISTORY_WEEKS,

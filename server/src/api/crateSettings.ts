@@ -5,7 +5,7 @@ import {
     type CrateType,
     crateOverrides,
     isCrateEligible,
-} from "../../../shared/defs/crateConfig";
+} from "../../../shared/defs/shop/crateConfig";
 import { Rarity } from "../../../shared/gameConfig";
 import { Config } from "../config";
 import { server } from "./apiServer";

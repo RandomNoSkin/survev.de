@@ -1,9 +1,9 @@
-import { GameConfig, type InventoryItem } from "../gameConfig";
-import { GameObjectDefs } from "./register.ts";
-import { type GunDef, GunDefs } from "./gameObjects/gunDefs";
-import { MeleeDefs } from "./gameObjects/meleeDefs";
-import { PerkDefs } from "./gameObjects/perkDefs";
-import { _allowedMeleeSkins } from "./gameObjects/unlockDefs";
+import { GameConfig, type InventoryItem } from "../../gameConfig";
+import { GameObjectDefs } from "../register.ts";
+import { type GunDef, GunDefs } from "../gameObjects/gunDefs";
+import { MeleeDefs } from "../gameObjects/meleeDefs";
+import { PerkDefs } from "../gameObjects/perkDefs";
+import { _allowedMeleeSkins } from "../gameObjects/unlockDefs";
 
 /**
  * Leader-configured loadout applied to every player when a private lobby's

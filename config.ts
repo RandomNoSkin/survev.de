@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ConfigType, PartialConfig } from "./configType.ts";
-import { TeamMode } from "./shared/gameConfig.ts";
+import { TeamMode, GameMode } from "./shared/gameConfig.ts";
 import { util } from "./shared/utils/util.ts";
 
 export const configFileName = "survev-config.hjson";
@@ -40,7 +40,8 @@ export function getConfig(isProduction: boolean, dir: string) {
             { mapName: "local", teamMode: TeamMode.Solo, enabled: true },
             { mapName: "two_vs_two", teamMode: TeamMode.Duo, enabled: true },
             { mapName: "comp", teamMode: TeamMode.Squad, enabled: true },
-            //{ mapName: "gungame", teamMode: 1, gameMode: 1, enabled: true },
+            { mapName: "gungame", teamMode: TeamMode.Solo, gameMode: GameMode.GunGame, arena: true, enabled: true },
+            { mapName: "domination", teamMode: TeamMode.Squad, gameMode: GameMode.Domination, arena: true, enabled: false },
         ],
         clientTheme: "main",
         passType: "pass_survivr1",
@@ -176,6 +177,12 @@ export function getConfig(isProduction: boolean, dir: string) {
     }
 
     return config;
+}
+
+/** Where the config file of a process lives (`dir`: see getConfig). */
+export function configFilePath(dir: string): string {
+    const dirname = import.meta?.dirname || __dirname;
+    return path.join(dirname, dir, configFileName);
 }
 
 export function saveConfig(dir: string, config: PartialConfig) {

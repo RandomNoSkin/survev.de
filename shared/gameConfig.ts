@@ -163,6 +163,8 @@ export enum Input {
     AdvSpecFoliageTransparent,
     AdvSpecVisionRadius,
     HudClickOverride,
+    /** the arena's kill streak (Domination) */
+    UseKillstreak,
     Count,
 }
 
@@ -192,6 +194,7 @@ export enum MapId {
     Local = 16,
     Custom = 17,
     GunGame = 18,
+    Domination = 19,
 }
 
 export enum Plane {
@@ -231,6 +234,8 @@ export enum TeamMode {
 export enum GameMode {
     Standard = 0,
     GunGame = 1,
+    /** Arena: two teams hold the zones A / B / C */
+    Domination = 2,
 }
 
 export enum FactionTeam {
@@ -243,7 +248,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1044,
+    protocolVersion: 1045,
     Action,
     Anim,
     DamageType,
@@ -264,6 +269,7 @@ export const GameConfig = {
     GameModeToString: {
         [GameMode.Standard]: "standard",
         [GameMode.GunGame]: "gungame",
+        [GameMode.Domination]: "domination",
     },
     FactionTeam,
     WeaponSlot,
@@ -605,7 +611,8 @@ export const GameConfig = {
         soundRangeMax: 92,
         fallOff: 0,
     },
-    groupColors: [0xffff00, 0xff00ff, 0xffff, 0xff5400],
+    // the last two only for the arena's teams of 6 (Domination)
+    groupColors: [0xffff00, 0xff00ff, 0xffff, 0xff5400, 0x4cff4c, 0x4a7dff],
     teamColors: [0xcc0000, 0x7eff],
     bullet: {
         maxReflect: 3,

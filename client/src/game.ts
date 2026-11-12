@@ -1,3 +1,4 @@
+import { DominationHud } from "./ui/modes/dominationHud";
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
@@ -105,6 +106,11 @@ export class Game {
     m_gameOver!: boolean;
     m_wonGame!: boolean;
     m_spectating!: boolean;
+    /** Domination: score bar, zones, loadout picker (see ui/modes/dominationHud.ts) */
+    m_domHud?: DominationHud;
+    /** joined with "Spectate" (not a player watching the killer until the respawn) */
+    m_joinedAsSpectator = false;
+    private m_domHudErrorLogged = false;
     //m_spectateCooldown!: number;
     m_inputMsgTimeout!: number;
     m_prevInputMsg!: net.InputMsg;
@@ -482,6 +488,7 @@ export class Game {
         this.m_gameOver = false;
         this.m_wonGame = false;
         this.m_spectating = false;
+        this.m_joinedAsSpectator = false;
         //this.m_spectateCooldown = 0;
         this.m_inputMsgTimeout = 0;
         this.m_prevInputMsg = new net.InputMsg();
@@ -524,6 +531,14 @@ export class Game {
         }
         this.connecting = false;
         this.connected = false;
+        // the mode HUD goes with the game (its loadout menu sits on the body, its
+        // "Spectating" text on the shared HUD - nothing of it may stay for the next one)
+        try {
+            this.m_domHud?.destroy();
+        } catch (err) {
+            console.error("Domination HUD failed to close", err);
+        }
+        this.m_domHud = undefined;
         if (this.initialized) {
             this.initialized = false;
             this.m_updatePass = false;
@@ -907,6 +922,7 @@ export class Game {
                 Input.EquipNextScope,
                 Input.StowWeapons,
                 Input.SwitchAmmo,
+                Input.UseKillstreak,
             ];
             for (let i = 0; i < checkInputs.length; i++) {
                 const input = checkInputs[i];
@@ -1429,6 +1445,41 @@ export class Game {
         this.m_decalBarn.m_render(this.m_camera, debug, this.m_activePlayer.layer);
         this.m_map.m_render(this.m_camera);
         this.m_gas.m_render(dt, this.m_camera);
+        // a mode HUD must never take the rest of the frame down with it
+        if (this.m_domHud) {
+            try {
+                const map = this.m_map;
+                const ui = this.m_uiManager;
+                const origin = ui.getMapPosFromWorldPos(v2.create(0, 0), map);
+                const unit = ui.getMapPosFromWorldPos(v2.create(1, 0), map);
+                this.m_domHud.render(
+                    this.m_camera,
+                    {
+                        pos: this.m_activePlayer.m_pos,
+                        layer: this.m_activePlayer.layer,
+                        // dead: watching a teammate (or the killer) until the respawn
+                        watchingOther: this.m_activeId !== this.m_localId,
+                        watchingName: this.m_activeId !== this.m_localId
+                            ? this.m_playerBarn.getPlayerName(this.m_activeId, this.m_localId, false)
+                            : "",
+                        // knocked: the interact key gives up (Revivify: it revives instead)
+                        streakKey: this.m_inputBinds.getBind(Input.UseKillstreak)?.toString() ?? "",
+                        giveUpKey: this.m_activeId === this.m_localId
+                            && this.m_activePlayer.m_netData.m_downed
+                            && !this.m_activePlayer.m_hasPerk("self_revive")
+                            ? (this.m_inputBinds.getBind(Input.Revive) ?? this.m_inputBinds.getBind(Input.Interact))?.toString() ?? "F"
+                            : undefined,
+                    },
+                    (pos) => ui.getMapPosFromWorldPos(pos, map),
+                    Math.abs(unit.x - origin.x),
+                );
+            } catch (err) {
+                if (!this.m_domHudErrorLogged) {
+                    this.m_domHudErrorLogged = true;
+                    console.error("Domination HUD render failed", err);
+                }
+            }
+        }
         this.m_uiManager.m_render(
             this.m_activePlayer.m_pos,
             this.m_gas,
@@ -1600,7 +1651,8 @@ export class Game {
         }
         // Gun Game: watching the killer until the respawn (~2 s) is no real spectating -
         // keep the normal HUD instead of opening the spectate menu
-        const gunGameKillCam = !!this.m_uiManager.gunGameLadder && !this.m_replayMode;
+        // (a real spectator gets the full spectate UI, advanced spectating included)
+        const gunGameKillCam = this.m_uiManager.modeActive && !this.m_replayMode && !this.m_joinedAsSpectator;
         if (this.m_spectating && !gunGameKillCam) {
             this.m_uiManager.setSpectateTarget(
                 this.m_activeId,
@@ -1729,9 +1781,38 @@ export class Game {
                 this.onJoin();
                 this.teamMode = msg.teamMode;
                 this.m_uiManager.setGunGameLadder(msg.gameMode === GameMode.GunGame ? msg.modeTypes : null);
+                this.m_uiManager.setGameMode(
+                    msg.gameMode !== GameMode.Standard,
+                    msg.gameMode === GameMode.GunGame ? "Gun Game" : msg.gameMode === GameMode.Domination ? "Domination" : "",
+                );
+                this.m_domHud?.destroy();
+                this.m_domHud = undefined;
+                this.m_emoteBarn.respawns = msg.gameMode !== GameMode.Standard && !msg.spectator;
+                if (msg.gameMode === GameMode.Domination && !this.m_replayMode) {
+                    // (a broken HUD must not break the join - the rest of it still has to run)
+                    try {
+                        this.m_domHud = new DominationHud(
+                            this.m_renderer,
+                            msg.modeTypes,
+                            (slot, action) => {
+                                const pick = new net.ArenaLoadoutSelectMsg();
+                                pick.slot = slot;
+                                pick.action = action;
+                                this.m_sendMessage(net.MsgType.ArenaLoadoutSelect, pick, 16);
+                            },
+                            () => this.m_playerBarn.getPlayerInfo(msg.spectator ? this.m_activeId : this.m_localId)?.teamId ?? 0,
+                            msg.spectator,
+                        );
+                        this.m_uiManager.addMinimapLayer(this.m_domHud.minimap);
+                    } catch (err) {
+                        console.error("Domination HUD failed to start", err);
+                        this.m_domHud = undefined;
+                    }
+                }
                 this.m_localId = msg.playerId;
                 this.m_isAdmin = msg.isAdmin;
                 this.chatUi.setSpectator(msg.spectator);
+                this.m_joinedAsSpectator = msg.spectator;
                 // In replay mode the advanced spectator (freecam / zoom / ESP) is always
                 // available — it runs purely client-side on the recorded objects.
                 this.m_advancedSpectatorAllowed =
@@ -1829,6 +1910,8 @@ export class Game {
             case net.MsgType.Kill: {
                 const msg = new net.KillMsg();
                 msg.deserialize(stream);
+                // Domination: pick the next loadout while waiting to respawn
+                if (msg.killed && msg.targetId === this.m_localId) this.m_domHud?.onLocalDeath();
                 const sourceType = msg.itemSourceType || msg.mapSourceType;
                 const activeTeamId = this.m_playerBarn.getPlayerInfo(
                     this.m_activeId,
@@ -2073,6 +2156,8 @@ export class Game {
                 const msg = new net.GameOverMsg();
                 msg.deserialize(stream);
                 this.m_gameOver = msg.gameOver;
+                // the match is over: nothing of the mode HUD over the game over screen
+                if (msg.gameOver) this.m_domHud?.onGameOver();
                 const localTeamId = this.m_playerBarn.getPlayerInfo(
                     this.m_localId,
                 ).teamId;
@@ -2239,6 +2324,12 @@ export class Game {
                 }
                 break;
             }
+            case net.MsgType.Killstreak: {
+                const msg = new net.KillstreakMsg();
+                msg.deserialize(stream);
+                this.m_domHud?.setStreak(msg.streak, msg.ready, msg.active, msg.next);
+                break;
+            }
             case net.MsgType.ModeStandings: {
                 const msg = new net.ModeStandingsMsg();
                 msg.deserialize(stream);
@@ -2246,15 +2337,22 @@ export class Game {
                     phase: msg.phase,
                     players: msg.players,
                     needed: msg.needed,
+                    max: msg.max,
                     seconds: msg.seconds,
+                    scoreLimit: msg.scoreLimit,
                 });
+                this.m_domHud?.setStandings(msg.phase, msg.teamIds, msg.teamScores, msg.scoreLimit, msg.zones);
                 break;
             }
             case net.MsgType.TeamInfo: {
                 const msg = new net.TeamInfoMsg();
                 msg.deserialize(stream);
-                this.m_uiManager.teamOverview.setData(msg.players, this.m_playerBarn, this.m_activeId);
-                this.m_uiManager.updateTeamBoost(msg.players);
+                // (the modes show their teams only top left - no detailed overview on the map)
+                if (!this.m_uiManager.modeActive) {
+                    this.m_uiManager.teamOverview.setData(msg.players, this.m_playerBarn, this.m_activeId);
+                }
+                // (no adrenaline bars in the modes - it's always full there)
+                this.m_uiManager.updateTeamBoost(this.m_uiManager.modeActive ? [] : msg.players);
                 break;
             }
             case net.MsgType.AdvancedSpectatorAllowed: {

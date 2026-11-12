@@ -1,3 +1,4 @@
+import { ARENA_MAP_IDS } from "../../../../../shared/types/stats.ts";
 import { eq, type SQL, sql } from "drizzle-orm";
 import { MapId, TeamMode } from "../../../../../shared/gameConfig.ts";
 import { Hono } from "hono";
@@ -125,6 +126,8 @@ UserProfileStatsRouter.post(
         if (range.from !== null) weaponConds.push(sql`day >= ${utcDay(range.from)}`);
         if (req.teamMode !== undefined) weaponConds.push(sql`team_mode = ${req.teamMode}`);
         if (req.mapId !== undefined) weaponConds.push(sql`map_id = ${req.mapId}`);
+        // (all maps: the arena modes' weapons left out, like their matches above)
+        else weaponConds.push(sql`map_id NOT IN (${sql.join(ARENA_MAP_IDS.map((id) => sql`${id}`), sql`, `)})`);
 
         // 1v1 duels only exist in local (solo) mode - other map / mode filters have none
         const duelsApply =

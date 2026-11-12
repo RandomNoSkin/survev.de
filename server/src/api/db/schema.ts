@@ -1211,7 +1211,7 @@ export const tradeSalesArchiveTable = pgTable(
 );
 
 // Crate loot settings edited in the moderation dashboard (one row per crate). null
-// columns fall back to the defaults in shared/defs/crateConfig.ts.
+// columns fall back to the defaults in shared/defs/shop/crateConfig.ts.
 export const crateSettingsTable = pgTable("crate_settings", {
     crate: text("crate").primaryKey(),
     pool: json("pool").$type<string[] | null>(),
@@ -1404,4 +1404,56 @@ export const playerWeekStatsTable = pgTable(
         kills: integer("kills").notNull().default(0),
     },
     (table) => [primaryKey({ columns: [table.week, table.userId, table.mode] })],
+);
+
+// ── Arena (Domination, ...): progression and loadouts, see shared/defs/modes/arenaDefs.ts ──
+
+// A player's arena XP (the level follows from it, see arenaLevelFromXp).
+export const arenaProgressTable = pgTable("arena_progress", {
+    userId: text("user_id")
+        .primaryKey()
+        .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    xp: integer("xp").notNull().default(0),
+});
+
+// Kills per weapon that count for the arena weapon challenges (arena modes, Gun Game, Comp).
+export const arenaWeaponKillsTable = pgTable(
+    "arena_weapon_kills",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+        weaponType: text("weapon_type").notNull(),
+        kills: integer("kills").notNull().default(0),
+    },
+    (table) => [primaryKey({ columns: [table.userId, table.weaponType] })],
+);
+
+// The kill streak picks (shared/defs/modes/arenaStreakDefs.ts ArenaStreakSettings).
+export const arenaStreaksTable = pgTable("arena_streaks", {
+    userId: text("user_id")
+        .primaryKey()
+        .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    airdrop: text("airdrop").notNull(),
+    juggernaut: text("juggernaut").notNull(),
+    airdropWeapon: text("airdrop_weapon").notNull(),
+    brokenArrow: boolean("broken_arrow").notNull().default(false),
+    /** the tiers switched off, comma separated (see ArenaStreakSettings.off) */
+    off: text("off").notNull().default(""),
+});
+
+// The saved arena loadouts (slot 0..ARENA_LOADOUT_SLOTS-1).
+export const arenaLoadoutsTable = pgTable(
+    "arena_loadouts",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+        slot: integer("slot").notNull(),
+        primary: text("primary").notNull(),
+        pistol: text("pistol").notNull(),
+        throwable: text("throwable").notNull(),
+        perk: text("perk").notNull(),
+    },
+    (table) => [primaryKey({ columns: [table.userId, table.slot] })],
 );

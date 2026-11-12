@@ -221,7 +221,7 @@ export class TeamMenu {
             this.roomData = {
                 roomUrl,
                 region: this.config.get("region")!,
-                gameModeIdx: this.config.get("gameModeIdx")!,
+                gameModeIdx: this.siteInfo.defaultTeamModeIdx() ?? this.config.get("gameModeIdx")!,
                 autoFill: this.config.get("teamAutoFill")!,
                 findingGame: false,
                 lastError: "",

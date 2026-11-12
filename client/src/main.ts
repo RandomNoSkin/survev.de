@@ -1,3 +1,5 @@
+import { ArenaMenu, ArenaProgressPanel } from "./ui/arenaMenu";
+import { ArenaTutorial, tutorialContext, tutorialPages } from "./ui/arenaTutorial";
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
 import { GameConfig } from "../../shared/gameConfig";
@@ -97,6 +99,35 @@ export class Application {
     hudLayoutManager = new HudLayoutManager(this.config);
 
     account!: Account;
+    /** main menu → Arena Loadouts (created on first open) */
+    arenaMenu?: ArenaMenu;
+    arenaTutorial?: ArenaTutorial;
+
+    /** The arena modes playable in the selected region now (mapNames). */
+    private arenaModesOn(): string[] {
+        return this.siteInfo.getModesForSelectedRegion().filter((m) => m.arena && m.enabled).map((m) => m.mapName);
+    }
+
+    /**
+     * The multiplayer client's tour, for the modes playable now (its last page opens
+     * the arena loadouts). `onlyUnseen`: the pages not seen yet only, then marked seen.
+     */
+    openArenaTutorial(onlyUnseen: boolean) {
+        if (!this.siteInfo.loaded) return;
+        const ctx = tutorialContext(this.arenaModesOn());
+        let pages = tutorialPages(ctx);
+        if (onlyUnseen) {
+            const seen = this.config.get("arenaTutorialPages") ?? [];
+            pages = pages.filter((id) => !seen.includes(id));
+            if (!pages.length) return;
+            this.config.set("arenaTutorialPages", [...new Set([...seen, ...pages])]);
+        }
+        this.arenaTutorial ??= new ArenaTutorial(() => {
+            this.arenaMenu ??= new ArenaMenu(this.account);
+            this.arenaMenu.open();
+        });
+        this.arenaTutorial.open(ctx, pages);
+    }
     loadoutMenu!: LoadoutMenu;
     pass!: Pass;
     profileUi!: ProfileUi;
@@ -333,26 +364,52 @@ export class Application {
 
             this.playMode0Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(0);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode0Btn, 0));
                 });
             });
             this.playMode1Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(1);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode1Btn, 1));
                 });
             });
             this.playMode2Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(2);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode2Btn, 2));
                 });
             });
             this.playMode3Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(3);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode3Btn, 3));
                 });
             });
             this.spectatorModeBtn.on("click", () => {
                 this.spectatorMenu.loadSpectatorMenu();
+            });
+            // the main menu's battle royale / multiplayer (arena modes) view; the button
+            // names the other one
+            const applyView = () => {
+                const arena = this.config.get("clientView") === "arena";
+                $(document.body).toggleClass("client-view-arena", arena);
+                $("#btn-client-view").text(arena ? "Battle Royale" : "Multiplayer");
+                // the right column: multiplayer opens on the arena progress, BR on the pass
+                this.showArenaProgress(arena);
+                this.siteInfo.updatePageFromInfo();
+                this.refreshUi();
+            };
+            $("#btn-client-view").on("click", (e) => {
+                // (it sits in the account box, whose click opens the account menu)
+                e.stopPropagation();
+                this.config.set("clientView", this.config.get("clientView") === "arena" ? "br" : "arena");
+                applyView();
+                // in the multiplayer client: a short tour of what's new there (the
+                // first time all of it; a mode switched on later: only its pages)
+                if (this.config.get("clientView") === "arena") this.openArenaTutorial(true);
+            });
+            $("#btn-arena-tutorial").on("click", () => this.openArenaTutorial(false));
+            applyView();
+            $("#btn-arena-loadouts").on("click", () => {
+                this.arenaMenu ??= new ArenaMenu(this.account);
+                this.arenaMenu.open();
             });
 
             this.serverSelect.on("change", () => {
@@ -482,28 +539,9 @@ export class Application {
                 this.game?.free();
                 this.privateLobbyMenu.leave();
             });
-            const r = $("#news-current").data("date");
-            const a = new Date(r).getTime();
-            $(".right-column-toggle").on("click", () => {
-                if (this.newsDisplayed) {
-                    //$("#news-wrapper").fadeOut(250);
-                    //$("#pass-wrapper").fadeIn(250);
-                    $("#news-wrapper").css("display", "none");
-                    $("#pass-wrapper").css("display", "block");
-                } else {
-                    this.config.set("lastNewsTimestamp", a);
-                    $(".news-toggle").find(".account-alert").css("display", "none");
-                    //$("#news-wrapper").fadeIn(250);
-                    //$("#pass-wrapper").fadeOut(250);
-                    $("#news-wrapper").css("display", "block");
-                    $("#pass-wrapper").css("display", "none");
-                }
-                this.newsDisplayed = !this.newsDisplayed;
-            });
-            const i = this.config.get("lastNewsTimestamp")!;
-            if (a > i) {
-                $(".news-toggle").find(".account-alert").css("display", "block");
-            }
+            // the right column: the battle pass <-> the arena progress (the news aren't
+            // reachable from here anymore)
+            $(".right-column-toggle").on("click", () => this.showArenaProgress(!this.arenaProgressShown));
             this.setDOMFromConfig();
             this.setAppActive(true);
             const domCanvas = document.querySelector<HTMLCanvasElement>("#cvs")!;
@@ -588,6 +626,9 @@ export class Application {
                     this.onJoinGameError(errMsg);
                 }
                 if (errMsg == "kicked_by_admin") {
+                    this.onJoinGameError(errMsg);
+                }
+                if (errMsg == "kicked_afk") {
                     this.onJoinGameError(errMsg);
                 }
                 if (errMsg == "player_not_verified") {
@@ -1036,10 +1077,10 @@ export class Application {
             );
         };
 
-        updateButton(this.playMode0Btn, 0);
-        updateButton(this.playMode1Btn, 1);
-        updateButton(this.playMode2Btn, 2);
-        updateButton(this.playMode3Btn, 3);
+        updateButton(this.playMode0Btn, this.modeIdxOf(this.playMode0Btn, 0));
+        updateButton(this.playMode1Btn, this.modeIdxOf(this.playMode1Btn, 1));
+        updateButton(this.playMode2Btn, this.modeIdxOf(this.playMode2Btn, 2));
+        updateButton(this.playMode3Btn, this.modeIdxOf(this.playMode3Btn, 3));
     }
 
     private menuAssetsRequested = false;
@@ -1149,6 +1190,37 @@ export class Application {
                 this.refreshUi();
             }
         }
+    }
+
+    /** The right column shows the arena progress (else the battle pass). */
+    arenaProgressShown = false;
+    arenaProgress?: ArenaProgressPanel;
+
+    showArenaProgress(show: boolean) {
+        this.arenaProgressShown = show;
+        $("#news-wrapper").css("display", "none");
+        $("#pass-wrapper").css("display", show ? "none" : "block");
+        $("#arena-progress-wrapper").css("display", show ? "block" : "none");
+        if (show) {
+            if (!this.arenaProgress) {
+                this.arenaProgress = new ArenaProgressPanel(this.account, $("#arena-progress-block"), () => {
+                    this.arenaMenu ??= new ArenaMenu(this.account);
+                    this.arenaMenu.open();
+                });
+                // on page load the login is still on its way - load again once it's done
+                // (and after a later login)
+                this.account.addEventListener("login", () => {
+                    if (this.arenaProgressShown) this.arenaProgress?.load();
+                });
+            }
+            this.arenaProgress.load();
+        }
+    }
+
+    /** A play button's mode (its index in the region's modes - the view picks which show). */
+    modeIdxOf(btn: JQuery<HTMLElement>, fallback: number): number {
+        const idx = btn.data("modeIdx");
+        return typeof idx === "number" ? idx : fallback;
     }
 
     tryQuickStartGame(gameModeIdx: number) {
@@ -1438,6 +1510,7 @@ export class Application {
             join_game_failed: this.localization.translate("index-failed-joining-game"),
             rate_limited: this.localization.translate("index-rate-limited"),
             kicked_by_admin: this.localization.translate("index-kicked-by-admin"),
+            kicked_afk: this.localization.translate("index-kicked-afk"),
             player_not_verified: this.localization.translate("index-player-not-verified"),
         };
         if (err == "invalid_protocol") {

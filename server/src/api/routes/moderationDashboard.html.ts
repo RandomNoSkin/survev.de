@@ -3937,7 +3937,7 @@ async function loadCrates() {
   document.getElementById('crate-editors').innerHTML = crateData.crates.map(renderCrateEditor).join('');
 }
 
-/** Chances of a draft - the same maths as the server (shared/defs/crateConfig.ts). */
+/** Chances of a draft - the same maths as the server (shared/defs/shop/crateConfig.ts). */
 function crateDraftChances(d) {
   const groups = {};
   for (const t of new Set(d.custom ? d.pool : crateData.autoPool)) {

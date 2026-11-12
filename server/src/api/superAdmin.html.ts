@@ -51,6 +51,10 @@ export const superAdminHtml = String.raw`<!doctype html>
   #toast { position: fixed; bottom: 20px; right: 20px; background: var(--panel2); border: 1px solid var(--border); padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; } #toast.err { border-color: var(--bad); color: var(--bad); }
   .offline { color: var(--bad); }
+  textarea#cfg-text { width: 100%; height: 55vh; background: #0b0d10; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; tab-size: 4; resize: vertical; }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 10px; }
+  .hint b { color: var(--warn); font-weight: 600; }
+  #modes td select, #modes td input[type=checkbox] { margin: 0; }
 </style>
 </head>
 <body>
@@ -60,6 +64,7 @@ export const superAdminHtml = String.raw`<!doctype html>
   <nav>
     <button data-tab="roles" class="active">Roles</button>
     <button data-tab="server">Server</button>
+    <button data-tab="config">Config</button>
     <button data-tab="logs">Logs</button>
   </nav>
 </header>
@@ -86,6 +91,38 @@ export const superAdminHtml = String.raw`<!doctype html>
       <div class="grid" id="api-stats"></div>
     </div>
     <div id="regions"></div>
+  </section>
+
+  <section id="tab-config">
+    <div class="card">
+      <h2>Config</h2>
+      <div class="row">
+        <select id="cfg-target"></select>
+        <button class="btn" id="cfg-reload">Reload</button>
+        <span class="muted mono" id="cfg-path"></span>
+      </div>
+    </div>
+    <div class="card" id="cfg-modes-card">
+      <h2>Modes (live)</h2>
+      <div class="hint">Applied right away: new games and the play buttons (after a page reload). <b>The order matters</b> - clients pick a mode by its position, so add new modes at the end.</div>
+      <table>
+        <thead><tr><th>#</th><th>Map</th><th>Team mode</th><th>Game mode</th><th>Arena view</th><th>Enabled</th><th></th></tr></thead>
+        <tbody id="modes"></tbody>
+      </table>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="mode-add">+ Add mode</button>
+        <button class="btn" id="modes-save">Save modes (live)</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Config file</h2>
+      <div class="hint">The whole survev-config.hjson of this host. It is checked before saving (must be valid hjson), the old file is kept as .bak. <b>Applies on the next restart</b> of this server.</div>
+      <textarea id="cfg-text" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="cfg-save">Save file</button>
+        <span class="muted" id="cfg-dirty"></span>
+      </div>
+    </div>
   </section>
 
   <section id="tab-logs">
@@ -162,6 +199,7 @@ document.querySelectorAll("nav button").forEach(function (b) {
     document.querySelectorAll("section").forEach(function (s) { s.classList.toggle("active", s.id === "tab-" + current); });
     if (current === "server") loadStatus();
     if (current === "logs") loadLogFiles();
+    if (current === "config") loadConfigTargets();
   };
 });
 
@@ -295,6 +333,123 @@ document.getElementById("regions").onclick = function (e) {
       .catch(fail);
   }
 };
+
+// ---- config ----
+var cfg = null;
+var cfgOriginal = "";
+function loadConfigTargets() {
+  api("GET", "/api/config").then(function (r) {
+    var sel = document.getElementById("cfg-target"), prev = sel.value;
+    sel.innerHTML = r.targets.map(function (t) {
+      return '<option value="' + esc(t) + '">' + (t === "api" ? "API host" : "Region " + esc(t)) + "</option>";
+    }).join("");
+    if (prev && r.targets.indexOf(prev) !== -1) sel.value = prev;
+    else if (r.targets.length > 1) sel.value = r.targets[1];
+    loadConfig();
+  }).catch(fail);
+}
+function loadConfig() {
+  var target = document.getElementById("cfg-target").value;
+  if (!target) return;
+  if (cfgDirty() && !confirm("Discard your unsaved changes to the config file?")) return;
+  api("GET", "/api/config/" + encodeURIComponent(target)).then(function (r) {
+    cfg = r;
+    cfgOriginal = r.text || "";
+    document.getElementById("cfg-path").textContent = r.path || "";
+    document.getElementById("cfg-text").value = cfgOriginal;
+    document.getElementById("cfg-modes-card").style.display = r.live ? "" : "none";
+    renderModes();
+    updateDirty();
+  }).catch(function (e) {
+    cfg = null;
+    document.getElementById("modes").innerHTML = "";
+    document.getElementById("cfg-text").value = "";
+    fail(e);
+  });
+}
+function options(list, value) {
+  return list.map(function (o) {
+    return '<option value="' + esc(o.value) + '"' + (String(o.value) === String(value) ? " selected" : "") + ">" + esc(o.name) + "</option>";
+  }).join("");
+}
+var TEAM_MODES = [{ name: "Solo", value: 1 }, { name: "Duo", value: 2 }, { name: "Squad", value: 4 }];
+function renderModes() {
+  if (!cfg) return;
+  var maps = cfg.maps.map(function (m) { return { name: m, value: m }; });
+  var gm = cfg.gameModes || [{ name: "Standard", value: 0 }];
+  document.getElementById("modes").innerHTML = cfg.modes.map(function (m, i) {
+    return '<tr data-i="' + i + '">' +
+      "<td>" + i + "</td>" +
+      '<td><select data-f="mapName">' + options(maps, m.mapName) + "</select></td>" +
+      '<td><select data-f="teamMode">' + options(TEAM_MODES, m.teamMode) + "</select></td>" +
+      '<td><select data-f="gameMode">' + options(gm, m.gameMode || 0) + "</select></td>" +
+      '<td><input type="checkbox" data-f="arena"' + (m.arena ? " checked" : "") + "></td>" +
+      '<td><input type="checkbox" data-f="enabled"' + (m.enabled ? " checked" : "") + "></td>" +
+      '<td><button class="btn danger" data-rm="' + i + '">Remove</button></td></tr>';
+  }).join("");
+}
+function readModes() {
+  var rows = document.querySelectorAll("#modes tr");
+  return Array.prototype.map.call(rows, function (row) {
+    var get = function (f) { return row.querySelector('[data-f="' + f + '"]'); };
+    var gameMode = Number(get("gameMode").value);
+    var m = {
+      mapName: get("mapName").value,
+      teamMode: Number(get("teamMode").value),
+      enabled: get("enabled").checked,
+    };
+    if (gameMode) m.gameMode = gameMode;
+    if (get("arena").checked) m.arena = true;
+    return m;
+  });
+}
+document.getElementById("modes").onclick = function (e) {
+  var t = e.target.closest("[data-rm]");
+  if (!t || !cfg) return;
+  var m = cfg.modes[Number(t.dataset.rm)];
+  if (!confirm("Remove mode " + t.dataset.rm + " (" + m.mapName + ")? The modes after it move up one place.")) return;
+  cfg.modes = readModes();
+  cfg.modes.splice(Number(t.dataset.rm), 1);
+  renderModes();
+};
+document.getElementById("mode-add").onclick = function () {
+  if (!cfg) return;
+  cfg.modes = readModes();
+  cfg.modes.push({ mapName: cfg.maps[0], teamMode: 1, enabled: false });
+  renderModes();
+};
+document.getElementById("modes-save").onclick = function () {
+  if (!cfg) return;
+  var modes = readModes();
+  if (!confirm("Apply these " + modes.length + " modes on " + cfg.target + " now?")) return;
+  api("POST", "/api/config/" + encodeURIComponent(cfg.target) + "/modes", { modes: modes })
+    .then(function () { toast("Modes applied on " + cfg.target); loadConfig(); })
+    .catch(fail);
+};
+function cfgDirty() {
+  return cfg && document.getElementById("cfg-text").value !== cfgOriginal;
+}
+function updateDirty() {
+  document.getElementById("cfg-dirty").textContent = cfgDirty() ? "unsaved changes" : "";
+}
+document.getElementById("cfg-text").oninput = updateDirty;
+document.getElementById("cfg-text").onkeydown = function (e) {
+  if (e.key !== "Tab") return;
+  e.preventDefault();
+  var el = e.target, a = el.selectionStart, b = el.selectionEnd;
+  el.value = el.value.slice(0, a) + "    " + el.value.slice(b);
+  el.selectionStart = el.selectionEnd = a + 4;
+  updateDirty();
+};
+document.getElementById("cfg-save").onclick = function () {
+  if (!cfg) return;
+  if (!confirm("Replace the config file of " + cfg.target + "? It applies on the next restart (the old one is kept as .bak).")) return;
+  api("POST", "/api/config/" + encodeURIComponent(cfg.target) + "/text", { text: document.getElementById("cfg-text").value })
+    .then(function () { toast("Saved - applies on the next restart"); cfgOriginal = document.getElementById("cfg-text").value; updateDirty(); })
+    .catch(fail);
+};
+document.getElementById("cfg-target").onchange = loadConfig;
+document.getElementById("cfg-reload").onclick = loadConfig;
 
 // ---- logs ----
 var logText = "";

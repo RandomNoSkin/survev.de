@@ -5,7 +5,7 @@
  * categories, in that order, are picked at random from the pool; the last step is
  * always the melee weapon below, and a kill with it on that step wins.
  */
-import type { GunCategory } from "./gunCategories";
+import type { GunCategory } from "../gameObjects/gunCategories";
 
 /** 19 guns + the melee = 20 steps. A step with several categories draws from all of
  *  them (there are only a handful of SMGs); no gun appears twice in a ladder. */
@@ -75,7 +75,7 @@ export const GUN_GAME_SPAWN_TARGET_DIST = 55;
 /** Warmup: the match (and its clock) starts once this many players are in - until
  *  then everyone runs around with WARMUP_GUNS random guns, kills don't count. A lobby
  *  (or map) for fewer players starts when it's full. */
-export const GUN_GAME_MIN_PLAYERS = 6;
+export const GUN_GAME_MIN_PLAYERS = 5;
 export const GUN_GAME_WARMUP_GUNS = 2;
 /** Seconds from "enough players" to the start - cut to FULL_COUNTDOWN once it's full. */
 export const GUN_GAME_COUNTDOWN_S = 15;

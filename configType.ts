@@ -197,6 +197,11 @@ export interface ConfigType {
          */
         gameMode?: GameMode;
         /**
+         * Shown in the arena view of the client (the BR | ARENA switch next to Social)
+         * instead of the battle royale one - for the arena modes (Domination, Gun Game).
+         */
+        arena?: boolean;
+        /**
          * Enables / disables the mode, will apply a "disabled" effect to the button client-side
          */
         enabled: boolean;

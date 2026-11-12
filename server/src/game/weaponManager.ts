@@ -856,6 +856,23 @@ export class WeaponManager {
 
         let item = weap.type;
 
+        // (the arena: the rounds stay in the dropped gun, not in the backpack)
+        if (this.player.game.rules?.lootKeepsClip) {
+            const rounds = this.isInfinite(weaponDef) ? 0 : weaponAmmoCount;
+            if (weaponDef.isDual) {
+                item = item.replace("_dual", "");
+                const first = this.player.dropLoot(item, 0, true);
+                if (first) first.clip = Math.ceil(rounds / 2);
+                const second = this.player.dropLoot(item, 0, true);
+                if (second) second.clip = Math.floor(rounds / 2);
+            } else {
+                const loot = this.player.dropLoot(item, 0, true);
+                if (loot) loot.clip = rounds;
+            }
+            this.player.weapsDirty = true;
+            return;
+        }
+
         let amountToDrop = 0;
         if (!this.isInfinite(weaponDef)) {
             const res = this.player.invManager.give(

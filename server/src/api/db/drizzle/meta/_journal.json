@@ -323,6 +323,13 @@
       "when": 1794319503305,
       "tag": "0043_lazy_cammi",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794326223157,
+      "tag": "0044_arena",
+      "breakpoints": true
     }
   ]
 }

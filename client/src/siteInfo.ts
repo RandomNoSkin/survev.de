@@ -1,3 +1,4 @@
+import { ARENA_LOADOUT_MAPS } from "./ui/arenaTutorial";
 import $ from "jquery";
 import { type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
@@ -220,7 +221,60 @@ export class SiteInfo {
             this.info = data || {};
             this.loaded = true;
             this.updatePageFromInfo();
+            this.pollLive(siteInfoUrl);
         });
+    }
+
+    /**
+     * The arena play buttons: players waiting in a warmup (a match about to start:
+     * come in) - a bubble on the button's corner. From the game
+     * servers' reports (every 10 s), polled again every 15 s while the menu is open.
+     */
+    renderLiveCounts() {
+        const region = this.config.get("region") ?? "";
+        const games = this.info.pops?.[region]?.modeGames ?? [];
+        for (let i = 0; i < MODE_BUTTON_COUNT; i++) {
+            const btn = $(`#btn-start-mode-${i}`);
+            btn.find(".btn-mode-live").remove();
+            const mapName = btn.data("mapName") as string | undefined;
+            if (!mapName) continue;
+            const g = games.find((m) => m.mapName === mapName);
+            // only what matters: someone waits for players right now
+            if (!g?.warmupPlayers) continue;
+            const text = `${g.warmupPlayers} waiting`;
+            btn.append(
+                $("<span/>", { class: "btn-mode-live" }).append(
+                    $("<span/>", { class: "btn-mode-live-dot" }),
+                    $("<span/>", { text }),
+                ),
+            );
+        }
+    }
+
+    /** Fetches the site info again now and then (the live arena counts), menu open only. */
+    private pollLive(url: string) {
+        if (this.livePolling) return;
+        this.livePolling = true;
+        setInterval(() => {
+            if (document.hidden || !$("#start-menu").is(":visible")) return;
+            fetch(url)
+                .then((res) => res.json())
+                .then((data: SiteInfoRes) => {
+                    if (!data?.pops) return;
+                    this.info.pops = data.pops;
+                    this.renderLiveCounts();
+                })
+                .catch(() => {});
+        }, 15_000);
+    }
+
+    private livePolling = false;
+
+    /** The team mode a new team plays: the first one of the current view (BR / multiplayer). */
+    defaultTeamModeIdx(): number | undefined {
+        const arena = this.config.get("clientView") === "arena";
+        const idx = this.getModesForSelectedRegion().findIndex((m) => m.enabled && m.teamMode > 1 && !!m.arena === arena);
+        return idx >= 0 ? idx : undefined;
     }
 
     getModesForSelectedRegion() {
@@ -251,6 +305,10 @@ export class SiteInfo {
                 buttonText,
                 l10nKey,
                 enabled: mode.enabled,
+                /** its index in the region's modes (what find_game takes) */
+                modeIdx: i,
+                arena: !!mode.arena,
+                mapName: mode.mapName,
             });
         }
         return availableModes;
@@ -264,6 +322,12 @@ export class SiteInfo {
             for (let i = 0; i < MODE_BUTTON_COUNT; i++) {
                 const btn = $(`#btn-start-mode-${i}`);
                 btn.removeClass("btn-custom-mode-no-indent btn-custom-mode-main");
+                // the style class the button's previous mode put on (a view switch moves
+                // other modes onto these buttons - 2v2's blue pulse stayed on Domination)
+                const prevCss = btn.data("modeCss");
+                if (prevCss) btn.removeClass(prevCss);
+                btn.removeData("modeCss");
+                btn.removeData("modeIdx");
                 btn.css("background-image", "");
                 btn.removeData("l10n");
                 btn.html("");
@@ -277,12 +341,15 @@ export class SiteInfo {
                 l.hide();
             }
             const getGameModeStyles = this.getGameModeStyles();
-            for (let i = 0; i < getGameModeStyles.length; i++) {
-                const style = getGameModeStyles[i];
+            // the main play buttons: the view's modes (BR | ARENA switch), in order
+            const arenaView = this.config.get("clientView") === "arena";
+            const viewStyles = getGameModeStyles.filter((s) => s.arena === arenaView);
+            for (let i = 0; i < viewStyles.length && i < MODE_BUTTON_COUNT; i++) {
+                const style = viewStyles[i];
                 const selector = `index-play-${style.buttonText}`;
                 const btn = $(`#btn-start-mode-${i}`);
                 btn.data("l10n", selector);
-                btn.html(this.localization.translate(selector));
+                btn.data("modeIdx", style.modeIdx);
                 if (style.icon || style.buttonCss) {
                     if (i == 0) {
                         btn.addClass("btn-custom-mode-no-indent");
@@ -290,31 +357,42 @@ export class SiteInfo {
                         btn.addClass("btn-custom-mode-main");
                     }
                     btn.addClass(style.buttonCss);
+                    btn.data("modeCss", style.buttonCss);
                     btn.css({
                         "background-image": `url(${style.icon})`,
                     });
                 }
-                const l = $(`#btn-team-queue-mode-${i}`);
-                if (l.length) {
-                    const c = `index-play-${style.buttonText}`;
-                    l.data("l10n", c);
-                    l.html(this.localization.translate(c));
-                    if (style.icon) {
-                        l.addClass("btn-custom-mode-select");
-                        l.css({
-                            "background-image": `url(${style.icon})`,
-                        });
-                    }
-                }
-
+                btn.html(this.localization.translate(selector));
+                btn.data("mapName", style.arena ? style.mapName : "");
                 btn.toggle(style.enabled);
+            }
+            this.renderLiveCounts();
+            // the arena loadouts only matter while a mode that uses them is on
+            const modesOn = this.getModesForSelectedRegion().filter((m) => m.arena && m.enabled).map((m) => m.mapName);
+            $(document.body).toggleClass("arena-no-loadouts", !ARENA_LOADOUT_MAPS.some((m) => modesOn.includes(m)));
+            // the team menu's queue buttons: every mode, by index
+            for (let i = 0; i < getGameModeStyles.length; i++) {
+                const style = getGameModeStyles[i];
+                const l = $(`#btn-team-queue-mode-${i}`);
+                if (!l.length) continue;
+                const c = `index-play-${style.buttonText}`;
+                l.data("l10n", c);
+                l.html(this.localization.translate(c));
+                if (style.icon) {
+                    l.addClass("btn-custom-mode-select");
+                    l.css({
+                        "background-image": `url(${style.icon})`,
+                    });
+                }
                 l.toggle(style.enabled);
             }
-            const selectedModes = this.getModesForSelectedRegion();
+            const arenaFlag = (s: { arena?: boolean }) => !!s.arena === (this.config.get("clientView") === "arena");
+            const selectedModes = this.getModesForSelectedRegion().filter(arenaFlag);
             const supportsTeam = selectedModes.some((s) => s.enabled && s.teamMode > 1);
             $("#btn-join-team, #btn-create-team").toggle(supportsTeam);
 
-            const supportsPrivateLobby = selectedModes.some((s) => s.enabled);
+            // custom lobbies in both views (the arena modes come from its Game Modes tab)
+            const supportsPrivateLobby = this.getModesForSelectedRegion().some((s) => s.enabled);
             $("#btn-join-private-lobby, #btn-create-private-lobby").toggle(
                 supportsPrivateLobby,
             );
