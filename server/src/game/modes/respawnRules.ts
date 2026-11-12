@@ -1,4 +1,10 @@
-import { ARENA_AFK_KICK_S, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S } from "../../../../shared/defs/modes/arenaDefs";
+import {
+    ARENA_AFK_KICK_S,
+    ARENA_BOOST_RESIST,
+    ARENA_OUT_OF_COMBAT_HEAL_MULT,
+    ARENA_OUT_OF_COMBAT_S,
+    ARENA_TAKEDOWN,
+} from "../../../../shared/defs/modes/arenaDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
 import type { MapDef } from "../../../../shared/defs/mapDefs";
 import { GameObjectDefs } from "../../../../shared/defs/register";
@@ -241,10 +247,11 @@ export abstract class RespawnRules implements ModeRules {
         if (countWeapon && weapon && (weaponType === "gun" || weaponType === "melee" || weaponType === "throwable")) {
             killer.weaponKills.set(weapon, (killer.weaponKills.get(weapon) ?? 0) + 1);
         }
+        // Takedown, the arena's (nerfed): a bit of health, a pill's resistance, a short haste
         if (killer.hasPerk("takedown")) {
-            killer.health += 25;
-            killer.boost += 25;
-            killer.giveHaste(GameConfig.HasteType.Takedown, 3);
+            killer.health += ARENA_TAKEDOWN.health;
+            this.onBoostUsed(killer, ARENA_TAKEDOWN.boost);
+            killer.giveHaste(GameConfig.HasteType.Takedown, ARENA_TAKEDOWN.hasteSeconds);
         }
         this.game.playerBarn.killLeaderDirty = true;
         this.game.logKillFeedEntry({
@@ -364,6 +371,32 @@ export abstract class RespawnRules implements ModeRules {
         this.game.grid.updateObject(player);
         this.giveSpawnItems(player);
         this.statusChanged(player);
+    }
+
+    // ── a soda / pill: damage resistance (the adrenaline is always full) ────────
+
+    /** a soda / pill's damage resistance: until when (match clock), how much */
+    protected resist = new Map<Player, { until: number; reduction: number }>();
+
+    /** A soda / pill (and Takedown, a revive): a few seconds of damage resistance. */
+    onBoostUsed(player: Player, item: string): void {
+        const r = ARENA_BOOST_RESIST[item];
+        if (!r) return;
+        const now = this.resist.get(player);
+        this.resist.set(player, {
+            until: Math.max(this.clock + r.seconds, now?.until ?? 0),
+            reduction: Math.max(r.reduction, now && now.until > this.clock ? now.reduction : 0),
+        });
+    }
+
+    /** The soda / pill resistance running now (0..1). */
+    protected boostResistance(player: Player): number {
+        const r = this.resist.get(player);
+        return r && r.until > this.clock ? r.reduction : 0;
+    }
+
+    damageReduction(player: Player, _params?: DamageParams): number {
+        return this.boostResistance(player);
     }
 
     /** Every arena mode: out of combat (no shot, no enemy damage dealt / taken for a

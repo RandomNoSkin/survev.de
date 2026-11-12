@@ -21,11 +21,12 @@ export interface ArenaLoadout {
 }
 
 /** What everyone wears and carries on every spawn: level 2 helmet, level 1 vest, a
- *  backpack full of ammo, 5 bandages, 3 sodas and a pill; adrenaline is always full. */
+ *  level 2 backpack with ammo for the guns (ARENA_SPAWN_AMMO_MULT), 5 bandages, 3 sodas
+ *  and a pill; adrenaline is always full. */
 export const ARENA_GEAR = {
     helmet: "helmet02",
     chest: "chest01",
-    backpack: "backpack01",
+    backpack: "backpack02",
     fullAmmo: true,
     heals: { bandage: 5, soda: 3, painkiller: 1 } as Record<string, number>,
     /** the scopes everyone has; the last one is selected on spawn */
@@ -41,7 +42,24 @@ export const ARENA_GEAR = {
 export const ARENA_BOOST_RESIST: Record<string, { reduction: number; seconds: number }> = {
     soda: { reduction: 0.2, seconds: 5 },
     painkiller: { reduction: 0.3, seconds: 8 },
+    /** (no item: what Takedown gives per kill - see ARENA_TAKEDOWN) */
+    takedown: { reduction: 0.15, seconds: 8 },
 };
+
+/** Spawn ammo per gun: this many times what the gun drops with in the battle royale
+ *  (its ammoSpawnCount) - two guns of one ammo type add up, the backpack caps it. */
+export const ARENA_SPAWN_AMMO_MULT = 2;
+/** ...pistols and shotguns more (their drop is small). `max`: at most that many. */
+export const ARENA_SPAWN_AMMO_BY_CATEGORY: Record<string, { mult: number; max?: number }> = {
+    pistol: { mult: 4 },
+    shotgun: { mult: 3 },
+};
+/** Grenades (any throwable) a player can carry at most - whatever the backpack holds. */
+export const ARENA_MAX_THROWABLES = 4;
+
+/** Takedown in the arena modes (Gun Game too): per kill a bit of health, a short damage
+ *  resistance (ARENA_BOOST_RESIST.takedown - half a pill's) and a short burst of speed. */
+export const ARENA_TAKEDOWN = { health: 10, boost: "takedown", hasteSeconds: 2 };
 
 /** Health after a revive (on top: a pill's damage resistance, ARENA_BOOST_RESIST). */
 export const ARENA_REVIVE_HEALTH = 50;
@@ -93,7 +111,7 @@ export const ARENA_LEVEL_UNLOCKS: Record<number, string[]> = {
     15: ["groza", "windwalk"],
     16: ["model94", "self_revive"],
     17: ["dynamite"],
-    18: ["vss"],
+    18: ["vss", "quickswitch"],
     19: ["dp28"],
     20: ["l86", "steelskin"],
     21: ["henry"],

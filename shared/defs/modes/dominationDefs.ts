@@ -55,8 +55,12 @@ export const DOMINATION_MENU_MAX_S = 30;
 /** Respawns keep at least this far from enemies when the map allows it. */
 export const DOMINATION_SPAWN_SAFE_DIST = 45;
 /** A zone without hard cover this close gets some (indestructible stones). */
-export const DOMINATION_COVER_CHECK_RAD = 20;
-export const DOMINATION_COVER_MIN = 2;
+/** Hard cover in a zone: around its middle in this many directions (sectors)... */
+export const DOMINATION_COVER_SECTORS = 6;
+/** ...at least this many of them with a piece inside the zone - the missing ones get one. */
+export const DOMINATION_COVER_MIN = 5;
+/** Destructible cover this tough counts as hard cover too (sandbags: 2500). */
+export const DOMINATION_HARD_COVER_HEALTH = 1000;
 /** A loadout picked this soon after spawning (nothing fired, no damage taken) is given right away. */
 export const DOMINATION_LOADOUT_SWAP_S = 15;
 export const DOMINATION_SPAWN_PROTECTION_S = 2;

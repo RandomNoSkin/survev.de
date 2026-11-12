@@ -1,3 +1,4 @@
+import { arenaLevelFromXp } from "../../../../shared/utils/arena";
 /**
  * Moderation Dashboard Router
  *
@@ -114,6 +115,10 @@ import {
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
+    arenaLoadoutsTable,
+    arenaProgressTable,
+    arenaStreaksTable,
+    arenaWeaponKillsTable,
     auctionsTable,
     banCommentsTable,
     banHistoryTable,
@@ -3701,9 +3706,27 @@ export const ModerationDashboardRouter = new Hono<Context>()
             mapId: MapId[m.mapId],
         }));
 
+        // the arena progress (Domination & co): level / XP, challenge kills, loadouts
+        const [arenaXpRow, arenaKills, arenaLoadouts] = await Promise.all([
+            db.select({ xp: arenaProgressTable.xp }).from(arenaProgressTable).where(eq(arenaProgressTable.userId, user.id)),
+            db.select({ kills: sql<string>`coalesce(sum(${arenaWeaponKillsTable.kills}), 0)`, weapons: sql<string>`count(*)` })
+                .from(arenaWeaponKillsTable)
+                .where(eq(arenaWeaponKillsTable.userId, user.id)),
+            db.select({ n: sql<string>`count(*)` }).from(arenaLoadoutsTable).where(eq(arenaLoadoutsTable.userId, user.id)),
+        ]);
+        const arenaXp = arenaXpRow[0]?.xp ?? 0;
+        const arena = {
+            xp: arenaXp,
+            level: arenaLevelFromXp(arenaXp).level,
+            challengeKills: Number(arenaKills[0]?.kills ?? 0),
+            challengeWeapons: Number(arenaKills[0]?.weapons ?? 0),
+            loadouts: Number(arenaLoadouts[0]?.n ?? 0),
+        };
+
         return c.json({
             user: { ...user, discordId: user.linkedDiscord ? user.authId : null },
             clan: await adminClanOf(user.id),
+            arena,
             passTypes,
             xp,
             itemsBySource,
@@ -4085,6 +4108,58 @@ export const ModerationDashboardRouter = new Hono<Context>()
         }
     })
     /** Sets a pass's level + xp absolutely, then grants the corresponding unlocks. */
+    /**
+     * The arena progress of an account: set the XP (the level follows), or reset the
+     * challenge kills (the weapon challenges start over), or everything (XP, kills,
+     * saved loadouts and kill streak picks - a fresh start).
+     */
+    .post(
+        "/api/account/arena",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                action: z.enum(["set_xp", "reset_kills", "reset_all"]),
+                xp: z.number().int().gte(0).lte(100_000_000).optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, action, xp } = c.req.valid("json");
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+
+            if (action === "set_xp") {
+                const value = xp ?? 0;
+                await db
+                    .insert(arenaProgressTable)
+                    .values({ userId: user.id, xp: value })
+                    .onConflictDoUpdate({ target: arenaProgressTable.userId, set: { xp: value } });
+            } else {
+                await db.delete(arenaWeaponKillsTable).where(eq(arenaWeaponKillsTable.userId, user.id));
+                if (action === "reset_all") {
+                    await db.delete(arenaProgressTable).where(eq(arenaProgressTable.userId, user.id));
+                    await db.delete(arenaLoadoutsTable).where(eq(arenaLoadoutsTable.userId, user.id));
+                    await db.delete(arenaStreaksTable).where(eq(arenaStreaksTable.userId, user.id));
+                }
+            }
+            const label = action === "set_xp" ? `XP set to ${xp ?? 0} (level ${arenaLevelFromXp(xp ?? 0).level})`
+                : action === "reset_kills" ? "challenge kills reset"
+                : "everything reset (XP, kills, loadouts, kill streaks)";
+            void logModerationAction(
+                "🎯 Arena progress changed",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Change", value: label },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x3355ee,
+            );
+            return c.json({ ok: true });
+        },
+    )
     .post(
         "/api/account/set-xp",
         validateParams(

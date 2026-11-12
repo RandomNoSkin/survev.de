@@ -53,10 +53,13 @@ const ARENA_ICONS: Record<string, string> = {
 export const arenaIconOf = (type: string) => ARENA_ICONS[type] ?? helpers.getSvgFromGameType(type);
 
 /** The pistol slot's groups: pistols, dual pistols, main guns allowed as secondary. */
+/** The pistol slot's groups: pistols, dual pistols - then main guns (the MP220 / P90, or
+ *  any with Quickswitch) by their category like in the main gun slot. */
 function pistolGroup(type: string): string {
-    if (gunCategory(type) !== "pistol") return "Main guns as secondary";
+    if (gunCategory(type) !== "pistol") return CATEGORY_LABELS[gunCategory(type)] ?? "Other";
     return (GunDefs[type] as { isDual?: boolean }).isDual ? "Dual pistols" : "Pistols";
 }
+const PISTOL_GROUPS = ["Pistols", "Dual pistols"];
 
 /** Names the game has none for (kills counted under their own name). */
 const ARENA_NAMES: Record<string, string> = {
@@ -189,7 +192,7 @@ export class ArenaMenu {
     /** Everything for the slot being edited: unlocked ones to pick, locked ones with how to get them. */
     private renderChoices(p: ArenaProfileResponse) {
         const unlocked = new Set(p.unlocked);
-        const items = arenaItems().filter((t) => arenaFitsSlot(t, this.editing));
+        const items = arenaItems().filter((t) => arenaFitsSlot(t, this.editing, this.loadout.perk));
         const order = (t: string) => arenaUnlockLevel(t) ?? 100 + (ARENA_CHALLENGES[t]?.kills ?? 0) / 1000;
         items.sort((a, b) => order(a) - order(b));
 
@@ -203,7 +206,14 @@ export class ArenaMenu {
                   : "";
             groups.set(group, [...(groups.get(group) ?? []), t]);
         }
-        for (const [group, list] of groups) {
+        // the secondary slot: the pistols first, the main guns' categories after them
+        const ordered = [...groups].sort(([a], [b]) => {
+            if (this.editing !== "pistol") return 0;
+            const ia = PISTOL_GROUPS.indexOf(a);
+            const ib = PISTOL_GROUPS.indexOf(b);
+            return (ia < 0 ? PISTOL_GROUPS.length : ia) - (ib < 0 ? PISTOL_GROUPS.length : ib);
+        });
+        for (const [group, list] of ordered) {
             if (group) wrap.append($("<div/>", { class: "arena-group", text: group }));
             const grid = $("<div/>", { class: "arena-grid" });
             for (const t of list) {
@@ -332,6 +342,8 @@ export class ArenaMenu {
         const p = this.profile;
         if (!p) return;
         const loadout = { ...this.loadout, [this.editing]: type };
+        // no Quickswitch any more: a main gun as secondary goes back to a pistol
+        if (!arenaFitsSlot(loadout.pistol, "pistol", loadout.perk)) loadout.pistol = ARENA_DEFAULT_LOADOUT.pistol;
         p.loadouts[this.slot] = loadout;
         this.render();
         this.account.ajaxRequest("/api/user/arena/loadout", { slot: this.slot, loadout }, (err, res: { loadout: ArenaLoadout }) => {

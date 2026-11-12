@@ -1,6 +1,9 @@
+import { gunCategory } from "../../../../shared/defs/gameObjects/gunCategories";
 import {
-    ARENA_BOOST_RESIST,
     ARENA_GEAR,
+    ARENA_MAX_THROWABLES,
+    ARENA_SPAWN_AMMO_BY_CATEGORY,
+    ARENA_SPAWN_AMMO_MULT,
     ARENA_JUGGERNAUT_M249_KILLS,
     ARENA_REVIVE_HEALTH,
     ARENA_XP,
@@ -25,8 +28,9 @@ import {
     DOMINATION_CAPTURE_S,
     DOMINATION_COUNTDOWN_S,
     DOMINATION_COUNTDOWNS,
-    DOMINATION_COVER_CHECK_RAD,
     DOMINATION_COVER_MIN,
+    DOMINATION_COVER_SECTORS,
+    DOMINATION_HARD_COVER_HEALTH,
     DOMINATION_FULL_COUNTDOWN_S,
     DOMINATION_GROUP_SPEED,
     DOMINATION_LOADOUT_SWAP_S,
@@ -53,8 +57,11 @@ import { GameConfig, type InventoryItem } from "../../../../shared/gameConfig";
 import { ArenaLoadoutAction } from "../../../../shared/net/arenaLoadoutSelectMsg";
 import type * as net from "../../../../shared/net/net";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
+import { ARENA_QUICKSWITCH } from "../../../../shared/defs/modes/arenaPerkDefs";
 import { ARENA_ALSO_SECONDARY, ARENA_DEFAULT_LOADOUT, ARENA_PRESET_LOADOUTS, arenaSlotOf } from "../../../../shared/utils/arena";
+import { coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
+import { math } from "../../../../shared/utils/math";
 import { util } from "../../../../shared/utils/util";
 import { GameObjectDefs, MapObjectDefs } from "../../../../shared/defs/register";
 import type { ObstacleDef } from "../../../../shared/defs/mapObjectsTyping";
@@ -91,7 +98,8 @@ interface Zone {
 /** Cover that holds: indestructible, or plated (only armor piercing rounds break it). */
 export function isHardCover(type: string): boolean {
     const def = MapObjectDefs.typeToDefSafe(type) as ObstacleDef | undefined;
-    return !!def && (!def.destructible || !!def.stonePlated || !!def.armorPlated);
+    // indestructible, plated - or so tough it holds a whole fight (sandbags: 2500 health)
+    return !!def && (!def.destructible || !!def.stonePlated || !!def.armorPlated || (def.health ?? 0) >= DOMINATION_HARD_COVER_HEALTH);
 }
 
 /**
@@ -183,8 +191,6 @@ export class Domination extends RespawnRules {
     private streakDirty = new Set<Player>();
     /** flares fired: who called which crate where (to fill the crate when it's opened) */
     private calledCrates: Array<{ player: Player; pos: Vec2; supply: boolean }> = [];
-    /** a soda / pill's damage resistance: until when (game clock), how much */
-    private resist = new Map<Player, { until: number; reduction: number }>();
     /** what each player dropped on their last death (cleared on the next one) */
     private drops = new Map<Player, Loot[]>();
     /** in the loadout menu - not respawning before "Enter game" (or DOMINATION_MENU_MAX_S) */
@@ -373,34 +379,76 @@ export class Domination extends RespawnRules {
     }
 
     /** Hard cover (indestructible obstacles, walls) near a zone, else some stones. */
+    /**
+     * Hard cover in a zone, all around: the zone split into DOMINATION_COVER_SECTORS
+     * directions, a piece of hard cover (an indestructible / plated obstacle, a wall)
+     * inside the zone in each - a building next to it doesn't count, nor do its many
+     * wall pieces in one direction. Until DOMINATION_COVER_MIN directions have one,
+     * the empty ones get sandbags or a stone (crowded spots get more tries).
+     */
     private ensureCover(pos: Vec2): void {
         const map = this.game.map;
-        const area = collider.createCircle(pos, DOMINATION_COVER_CHECK_RAD);
-        let cover = 0;
-        // (a building's walls are indestructible obstacles too; plated ones - the stones
-        // below - only break to armor piercing rounds)
-        for (const obj of this.game.grid.intersectCollider(area)) {
+        const rad = DOMINATION_ZONE_RAD;
+        const sectors = DOMINATION_COVER_SECTORS;
+        const sectorOf = (p: Vec2) => {
+            const a = Math.atan2(p.y - pos.y, p.x - pos.x);
+            return Math.floor((((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / ((Math.PI * 2) / sectors)) % sectors;
+        };
+        const covered = new Set<number>();
+        for (const obj of this.game.grid.intersectCollider(collider.createCircle(pos, rad))) {
             if (obj.__type !== ObjectType.Obstacle || obj.dead || !obj.collidable || obj.layer !== 0) continue;
-            if (!isHardCover(obj.type) || v2.distance(obj.pos, pos) > DOMINATION_COVER_CHECK_RAD) continue;
-            cover++;
+            const d = v2.distance(obj.pos, pos);
+            // (right in the middle: no direction - it hides from nothing in particular)
+            if (!isHardCover(obj.type) || d > rad || d < rad * 0.2) continue;
+            covered.add(sectorOf(obj.pos));
         }
-        if (cover >= DOMINATION_COVER_MIN) return;
-        // three pieces spread around it - mostly sandbags, some stones; crowded spots
-        // (trees, walls) get more tries
-        const start = Math.random() * Math.PI * 2;
-        for (let i = 0, placed = 0; i < 40 && placed < 3; i++) {
-            const angle = i < 3 ? start + (i * Math.PI * 2) / 3 : Math.random() * Math.PI * 2;
-            const dist = DOMINATION_ZONE_RAD * (i < 3 ? 0.6 : 0.35 + Math.random() * 0.9);
-            const at = v2.add(pos, v2.create(Math.cos(angle) * dist, Math.sin(angle) * dist));
-            const roll = Math.random();
-            const type = roll < 0.55 ? "sandbags_01" : roll < 0.75 ? "sandbags_02" : "stone_01_indestructible";
-            if (!MapObjectDefs.typeToDefSafe(type)) continue;
-            // sandbags lie across the way to the zone (their long side is along x at ori 0)
-            const ori = Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle)) ? 1 : 0;
-            if (!map.canSpawn(type, at, ori, 1)) continue;
-            map.genObstacle(type, at, 0, ori, 1);
-            placed++;
+        const width = (Math.PI * 2) / sectors;
+        for (let s = 0; s < sectors && covered.size < DOMINATION_COVER_MIN; s++) {
+            if (covered.has(s)) continue;
+            for (let i = 0; i < 40; i++) {
+                // the sector's middle first, then anywhere in it (trees, walls, crates in the way)
+                const angle = (s + (i === 0 ? 0.5 : 0.08 + Math.random() * 0.84)) * width;
+                const dist = rad * (i === 0 ? 0.6 : 0.3 + Math.random() * 0.62);
+                const at = v2.add(pos, v2.create(Math.cos(angle) * dist, Math.sin(angle) * dist));
+                const roll = Math.random();
+                const type = roll < 0.55 ? "sandbags_01" : roll < 0.75 ? "sandbags_02" : "stone_01_indestructible";
+                if (!MapObjectDefs.typeToDefSafe(type)) continue;
+                // sandbags lie across the way to the zone (their long side is along x at ori 0)
+                const ori = Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle)) ? 1 : 0;
+                // the map generator's check first (it keeps wide gaps around trees, stones,
+                // the pieces put here already - in a 12 m zone whole directions), then
+                // just "nothing in the way" (see fitsAt)
+                if (!(i < 15 ? map.canSpawn(type, at, ori, 1) : this.fitsAt(type, at, ori))) continue;
+                map.genObstacle(type, at, 0, ori, 1);
+                covered.add(s);
+                break;
+            }
         }
+    }
+
+    /** A piece of cover fits here: on land, not inside a building, overlapping no obstacle. */
+    private fitsAt(type: string, at: Vec2, ori: number): boolean {
+        const map = this.game.map;
+        const def = MapObjectDefs.typeToDefSafe(type) as ObstacleDef | undefined;
+        if (!def?.collision || map.isOnWater(at, 0)) return false;
+        if (at.x < map.shoreInset || at.y < map.shoreInset || at.x > map.width - map.shoreInset || at.y > map.height - map.shoreInset) return false;
+        const coll = collider.transform(def.collision, at, math.oriToRad(ori), 1);
+        // a little room around it (players walk around it)
+        const room = collider.createCircle(at, 1.5 + Math.max(
+            ...(coll.type === collider.Type.Aabb ? [v2.length(v2.sub(coll.max, coll.min)) / 2] : [coll.rad]),
+        ));
+        for (const obj of this.game.grid.intersectCollider(room)) {
+            if (obj.layer !== 0) continue;
+            // a building: not inside it (its roofed part) - right next to its walls is fine
+            if (obj.__type === ObjectType.Building) {
+                for (const r of obj.zoomRegions) {
+                    if (r.zoomIn && coldet.test(room, r.zoomIn)) return false;
+                }
+                continue;
+            }
+            if (obj.__type === ObjectType.Obstacle && !obj.dead && obj.collidable && coldet.test(room, obj.collider)) return false;
+        }
+        return true;
     }
 
     private ensureZones(): void {
@@ -524,9 +572,15 @@ export class Domination extends RespawnRules {
         ] as const) {
             const gun = GunDefs[type];
             wm.setWeapon(slot, gun ? type : "", gun ? wm.getAmmoStats(gun).maxClip : 0);
-            // a backpack full of its ammo
+            // its ammo: twice what it drops with in the battle royale (both guns of one
+            // ammo type add up), at most what the backpack holds
+            // (pistols and shotguns four times, shotguns at most 30 shells)
             if (gun && player.invManager.isValid(gun.ammo)) {
-                player.invManager.set(gun.ammo, player.invManager.getMaxCapacity(gun.ammo));
+                const ammo = gun.ammo;
+                const rule = ARENA_SPAWN_AMMO_BY_CATEGORY[gunCategory(type)];
+                const cap = Math.min(player.invManager.getMaxCapacity(ammo), rule?.max ?? Infinity);
+                const add = gun.ammoSpawnCount * (rule?.mult ?? ARENA_SPAWN_AMMO_MULT);
+                player.invManager.set(ammo, Math.min(cap, player.invManager.get(ammo) + add));
             }
         }
         wm.setWeapon(GameConfig.WeaponSlot.Melee, this.ownMelee.get(player) ?? "fists", 0);
@@ -799,21 +853,8 @@ export class Domination extends RespawnRules {
         return undefined;
     }
 
-    /** Adrenaline is always full - a soda / pill gives a few seconds of damage resistance. */
-    onBoostUsed(player: Player, item: string): void {
-        const r = ARENA_BOOST_RESIST[item];
-        if (!r) return;
-        const now = this.resist.get(player);
-        const until = this.clock + r.seconds;
-        this.resist.set(player, {
-            until: Math.max(until, now?.until ?? 0),
-            reduction: Math.max(r.reduction, now && now.until > this.clock ? now.reduction : 0),
-        });
-    }
-
     damageReduction(player: Player, params?: DamageParams): number {
-        const r = this.resist.get(player);
-        const boost = r && r.until > this.clock ? r.reduction : 0;
+        const boost = this.boostResistance(player);
         // Flak Jacket: less from explosions (on top of the soda / pill's)
         let explosion = 0;
         if (params?.isExplosion) {
@@ -1022,6 +1063,12 @@ export class Domination extends RespawnRules {
         player.msgsToSend.push({ type: netMsgs.MsgType.Killstreak, msg });
     }
 
+    /** At most ARENA_MAX_THROWABLES grenades (the level 2 backpack would hold 6+). */
+    itemCap(_player: Player, item: string, usual: number): number {
+        const def = GameObjectDefs.typeToDefSafe(item) as { type?: string } | undefined;
+        return def?.type === "throwable" ? Math.min(usual, ARENA_MAX_THROWABLES) : usual;
+    }
+
     /** The kill streak flares give no speed (they sit in the melee slot). */
     equipSpeed(_player: Player, weapon: string, usual: number): number {
         return ARENA_STREAKS[0].options.includes(weapon) ? 0 : usual;
@@ -1077,6 +1124,12 @@ export class Domination extends RespawnRules {
         // a gun for either slot (the MP220): into the one in hand (main gun / secondary) -
         // a second one too (two only this way: the loadout allows one)
         if (ARENA_ALSO_SECONDARY.includes(gunType) && slots.includes(player.curWeapIdx)) return player.curWeapIdx;
+        // Quickswitch: two main guns - a main gun replaces the one in hand (else a free slot)
+        if (kind === "primary" && player.hasPerk(ARENA_QUICKSWITCH)) {
+            if (slots.includes(player.curWeapIdx)) return player.curWeapIdx;
+            const free = slots.find((s) => !player.weapons[s].type);
+            return free ?? GameConfig.WeaponSlot.Primary;
+        }
         const exact = slots.find((s) => player.weapons[s].type === gunType);
         if (exact !== undefined) return exact;
         const same = slots.find((s) => player.weapons[s].type && arenaSlotOf(player.weapons[s].type) === kind);
