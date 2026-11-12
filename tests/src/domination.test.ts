@@ -1,11 +1,14 @@
+import { GunDefs } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { type Domination, isHardCover, splitIntoTeams } from "../../server/src/game/modes/domination.ts";
 import type { Player } from "../../server/src/game/objects/player.ts";
-import { ARENA_AFK_KICK_S, ARENA_BOOST_RESIST, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S, ARENA_CHALLENGES, ARENA_REVIVE_HEALTH, ARENA_GEAR, ARENA_LEVEL_UNLOCKS, ARENA_PERKS, ARENA_STARTER_ITEMS } from "../../shared/defs/modes/arenaDefs.ts";
+import { ARENA_AFK_KICK_S, ARENA_BOOST_RESIST, ARENA_MAX_THROWABLES, ARENA_SPAWN_AMMO_MULT, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S, ARENA_CHALLENGES, ARENA_REVIVE_HEALTH, ARENA_GEAR, ARENA_LEVEL_UNLOCKS, ARENA_PERKS, ARENA_STARTER_ITEMS } from "../../shared/defs/modes/arenaDefs.ts";
 import { ARENA_FAST_REVIVE_S } from "../../shared/defs/modes/arenaPerkDefs.ts";
 import {
     DOMINATION_CAPTURE_S,
+    DOMINATION_COVER_MIN,
+    DOMINATION_COVER_SECTORS,
     DOMINATION_MIN_PLAYERS,
     DOMINATION_NEUTRALIZE_S,
     DOMINATION_POINT_INTERVAL_S,
@@ -292,10 +295,24 @@ describe("domination", () => {
             expect(v2.distance(v2.create(game.map.width - a.pos.x, game.map.height - a.pos.y), c.pos)).toBeLessThan(15);
             expect(v2.distance(b.pos, mid)).toBeLessThan(game.map.width * 0.38);
             for (const z of rules.zones) {
-                const near = game.map.obstacles.filter(
-                    (o) => !o.destroyed && !o.dead && o.collidable && isHardCover(o.type) && o.layer === 0 && v2.distance(o.pos, z.pos) <= 20,
-                ).length;
-                expect(near).toBeGreaterThan(0);
+                // hard cover inside the zone, in (nearly) every direction around its middle
+                const sectors = new Set(
+                    game.map.obstacles
+                        .filter((o) => !o.destroyed && !o.dead && o.collidable && isHardCover(o.type) && o.layer === 0)
+                        .filter((o) => {
+                            const d = v2.distance(o.pos, z.pos);
+                            return d <= z.rad && d >= z.rad * 0.2;
+                        })
+                        .map((o) => {
+                            const a = (Math.atan2(o.pos.y - z.pos.y, o.pos.x - z.pos.x) + Math.PI * 2) % (Math.PI * 2);
+                            return Math.floor(a / ((Math.PI * 2) / DOMINATION_COVER_SECTORS)) % DOMINATION_COVER_SECTORS;
+                        }),
+                );
+                // (a zone in / at a building: nothing can be put there - its walls and crates are the cover)
+                const atBuilding = game.map.buildings.some((bd) => bd.layer === 0 && v2.distance(bd.pos, z.pos) < 25);
+                // (open ground: DOMINATION_COVER_MIN directions - one may stay open when a tree /
+                // stone cluster leaves no room for a piece)
+                expect(sectors.size).toBeGreaterThanOrEqual(atBuilding ? 1 : DOMINATION_COVER_MIN - 1);
             }
         }
     });
@@ -525,7 +542,7 @@ describe("domination", () => {
         expect(game.lootBarn.loots.filter((l) => !l.destroyed)).toHaveLength(0);
         expect(game.map.obstacles.filter((o) => !o.destroyed && o.dead)).toHaveLength(0);
         // the same map (give or take the cover pieces put next to the zones)
-        expect(Math.abs(game.map.obstacles.filter((o) => !o.destroyed).length - before)).toBeLessThanOrEqual(9);
+        expect(Math.abs(game.map.obstacles.filter((o) => !o.destroyed).length - before)).toBeLessThanOrEqual(3 * DOMINATION_COVER_SECTORS);
     });
 
     test("a second death clears what the first one dropped", () => {
@@ -938,6 +955,42 @@ describe("domination", () => {
         expect(rules.startedFull).toBe(false);
         const full = domination(6);
         expect(full.rules.startedFull).toBe(true);
+    });
+
+    test("a custom lobby's match: the join tokens keep the players' arena loadouts and kill streaks", () => {
+        const game = createGame(TeamMode.Squad, "domination", GameMode.Domination);
+        const loadouts = [{ primary: "ak47", pistol: "deagle", throwable: "smoke", perk: "windwalk" }];
+        const streaks = { airdrop: "supply_flare_gun", juggernaut: "m134", airdropWeapon: "awc", brokenArrow: false };
+        game.addGroupedJoinTokens([[
+            { token: "t1", userId: "u1", ip: "1.2.3.4", admin: false, roleTag: null, arenaLoadouts: loadouts, arenaStreaks: streaks },
+        ]]);
+        const data = game.joinTokens.get("t1")!;
+        expect(data.arenaLoadouts).toStrictEqual(loadouts);
+        expect(data.arenaStreaks).toStrictEqual(streaks);
+    });
+
+    test("spawn ammo: twice what the guns drop with in the battle royale (one ammo type adds up)", () => {
+        const { red } = domination(1);
+        const [r] = red;
+        const main = GunDefs[r.weapons[GameConfig.WeaponSlot.Primary].type];
+        const second = GunDefs[r.weapons[GameConfig.WeaponSlot.Secondary].type];
+        const mult = (g: typeof main) => (g.pistol ? 4 : g.ammo === "12gauge" ? 3 : ARENA_SPAWN_AMMO_MULT);
+        const expected = (ammo: string) => Math.min(
+            r.invManager.getMaxCapacity(ammo as never),
+            [main, second].filter((g) => g?.ammo === ammo).reduce((n, g) => n + g.ammoSpawnCount * mult(g), 0),
+        );
+        expect(r.invManager.get(main.ammo as never)).toBe(expected(main.ammo));
+        expect(r.invManager.get(second.ammo as never)).toBe(expected(second.ammo));
+    });
+
+    test("at most 4 grenades - whatever the level 2 backpack holds", () => {
+        const { red } = domination(1);
+        const [r] = red;
+        expect(r.backpack).toBe("backpack02");
+        expect(r.invManager.getMaxCapacity("frag" as never)).toBe(ARENA_MAX_THROWABLES);
+        expect(r.invManager.getMaxCapacity("smoke" as never)).toBe(ARENA_MAX_THROWABLES);
+        // (ammo isn't limited by it)
+        expect(r.invManager.getMaxCapacity("556mm" as never)).toBeGreaterThan(ARENA_MAX_THROWABLES);
     });
 
     test("out of combat the adrenaline heals faster", () => {

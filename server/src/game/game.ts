@@ -1072,6 +1072,9 @@ export class Game {
                     findGameIp: token.ip,
                     loadout: token.loadout,
                     customLoadout: token.customLoadout,
+                    // (a custom lobby's arena match: the players' own loadouts / kill streaks)
+                    arenaLoadouts: token.arenaLoadouts,
+                    arenaStreaks: token.arenaStreaks,
                     admin: token.admin,
                     roleTag: token.roleTag,
                     clanTag: token.clanTag,

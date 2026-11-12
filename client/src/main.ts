@@ -786,7 +786,7 @@ export class Application {
      */
     resolveRegionSelection() {
         const group = this.config.get("regionGroup")!;
-        const cats = this.siteInfo.getCategoriesForGroup(group);
+        const cats = this.siteInfo.getCategoriesForView(group);
         let playlist = this.config.get("playlist")!;
         if (!cats.some((c) => c.category === playlist)) {
             playlist = cats[0]?.category ?? "default";

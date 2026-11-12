@@ -24,11 +24,14 @@ export interface ArenaPerkDef {
     noArenaEffect?: boolean;
 }
 
+/** The perk that lets the pistol slot hold a main gun (two main guns). */
+export const ARENA_QUICKSWITCH = "quickswitch";
+
 /** A revive with a fast-revive perk (Mass Medicate, Revivify), in seconds. */
 export const ARENA_FAST_REVIVE_S = 0.5;
 
 export const ARENA_PERK_DEFS: Record<string, ArenaPerkDef> = {
-    takedown: { description: "Every kill: +25 health, +25 adrenaline and 3 s of extra speed." },
+    takedown: { description: "Every kill: +10 health, 15% less damage for 8 s and 2 s of extra speed." },
     firepower: { description: "High-capacity magazines." },
     windwalk: { description: "When taking fire, gain a short burst of speed." },
     aoe_heal: {
@@ -40,6 +43,9 @@ export const ARENA_PERK_DEFS: Record<string, ArenaPerkDef> = {
         description: "Your bullets go straight through vests (helmets still protect).",
         replacesEffect: true,
         ignoresVest: true,
+    },
+    quickswitch: {
+        description: "Carry two main guns: your secondary slot takes a main gun instead of a pistol.",
     },
     steelskin: {
         description: "Spawn with a level 3 vest instead of level 1.",

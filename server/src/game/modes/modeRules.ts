@@ -89,6 +89,8 @@ export interface ModeRules {
     isRespawning?(player: Player): boolean;
     /** The player isn't sent to other clients right now. */
     isHidden?(player: Player): boolean;
+    /** How many of an item the player can carry (`usual`: what the backpack holds). */
+    itemCap?(player: Player, item: string, usual: number): number;
     /** How much faster the adrenaline heals the player right now (1: as usual). */
     boostHealFactor?(player: Player): number;
     /** Every tick. */

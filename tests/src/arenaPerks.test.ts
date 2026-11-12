@@ -5,11 +5,11 @@ import { GunDefs } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { ObjectType } from "../../shared/net/objectSerializeFns.ts";
 import { collider } from "../../shared/utils/collider.ts";
-import { ARENA_BOOST_RESIST, ARENA_PERKS, ARENA_REVIVE_HEALTH } from "../../shared/defs/modes/arenaDefs.ts";
+import { ARENA_BOOST_RESIST, ARENA_PERKS, ARENA_REVIVE_HEALTH, ARENA_TAKEDOWN } from "../../shared/defs/modes/arenaDefs.ts";
 import { ARENA_FAST_REVIVE_S, ARENA_PERK_DEFS } from "../../shared/defs/modes/arenaPerkDefs.ts";
 import { DOMINATION_SPAWN_PROTECTION_S } from "../../shared/defs/modes/dominationDefs.ts";
 import { GameConfig, GameMode, TeamMode } from "../../shared/gameConfig.ts";
-import { arenaSlotOf } from "../../shared/utils/arena.ts";
+import { arenaSlotOf, arenaUnlockLevel, sanitizeArenaLoadout } from "../../shared/utils/arena.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
 
@@ -85,15 +85,17 @@ describe("arena perks", () => {
         }
     });
 
-    test("Takedown: a kill gives +25 health, adrenaline and a burst of speed", () => {
+    test("Takedown: a kill gives +10 health, a short damage resistance and a short burst of speed", () => {
         const { rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
         withPerk(rules, r, "takedown");
         r.health = 50;
+        expect(rules.damageReduction(r)).toBe(0);
         shoot(b, r, 1000);
         expect(r.kills).toBe(1);
-        expect(r.health).toBe(75);
+        expect(r.health).toBe(50 + ARENA_TAKEDOWN.health);
+        expect(rules.damageReduction(r)).toBeCloseTo(ARENA_BOOST_RESIST.takedown.reduction);
         expect(r.hasteType).toBe(GameConfig.HasteType.Takedown);
     });
 
@@ -298,5 +300,20 @@ describe("arena perks", () => {
     test("Broken Arrow: not for the perk slot - worn on top of it (see arenaStreaks.test.ts)", () => {
         expect(ARENA_PERK_DEFS.broken_arrow.noArenaEffect).toBeFalsy();
         expect(arenaSlotOf("broken_arrow")).toBeUndefined();
+    });
+
+    test("Quickswitch (level 18, before Steelskin): two main guns - in the loadout and when picking one up", () => {
+        expect(arenaUnlockLevel("quickswitch")).toBe(18);
+        expect(arenaUnlockLevel("quickswitch")!).toBeLessThan(arenaUnlockLevel("steelskin")!);
+        const all = new Set(["hk416", "ak47", "p30l", "frag", "quickswitch", "takedown"]);
+        // with it: a main gun as secondary; without: back to a pistol
+        expect(sanitizeArenaLoadout({ primary: "hk416", pistol: "ak47", throwable: "frag", perk: "quickswitch" }, all).pistol).toBe("ak47");
+        expect(sanitizeArenaLoadout({ primary: "hk416", pistol: "ak47", throwable: "frag", perk: "takedown" }, all).pistol).not.toBe("ak47");
+        // in the match: a main gun replaces the one in hand
+        const { rules, red } = domination(1);
+        const [r] = red;
+        r.addPerk("quickswitch", false);
+        r.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Secondary);
+        expect(rules.gunPickupSlot(r, "ak47")).toBe(GameConfig.WeaponSlot.Secondary);
     });
 });

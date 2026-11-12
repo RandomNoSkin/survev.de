@@ -1,3 +1,4 @@
+import { ARENA_BOOST_RESIST, ARENA_TAKEDOWN } from "../../shared/defs/modes/arenaDefs.ts";
 import { describe, expect, test } from "vitest";
 import { GunGame, buildGunGameLadder, gunPool } from "../../server/src/game/modes/gunGame.ts";
 import type { Player } from "../../server/src/game/objects/player.ts";
@@ -168,12 +169,14 @@ describe("gun game", () => {
         expect(rules.isProtected(b)).toBe(false);
     });
 
-    test("takedown: a kill gives the killer health back", () => {
-        const { ps } = gunGame();
+    test("takedown (the arena's, as in Domination): +10 health, a short damage resistance, a short haste", () => {
+        const { rules, ps } = gunGame();
         const [a, b] = ps;
         a.health = 50;
         kill(b, a);
-        expect(a.health).toBe(75);
+        expect(a.health).toBe(50 + ARENA_TAKEDOWN.health);
+        expect(rules.damageReduction(a)).toBeCloseTo(ARENA_BOOST_RESIST.takedown.reduction);
+        expect(a.hasteType).toBe(GameConfig.HasteType.Takedown);
     });
 
     test("anti kill steal: killing yourself costs a step, the last one who hurt you gets the kill", () => {

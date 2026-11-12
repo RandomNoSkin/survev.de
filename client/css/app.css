@@ -15256,7 +15256,13 @@ body.client-view-arena .btn-team-queue {
   }
 }
 
-/* no arena mode with loadouts on (only Gun Game): no "Arena Loadouts" button */
-body.arena-no-loadouts #btn-arena-loadouts {
-  display: none !important;
+/* the view (multiplayer) has no mode running on the picked server */
+#view-no-modes {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  text-align: center;
 }

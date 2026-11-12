@@ -3,6 +3,7 @@
  * client (the arena menu): levels from XP, what is unlocked, challenge progress, which
  * loadout slot an item belongs in. The tables themselves are in shared/defs/modes/arenaDefs.ts.
  */
+import { ARENA_QUICKSWITCH } from "../defs/modes/arenaPerkDefs";
 import {
     ARENA_AIRDROP_WEAPONS,
     ARENA_DEFAULT_STREAKS,
@@ -79,11 +80,15 @@ export function arenaSlotOf(type: string): ArenaSlot | undefined {
 /** Main guns that may go into the pistol slot as well (a secondary). */
 export const ARENA_ALSO_SECONDARY = ["p90", "mp220"];
 
-/** Whether an item may go into a loadout slot - its own, or a main gun allowed as secondary. */
-export function arenaFitsSlot(type: string, slot: ArenaSlot): boolean {
+/**
+ * Whether an item may go into a loadout slot - its own, or a main gun allowed as
+ * secondary (any main gun with the Quickswitch perk: `perk` is the loadout's).
+ */
+export function arenaFitsSlot(type: string, slot: ArenaSlot, perk?: string): boolean {
     const own = arenaSlotOf(type);
     if (!own) return false;
-    return own === slot || (slot === "pistol" && own === "primary" && ARENA_ALSO_SECONDARY.includes(type));
+    if (own === slot) return true;
+    return slot === "pistol" && own === "primary" && (ARENA_ALSO_SECONDARY.includes(type) || perk === ARENA_QUICKSWITCH);
 }
 
 /** Kills counted per weapon - skins count for their base weapon. */
@@ -133,10 +138,17 @@ export function sanitizeArenaLoadout(
     fallback: ArenaLoadout = ARENA_DEFAULT_LOADOUT,
 ): ArenaLoadout {
     const out = { ...fallback };
-    for (const slot of Object.keys(out) as ArenaSlot[]) {
+    // the perk first: Quickswitch decides what the pistol slot may hold
+    const ok = (slot: ArenaSlot, perk?: string) => {
         const type = loadout?.[slot];
-        if (type && unlocked.has(type) && arenaFitsSlot(type, slot)) out[slot] = type;
+        return !!type && unlocked.has(type) && arenaFitsSlot(type, slot, perk);
+    };
+    if (ok("perk")) out.perk = loadout!.perk!;
+    for (const slot of ["primary", "pistol", "throwable"] as ArenaSlot[]) {
+        if (ok(slot, out.perk)) out[slot] = loadout![slot]!;
     }
+    // (a fallback's main gun as secondary without Quickswitch: its pistol back)
+    if (!arenaFitsSlot(out.pistol, "pistol", out.perk)) out.pistol = ARENA_DEFAULT_LOADOUT.pistol;
     // one gun once (the MP220 as main gun and secondary: only by picking up another in game)
     if (out.pistol === out.primary) out.pistol = fallback.pistol !== out.primary ? fallback.pistol : ARENA_DEFAULT_LOADOUT.pistol;
     return out;

@@ -1,4 +1,3 @@
-import { ARENA_LOADOUT_MAPS } from "./ui/arenaTutorial";
 import $ from "jquery";
 import { type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
@@ -64,6 +63,21 @@ export class SiteInfo {
         return cats.map(({ category }) => ({ category }));
     }
 
+    /**
+     * The categories of a group that have something to play in the current view (BR /
+     * multiplayer): a region whose modes include an enabled one of that view. Before
+     * the site info is there: all of them.
+     */
+    getCategoriesForView(group: string): Array<{ category: string }> {
+        const cats = this.getCategoriesForGroup(group);
+        if (!this.loaded) return cats;
+        const arena = this.config.get("clientView") === "arena";
+        return cats.filter(({ category }) => {
+            const modes = this.info.modesByRegion?.[this.resolveRegion(group, category)] ?? [];
+            return modes.some((m) => m.enabled && !!m.arena === arena);
+        });
+    }
+
     /** Resolves a (group, category) selection back to a concrete region key. */
     resolveRegion(group: string, category: string): string {
         for (const region in GAME_REGIONS) {
@@ -101,7 +115,13 @@ export class SiteInfo {
 
         const tabs = $("#category-tabs");
         tabs.empty();
-        const cats = this.getCategoriesForGroup(group);
+        // only the categories with something to play in this view (multiplayer: the
+        // ones running arena modes) - the picked one gone: the first that has some
+        const cats = this.getCategoriesForView(group);
+        if (cats.length && !cats.some((c) => c.category === this.config.get("playlist"))) {
+            this.config.set("playlist", cats[0].category);
+            this.config.set("region", this.resolveRegion(group, cats[0].category));
+        }
         if (cats.length <= 1) {
             // Single (or no) category for this group — nothing to choose, hide the row.
             tabs.css("display", "none");
@@ -344,6 +364,8 @@ export class SiteInfo {
             // the main play buttons: the view's modes (BR | ARENA switch), in order
             const arenaView = this.config.get("clientView") === "arena";
             const viewStyles = getGameModeStyles.filter((s) => s.arena === arenaView);
+            // nothing to play in this view here (multiplayer: no arena mode running yet)
+            $("#view-no-modes").toggle(!viewStyles.some((s) => s.enabled));
             for (let i = 0; i < viewStyles.length && i < MODE_BUTTON_COUNT; i++) {
                 const style = viewStyles[i];
                 const selector = `index-play-${style.buttonText}`;
@@ -367,9 +389,6 @@ export class SiteInfo {
                 btn.toggle(style.enabled);
             }
             this.renderLiveCounts();
-            // the arena loadouts only matter while a mode that uses them is on
-            const modesOn = this.getModesForSelectedRegion().filter((m) => m.arena && m.enabled).map((m) => m.mapName);
-            $(document.body).toggleClass("arena-no-loadouts", !ARENA_LOADOUT_MAPS.some((m) => modesOn.includes(m)));
             // the team menu's queue buttons: every mode, by index
             for (let i = 0; i < getGameModeStyles.length; i++) {
                 const style = getGameModeStyles[i];
