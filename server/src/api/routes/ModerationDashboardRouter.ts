@@ -58,9 +58,9 @@ import {
     getKeyTypes,
     isCrateEligible,
     isCrateType,
-} from "../../../../shared/defs/crateConfig";
+} from "../../../../shared/defs/shop/crateConfig";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
-import { getItemCategory, getItemRarity } from "../../../../shared/defs/shopConfig";
+import { getItemCategory, getItemRarity } from "../../../../shared/defs/shop/shopConfig";
 import {
     cleanFries,
     cleanPool,

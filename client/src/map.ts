@@ -1,5 +1,5 @@
 import * as PIXI from "pixi.js-legacy";
-import { applyLobbyRules, CUSTOM_MAP_COLORS } from "../../shared/defs/customMap.ts";
+import { applyLobbyRules, CUSTOM_MAP_COLORS } from "../../shared/defs/lobby/customMap.ts";
 import { type MapDef, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import type { BuildingDef, ObstacleDef } from "../../shared/defs/mapObjectsTyping.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";

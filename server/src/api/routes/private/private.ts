@@ -43,6 +43,7 @@ import {
 } from "../../db/schema";
 import { MOCK_USER_ID } from "../user/auth/mock";
 import { addClanXp, recordClanStats } from "../../db/clanStats";
+import { recordArenaResults } from "../../db/arena";
 import { getActiveChatBan, hashIp, isBanned, logPlayerIPs, ModerationRouter } from "./ModerationRouter";
 import { _allowedCrosshairs, _allowedEmotes, _allowedHealEffects, _allowedMeleeSkins, _allowedOutfits, _allowedDeathEffects, UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs";
 import { PassDefs } from "../../../../../shared/defs/gameObjects/passDefs";
@@ -273,6 +274,8 @@ export const PrivateRouter = new Hono<Context>()
         }
 
         server.modes[index] = {
+            // (keeps the rest - an arena mode's gameMode / arena flag)
+            ...server.modes[index],
             mapName: (mapName ?? server.modes[index].mapName) as keyof typeof MapDefs,
             teamMode: teamMode ?? server.modes[index].teamMode,
             enabled: enabled ?? server.modes[index].enabled,
@@ -375,6 +378,11 @@ export const PrivateRouter = new Hono<Context>()
         }
         if (data.weaponStats?.entries.length) {
             await attributeWeaponStats(data.weaponStats);
+        }
+        if (data.arena?.length) {
+            await recordArenaResults(data.arena).catch((err) =>
+                server.logger.error("save_game: failed to record arena progress", err),
+            );
         }
         if (data.duels?.entries.length) {
             const { gameId, mapId, entries } = data.duels;

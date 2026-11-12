@@ -2,7 +2,7 @@ import { GameConfig, GasMode } from "../../../../shared/gameConfig.ts";
 import { math } from "../../../../shared/utils/math.ts";
 import { util } from "../../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../../shared/utils/v2.ts";
-import type { CustomMapConfig } from "../../../../shared/defs/customMap.ts";
+import type { CustomMapConfig } from "../../../../shared/defs/lobby/customMap.ts";
 import type { Game } from "../game.ts";
 
 interface StageData {

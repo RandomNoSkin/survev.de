@@ -2,7 +2,7 @@ import { and, eq, notInArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { UnlockDefs } from "../../../../../shared/defs/gameObjects/unlockDefs.ts";
 import { GameObjectDefs } from "../../../../../shared/defs/register.ts";
-import { getItemPrice } from "../../../../../shared/defs/shopConfig.ts";
+import { getItemPrice } from "../../../../../shared/defs/shop/shopConfig.ts";
 import { Rarity } from "../../../../../shared/gameConfig.ts";
 import {
     type DiscordLinkResponse,

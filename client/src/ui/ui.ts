@@ -147,6 +147,10 @@ export class UiManager {
     killLeaderCount = $("#ui-kill-leader-count");
     /** Gun Game: this match's weapon ladder (null in every other mode) */
     gunGameLadder: string[] | null = null;
+    /** a GameMode (Gun Game, Domination...) runs this game: its clock replaces the gas timer */
+    modeActive = false;
+    /** its name, for "... starts in" / "... started!" */
+    modeName = "";
     gunGameLevel = -1;
     gunGameBox = $("#ui-gungame-level-box");
     gunGameLevelText = $("#ui-gungame-level");
@@ -155,12 +159,13 @@ export class UiManager {
     /** ModeStandingsMsg: everyone's step, best first */
     modeStandings: Array<{ playerId: number; score: number }> = [];
     /** ModeStandingsMsg: warmup / countdown / running, and its seconds */
-    modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, seconds: 0 };
+    modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, max: 0, seconds: 0 };
     /** the watched player and their place, last drawn (redraw only on change) */
     gunGameDrawn = "";
     mapContainer = $("#ui-map-container");
     mapContainerBottom = 52;
     mapInfo = $("#ui-map-info");
+    killstreakWrap = $("#hud-wrap-killstreak");
     mapInfoBottom = 218;
     gasState = {} as {
         mode: number;
@@ -681,7 +686,8 @@ export class UiManager {
             $(".ui-team-member-health").find(".ui-bar-inner").css("width"),
         );
 
-        for (let i = 0; i < 4; i++) {
+        // up to 6: the arena's teams (Domination); squads use the first 4
+        for (let i = 0; i < GameConfig.groupColors.length; i++) {
             const parent = this.topLeft;
             const slotIdx = i;
             this.teamSelectors.push({
@@ -842,7 +848,7 @@ export class UiManager {
             time: timeLeft,
         };
         if (
-            !this.gunGameLadder
+            !this.modeActive
             && (this.gasState.mode != gasState.mode || this.gasState.time != gasState.time)
         ) {
             this.gasState = gasState;
@@ -2653,13 +2659,24 @@ export class UiManager {
         this.killLeaderCount.html(this.gunGameLadder ? `Lv ${count}` : String(count));
     }
 
+    /** The game's GameMode (from the JoinedMsg): its name, and whether one runs at all. */
+    setGameMode(active: boolean, name: string) {
+        this.modeActive = active;
+        this.modeName = name;
+    }
+
+    /** A layer drawn on the minimap above the gas (a mode's zones). */
+    addMinimapLayer(layer: PIXI.Container) {
+        this.container.addChildAt(layer, this.container.getChildIndex(this.display.mapSprites));
+    }
+
     /** Gun Game: the match's weapon ladder (from the JoinedMsg), or null for any other mode. */
     setGunGameLadder(ladder: string[] | null) {
         this.gunGameLadder = ladder?.length ? ladder : null;
         this.gunGameLevel = -1;
         this.gunGameDrawn = "";
         this.modeStandings = [];
-        this.modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, seconds: 0 };
+        this.modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, max: 0, seconds: 0 };
         this.gunGameBox.css("display", this.gunGameLadder ? "block" : "none");
         // the warmup text / match clock replaced the normal ones - back for other games
         this.waitingText.html(this.waitingTextHtml);
@@ -2670,7 +2687,7 @@ export class UiManager {
     /** ModeStandingsMsg - redrawn on the next frame. */
     setModeStandings(
         entries: Array<{ playerId: number; score: number }>,
-        status: { phase: ModePhase; players: number; needed: number; seconds: number },
+        status: { phase: ModePhase; players: number; needed: number; max: number; seconds: number; scoreLimit?: number },
     ) {
         const started = this.modeStatus.phase !== ModePhase.Running && status.phase === ModePhase.Running;
         this.modeStandings = entries;
@@ -2684,13 +2701,16 @@ export class UiManager {
             this.waitingText
                 .text(
                     status.phase === ModePhase.Waiting
-                        ? `Warmup - waiting for players (${status.players}/${status.needed})`
-                        : `Gun Game starts in ${status.seconds}...`,
+                        ? `Warmup - waiting for players (${status.players}/${status.max || status.needed}, starts at ${status.needed})`
+                        : `${this.modeName || "The match"} starts in ${status.seconds}...`,
                 )
                 .css("display", "block");
             this.waitingForPlayers = true;
         }
-        if (started) this.displayAnnouncement("Gun Game started!");
+        if (started) {
+            const limit = status.scoreLimit ? ` - first to ${status.scoreLimit}` : "";
+            this.displayAnnouncement(`${this.modeName || "The match"} started${limit}!`);
+        }
 
         // the match clock where the gas timer goes
         const seconds = status.phase === ModePhase.Running ? status.seconds : 0;
@@ -2719,14 +2739,14 @@ export class UiManager {
             level = ladder.indexOf(weapons[0]?.type || weapons[1]?.type || weapons[2]?.type || "");
         }
         if (this.modeStatus.phase !== ModePhase.Running) {
-            const { phase, players, needed, seconds } = this.modeStatus;
-            const key = `warmup|${phase}|${players}|${needed}|${seconds}`;
+            const { phase, players, needed, max, seconds } = this.modeStatus;
+            const key = `warmup|${phase}|${players}|${needed}|${max}|${seconds}`;
             if (key === this.gunGameDrawn) return;
             this.gunGameDrawn = key;
             this.gunGameTop.empty();
             this.gunGameLevelText.text("Warmup");
             this.gunGameNextText.text(
-                phase === ModePhase.Waiting ? `Waiting for players ${players}/${needed}` : `Starts in ${seconds}s`,
+                phase === ModePhase.Waiting ? `Waiting for players ${players}/${max || needed} (starts at ${needed})` : `Starts in ${seconds}s`,
             );
             return;
         }
@@ -2777,7 +2797,7 @@ export class UiManager {
             this.bigmapDisplayed ? "none" : "block",
         );
         $(".js-ui-map-show").css("display", this.bigmapDisplayed ? "block" : "none");
-        this.teamOverview.setMapOpen(this.bigmapDisplayed, this.game.m_playerBarn, this.game.m_activeId);
+        if (!this.modeActive) this.teamOverview.setMapOpen(this.bigmapDisplayed, this.game.m_playerBarn, this.game.m_activeId);
         this.updateSpectatorCountDisplay(true);
         this.redraw(this.game.m_camera);
     }
@@ -3235,6 +3255,16 @@ export class UiManager {
                 minimapSize,
             );
             this.container.mask.endFill();
+
+            // the arena kill streak box (hud-wrap-killstreak): right next to the minimap,
+            // level with its bottom edge (top edge on small layouts) - whatever the size
+            // or the minimap's own drag offset; its own drag offset comes on top (transform)
+            const streakLeft = thisMinimapMargin + minimapSize + 10 + thisMinimapMarginXAdjust;
+            this.killstreakWrap.css(
+                layoutSm
+                    ? { left: streakLeft, top: thisMinimapMargin + thisMinimapMarginYAdjust, bottom: "auto" }
+                    : { left: streakLeft, bottom: thisMinimapMargin - thisMinimapMarginYAdjust, top: "auto" },
+            );
         }
     }
 

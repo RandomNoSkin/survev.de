@@ -4,7 +4,7 @@ import {
     BUY_ORDER_TTL_MS,
     getItemCategory,
     getMarketTotal,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     BuyOrder,
     BuyOrderActionResponse,

@@ -1,6 +1,6 @@
-import { Rarity } from "../gameConfig";
-import { cosmeticStats } from "../utils/cosmeticStats";
-import { GameObjectDefs } from "./register.ts";
+import { Rarity } from "../../gameConfig";
+import { cosmeticStats } from "../../utils/cosmeticStats";
+import { GameObjectDefs } from "../register.ts";
 import {
     _allowedCrosshairs,
     _allowedDeathEffects,
@@ -8,7 +8,7 @@ import {
     _allowedHealEffects,
     _allowedMeleeSkins,
     _allowedOutfits,
-} from "./gameObjects/unlockDefs";
+} from "../gameObjects/unlockDefs";
 
 /**
  * The curated allow-lists from unlockDefs. ONLY these item types may ever be

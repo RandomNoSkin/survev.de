@@ -14,7 +14,7 @@ const mapDef: PartialMapDef = {
     mapId: MapId.GunGame,
     desc: {
         name: "Gun Game",
-        icon: "img/gui/player-the-hunted.svg",
+        icon: "img/gui/bullets.svg",
         buttonCss: "",
         // l10n key: index-play-gungame-solo
         buttonText: "gungame",
@@ -33,6 +33,7 @@ const mapDef: PartialMapDef = {
         // weapons come from the ladder only
         pickup: false,
         // respawns: players can come in for (almost) the whole match
+        // (join until the match's last minute - see the TIME_LIMIT_S)
         joinTime: 540,
         canDespawn: false,
         betterStats: true,

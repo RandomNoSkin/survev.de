@@ -1,7 +1,7 @@
-import type { BulletDef } from "./gameObjects/bulletDefs.ts";
-import type { GunDef } from "./gameObjects/gunDefs.ts";
-import type { MeleeDef } from "./gameObjects/meleeDefs.ts";
-import { GameObjectDefs } from "./register.ts";
+import type { BulletDef } from "../gameObjects/bulletDefs.ts";
+import type { GunDef } from "../gameObjects/gunDefs.ts";
+import type { MeleeDef } from "../gameObjects/meleeDefs.ts";
+import { GameObjectDefs } from "../register.ts";
 
 /**
  * Per-lobby weapon stat changes (Advanced Settings). Only stats the server alone

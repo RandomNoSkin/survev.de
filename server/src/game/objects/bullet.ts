@@ -132,9 +132,11 @@ export class BulletBarn {
         const bulletDef = GameObjectDefs.typeToDefSafe(params.bulletType) as BulletDef;
         if (bulletDef.addFlare) {
             this.game.planeBarn.addAirdrop(params.pos, true);
+            this.game.rules?.onAirdropCalled?.(params.playerId, params.pos, false);
         }
         if(bulletDef.addSupplyFlare){
             this.game.planeBarn.addSupplyDrop(params.pos, true, "supply_crate_01");
+            this.game.rules?.onAirdropCalled?.(params.playerId, params.pos, true);
         }
 
         return bullet;

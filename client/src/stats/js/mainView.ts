@@ -1,4 +1,5 @@
 import $ from "jquery";
+import { ARENA_MAP_IDS } from "../../../../shared/types/stats.ts";
 import { MapId } from "../../../../shared/gameConfig.ts";
 import type { LeaderboardRequest } from "../../../../shared/types/stats.ts";
 import { api } from "../../api.ts";
@@ -26,6 +27,8 @@ const LEADERBOARD_MAP_IDS: number[] = [
     MapId.TwoVsTwo,
     MapId.FourVsFour,
     MapId.Local,
+    MapId.GunGame,
+    MapId.Domination,
 ];
 const DEFAULT_MAP_ID = String(LEADERBOARD_MAP_IDS[0]);
 
@@ -164,6 +167,8 @@ export class MainView {
             } else {
                 $("#leaderboard-type option[value=\"most_kills\"]").removeAttr("disabled");
             }
+            // an arena mode has its own team size - the team mode filter doesn't apply
+            $("#leaderboard-team-mode").prop("disabled", ARENA_MAP_IDS.includes(Number(this.data.mapId)));
         }
 
         this.el.find(".content").html(content);

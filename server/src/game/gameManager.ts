@@ -219,6 +219,8 @@ export class SingleThreadGameManager implements GameManager {
             .filter((game) => {
                 return (
                     game.canJoin &&
+                    // a party only where it fits together (Domination: on one side)
+                    (game.partyRoom === undefined || game.partyRoom >= body.playerData.length) &&
                     game.teamMode === body.teamMode &&
                     game.gameMode === (body.gameMode ?? GameMode.Standard) &&
                     game.mapName === body.mapName

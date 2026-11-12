@@ -1,6 +1,6 @@
-import type { MapDef } from "./mapDefs.ts";
-import { RawMapObjectDefs } from "./mapObjectDefs.ts";
-import { GameObjectDefs } from "./register.ts";
+import type { MapDef } from "../mapDefs.ts";
+import { RawMapObjectDefs } from "../mapObjectDefs.ts";
+import { GameObjectDefs } from "../register.ts";
 
 /**
  * A private-lobby map built on top of an existing map: its look (biome, assets) and

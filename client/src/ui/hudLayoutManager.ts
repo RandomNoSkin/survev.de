@@ -69,6 +69,8 @@ export const HUD_ELEMENTS: HudElementDef[] = [
     { id: "killfeed", wrapperId: "ui-killfeed", label: "Killfeed", hasClickAction: false },
     { id: "killLeader", wrapperId: "hud-wrap-killLeader", label: "Kill Leader Banner", hasClickAction: false },
     { id: "gunGameLevel", wrapperId: "hud-wrap-gunGameLevel", label: "Gun Game Standings", hasClickAction: false },
+    { id: "domination", wrapperId: "hud-wrap-domination", label: "Domination Status", hasClickAction: false },
+    { id: "killstreak", wrapperId: "hud-wrap-killstreak", label: "Killstreak", hasClickAction: false },
     {
         id: "spectatorBar",
         wrapperId: "ui-spectate-options",
@@ -94,23 +96,26 @@ export const HUD_ELEMENTS: HudElementDef[] = [
 
 /** The editor's views: which situation's HUD is on screen (and in the settings list)
  * while editing, so elements that never show at the same time don't pile up. */
-export type HudView = "game" | "team" | "spectator" | "map";
+export type HudView = "game" | "team" | "spectator" | "map" | "modes";
 export const HUD_VIEWS: Array<{ id: HudView; label: string }> = [
     { id: "game", label: "Game" },
     { id: "team", label: "Team" },
     { id: "spectator", label: "Spectator" },
     { id: "map", label: "Map" },
+    { id: "modes", label: "Modes" },
 ];
 const GAME_ELEMENTS = [
     "healthBar", "boostBar", "weaponSlots", "scopeRow", "lootRow", "ammoCounter", "gearRow", "perkRow",
-    "minimap", "killfeed", "killLeader", "gunGameLevel", "aliveCount", "fpsCounter", "pingCounter", "hpNumeric",
+    "minimap", "killfeed", "killLeader", "aliveCount", "fpsCounter", "pingCounter", "hpNumeric",
     "adrenalineNumeric",
 ];
 const VIEW_ELEMENTS: Record<HudView, string[]> = {
     game: GAME_ELEMENTS,
     team: [...GAME_ELEMENTS, "teamHealthBars"],
-    spectator: ["spectatorBar", "teamHealthBars", "minimap", "killfeed", "killLeader", "gunGameLevel", "aliveCount", "fpsCounter", "pingCounter"],
+    spectator: ["spectatorBar", "teamHealthBars", "minimap", "killfeed", "killLeader", "gunGameLevel", "domination", "aliveCount", "fpsCounter", "pingCounter"],
     map: ["teamOverview", "aliveCount", "killfeed"],
+    // Gun Game / Domination: their own boxes, with the minimap and the scope row to place them by
+    modes: ["gunGameLevel", "domination", "killstreak", "minimap", "scopeRow", "ammoCounter", "perkRow"],
 };
 
 /**

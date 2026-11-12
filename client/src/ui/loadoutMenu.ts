@@ -11,7 +11,7 @@ import {
     getItemRarity,
     getMarketPriceBounds,
     MARKET_LISTING_TTL_MS,
-} from "../../../shared/defs/shopConfig";
+} from "../../../shared/defs/shop/shopConfig";
 import { EmoteSlot, Rarity } from "../../../shared/gameConfig";
 import type { OAuthGrantEntry } from "../../../shared/types/oauth";
 import type { TagDisplay } from "../../../shared/types/user";
@@ -25,7 +25,7 @@ import { device } from "../device";
 import { helpers } from "../helpers";
 import type { AuctionUi } from "./auctionUi";
 import { CrateUi } from "./crateUi";
-import { CrateDefs, type CrateType } from "../../../shared/defs/crateConfig";
+import { CrateDefs, type CrateType } from "../../../shared/defs/shop/crateConfig";
 import type { Localization } from "./localization";
 import type { MarketUi } from "./marketUi";
 import { MenuModal } from "./menuModal";

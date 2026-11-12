@@ -14,7 +14,7 @@ import {
     weaponSkinBase,
     weaponSkins,
     weaponVariantLabel,
-} from "../../../shared/defs/weaponStats";
+} from "../../../shared/defs/lobby/weaponStats";
 import type { ConfigManager } from "../config";
 import { helpers } from "../helpers";
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { GunGame, buildGunGameLadder, gunPool } from "../../server/src/game/modes/gunGame.ts";
 import type { Player } from "../../server/src/game/objects/player.ts";
-import { gunCategory } from "../../shared/defs/gunCategories.ts";
+import { gunCategory } from "../../shared/defs/gameObjects/gunCategories.ts";
 import {
     GUN_GAME_GEAR,
     GUN_GAME_COUNTDOWN_S,
@@ -13,7 +13,7 @@ import {
     GUN_GAME_SPAWN_PROTECTION_S,
     GUN_GAME_TIME_LIMIT_S,
     gunGameMapScale,
-} from "../../shared/defs/gunGameDefs.ts";
+} from "../../shared/defs/modes/gunGameDefs.ts";
 import { GameConfig, GameMode, TeamMode } from "../../shared/gameConfig.ts";
 import { v2 } from "../../shared/utils/v2.ts";
 import { createGame } from "./gameTestHelpers.ts";
@@ -79,20 +79,28 @@ describe("ladder", () => {
 
 describe("gun game map", () => {
     test("a lobby's map scale grows the map, its objects with the area", () => {
-        const make = (mapScale?: number) => {
-            const Game = createGame(TeamMode.Solo, "main").constructor as any;
+        const Game = createGame(TeamMode.Solo, "main").constructor as any;
+        const make = (seed: number, mapScale?: number) => {
             const g = new Game("t", { mapName: "gungame", teamMode: TeamMode.Solo, gameMode: GameMode.GunGame, mapScale }, () => {}, () => {});
-            g.map.init();
+            g.map.init(seed);
             return g;
         };
-        const small = make();
-        const big = make(1.4);
-        expect(big.map.width).toBeCloseTo(small.map.width * 1.4, 0);
         const count = (g: any) => g.objectRegister.objects.filter(Boolean).length;
-        // ~2x the area -> ~2x the objects; the random buildings (with many sub-objects) make
-        // single maps vary a lot, so only check for a clear increase
-        expect(count(big)).toBeGreaterThan(count(small) * 1.2);
-    });
+        // ~2x the area -> ~2x the objects. One random map varies a lot (a few big buildings
+        // with many sub-objects more or less), so: the same seeds for both sizes, summed up
+        // over several maps - fixed seeds, the same result every run
+        let small = 0;
+        let big = 0;
+        for (const seed of [11, 22, 33]) {
+            const s = make(seed);
+            const b = make(seed, 1.4);
+            expect(b.map.width).toBeCloseTo(s.map.width * 1.4, 0);
+            small += count(s);
+            big += count(b);
+        }
+        expect(big).toBeGreaterThan(small * 1.3);
+        // (six maps generated: slow under a full parallel run - more than the default 5 s)
+    }, 30_000);
 
     test("respawns keep their distance to everyone alive", () => {
         const { game, ps } = gunGame(4);

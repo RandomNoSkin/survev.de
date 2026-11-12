@@ -1,3 +1,5 @@
+import { GameMode } from "../../../shared/gameConfig";
+import { getJoinArenaLoadouts, getJoinArenaStreaks } from "./db/arena";
 import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { Cron } from "croner";
@@ -34,10 +36,10 @@ import { settleEndedAuctions } from "./db/auctions";
 import { sweepExpiredBans } from "./db/banExpiry";
 import { getOwnedLoadouts } from "./db/loadouts";
 import { resolveRoleTag } from "./db/roleTag";
-import { crateOverrides } from "../../../shared/defs/crateConfig";
+import { crateOverrides } from "../../../shared/defs/shop/crateConfig";
 import "./crateSettings";
 import { awardFinishedClanWeeks } from "./db/clanStats";
-import { CUSTOM_MAP_TEMPLATES } from "../../../shared/defs/customMap";
+import { CUSTOM_MAP_TEMPLATES } from "../../../shared/defs/lobby/customMap";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
 import { spectateStream } from "./spectateFeed";
@@ -315,6 +317,10 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
         }
     }
 
+    // arena modes: the account's saved arena loadouts (guests: the default one)
+    const arenaLoadouts = mode.gameMode === GameMode.Domination ? await getJoinArenaLoadouts(user?.id ?? null) : undefined;
+    const arenaStreaks = mode.gameMode === GameMode.Domination ? await getJoinArenaStreaks(user?.id ?? null) : undefined;
+
     const data = await server.findGame({
         region: body.region,
         version: body.version,
@@ -328,6 +334,8 @@ app.post("/api/find_game", validateParams(zFindGameBody), async (c) => {
                 userId: user?.id || null,
                 ip,
                 loadout: userLoadout,
+                arenaLoadouts,
+                arenaStreaks,
                 admin: user?.admin ?? false,
                 roleTag: user ? resolveRoleTag(user) : null,
             },

@@ -1917,6 +1917,14 @@ body.hud-preview-mode #hud-preview-backdrop {
   background-color: #ff5400;
 }
 
+.ui-background-green {
+  background-color: #4cff4c;
+}
+
+.ui-background-lightblue {
+  background-color: #4a7dff;
+}
+
 .ui-team-member-status {
   display: none;
   position: absolute;
@@ -7010,3 +7018,363 @@ span.ui-stats-header-value {
 
 /* a spectator writing in the ALL chat */
 .chat-spec-tag { color: #c3a6ff; }
+
+/* Domination: score bar with A / B / C (ui/modes/dominationHud.ts) */
+/* below the scope row (#ui-top-center-scopes, ~100px tall) */
+#ui-domination-wrapper {
+  position: absolute;
+  top: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 10;
+}
+#ui-domination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  z-index: 10;
+}
+#ui-domination .dom-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+}
+#ui-domination .dom-score {
+  min-width: 44px;
+  text-align: center;
+  font-size: 26px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+#ui-domination .dom-zones {
+  display: flex;
+  gap: 8px;
+}
+#ui-domination .dom-zone {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 17px;
+  color: #fff;
+  box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#ui-domination .dom-zone-contested {
+  animation: dom-zone-pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes dom-zone-pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.12); }
+}
+/* the zone status: right above the ammo counter (bottom center) */
+#ui-equipped-ammo-wrapper > .dom-status {
+  /* out of the flow: the wrapper is bottom-anchored, so in-flow it'd push the ammo up */
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0 0 4px;
+  white-space: nowrap;
+}
+.dom-status {
+  margin-top: 4px;
+  padding: 3px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  display: none;
+}
+/* dead in Domination: the respawn countdown (whom you watch: the usual top line) */
+#ui-dom-spectate {
+  margin-top: 10px;
+  padding: 6px 22px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#ui-dom-spectate .dom-spectate-title {
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.7);
+}
+#ui-dom-spectate .dom-spectate-name {
+  font-size: 24px;
+  font-weight: bold;
+}
+#ui-dom-spectate .dom-spectate-timer {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffe11a;
+  font-variant-numeric: tabular-nums;
+}
+#ui-domination .dom-limit {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Domination: the loadout menu (like the arena class select) and its button while dead */
+#ui-dom-loadout-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  pointer-events: all;
+}
+#ui-dom-loadout-menu {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(900px, 94vw);
+  background-color: rgba(61, 92, 150, 0.75);
+  border: 8px solid #191919;
+  border-radius: 5px;
+  box-sizing: border-box;
+  cursor: default;
+}
+#ui-dom-loadout-menu .dom-menu-header {
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+}
+#ui-dom-loadout-menu .dom-menu-option {
+  width: 150px;
+  padding: 10px 6px;
+  border-radius: 6px;
+  border: 3px solid transparent;
+  cursor: pointer;
+  opacity: 0.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#ui-dom-loadout-menu .dom-menu-option:hover {
+  opacity: 0.8;
+}
+#ui-dom-loadout-menu .dom-menu-option-picked {
+  opacity: 1;
+  border-color: #ffe11a;
+}
+#ui-dom-loadout-menu .dom-menu-option-icon {
+  width: 110px;
+  height: 64px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#ui-dom-loadout-menu .dom-menu-option-name {
+  font-size: 20px;
+  font-weight: bold;
+}
+#ui-dom-loadout-menu .dom-menu-body {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 24px 20px;
+}
+#ui-dom-loadout-menu .dom-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  min-width: 0;
+}
+#ui-dom-loadout-menu .dom-menu-item-label {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.65);
+}
+#ui-dom-loadout-menu .dom-menu-item-icon {
+  width: 100%;
+  height: 70px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#ui-dom-loadout-menu .dom-menu-item-name {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+#ui-dom-loadout-menu .dom-menu-footer {
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+}
+#ui-dom-loadout-menu .dom-menu-footer-desc {
+  font-size: 30px;
+  font-weight: bold;
+  text-shadow: 3px 3px black;
+}
+#ui-dom-loadout-menu .dom-menu-footer-enter {
+  background: rgba(0, 0, 0, 0.75);
+  color: #00ff00;
+  cursor: pointer;
+  font-size: 30px;
+  font-weight: bold;
+  padding: 10px 28px;
+  text-shadow: 3px 3px black;
+}
+#ui-dom-change-loadout {
+  position: fixed;
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  pointer-events: auto;
+  padding: 10px 26px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+#ui-dom-change-loadout:hover {
+  border-color: #ffe11a;
+}
+@media (max-width: 700px) {
+  #ui-dom-loadout-menu .dom-menu-body {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  #ui-dom-loadout-menu .dom-menu-footer-desc {
+    font-size: 20px;
+  }
+}
+
+/* Domination: the team scores in the "Alive" counter's place (top right) */
+#ui-leaderboard.dom-active #ui-leaderboard-alive,
+#ui-leaderboard.dom-active #ui-leaderboard-alive-faction {
+  display: none !important;
+}
+#ui-leaderboard-domination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.05;
+  /* the same box as the "Alive" counter it replaces */
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  min-width: 72px;
+  box-sizing: border-box;
+}
+#ui-leaderboard-domination .dom-score {
+  font-size: 34px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Arena modes: the kill streak box - right next to the minimap, level with its bottom
+   edge (left/bottom set from the minimap's size in UiManager.redraw, these are the
+   fallback), growing upwards; players move it in the HUD editor ("Modes" tab) */
+#hud-wrap-killstreak {
+  position: absolute;
+  left: 214px;
+  bottom: 12px;
+  z-index: 1;
+  pointer-events: none;
+}
+body.hud-edit-mode #hud-wrap-killstreak:empty::before,
+body.hud-edit-mode #hud-wrap-domination:empty::before {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-weight: bold;
+  white-space: nowrap;
+}
+body.hud-edit-mode #hud-wrap-killstreak:empty::before {
+  content: "Streak 0/3  b7 Airdrop";
+}
+body.hud-edit-mode #hud-wrap-domination:empty::before {
+  content: "Domination: A  B  C";
+}
+.dom-streak {
+  min-width: 150px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-weight: bold;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+.dom-streak.dom-streak-ready {
+  box-shadow: 0 0 0 2px #ffd800;
+}
+.dom-streak .dom-streak-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dom-streak .dom-streak-icon-small {
+  width: 26px !important;
+  height: 26px !important;
+}
+.dom-streak .dom-streak-active {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.dom-streak .dom-streak-icon {
+  width: 40px;
+  height: 40px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.dom-streak .dom-streak-text {
+  font-size: 15px;
+}
+.dom-streak .dom-streak-key {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #ffd800;
+  color: #1c1c1c;
+  text-align: center;
+}
+.dom-streak .dom-streak-next {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}

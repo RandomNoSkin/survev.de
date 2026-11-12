@@ -1,7 +1,7 @@
 import type { MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
-import type { CustomMapConfig } from "../../shared/defs/customMap.ts";
-import type { WeaponStatsProfile } from "../../shared/defs/weaponStats.ts";
+import type { CustomMapConfig } from "../../shared/defs/lobby/customMap.ts";
+import type { WeaponStatsProfile } from "../../shared/defs/lobby/weaponStats.ts";
 import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby.ts";
 import loadout from "../../shared/utils/loadout.ts";
 import { util } from "../../shared/utils/util.ts";
@@ -146,6 +146,10 @@ const defaultConfig = {
     region: "na",
     /** Selected geographic region group (e.g. "eu", "asia"); resolves to `region`. */
     regionGroup: "" as string,
+    /** main menu: the battle royale or the arena view (the BR | ARENA switch) */
+    clientView: "br" as "br" | "arena",
+    /** the multiplayer client's tour pages already shown (a switch to it shows the others) */
+    arenaTutorialPages: [] as string[],
     /** Selected playlist category (e.g. "normal", "arena", "scrims"); resolves to `region`. */
     playlist: "" as string,
     gameModeIdx: 2,

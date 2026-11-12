@@ -1,8 +1,10 @@
-import { GUN_GAME_MAP_SCALE_MAX } from "../../../shared/defs/gunGameDefs";
+import type { ArenaLoadout } from "../../../shared/defs/modes/arenaDefs";
+import type { ArenaStreakSettings } from "../../../shared/defs/modes/arenaStreakDefs";
+import { GUN_GAME_MAP_SCALE_MAX } from "../../../shared/defs/modes/gunGameDefs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { type CustomLoadoutConfig, showsPlayersOnMap } from "../../../shared/defs/customLoadout";
+import { type CustomLoadoutConfig, showsPlayersOnMap } from "../../../shared/defs/lobby/customLoadout";
 import type { RoleDef } from "../../../shared/defs/gameObjects/roleDefs";
 import { MapId } from "../../../shared/gameConfig.ts";
 import { DamageType, GameConfig, GameMode, TeamMode } from "../../../shared/gameConfig";
@@ -62,6 +64,10 @@ export interface JoinTokenData {
     clanTag?: { tag: string; color: number } | null;
     /** Invisible spectator (staff via the dashboard), see Player.stealth. */
     stealth?: boolean;
+    /** Arena modes: the loadouts the player may pick from on every spawn. */
+    arenaLoadouts?: ArenaLoadout[];
+    /** Arena modes: the kill streak picks. */
+    arenaStreaks?: ArenaStreakSettings;
     groupData: {
         autoFill: boolean;
         playerCount: number;
@@ -76,6 +82,11 @@ export class Game {
     started = false;
     /** Private lobbies: how many players the lobby sent (see addGroupedJoinTokens). */
     expectedPlayers = 0;
+
+    /** The largest group: the team mode's size, unless the GameMode says otherwise. */
+    get groupSize(): number {
+        return this.rules?.groupSize ?? this.teamMode;
+    }
     stopped = false;
     allowJoin = false;
     over = false;
@@ -282,7 +293,9 @@ export class Game {
 
     async init() {
         await this.pluginManager.loadPlugins();
-        this.map.init();
+        // a mode that puts the same map back later (Domination after its warmup) builds
+        // it from a seed - only a seeded generation comes out the same again
+        this.map.init(this.rules?.seededMap ? Math.floor(Math.random() * (2 ** 32 - 2)) + 1 : undefined);
         this.pluginManager.emit("gameCreated", this);
 
         this.allowJoin = true;
@@ -568,6 +581,7 @@ export class Game {
             | net.SpectateMsg
             | net.PerkModeRoleSelectMsg
             | net.RoleSelectMsg
+            | net.ArenaLoadoutSelectMsg
             | net.EditMsg
             | net.KillFeedMsg
             | net.SpectatorAdvancedMsg
@@ -645,6 +659,10 @@ export class Game {
                 break;
             case net.MsgType.RoleSelect:
                 msg = new net.RoleSelectMsg();
+                msg.deserialize(stream);
+                break;
+            case net.MsgType.ArenaLoadoutSelect:
+                msg = new net.ArenaLoadoutSelectMsg();
                 msg.deserialize(stream);
                 break;
             case net.MsgType.Edit:
@@ -748,6 +766,13 @@ export class Game {
                 case net.MsgType.RoleSelect: {
                     if (player.role) return;
                     player.playerRoleSelect((msg as net.RoleSelectMsg).role);
+                    break;
+                }
+                case net.MsgType.ArenaLoadoutSelect: {
+                    // the arena loadout menu: a pick, entering the game, staying in the menu
+                    const { slot, action } = msg as net.ArenaLoadoutSelectMsg;
+                    if (slot < player.arenaLoadouts.length) player.arenaLoadoutIdx = slot;
+                    this.rules?.onLoadoutSelect?.(player, action);
                     break;
                 }
                 case net.MsgType.Edit: {
@@ -984,6 +1009,8 @@ export class Game {
                 findGameIp: token.ip,
                 loadout: token.loadout,
                 customLoadout: token.customLoadout,
+                arenaLoadouts: token.arenaLoadouts,
+                arenaStreaks: token.arenaStreaks,
                 admin: token.admin,
                 roleTag: token.roleTag,
                 clanTag: token.clanTag,
@@ -1009,6 +1036,8 @@ export class Game {
                 findGameIp: token.ip,
                 loadout: token.loadout,
                 customLoadout: token.customLoadout,
+                arenaLoadouts: token.arenaLoadouts,
+                arenaStreaks: token.arenaStreaks,
                 admin: token.admin,
                 roleTag: token.roleTag,
                 clanTag: token.clanTag,
@@ -1057,6 +1086,11 @@ export class Game {
         return this.config.xpEnabled ?? !this.advancedSettings;
     }
 
+    /** The biggest party that can still join together (see ModeRules.partyRoom). */
+    get partyRoom(): number | undefined {
+        return this.rules?.partyRoom?.();
+    }
+
     updateData() {
         this.sendData?.({
             type: ProcessMsgType.UpdateData,
@@ -1065,6 +1099,7 @@ export class Game {
             gameMode: this.gameMode,
             mapName: this.mapName,
             canJoin: this.canJoin,
+            partyRoom: this.partyRoom,
             isPrivate: this.isPrivate,
             publicSpectating: this.publicSpectating,
             aliveCount: this.aliveCount,
@@ -1330,10 +1365,36 @@ export class Game {
                     }),
                 ),
             );
-        // battle royale only: a GameMode deals out weapons itself (Gun Game: a random
-        // ladder with endless ammo), which says nothing about how good a gun is
-        const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length && this.gameMode === GameMode.Standard
+        // every game, the arena modes too (under their own map id): "all maps" on the
+        // stats pages leaves those out (ARENA_MAP_IDS) - a Gun Game's random ladder with
+        // endless ammo says nothing about a gun in the battle royale - but picked on
+        // their own the arena modes show their weapons as well
+        const weaponStats: SaveGameBody["weaponStats"] = weaponStatsEntries.length
             ? { mapId, teamMode: this.teamMode, entries: weaponStatsEntries }
+            : undefined;
+
+        // Arena progression: kills per weapon count for the arena weapon challenges in
+        // the arena modes, Gun Game and Comp; arena XP comes from the arena modes
+        // - public games; a custom lobby only when it's full (an arena mode) or the owner
+        // switched XP on for it (Comp) - stricter than the pass: a plain lobby earns pass
+        // XP, but two friends (or an alt) would farm every arena unlock in a private room
+        // (an arena mode's lobby: only full - see RespawnRules.startedFull; Comp: the switch)
+        const arenaEarns = !this.isPrivate
+            ? this.earnsXp
+            : this.gameMode !== GameMode.Standard
+              ? !!(this.rules as { startedFull?: boolean } | undefined)?.startedFull
+              : this.config.xpEnabled === true;
+        const countsForArena = arenaEarns && (this.gameMode !== GameMode.Standard
+            || [MapId.Comp, MapId.CompDuo, MapId.CompSolo].includes(this.map.mapId));
+        const arena: SaveGameBody["arena"] = countsForArena
+            ? players
+                .filter(({ player }) => player.userId && !player.spectator && !player.bot)
+                .map(({ player }) => ({
+                    userId: player.userId!,
+                    xp: Math.max(0, Math.round(this.rules?.arenaXp?.(player) ?? 0)),
+                    weaponKills: Object.fromEntries(player.weaponKills),
+                }))
+                .filter((e) => e.xp > 0 || Object.keys(e.weaponKills).length)
             : undefined;
 
         // only save the game if it has more than 2 players lol
@@ -1350,6 +1411,7 @@ export class Game {
                     matchData: values,
                     cosmeticStats,
                     weaponStats,
+                    arena: arena?.length ? arena : undefined,
                     duels: this.duels.length
                         ? { gameId: this.id, mapId, entries: this.duels }
                         : undefined,

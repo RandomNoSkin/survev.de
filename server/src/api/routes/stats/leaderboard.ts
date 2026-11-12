@@ -1,3 +1,4 @@
+import { ARENA_MAP_IDS } from "../../../../../shared/types/stats.ts";
 import { and, count, eq, gte, inArray, ne, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { TeamMode } from "../../../../../shared/gameConfig.ts";
@@ -41,7 +42,9 @@ leaderboardRouter.post(
         }
 
         const startTime = performance.now();
-        const data = type === "most_kills" && teamMode != TeamMode.Solo
+        // (an arena mode: every player on their own - its teams are no duo / squad)
+        const arena = ARENA_MAP_IDS.includes(params.mapId);
+        const data = type === "most_kills" && teamMode != TeamMode.Solo && !arena
             ? await multiplePlayersQuery(params)
             : await soloLeaderboardQuery(params);
         logQueryPerformance(startTime, params);
@@ -91,7 +94,8 @@ async function soloLeaderboardQuery(params: LeaderboardRequest) {
         .leftJoin(usersTable, eq(usersTable.id, matchDataTable.userId))
         .where(
             and(
-                eq(matchDataTable.teamMode, teamMode),
+                // an arena mode has one team size of its own - the filter doesn't apply
+                ARENA_MAP_IDS.includes(mapId) ? undefined : eq(matchDataTable.teamMode, teamMode),
                 eq(usersTable.banned, false),
                 interval === "alltime" ? undefined : intervalFilter[interval],
                 ne(matchDataTable.userId, ""),

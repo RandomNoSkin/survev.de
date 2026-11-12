@@ -11,6 +11,9 @@ export const PLAYER_MAP_IDS: number[] = [
     MapId.TwoVsTwo,
     MapId.FourVsFour,
     MapId.Local,
+    // the arena modes ("all maps" leaves them out - see ARENA_MAP_IDS)
+    MapId.GunGame,
+    MapId.Domination,
 ];
 
 /** Those maps with their display names, in that order. */

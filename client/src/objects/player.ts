@@ -1294,11 +1294,13 @@ export class Player implements AbstractObject {
             this.passiveHealEmitter.zOrd = this.renderZOrd + 1;
         }
 
+        // (a player whose info isn't known (yet) has no loadout - no crash over it)
         const adrenalineEmitterType = (
-            GameObjectDefs.typeToDef(playerInfo.loadout.boost, "boost_effect")
-        ).emitter;
+            GameObjectDefs.typeToDefSafe(playerInfo.loadout?.boost ?? "") as { emitter?: string } | undefined
+        )?.emitter;
         if (
-            this.m_netData.m_adrenalineEffect
+            adrenalineEmitterType
+            && this.m_netData.m_adrenalineEffect
             && (!this.adrenalineEmitter
                 || this.adrenalineEmitter.type !== adrenalineEmitterType)
         ) {
@@ -3038,6 +3040,8 @@ export class PlayerBarn {
             anonName: `Player${info.playerId - 2750}`,
             loadout: util.cloneDeep(info.loadout),
         };
+        // (sent again when a mode builds the teams after its warmup: just the new data)
+        if (this.playerIds.includes(info.playerId)) return;
         this.playerIds.push(info.playerId);
         this.playerIds.sort((a, b) => {
             return a - b;
@@ -3135,6 +3139,8 @@ export class PlayerBarn {
         // In factionMode, playerStatus refers to all playerIds in the game.
         // In all other modes, playerStatus refers to only playerIds in our team.
         const team = this.getTeamInfo(teamId);
+        // (no team known for it - e.g. a spectator with nobody to watch yet: nothing to map)
+        if (!factionMode && !team) return;
         const playerIds = factionMode ? this.playerIds : team.playerIds;
 
         if (playerIds.length != playerStatus.length) {

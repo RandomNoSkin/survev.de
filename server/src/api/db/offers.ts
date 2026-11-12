@@ -4,7 +4,7 @@ import {
     getMarketFee,
     OFFER_MAX_OUTSTANDING,
     OFFER_TTL_MS,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     MakeOfferResponse,
     Offer,

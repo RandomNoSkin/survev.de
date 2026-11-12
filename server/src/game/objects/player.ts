@@ -1,9 +1,11 @@
+import { ARENA_DEFAULT_STREAKS, type ArenaStreakSettings } from "../../../../shared/defs/modes/arenaStreakDefs";
+import type { ArenaLoadout } from "../../../../shared/defs/modes/arenaDefs";
 import { randomUUID } from "node:crypto";
 import {
     buildDefaultItemsFromCustomLoadout,
     type CustomLoadoutConfig,
     getArenaModeExtraPerks,
-} from "../../../../shared/defs/customLoadout";
+} from "../../../../shared/defs/lobby/customLoadout";
 import {
     type LootDef,
     WeaponTypeToDefs,
@@ -60,7 +62,7 @@ import type { BotDifficulty } from "../bot/botDefs.ts";
 import type { Game, JoinTokenData } from "../game";
 import { Group, Team } from "../group";
 import { InventoryManager } from "../inventoryManager";
-import { WeaponManager } from "../weaponManager";
+import { WeaponManager, throwableList as THROWABLE_TYPES } from "../weaponManager";
 import type { Building } from "./building";
 import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject";
 import { getGasDamageMultiplier } from "./gas";
@@ -298,6 +300,8 @@ export class PlayerBarn {
         player.clanTag = joinData.clanTag?.tag ?? "";
         player.clanColor = joinData.clanTag?.color ?? 0;
         this.socketIdToPlayer.set(socketId, player);
+        if (joinData.arenaLoadouts?.length) player.arenaLoadouts = joinData.arenaLoadouts;
+        if (joinData.arenaStreaks) player.arenaStreaks = joinData.arenaStreaks;
 
         this.activatePlayer(player, group, team);
 
@@ -692,7 +696,9 @@ export class PlayerBarn {
         if (!player.spectator) {
             const freezeTime = this.game.map.mapDef.gameMode.freezeTime ?? 0;
 
-            if (this.game.startedTime <= GameConfig.player.minActiveTime) {
+            // (a GameMode has its own warmup: one left there waits for more - the battle
+            // royale's "the last one left right at the start: stop" would kill it)
+            if (!this.game.rules && this.game.startedTime <= GameConfig.player.minActiveTime) {
                 if (this.game.aliveCount === 1 || this.getAliveGroups().length === 1) {
                     if (this.game.startedTime < freezeTime) {
                         this.game.started = false;
@@ -834,7 +840,9 @@ export class PlayerBarn {
         let group = this.groupsByHash.get(groupData.groupHashToJoin);
         let team = this.game.map.factionMode ? this.getSmallestTeam() : undefined;
 
-        if (!group && groupData.autoFill) {
+        if (!group && this.game.rules?.pickGroup) {
+            group = this.game.rules.pickGroup(this.groups, groupData.playerCount);
+        } else if (!group && groupData.autoFill) {
             const groups = team ? team.getGroups() : this.groups;
             group = groups.find((group) => {
                 return group.autoFill && group.canJoin(groupData.playerCount);
@@ -844,7 +852,7 @@ export class PlayerBarn {
         // second condition should never happen
         // but keeping it just in case
         // since more than 4 players in a group crashes the client
-        if (!group || group.players.length >= this.game.teamMode) {
+        if (!group || group.players.length >= this.game.groupSize) {
             group = this.addGroup(groupData.autoFill, isSpectator);
         }
 
@@ -871,7 +879,7 @@ export class PlayerBarn {
         // and doesn't need to be cryptographically secure lol
         const hash = Math.random().toString(16).slice(2);
         const groupId = this.groupIdAllocator.getNextId();
-        const group = new Group(hash, groupId, autoFill, this.game.teamMode, isSpectator);
+        const group = new Group(hash, groupId, autoFill, this.game.groupSize, isSpectator);
         group.arenaRoles = group?.arenaRoles?.length
             ? group.arenaRoles
             : this.game.arenaRoles?.length
@@ -1037,6 +1045,12 @@ export class Player extends BaseGameObject {
      * - dead owners, always
      * Never anyone alive (downed players aren't dead yet).
      */
+    /** Dead as far as the others see it: a GameMode's player waiting to respawn (not
+     *  really dead - hidden until then; the team top left shows them dead). */
+    get modeDead(): boolean {
+        return !!this.game.rules?.isRespawning?.(this);
+    }
+
     get advSpecAllowed(): boolean {
         if (this.spectator) return true;
         if (!this.dead) return false;
@@ -1116,6 +1130,8 @@ export class Player extends BaseGameObject {
     occupiedBuilding: Building | undefined;
     /** Date.now() of the last shot fired (anti-cheat: shooting gives a hidden player away) */
     lastShotAt = 0;
+    /** the last input that did something (see handleInput) - the arena's AFK kick */
+    lastActiveAt = Date.now();
 
     private _zoom: number = 0;
     // zoom used for the area in which the server will send objects to the client
@@ -1192,6 +1208,12 @@ export class Player extends BaseGameObject {
     get spectatorCount(): number {
         return this._spectatorCount;
     }
+
+    /** Arena modes: the loadouts to pick from on a spawn (see joinData), and the picked one. */
+    arenaLoadouts: ArenaLoadout[] = [];
+    /** the kill streak picks (arena modes; guests: the defaults) */
+    arenaStreaks: ArenaStreakSettings = ARENA_DEFAULT_STREAKS;
+    arenaLoadoutIdx = 0;
 
     /** true when player starts spectating new player, only stays true for that given tick */
     startedSpectating: boolean = false;
@@ -2006,7 +2028,8 @@ export class Player extends BaseGameObject {
     }
 
     hasPerk(type: string) {
-        return this._perkTypes.includes(type);
+        // (a mode may switch a perk's usual effect off - the arena's Cast Ironskin is a vest)
+        return this._perkTypes.includes(type) && !this.game.rules?.inertPerks?.has(type);
     }
 
     hasActivePan() {
@@ -2378,8 +2401,10 @@ export class Player extends BaseGameObject {
     }
 
     update(dt: number): void {
-        // ESP: aim following enemies this player can't see (see antiCheat.ts)
-        if (this.cheatMonitor && !this.dead) {
+        // ESP: aim following enemies this player can't see (see antiCheat.ts) - not while
+        // a GameMode hides them until the respawn: the camera is on the killer then, the
+        // client knows the enemies around them, but the aim is still the dead body's
+        if (this.cheatMonitor && !this.dead && !this.game.rules?.isHidden?.(this)) {
             const flagged = this.cheatMonitor.onTick(this, this.game.playerBarn.livingPlayers, Date.now(), this.activeBulletSpeed);
             if (flagged) {
                 this.game.logger.warn(`Anti-cheat: ${this.name} (${this.userId ?? "guest"}) flagged for ${flagged}`);
@@ -2604,7 +2629,7 @@ export class Player extends BaseGameObject {
                     return this.boost >= prev && this.boost <= b.maxBoost;
                 });
 
-                this.health += healAmount!.heal * dt;
+                this.health += healAmount!.heal * (this.game.rules?.boostHealFactor?.(this) ?? 1) * dt;
 
                 if (this.boost > this.minBoost && !unlimitedAdren) {
                     this.boost -=
@@ -2780,8 +2805,10 @@ export class Player extends BaseGameObject {
                         }
                     }
                     if ("boost" in itemDef) {
+                        const item = this.actionItem;
                         this.applyActionFunc((target: Player) => {
                             target.boost += itemDef.boost;
+                            this.game.rules?.onBoostUsed?.(target, item);
                         });
                     }
                     this.invManager.take(this.actionItem as InventoryItem, 1);
@@ -2834,6 +2861,7 @@ export class Player extends BaseGameObject {
                         target.setDirty();
                         target.setGroupStatuses();
                         this.game.pluginManager.emit("playerRevived", target);
+                        this.game.rules?.onRevived?.(target);
                     });
                 } else if (
                     this.actionType === GameConfig.Action.InstantRevive &&
@@ -3611,7 +3639,7 @@ export class Player extends BaseGameObject {
             this.advSpecAllowedSent = joinedMsg.advancedSpectator;
             joinedMsg.spectator = this.spectator;
             joinedMsg.gameMode = game.gameMode;
-            joinedMsg.modeTypes = game.rules?.joinedPayload?.() ?? [];
+            joinedMsg.modeTypes = game.rules?.joinedPayload?.(this) ?? [];
             this.sendMsg(net.MsgType.Joined, joinedMsg);
 
             const mapStream = game.map.mapStream.stream;
@@ -3758,9 +3786,11 @@ export class Player extends BaseGameObject {
             updateMsg.activePlayerData = player;
         }
 
-        updateMsg.playerInfos = (player._firstUpdate ? playerBarn.players : playerBarn.newPlayers)
+        // (the receiver's first update - not the watched player's: a spectator that is
+        // put on someone before its first update would never learn the players already in)
+        updateMsg.playerInfos = (this._firstUpdate ? playerBarn.players : playerBarn.newPlayers)
             // invisible staff spectators are only known to themselves
-            .filter((p) => !p.stealth || p === player);
+            .filter((p) => !p.stealth || p === this);
 
         updateMsg.deletedPlayerIds = playerBarn.deletedPlayers;
 
@@ -3781,7 +3811,7 @@ export class Player extends BaseGameObject {
             let statuses: GroupStatus[] = [];
             for (const p of teamPlayers) {
                 statuses.push({
-                    health: p.health,
+                    health: p.modeDead ? 0 : p.health,
                     disconnected: p.disconnected,
                 });
             }
@@ -3997,6 +4027,8 @@ export class Player extends BaseGameObject {
             (p) =>
                 this != p &&
                 !p.disconnected &&
+                // (a GameMode's players waiting to respawn: nothing to watch)
+                !this.game.rules?.isHidden?.(p) &&
                 (this.game.modeManager.getPlayerAlivePlayersContext(this).length === 0 ||
                     p.teamId == this.teamId),
         );
@@ -4085,9 +4117,10 @@ export class Player extends BaseGameObject {
                 ? (params.source as Player)
                 : undefined;
 
-        // teammates can't deal damage to each other
+        // teammates can't deal damage to each other (except where a GameMode says so -
+        // a warmup is everyone against everyone)
         if (playerSource && params.source !== this) {
-            if (playerSource.teamId === this.teamId && !this.disconnected) {
+            if (playerSource.teamId === this.teamId && !this.disconnected && !this.game.rules?.allowsTeamDamage?.()) {
                 return;
             }
         }
@@ -4160,7 +4193,8 @@ export class Player extends BaseGameObject {
             }
 
             const chest = GameObjectDefs.typeToDefSafe(this.chest) as ChestDef;
-            if (chest /*&& !isHeadShot*/) {
+            // (a mode may let a hit through the vest - the arena's Hollow-Points)
+            if (chest /*&& !isHeadShot*/ && !this.game.rules?.ignoresVest?.(params)) {
                 reduceDamage(chest.damageReduction);
             }
 
@@ -4168,6 +4202,10 @@ export class Player extends BaseGameObject {
             if (helmet) {
                 reduceDamage(helmet.damageReduction * /*isHeadShot ? 1 :*/ 0.6);
             }
+
+            // a mode's own (the arena: a soda / pill taken shortly before)
+            const modeReduction = this.game.rules?.damageReduction?.(this, params) ?? 0;
+            if (modeReduction > 0) reduceDamage(modeReduction);
         }
 
         if (this._health - finalDamage < 0) finalDamage = this.health;
@@ -5093,6 +5131,8 @@ export class Player extends BaseGameObject {
 
     revive(playerToRevive: Player | undefined) {
         if (!playerToRevive) return;
+        // (a mode may make it quicker - the arena's Mass Medicate / Revivify)
+        const duration = this.game.rules?.reviveDuration?.(this, playerToRevive) ?? GameConfig.player.reviveDuration;
 
         this.playerBeingRevived = playerToRevive;
         playerToRevive.revivedBy = this;
@@ -5100,22 +5140,22 @@ export class Player extends BaseGameObject {
             this.doAction(
                 "",
                 GameConfig.Action.Revive,
-                GameConfig.player.reviveDuration,
+                duration,
                 this.__id,
             );
         } else {
             playerToRevive.doAction(
                 "",
                 GameConfig.Action.Revive,
-                GameConfig.player.reviveDuration,
+                duration,
             );
             this.doAction(
                 "",
                 GameConfig.Action.Revive,
-                GameConfig.player.reviveDuration,
+                duration,
                 playerToRevive.__id,
             );
-            this.playAnim(GameConfig.Anim.Revive, GameConfig.player.reviveDuration);
+            this.playAnim(GameConfig.Anim.Revive, duration);
         }
     }
 
@@ -5245,7 +5285,7 @@ export class Player extends BaseGameObject {
         this.doAction(
             item,
             GameConfig.Action.UseItem,
-            (hasAoeHeal ? 0.75 : 1) * itemDef.useTime,
+            (hasAoeHeal ? 0.75 : 1) * (this.game.rules?.useTimeFactor?.(this) ?? 1) * itemDef.useTime,
         );
     }
 
@@ -5299,7 +5339,7 @@ export class Player extends BaseGameObject {
         this.doAction(
             item,
             GameConfig.Action.UseItem,
-            (hasAoeHeal ? 0.75 : 1) * itemDef.useTime,
+            (hasAoeHeal ? 0.75 : 1) * (this.game.rules?.useTimeFactor?.(this) ?? 1) * itemDef.useTime,
         );
     }
 
@@ -5344,6 +5384,15 @@ export class Player extends BaseGameObject {
         if (this.game.map.arenaMode && !this.role) return;
         if (this.game.rules?.blocksInput?.(this)) return;
 
+        // doing something (the arena's AFK kick): moving, shooting, a key, the aim moved
+        if (
+            msg.moveLeft || msg.moveRight || msg.moveUp || msg.moveDown || msg.shootHold || msg.shootStart
+            || msg.inputs.length || msg.touchMoveActive
+            || v2.length(v2.sub(v2.normalizeSafe(msg.toMouseDir), this.dirNew)) > 0.02
+        ) {
+            this.lastActiveAt = Date.now();
+        }
+
         // cheat signals (sus flags only, see antiCheat.ts) - real players only
         if (!this.bot && !this.spectator) {
             this.cheatMonitor ??= new CheatMonitor(this);
@@ -5386,6 +5435,23 @@ export class Player extends BaseGameObject {
 
         for (let i = 0; i < msg.inputs.length; i++) {
             const input = msg.inputs[i];
+            // knocked: the interact key gives up where a mode allows it (the arena: respawn
+            // right away) - not with Revivify (that key revives) or a door / obstacle in reach
+            if (
+                this.downed &&
+                (input === GameConfig.Input.Interact || input === GameConfig.Input.Revive) &&
+                !this.hasPerk("self_revive") &&
+                this.game.rules?.giveUp &&
+                this.getInteractableObstacles().length === 0 &&
+                this.game.rules.giveUp(this)
+            ) {
+                break;
+            }
+            // the arena's kill streak key
+            if (input === GameConfig.Input.UseKillstreak) {
+                this.game.rules?.useKillstreak?.(this);
+                continue;
+            }
             if (!this.shouldAcceptInput(input)) continue;
             switch (input) {
                 case GameConfig.Input.StowWeapons:
@@ -5671,10 +5737,10 @@ export class Player extends BaseGameObject {
                     hasData: real,
                     pos: p.pos,
                     visible: real,
-                    dead: p.dead,
+                    dead: p.dead || p.modeDead,
                     downed: p.downed,
                     role: p.role,
-                    health: p.health,
+                    health: p.modeDead ? 0 : p.health,
                     boost: p.boost,
                     screenWidth: p.screenWidth,
                     screenHeight: p.screenHeight,
@@ -5689,7 +5755,7 @@ export class Player extends BaseGameObject {
                 hasData: visible || p.playerStatusDirty,
                 pos: p.pos,
                 visible,
-                dead: p.dead,
+                dead: p.dead || p.modeDead,
                 downed: p.downed,
                 role: p.role,
             };
@@ -5752,6 +5818,7 @@ export class Player extends BaseGameObject {
             ? this.game.customLoadout.allowPickup
             : (this.game.map.mapDef.gameMode.pickup ?? true);
         if (!pickup) return;
+        if (this.game.rules?.allowsPickup && !this.game.rules.allowsPickup(this, obj.type)) return;
 
         const def = GameObjectDefs.typeToDefSafe(obj.type)!;
         if (
@@ -5780,6 +5847,18 @@ export class Player extends BaseGameObject {
                 {
                     const itemType = obj.type;
                     if (!this.invManager.isValid(itemType)) break;
+
+                    // one kind of throwable at a time: the ones carried go to the ground
+                    if (def.type === "throwable" && this.game.rules?.singleThrowable) {
+                        for (const other of THROWABLE_TYPES) {
+                            if (other === itemType || !this.invManager.isValid(other)) continue;
+                            if (this.game.rules?.canDrop && !this.game.rules.canDrop(this, other)) continue;
+                            const n = this.invManager.get(other as InventoryItem);
+                            if (n <= 0) continue;
+                            this.dropLoot(other, n);
+                            this.invManager.set(other as InventoryItem, 0);
+                        }
+                    }
 
                     const result = this.invManager.give(itemType, obj.count);
 
@@ -5813,7 +5892,17 @@ export class Player extends BaseGameObject {
                 {
                     amountLeft = 0;
 
-                    const freeGunSlot = this.getFreeGunSlot(obj);
+                    // a GameMode may fix the slot (the arena: main gun / pistol)
+                    const modeSlot = this.game.rules?.gunPickupSlot?.(this, obj.type);
+                    const freeGunSlot = modeSlot === undefined
+                        ? this.getFreeGunSlot(obj)
+                        : {
+                            slot: modeSlot as number | null,
+                            isDual: false,
+                            cause: this.weapons[modeSlot].type === obj.type
+                                ? net.PickupMsgType.AlreadyOwned
+                                : net.PickupMsgType.Success,
+                        };
                     pickupMsg.type = freeGunSlot.cause;
                     let newGunIdx = freeGunSlot.slot;
 
@@ -5833,8 +5922,10 @@ export class Player extends BaseGameObject {
                         return;
                     }
 
-                    // if "preloaded" gun add ammo to inventory
-                    if (obj.isPreloadedGun) {
+                    // if "preloaded" gun add ammo to inventory (not where guns come
+                    // with a full magazine instead)
+                    const keepsClip = !!this.game.rules?.lootKeepsClip;
+                    if (obj.isPreloadedGun && !keepsClip) {
                         this.invManager.giveAndDrop(
                             def.ammo as InventoryItem,
                             def.ammoSpawnCount,
@@ -5887,6 +5978,14 @@ export class Player extends BaseGameObject {
                         }
                     }
 
+                    // the rounds it was dropped with, all of them - also a Firepower
+                    // magazine picked up without Firepower (the next reload fills only the
+                    // usual one); never more than the gun's biggest magazine
+                    if (keepsClip) {
+                        const gunDef = GameObjectDefs.typeToDefSafe(gunType) as GunDef | undefined;
+                        const biggest = gunDef ? Math.max(gunDef.maxClip, gunDef.extendedClip ?? 0) : 0;
+                        newAmmo = Math.min(biggest, newAmmo + (obj.clip ?? 0));
+                    }
                     this.weaponManager.setWeapon(newGunIdx, gunType, newAmmo);
 
                     // always select primary slot if melee is selected
@@ -6043,7 +6142,7 @@ export class Player extends BaseGameObject {
             (obj.type == lootToAdd || !(lootToAddDef as ChestDef).noDrop)
         ) {
             const dir = v2.neg(this.dir);
-            this.game.lootBarn.addLootWithoutAmmo(
+            const back = this.game.lootBarn.addLootWithoutAmmo(
                 lootToAdd,
                 v2.add(obj.pos, v2.mul(dir, 0.4)),
                 obj.layer,
@@ -6051,6 +6150,8 @@ export class Player extends BaseGameObject {
                 undefined,
                 dir,
             );
+            // (the same gun back on the ground: with the same rounds)
+            if (back && lootToAdd === obj.type) back.clip = obj.clip;
         }
 
         obj.destroy();
@@ -6207,7 +6308,7 @@ export class Player extends BaseGameObject {
 
     dropLoot(type: string, count = 1, useCountForAmmo?: boolean) {
         this.mobileDropTicker = 3;
-        this.game.lootBarn.addLoot(
+        return this.game.lootBarn.addLoot(
             type,
             this.pos,
             this.layer,
@@ -6264,6 +6365,8 @@ export class Player extends BaseGameObject {
     }
 
     dropItem(dropMsg: net.DropItemMsg): void {
+        // (a mode's own items may not drop - the arena's kill streaks)
+        if (this.game.rules?.canDrop && !this.game.rules.canDrop(this, dropMsg.item)) return;
         const pickup = this.game.customLoadout
             ? this.game.customLoadout.allowPickup
             : (this.game.map.mapDef.gameMode.pickup ?? true);
@@ -6743,6 +6846,8 @@ export class Player extends BaseGameObject {
         let scale = 1;
         for (let i = 0; i < this.perks.length; i++) {
             const perk = this.perks[i].type;
+            // (a perk a mode switched off doesn't make the player bigger either)
+            if (this.game.rules?.inertPerks?.has(perk)) continue;
             const perkProps = PerkProperties[perk as keyof typeof PerkProperties];
             if (typeof perkProps === "object" && "scale" in perkProps) {
                 scale += perkProps.scale as number;
@@ -6817,6 +6922,8 @@ export class Player extends BaseGameObject {
             if (this.hasPerk("small_arms") && weaponDef.type == "gun") {
                 equipSpeed = 1;
             }
+            // (a mode may take a weapon's speed away - the arena's kill streak flares)
+            equipSpeed = this.game.rules?.equipSpeed?.(this, this.activeWeapon, equipSpeed) ?? equipSpeed;
 
             this.speed += equipSpeed;
         }

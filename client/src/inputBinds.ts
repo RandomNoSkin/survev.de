@@ -11,8 +11,8 @@ import type { Localization } from "./ui/localization.ts";
 // the new action's default key. v2 added AdvSpecToggle. v3 added the Spectator
 // category binds (ToggleSpectateUi + advanced spectator sub-toggles). v4 added
 // AdvSpecZoneTransparent/AdvSpecFoliageTransparent. v5 added AdvSpecVisionRadius.
-// v6 added HudClickOverride.
-const BINDS_VERSION = 6;
+// v6 added HudClickOverride. v7 added UseKillstreak (arena modes, key 5).
+const BINDS_VERSION = 7;
 
 type BindCategory = "controls" | "spectator";
 
@@ -97,6 +97,9 @@ const BindDefs = {
     [GameInput.TeamPingSingle]: def("Team Ping Menu", null),
     [GameInput.JoinChat]: def("Open the Chat", inputKey(Key.Enter)),
     [GameInput.SwitchAmmo]: def("Switch Ammo", inputKey(Key.B), "controls", true),
+    // the arena's kill streak (Domination) - 5, next to the weapon slots 1-4 (G already
+    // opens the big map when unbound, C is the team ping)
+    [GameInput.UseKillstreak]: def("Use Killstreak", inputKey(Key.Five), "controls", true),
     // Hold + click a HUD element to trigger its click-action even if you've disabled
     // clicking on it (see the "Clickable" toggle in HUD customization) - a deliberate
     // override rather than having to re-enable/disable clicking every time.
@@ -240,6 +243,7 @@ export class InputBinds {
             GameInput.AdvSpecFoliageTransparent,
             GameInput.AdvSpecVisionRadius,
             GameInput.HudClickOverride,
+            GameInput.UseKillstreak,
         ];
 
         for (const bind of newBinds) {

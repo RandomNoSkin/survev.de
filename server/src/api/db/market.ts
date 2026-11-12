@@ -21,7 +21,7 @@ import {
     MARKET_MAX_LISTINGS,
     MARKET_MAX_PRICE,
     type ShopCategory,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     BuyListingResponse,
     CancelListingResponse,

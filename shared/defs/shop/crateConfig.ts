@@ -1,7 +1,7 @@
-import { GameConfig, Rarity } from "../gameConfig";
-import type { CrateKeyDef } from "./gameObjects/crateKeyDefs";
-import { PassDefs } from "./gameObjects/passDefs";
-import { GameObjectDefs } from "./register.ts";
+import { GameConfig, Rarity } from "../../gameConfig";
+import type { CrateKeyDef } from "../gameObjects/crateKeyDefs";
+import { PassDefs } from "../gameObjects/passDefs";
+import { GameObjectDefs } from "../register.ts";
 import { getItemCategory, getItemPrice, getItemRarity } from "./shopConfig";
 
 /**

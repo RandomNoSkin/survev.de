@@ -14499,3 +14499,764 @@ img.custom-map-loot-icon {
 .clan-discover-more { margin: 10px auto 4px; width: 160px; text-align: center; }
 .clan-discover-hint { margin-top: 8px; text-align: center; }
 .clan-discover-sorts { flex-wrap: wrap; }
+
+/* Arena Loadouts menu (ui/arenaMenu.ts) */
+.arena-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.arena-menu {
+  width: min(860px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #1e2a1b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 16px 18px 20px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.arena-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.arena-head h2 {
+  margin: 0;
+  font-size: 24px;
+}
+.arena-close {
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+.arena-close:hover {
+  opacity: 1;
+}
+.arena-status {
+  padding: 16px 4px;
+  color: rgba(255, 255, 255, 0.8);
+}
+.arena-level {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.arena-level-num {
+  font-weight: bold;
+  font-size: 18px;
+  white-space: nowrap;
+}
+.arena-xp-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.arena-xp-bar i {
+  display: block;
+  height: 100%;
+  background: #7fcf5a;
+}
+.arena-xp-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.arena-tabs {
+  display: flex;
+  gap: 6px;
+}
+.arena-tab {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font-weight: bold;
+}
+.arena-tab-active {
+  background: #7fcf5a;
+  color: #142010;
+}
+.arena-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.arena-slot {
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.arena-slot-active {
+  border-color: #7fcf5a;
+}
+.arena-slot-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+}
+.arena-slot-name,
+.arena-item-name {
+  font-size: 13px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.arena-icon {
+  width: 56px;
+  height: 40px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.arena-group {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 6px;
+}
+.arena-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px;
+}
+.arena-item {
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+.arena-item:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.arena-item-picked,
+.arena-item-picked:hover {
+  /* chosen: stays yellow on hover too (nothing to click there) */
+  border-color: #ffe11a;
+  cursor: default;
+}
+.arena-item-locked {
+  cursor: default;
+  opacity: 0.45;
+}
+.arena-item-locked:hover {
+  border-color: transparent;
+}
+.arena-item-req {
+  font-size: 11px;
+  color: #ffd27f;
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .arena-slots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* main menu: battle royale / arena view switch, left of Social (main.ts applyView) */
+#start-top-pills {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#start-top-pills #btn-social.account-social-btn {
+  position: relative;
+  right: auto;
+  top: auto;
+  transform: none;
+  margin-right: 0;
+}
+/* the BR / multiplayer button: names the view it switches to */
+.client-view-btn {
+  display: flex;
+  align-items: center;
+  height: 50px;
+  padding: 0 22px;
+  border-radius: 10px;
+  box-sizing: border-box;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  /* in battle royale: "Multiplayer", black */
+  background: #1d1d1d;
+  border-bottom: 3px solid #000;
+  box-shadow: inset 0 -3px #000;
+}
+/* in multiplayer: "Battle Royale", the classic green */
+body.client-view-arena .client-view-btn {
+  background: #50af4d;
+  border-bottom-color: #2f7a2d;
+  box-shadow: inset 0 -3px #2f7a2d;
+}
+.client-view-btn:hover {
+  filter: brightness(1.12);
+}
+/* things only the arena view shows */
+.arena-view-only {
+  display: none !important;
+}
+body.client-view-arena .arena-view-only {
+  display: block !important;
+}
+
+/* multiplayer: a darker main menu background */
+body.client-view-arena #start-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+/* multiplayer: darker play buttons */
+body.client-view-arena #btn-start-mode-0,
+body.client-view-arena #btn-start-mode-1,
+body.client-view-arena #btn-start-mode-2,
+body.client-view-arena #btn-start-mode-3 {
+  background-color: #5d7d38;
+  border-bottom-color: #3f5526;
+  box-shadow: inset 0 -2px #3f5526;
+}
+/* multiplayer: no custom lobbies in the main menu, no team mode pick (the arena mode decides) */
+body.client-view-arena #btn-join-private-lobby,
+body.client-view-arena #btn-create-private-lobby,
+body.client-view-arena .btn-team-queue {
+  display: none !important;
+}
+/* the battle pass toggles to the arena progress (not the news) */
+.arena-progress-toggle {
+  background-image: url(/img/gui/player-the-hunted.svg);
+  background-size: 26px;
+  background-position: center;
+  opacity: 0.85;
+}
+.arena-progress-toggle:hover {
+  opacity: 1;
+}
+#arena-progress-wrapper {
+  position: relative;
+}
+/* the arena progress: built like the pass block (#pass-block / #pass-progress) */
+#arena-progress-block {
+  padding: 20px;
+  max-height: none;
+  color: #fff;
+  position: relative;
+  /* darker than the pass block (menu-block: 0.5) - tells them apart */
+  background-color: rgba(0, 0, 0, 0.72);
+}
+#arena-progress-block .ap-name {
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0));
+  height: 20px;
+  padding: 8px;
+  padding-left: 12px;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 20px;
+  text-transform: uppercase;
+}
+#arena-progress-block .ap-progress {
+  color: #dcdcdc;
+  font-weight: 700;
+  height: 114px;
+  position: relative;
+  top: 10px;
+}
+#arena-progress-block .ap-level {
+  background-image: url(/img/pass/pass-level-bg.svg);
+  background-repeat: no-repeat;
+  background-size: 72px;
+  color: #ffd800;
+  font-size: 36px;
+  height: 72px;
+  left: -6px;
+  padding-top: 26px;
+  box-sizing: content-box;
+  line-height: 20px;
+  position: relative;
+  text-align: center;
+  width: 72px;
+  z-index: 1;
+}
+#arena-progress-block .ap-bar {
+  background: rgba(0, 0, 0, 0.75);
+  height: 48px;
+  left: 48px;
+  padding: 4px;
+  position: absolute;
+  top: 8px;
+  width: 94px;
+}
+#arena-progress-block .ap-bar-fill {
+  background: rgba(222, 255, 0, 0.75);
+  height: 100%;
+}
+#arena-progress-block .ap-xp {
+  position: relative;
+  text-align: center;
+  top: 4px;
+  font-size: 15px;
+}
+#arena-progress-block .ap-unlock {
+  background-image: url(/img/pass/pass-unlock-bg.svg);
+  background-repeat: no-repeat;
+  background-size: 128px;
+  border-radius: 100%;
+  height: 128px;
+  position: absolute;
+  right: -6px;
+  top: -30px;
+  width: 128px;
+  z-index: 1;
+}
+#arena-progress-block .ap-unlock-image {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  width: 84px;
+  height: 84px;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+#arena-progress-block .ap-unlock-level {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  color: #ffd800;
+  white-space: nowrap;
+}
+/* the challenges: like the pass's "How to earn XP" box, always open */
+#arena-progress-block .ap-challenges {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 10px 6px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #dcdcdc;
+}
+#arena-progress-block .ap-challenges-title {
+  font-size: 11px;
+  color: #aaa;
+  text-transform: uppercase;
+  padding: 3px 0;
+}
+#arena-progress-block .ap-challenge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+#arena-progress-block .ap-challenge:last-child {
+  border-bottom: none;
+}
+#arena-progress-block .ap-challenge .arena-icon {
+  width: 44px;
+  height: 30px;
+  flex: 0 0 44px;
+}
+#arena-progress-block .ap-challenge-main {
+  flex: 1;
+  min-width: 0;
+}
+#arena-progress-block .ap-challenge-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+#arena-progress-block .ap-challenge-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-top: 2px;
+}
+#arena-progress-block .ap-challenge-bar i {
+  display: block;
+  height: 100%;
+  background: #a8d8a8;
+}
+#arena-progress-block .ap-note {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  margin-top: 14px;
+}
+
+/* a gap between Spectate and Arena Loadouts, as between the other rows; the blue of
+   the Loadout button (top right) */
+#btn-arena-loadouts {
+  margin-top: 8px;
+  background: #1e90ff;
+  border-bottom: 2px solid #1871c8;
+  box-shadow: inset 0 -2px #1871c8;
+}
+
+/* the arena loadout menu: a perk's description under its name */
+.arena-item .arena-item-desc {
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+}
+
+/* the arena menu: Broken Arrow is a switch - clickable also while on */
+.arena-item-toggle.arena-item-picked {
+  cursor: pointer;
+}
+.arena-item-toggle.arena-item-locked {
+  cursor: default;
+}
+
+/* the arena play buttons: someone waits in the warmup - a small bubble on the corner,
+   see SiteInfo.renderLiveCounts */
+#start-menu [id^="btn-start-mode-"] {
+  position: relative;
+  overflow: visible;
+}
+#start-menu .btn-mode-live {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  height: 23px;
+  width: auto !important;
+  min-width: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px 0 8px !important;
+  margin: 0 !important;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: linear-gradient(#ffe066, #f5c400);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 2;
+}
+/* (the button's own styles must not reach in - its font, paddings, widths) */
+#start-menu .btn-mode-live * {
+  flex: none !important;
+  display: inline-block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  text-align: left !important;
+}
+#start-menu .btn-mode-live::before,
+#start-menu .btn-mode-live::after,
+#start-menu .btn-mode-live *::before,
+#start-menu .btn-mode-live *::after {
+  content: none !important;
+  display: none !important;
+}
+#start-menu .btn-mode-live,
+#start-menu .btn-mode-live * {
+  color: #2b2200 !important;
+  font-size: 15px !important;
+  line-height: 23px !important;
+  font-weight: bold !important;
+  text-shadow: none !important;
+  /* the mode buttons indent their text (room for the icon) - not in here */
+  text-indent: 0 !important;
+}
+#start-menu .btn-mode-live-dot {
+  flex: none;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50%;
+  background: #d11 !important;
+  animation: btn-mode-live-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes btn-mode-live-pulse {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+/* the team menu grows with its members (Domination: up to 6) instead of a fixed
+   4-player height - the member list overflowed the panel */
+#team-menu-columns {
+  height: auto;
+  min-height: 225px;
+  display: flow-root;
+}
+#team-menu-members {
+  max-height: none;
+}
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #team-menu {
+    height: auto;
+    min-height: 230px;
+  }
+}
+
+/* arena menu, Killstreaks tab: the "No Killstreak" pick at the end of every tier */
+.arena-item-none-icon {
+  width: 56px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 40px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.55);
+}
+.arena-item-none.arena-item-picked .arena-item-none-icon {
+  color: #fff;
+}
+
+/* ── the multiplayer client's tour (ui/arenaTutorial.ts) ───────────────────── */
+.arena-tutorial-link {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.arena-tutorial-link:hover {
+  color: #fff;
+}
+.at-panel {
+  width: min(640px, 94vw);
+  overflow-x: hidden;
+}
+.at-step {
+  font-size: 13px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+}
+.at-pic {
+  min-height: 170px;
+  padding: 16px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.at-pic-row {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.at-pic-col {
+  flex-direction: column;
+  gap: 14px;
+}
+.at-feature {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+.at-feature-icons {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: nowrap;
+}
+.at-feature-name {
+  font-size: 13px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.85);
+}
+.at-feature-big {
+  height: 48px;
+  font-size: 40px;
+  line-height: 48px;
+  font-weight: bold;
+  color: #9fe870;
+}
+.at-feature-big.at-level {
+  font-size: 22px;
+  padding: 0 10px;
+  border: 3px solid #ffd23f;
+  border-radius: 8px;
+  color: #ffd23f;
+  line-height: 42px;
+  height: 42px;
+}
+.at-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.at-tile-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.08);
+  background-size: 80%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.at-tile-caption {
+  font-size: 11px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.7);
+}
+.at-tile-win .at-tile-icon {
+  background-color: rgba(255, 210, 63, 0.3);
+  box-shadow: 0 0 0 2px #ffd23f;
+}
+.at-tile-win .at-tile-caption {
+  color: #ffd23f;
+}
+.at-ladder {
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.at-arrow,
+.at-ladder-dots {
+  font-size: 20px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 16px;
+}
+.at-pic-dom {
+  flex-direction: column;
+  gap: 8px;
+}
+.at-dom-map {
+  width: 100%;
+  max-width: 420px;
+}
+.at-dom-score {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-weight: bold;
+}
+.at-dom-own {
+  color: #3a8dff;
+  font-size: 22px;
+}
+.at-dom-enemy {
+  color: #ff4b4b;
+  font-size: 22px;
+}
+.at-dom-limit {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+}
+.at-lines {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.9);
+}
+.at-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+.at-btn {
+  flex: 0 0 auto;
+  /* (.menu-option is a full-width block - not here) */
+  width: auto !important;
+  display: inline-block !important;
+  min-width: 120px;
+  padding: 0 16px;
+  margin: 0 !important;
+}
+.at-btn-back {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.at-btn-spacer {
+  min-width: 120px;
+}
+.at-dots {
+  display: flex;
+  gap: 8px;
+}
+.at-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+.at-dot-on {
+  background: #9fe870;
+}
+.at-skip {
+  align-self: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.at-skip:hover {
+  color: #fff;
+}
+@media (max-width: 600px) {
+  .at-btn,
+  .at-btn-spacer {
+    min-width: 90px;
+  }
+  /* two features a row on a phone */
+  .at-pic-row .at-feature {
+    flex: 1 1 40%;
+  }
+  .at-tile-icon {
+    width: 34px;
+    height: 34px;
+  }
+  .at-lines {
+    font-size: 13px;
+  }
+}
+
+/* no arena mode with loadouts on (only Gun Game): no "Arena Loadouts" button */
+body.arena-no-loadouts #btn-arena-loadouts {
+  display: none !important;
+}
