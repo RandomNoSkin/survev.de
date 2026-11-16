@@ -74,6 +74,9 @@ interface ContainerWithMask extends PIXI.Container {
 }
 
 type PrevStatus = Pick<PlayerStatus, "downed" | "dead" | "disconnected" | "role">;
+/** How long the spectators' Leave button is held before it leaves. */
+const SPEC_LEAVE_HOLD_MS = 800;
+
 export class UiManager {
     m_pieTimer = new PieTimer();
     gameElem = $("#ui-game");
@@ -206,6 +209,9 @@ export class UiManager {
     specPrev = false;
     specNextButton = $("#btn-spectate-next-player");
     specPrevButton = $("#btn-spectate-prev-player");
+    specQuitButton = $("#btn-spectate-quit");
+    /** Leave is held, not clicked (see SPEC_LEAVE_HOLD_MS) */
+    private specLeaveTimer: ReturnType<typeof setTimeout> | undefined;
 
     // Advanced spectator (admin only)
     specAdvancedButton = $("#btn-spectate-advanced");
@@ -461,9 +467,25 @@ export class UiManager {
         if (device.touch) {
             this.resumeButton.css("display", "none");
         }
-        $("#btn-spectate-quit").on("click", () => {
-            this.quitGame();
-        });
+        // Leave: hold it (a fill runs through the button) - a slip of the mouse
+        // mustn't throw a spectator out
+        const cancelLeave = () => {
+            clearTimeout(this.specLeaveTimer);
+            this.specLeaveTimer = undefined;
+            this.specQuitButton.removeClass("holding");
+        };
+        this.specQuitButton
+            .off(".specleave")
+            .on("pointerdown.specleave", (e) => {
+                e.stopPropagation();
+                cancelLeave();
+                this.specQuitButton.addClass("holding");
+                this.specLeaveTimer = setTimeout(() => {
+                    cancelLeave();
+                    this.quitGame();
+                }, SPEC_LEAVE_HOLD_MS);
+            })
+            .on("pointerup.specleave pointerleave.specleave pointercancel.specleave", cancelLeave);
         $("#btn-game-quit").on("mousedown", (e) => {
             e.stopPropagation();
         });
@@ -757,7 +779,9 @@ export class UiManager {
         this.fullScreenButton.off("click");
         this.resumeButton.off("mousedown");
         this.resumeButton.off("click");
-        $("#btn-spectate-quit").off("click");
+        this.specQuitButton.off(".specleave");
+        clearTimeout(this.specLeaveTimer);
+        this.specQuitButton.removeClass("holding");
         $("#btn-game-quit").off("mousedown");
         $("#btn-game-quit").off("click");
         this.specStatsButton.off("click");
@@ -2026,7 +2050,7 @@ export class UiManager {
                     }).append([
                         $("<div/>", {
                             class: "ui-stats-col rank",
-                            text: stats.rank === 0 ? "#?" : "#" + stats.rank,
+                            text: stats.rank === 0 ? "#?" : stats.rank === 999 ? "SPEC" : "#" + stats.rank,
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
@@ -2552,9 +2576,10 @@ export class UiManager {
         }
 
         this.specAdvancedButton.toggleClass("active", advSpec.enabled);
+        // (under the buttons - see game.css)
         this.specAdvancedOptions.css(
             "display",
-            advSpec.enabled ? "inline-block" : "none",
+            advSpec.enabled ? "block" : "none",
         );
         // The collapse header is shown when the mode is enabled; it toggles the
         // visibility of the option list without disabling any active feature.
@@ -2562,7 +2587,7 @@ export class UiManager {
             "display",
             advSpec.enabled && !this.advCollapsed ? "block" : "none",
         );
-        this.advCollapseButton.html(this.advCollapsed ? "▸ Options" : "▾ Options");
+        this.advCollapseButton.html(this.advCollapsed ? "Options ▸" : "Options ◂");
         this.advFreecamButton.toggleClass("active", advSpec.freecam);
         this.advZoomButton.toggleClass("active", advSpec.zoom);
         this.advLayerButton.toggleClass("active", advSpec.layer === 1);

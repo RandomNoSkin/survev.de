@@ -79,6 +79,9 @@ export interface ObjectsFullData {
         activeWeapon: string;
         layer: number;
         dead: boolean;
+        /** waiting to respawn (a GameMode hides them): sent as dead - only their own
+         *  client gets the object then, and must not show the body */
+        respawnHidden?: boolean;
         downed: boolean;
 
         animType: Anim;
@@ -219,7 +222,7 @@ export const ObjectSerializeFns: {
             s.writeGameType(data.activeWeapon);
 
             s.writeBits(data.layer, 2);
-            s.writeBoolean(data.dead);
+            s.writeBoolean(data.dead || !!data.respawnHidden);
             s.writeBoolean(data.downed);
 
             s.writeBits(data.animType, BitSizes.Anim);

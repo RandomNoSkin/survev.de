@@ -32,6 +32,27 @@ export const DOMINATION_ZONES = [
 ];
 export const DOMINATION_ZONE_RAD = 12;
 
+/**
+ * The big building in the map's middle (club, reserve, hydra bunker - see the map def's
+ * locationSpawns): its underground part may take zone B. Per underground building type:
+ * where in it (its own coordinates) and how big. Only players on that layer count there.
+ */
+export const DOMINATION_UNDERGROUND_ZONES: Record<string, { pos: { x: number; y: number }; rad: number }> = {
+    // the club's bathhouse (main hall)
+    bathhouse_01: { pos: { x: 2, y: 9.5 }, rad: 12 },
+    // the reserve's basement (its big room)
+    reserve_basement_01: { pos: { x: -11.75, y: 1 }, rad: 12 },
+    // the hydra bunker's first chamber (below the stairs)
+    bunker_hydra_sublevel_01: { pos: { x: 3.5, y: 2.25 }, rad: 9 },
+};
+/** How often zone B goes underground when the middle building has an underground part. */
+export const DOMINATION_UNDERGROUND_CHANCE = 0.5;
+/** The big buildings' ground floors that may take zone B instead (their own coordinates). */
+export const DOMINATION_BIG_BUILDING_ZONES: Record<string, { pos: { x: number; y: number }; rad: number }> = {
+    club_01: { pos: { x: -4, y: -8.5 }, rad: 12 },
+    reserve_01: { pos: { x: 7, y: 2.5 }, rad: 12 },
+};
+
 /** Where a team spawns: this far (fraction of the map) from its own edge. */
 export const DOMINATION_SPAWN_DEPTH = 0.14;
 /** The match start: a team spawns in a tight bunch - within this of their side's spot. */
@@ -40,7 +61,7 @@ export const DOMINATION_START_CLUSTER_RAD = 6;
 /** The map is made for this many players (6v6)... */
 export const DOMINATION_BASE_PLAYERS = 12;
 /** ...fewer at the match start shrink it (side length), at most down to this. */
-export const DOMINATION_MAP_SCALE_MIN = 0.65;
+export const DOMINATION_MAP_SCALE_MIN = 0.8;
 
 /** Map scale (side length) for a Domination match with `players` - area grows with the players. */
 export function dominationMapScale(players: number): number {
@@ -50,6 +71,8 @@ export function dominationMapScale(players: number): number {
 
 /** Dead for this long - time to pick another loadout. */
 export const DOMINATION_RESPAWN_DELAY_S = 10;
+/** ...in the warmup only this long (nothing to lose there). */
+export const DOMINATION_WARMUP_RESPAWN_DELAY_S = 2;
 /** The loadout menu holds a player out of the game at most this long (joining, or opened while dead). */
 export const DOMINATION_MENU_MAX_S = 30;
 /** Respawns keep at least this far from enemies when the map allows it. */

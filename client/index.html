@@ -718,14 +718,27 @@
         <div id="ui-spectate-options-wrapper">
           <div id="ui-spectate-options" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
             <div id="ui-spectate-buttons" class="ui-bg-standard">
+              <!-- held, not clicked (UiManager): no leaving by a slip; on top,
+                   apart from the rest. The others: order / on-off in the HUD editor
+                   (specButtons.ts) - next / previous are off by default (arrow keys) -->
+              <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" title="Hold to leave the game"><span class="spec-leave-fill"></span><span class="spec-leave-text" data-l10n="game-leave-game">Leave Game</span></a>
               <a class="menu-option btn-darken" id="btn-spectate-next-player" data-l10n="game-next-teammate">Next Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-prev-player" data-l10n="game-previous-teammate">Previous Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-view-stats" data-l10n="game-view-match-stats">View Match Stats</a>
               <a class="menu-option btn-darken" id="btn-spectate-advanced" style="display: none;">Advanced Spectator</a>
-              <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" data-l10n="game-leave-game">Leave Game</a>
             </div>
+            <div id="ui-spectate-stats" class="ui-bg-standard">
+              <div id="ui-spectate-stats-header" data-l10n="game-your-results">Your Results</div>
+              <table id="ui-spectate-stats-table">
+                <tbody id="ui-spectate-stats-data">
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <!-- advanced spectator's options: placed on its own in the HUD editor -->
+          <div id="ui-spectate-adv-wrap" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
             <div id="ui-spectate-advanced-options" class="ui-bg-standard" style="display: none;">
-              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">▾ Options</a>
+              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">Options ▸</a>
               <div id="ui-spectate-advanced-list">
                 <div class="spectate-adv-section">Camera</div>
                 <div class="spectate-adv-grid">
@@ -759,13 +772,6 @@
                   <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-crosshair">Crosshair</a>
                 </div>
               </div>
-            </div>
-            <div id="ui-spectate-stats" class="ui-bg-standard">
-              <div id="ui-spectate-stats-header" data-l10n="game-your-results">Your Results</div>
-              <table id="ui-spectate-stats-table">
-                <tbody id="ui-spectate-stats-data">
-                </tbody>
-              </table>
             </div>
           </div>
         </div>

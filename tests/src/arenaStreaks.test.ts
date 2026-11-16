@@ -58,10 +58,12 @@ const ready = (rules: Domination, p: Player) => (rules as unknown as { streakRea
 /** the running kill streaks' items */
 const actives = (rules: Domination, p: Player) => [...((rules as unknown as { streakActive: Map<Player, Map<string, string>> }).streakActive.get(p)?.values() ?? [])];
 const active = (rules: Domination, p: Player) => actives(rules, p)[0];
+/** the kills each tier takes */
+const K = Object.fromEntries(ARENA_STREAKS.map((t) => [t.kind, t.kills])) as Record<(typeof ARENA_STREAKS)[number]["kind"], number>;
 
 describe("kill streaks", () => {
-    test("the tiers: 3 / 5 / 7 / 10 kills; the defaults from the start, the rest unlocked like weapons", () => {
-        expect(ARENA_STREAKS.map((t) => t.kills)).toStrictEqual([3, 5, 7, 10]);
+    test("the tiers: 2 / 3 / 5 / 7 kills; the defaults from the start, the rest unlocked like weapons", () => {
+        expect(ARENA_STREAKS.map((t) => t.kills)).toStrictEqual([2, 3, 5, 7]);
         for (const item of ["flare_gun", "m134", "strobe"]) expect(ARENA_STARTER_ITEMS).toContain(item);
         expect(ARENA_CHALLENGES.modified_m249.with).toStrictEqual({ weapon: "m134" });
         expect(ARENA_CHALLENGES["8xscope"].with).toStrictEqual({ weapon: ARENA_JUGGERNAUT_M249_KILLS });
@@ -74,11 +76,11 @@ describe("kill streaks", () => {
         expect(s).toMatchObject({ airdrop: "flare_gun", juggernaut: "m134", airdropWeapon: "awc", brokenArrow: false, eagleEye: false });
     });
 
-    test("3 kills: the flare is ready; the key puts it in the melee slot, one shot calls the crate, then the melee is back", () => {
+    test("the first tier: the flare is ready; the key puts it in the melee slot, one shot calls the crate, then the melee is back", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
-        streakOf(game, rules, r, b, 3);
+        streakOf(game, rules, r, b, K.airdrop);
         expect(ready(rules, r)).toBe("flare_gun");
         expect(lastStreakMsg(r)?.ready).toBe("flare_gun");
         const melee = r.weapons[GameConfig.WeaponSlot.Melee].type;
@@ -108,7 +110,7 @@ describe("kill streaks", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
-        streakOf(game, rules, r, b, 7);
+        streakOf(game, rules, r, b, K.juggernaut);
         expect(ready(rules, r)).toBe("m134");
         // dying keeps the earned one (the streak starts over)
         kill(r, b);
@@ -127,7 +129,7 @@ describe("kill streaks", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
-        streakOf(game, rules, r, b, 7);
+        streakOf(game, rules, r, b, K.juggernaut);
         expect(rules.useKillstreak(r)).toBe(true);
         expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("m134");
         expect(r.weapons[GameConfig.WeaponSlot.Primary].ammo).toBe(GunDefs.m134.maxClip);
@@ -155,7 +157,7 @@ describe("kill streaks", () => {
         const [r] = red;
         const [b] = blue;
         r.arenaStreaks = { ...r.arenaStreaks, juggernaut: "modified_m249" };
-        streakOf(game, rules, r, b, 7);
+        streakOf(game, rules, r, b, K.juggernaut);
         expect(rules.useKillstreak(r)).toBe(true);
         expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("modified_m249");
         expect([r.helmet, r.chest]).toStrictEqual([ARENA_GEAR.helmet, ARENA_GEAR.chest]);
@@ -174,13 +176,13 @@ describe("kill streaks", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
-        streakOf(game, rules, r, b, 5);
-        // locked: 5 kills give nothing - the airdrop from 3 kills is still the one to fire
+        streakOf(game, rules, r, b, K.eagle_eye);
+        // locked: Eagle Eye's kills give nothing - the airdrop before is still the one to fire
         expect(ready(rules, r)).toBe(ARENA_DEFAULT_STREAKS.airdrop);
         const { game: g2, rules: rules2, red: red2, blue: blue2 } = domination();
         const [r2] = red2;
         r2.arenaStreaks = { ...r2.arenaStreaks, eagleEye: true };
-        streakOf(g2, rules2, r2, blue2[0], 5);
+        streakOf(g2, rules2, r2, blue2[0], K.eagle_eye);
         expect(ready(rules2, r2)).toBe("8xscope");
         expect(rules2.useKillstreak(r2)).toBe(true);
         expect(r2.scope).toBe("8xscope");
@@ -196,7 +198,7 @@ describe("kill streaks", () => {
         const [r] = red;
         const [b] = blue;
         r.arenaStreaks = { ...r.arenaStreaks, eagleEye: true };
-        streakOf(game, rules, r, b, 10);
+        streakOf(game, rules, r, b, K.airstrike);
         expect(ready(rules, r)).toBe("strobe");
         expect(rules.useKillstreak(r)).toBe(true);
         expect(r.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("strobe");
@@ -261,17 +263,17 @@ describe("kill streaks", () => {
         const [r] = red;
         const [b] = blue;
         r.arenaStreaks = { ...r.arenaStreaks, eagleEye: true };
-        streakOf(game, rules, r, b, 5);
+        streakOf(game, rules, r, b, K.eagle_eye);
         expect(ready(rules, r)).toBe("8xscope");
         expect(rules.useKillstreak(r)).toBe(true);
-        streakOf(game, rules, r, b, 2);
+        streakOf(game, rules, r, b, K.juggernaut - K.eagle_eye);
         expect(ready(rules, r)).toBe("m134");
         // the Juggernaut fired with Eagle Eye running: both run
         expect(rules.useKillstreak(r)).toBe(true);
         expect(actives(rules, r).sort()).toStrictEqual(["8xscope", "m134"]);
         expect(r.scope).toBe("8xscope");
         expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("m134");
-        streakOf(game, rules, r, b, 3);
+        streakOf(game, rules, r, b, K.airstrike - K.juggernaut);
         expect(ready(rules, r)).toBe("strobe");
         expect(rules.useKillstreak(r)).toBe(true);
         expect(r.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("strobe");
@@ -294,9 +296,9 @@ describe("kill streaks", () => {
         streakOf(game, rules, r, b, 1);
         // the next one: the Juggernaut (airdrop and Eagle Eye off)
         expect(lastStreakMsg(r)?.next).toBe(ARENA_STREAKS.findIndex((t) => t.kind === "juggernaut"));
-        streakOf(game, rules, r, b, 4);
+        streakOf(game, rules, r, b, K.eagle_eye - 1);
         expect(ready(rules, r)).toBeUndefined();
-        streakOf(game, rules, r, b, 2);
+        streakOf(game, rules, r, b, K.juggernaut - K.eagle_eye);
         expect(ready(rules, r)).toBe("m134");
         // all off: no next tier
         r.arenaStreaks = { ...r.arenaStreaks, off: ["airdrop", "eagle_eye", "juggernaut", "airstrike"] };
@@ -327,7 +329,7 @@ describe("kill streaks", () => {
     test("a Juggernaut picks up nothing at all", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
-        streakOf(game, rules, r, blue[0], 7);
+        streakOf(game, rules, r, blue[0], K.juggernaut);
         rules.useKillstreak(r);
         for (const item of ["ak47", "bandage", "556mm", "soda", "frag", "takedown", "helmet03"]) {
             expect(rules.allowsPickup(r, item), item).toBe(false);

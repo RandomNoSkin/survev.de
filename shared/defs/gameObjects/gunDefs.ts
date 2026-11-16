@@ -2201,8 +2201,9 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 10,
         maxClip: 2,
         maxReload: 2,
-        extendedClip: 4,
-        extendedReload: 4,
+        // Firepower: 3 shells (4 was too much)
+        extendedClip: 3,
+        extendedReload: 3,
         reloadTime: 1.5,
         fireDelay: 0.2,
         switchDelay: 0.3,

@@ -1,5 +1,6 @@
 import { MapId } from "../../gameConfig.ts";
 import { util } from "../../utils/util";
+import { v2 } from "../../utils/v2";
 import type { PartialMapDef } from "./compDefs";
 import { Local } from "./localDefs";
 
@@ -72,7 +73,16 @@ const mapDef: PartialMapDef = {
             xlarge: "",
         },
         customSpawnRules: {
-            locationSpawns: [],
+            // a big building in the middle - club, reserve or hydra bunker (see
+            // spawnReplacements); its underground part may take zone B
+            locationSpawns: [
+                {
+                    type: "club_complex_01",
+                    pos: v2.create(0.5, 0.5),
+                    rad: 10,
+                    retryOnFailure: false,
+                },
+            ],
             placeSpawns: [],
         },
         densitySpawns: [
@@ -116,7 +126,15 @@ const mapDef: PartialMapDef = {
                 choose: 3,
             },
         ],
-        spawnReplacements: [{}],
+        spawnReplacements: [
+            {
+                club_complex_01: [
+                    { type: "club_complex_01", weight: 1 },
+                    { type: "reserve_complex_01", weight: 1 },
+                    { type: "bunker_structure_02", weight: 1 },
+                ],
+            },
+        ],
         importantSpawns: [],
     },
     /* STRIP_FROM_PROD_CLIENT:END */

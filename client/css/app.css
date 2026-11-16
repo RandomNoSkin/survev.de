@@ -14676,6 +14676,50 @@ img.custom-map-loot-icon {
   color: #ffd27f;
   text-align: center;
 }
+.arena-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.arena-clear {
+  font: inherit;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.3);
+  color: #ffffff;
+  cursor: pointer;
+}
+.arena-clear:hover {
+  border-color: #ff8a7a;
+  color: #ff8a7a;
+}
+.arena-icon-empty {
+  border: 2px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+}
+.arena-item-points {
+  font-size: 11px;
+  font-weight: bold;
+  color: #7fcf5a;
+}
+.arena-points {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+}
+.arena-points-text {
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.arena-points-bar {
+  flex: 1;
+}
 @media (max-width: 600px) {
   .arena-slots {
     grid-template-columns: repeat(2, 1fr);

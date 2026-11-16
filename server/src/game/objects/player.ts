@@ -1291,6 +1291,11 @@ export class Player extends BaseGameObject {
     layer: number;
     aimLayer = 0;
     dead = false;
+    /** waiting to respawn in a respawn mode (hidden): the own client gets the body as
+     *  dead - it must never show standing around (see the Player serializer) */
+    get respawnHidden(): boolean {
+        return !!this.game.rules?.isHidden?.(this);
+    }
     downed = false;
 
     downedCount = 0;
@@ -2417,6 +2422,16 @@ export class Player extends BaseGameObject {
                 dir: this.dir,
                 source: undefined,
             });
+            // joined before anyone was in (a lobby spectator / owner): the client asked
+            // for someone to watch once and got nobody - the camera would sit on the
+            // spectator itself at (0, 0). Give them the first player there is.
+            // (a GameMode with respawns picks spectators' targets itself)
+            if (!this._spectating && !this.game.rules?.isHidden) {
+                const candidates = this.game.playerBarn.livingPlayers.filter((p) => !p.disconnected && !p.stealth);
+                const sameTeam = this.game.map.factionMode ? candidates.filter((p) => p.teamId === this.teamId) : [];
+                const target = util.randomItem(sameTeam.length ? sameTeam : candidates);
+                if (target) this.spectating = target;
+            }
         }
 
         if (this.dead) {
@@ -3575,18 +3590,24 @@ export class Player extends BaseGameObject {
     private pingGroupId = -1;
     /** Team overview (TeamInfoMsg): when it was last checked, and what was last sent. */
     private teamInfoCheckedAt = 0;
-    private teamInfoSent = "";
+    /** ("[]": nothing to show - an empty list only goes out to clear one shown before) */
+    private teamInfoSent = "[]";
 
     /** What the teammates carry, for the big-map team overview - twice a second at
-     *  most, and only when it changed. Team modes, own group only. */
+     *  most, and only when it changed. Team modes, own group only - a spectator gets the
+     *  team of whoever they watch (lobby spectators share a group with each other, which
+     *  must not show up as "their team"). */
     private sendTeamInfo(msgStream: net.MsgStream): void {
-        if (!this.game.isTeamMode || !this.group || this.group.players.length < 2) return;
+        if (!this.game.isTeamMode) return;
         const now = Date.now();
         if (now - this.teamInfoCheckedAt < 500) return;
         this.teamInfoCheckedAt = now;
 
+        const group = this.spectator ? this.spectating?.group : this.group;
+        const players = group && group.players.length >= 2 ? group.players.filter((p) => !p.spectator) : [];
+
         const msg = new net.TeamInfoMsg();
-        msg.players = this.group.players.map((p) => ({
+        msg.players = players.map((p) => ({
             playerId: p.__id,
             dead: p.dead,
             downed: p.downed,
@@ -5892,7 +5913,7 @@ export class Player extends BaseGameObject {
                 {
                     amountLeft = 0;
 
-                    // a GameMode may fix the slot (the arena: main gun / pistol)
+                    // a GameMode may fix the slot
                     const modeSlot = this.game.rules?.gunPickupSlot?.(this, obj.type);
                     const freeGunSlot = modeSlot === undefined
                         ? this.getFreeGunSlot(obj)
@@ -6950,7 +6971,8 @@ export class Player extends BaseGameObject {
         }
 
         if (this.hasteType != GameConfig.HasteType.None) {
-            this.speed += GameConfig.player.hasteSpeedBonus;
+            const bonus = GameConfig.player.hasteSpeedBonus;
+            this.speed += this.game.rules?.hasteSpeed?.(this, this.hasteType, bonus) ?? bonus;
         }
 
         if (this.frozen) {

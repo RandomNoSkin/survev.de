@@ -11,10 +11,11 @@ import type { GunCategory } from "../gameObjects/gunCategories";
 /** Perks the perk slot can hold, and what they do there: arenaPerkDefs.ts. */
 export { ARENA_PERK_DEFS, ARENA_PERKS } from "./arenaPerkDefs";
 
-/** What a loadout holds: one main gun (any category but pistols), one pistol, a
+/** What a loadout holds: two guns (ARENA_WEAPON_POINTS - within the point budget), a
  *  throwable and a perk. The melee is the one from the cosmetic loadout. */
 export interface ArenaLoadout {
     primary: string;
+    /** the second gun - any kind (the name from when it was a pistol slot: the DB column) */
     pistol: string;
     throwable: string;
     perk: string;
@@ -40,8 +41,8 @@ export const ARENA_GEAR = {
  * one while one runs: the stronger / longer one counts.
  */
 export const ARENA_BOOST_RESIST: Record<string, { reduction: number; seconds: number }> = {
-    soda: { reduction: 0.2, seconds: 5 },
-    painkiller: { reduction: 0.3, seconds: 8 },
+    soda: { reduction: 0.2, seconds: 9 },
+    painkiller: { reduction: 0.3, seconds: 15 },
     /** (no item: what Takedown gives per kill - see ARENA_TAKEDOWN) */
     takedown: { reduction: 0.15, seconds: 8 },
 };
@@ -61,6 +62,15 @@ export const ARENA_MAX_THROWABLES = 4;
  *  resistance (ARENA_BOOST_RESIST.takedown - half a pill's) and a short burst of speed. */
 export const ARENA_TAKEDOWN = { health: 10, boost: "takedown", hasteSeconds: 2 };
 
+/** How long a revive takes in the arena (the battle royale: 8 s) - a fast-revive perk:
+ *  ARENA_FAST_REVIVE_S. */
+export const ARENA_REVIVE_S = 3;
+/** Every kill gives the killer ammo for their guns: this much of the spawn ammo (per gun,
+ *  see ARENA_SPAWN_AMMO_MULT), the backpack caps it. */
+export const ARENA_KILL_AMMO_FRACTION = 0.5;
+/** Windwalk's burst of speed in the arena: this much of the usual. */
+export const ARENA_WINDWALK_SPEED_FACTOR = 0.75;
+
 /** Health after a revive (on top: a pill's damage resistance, ARENA_BOOST_RESIST). */
 export const ARENA_REVIVE_HEALTH = 50;
 /** Arena modes: no shot fired and no enemy damage dealt or taken this long - out of combat. */
@@ -74,16 +84,91 @@ export const ARENA_OUT_OF_COMBAT_HEAL_MULT = 2;
 /** How many loadouts a player can keep (picked from on every respawn). */
 export const ARENA_LOADOUT_SLOTS = 3;
 
-/** Everyone has these from the start (level 1). */
+/**
+ * The guns of a loadout: every gun listed here is free from the start - a loadout takes
+ * two of them (any kind, a pistol too) worth at most ARENA_WEAPON_BUDGET points together
+ * (Quickswitch: more, see ArenaPerkDef.budgetBonus). Strong guns cost a lot, so they go
+ * with a weak one; two average ones fit as well. Guns not listed (most of the airdrop's
+ * ARENA_AIRDROP_WEAPONS, the [+] guns, the kill streaks') never go into a loadout - only
+ * found in the game. The numbers: the user's (set with the points page).
+ */
+export const ARENA_WEAPON_BUDGET = 100;
+export const ARENA_WEAPON_POINTS: Record<string, number> = {
+    // pistols
+    m9: 10,
+    glock: 10,
+    m1911: 10,
+    ot38: 10,
+    ots38: 10,
+    p30l: 15,
+    colt45: 15,
+    deagle: 30,
+    sw500: 35,
+    // dual pistols
+    m9_dual: 20,
+    ot38_dual: 20,
+    m93r_dual: 25,
+    glock_dual: 30,
+    m1911_dual: 35,
+    p30l_dual: 35,
+    colt45_dual: 40,
+    ots38_dual: 45,
+    deagle_dual: 50,
+    // SMGs
+    m93r: 10,
+    mp5: 15,
+    mac10: 20,
+    ump9: 20,
+    p90: 45,
+    vss: 50,
+    vector: 50,
+    scorpion: 55,
+    // assault rifles
+    groza: 25,
+    hk416: 30,
+    ak47: 40,
+    ak74: 45,
+    famas: 50,
+    m4a1: 50,
+    imbel: 55,
+    scar: 55,
+    an94: 60,
+    grozas: 60,
+    // LMGs
+    dp28: 50,
+    bar: 50,
+    qbb97: 55,
+    l86: 55,
+    m249: 70,
+    pkp: 70,
+    // DMRs
+    mk12: 35,
+    mkg45: 40,
+    m39: 40,
+    svd: 45,
+    garand: 55,
+    // bolt actions
+    model94: 35,
+    henry: 40,
+    scout_elite: 45,
+    blr: 65,
+    mosin: 70,
+    // shotguns
+    mp220: 45,
+    m1100: 50,
+    m870: 50,
+    spas16: 50,
+    hawk: 60,
+    saiga: 60,
+    origin: 60,
+    m1014: 70,
+    spas12: 75,
+};
+
+/** Everyone has these from the start (level 1) - and every gun of ARENA_WEAPON_POINTS. */
 export const ARENA_STARTER_ITEMS = [
-    "mp5",
-    "hk416",
-    "mk12",
-    "m870",
-    "p30l",
     "frag",
     "takedown",
-    "scavenger",
     // the kill streaks' defaults (arenaStreakDefs.ts)
     "flare_gun",
     "m134",
@@ -91,45 +176,22 @@ export const ARENA_STARTER_ITEMS = [
 ];
 
 /**
- * Level → what it unlocks (weapons, throwables, perks). Roughly from easy to strong,
- * the categories mixed so every few levels bring something for each playstyle.
+ * Level → what it unlocks: the perks and kill streak variants (the guns are all free, see
+ * ARENA_WEAPON_POINTS; the grenades come by grenade kills, see ARENA_CHALLENGES).
  */
 export const ARENA_LEVEL_UNLOCKS: Record<number, string[]> = {
-    2: ["mac10"],
-    3: ["ots38"],
-    4: ["ak47", "aoe_heal"],
-    5: ["smoke"],
-    6: ["p90"],
-    7: ["mp220"],
-    8: ["famas", "endless_ammo"],
-    9: ["glock_dual"],
-    10: ["vector", "supply_flare_gun"],
-    11: ["scout_elite"],
-    12: ["scar", "firepower"],
-    13: ["saiga"],
-    14: ["m1911_dual", "flak_jacket"],
-    15: ["groza", "windwalk"],
-    16: ["model94", "self_revive"],
-    17: ["dynamite"],
-    18: ["vss", "quickswitch"],
-    19: ["dp28"],
-    20: ["l86", "steelskin"],
-    21: ["henry"],
-    22: ["colt45"],
-    23: ["blr"],
-    24: ["qbb97"],
-    25: ["origin"],
-    26: ["m39"],
-    27: ["bar"],
-    28: ["mkg45"],
-    29: ["deagle"],
-    30: ["m249", "bonus_assault"],
-    31: ["spas16"],
-    32: ["svd"],
-    33: ["pkp"],
-    34: ["ash12"],
+    2: ["aoe_heal"],
+    3: ["endless_ammo"],
+    4: ["supply_flare_gun"],
+    5: ["firepower"],
+    6: ["flak_jacket"],
+    7: ["windwalk"],
+    8: ["self_revive"],
+    9: ["quickswitch"],
+    10: ["steelskin"],
+    11: ["bonus_assault"],
 };
-export const ARENA_MAX_LEVEL = 34;
+export const ARENA_MAX_LEVEL = 11;
 
 /** The kills of the endless M249 [+] Juggernaut count under this name (the M249 [+] as a
  *  weapon is just an M249 skin - its kills count for the M249). */
@@ -141,37 +203,12 @@ export interface ArenaChallenge {
     with: { weapon: string } | { category: GunCategory | "throwable" };
 }
 
-/** Weapon → the challenge that unlocks it (it builds on a level weapon of its kind). */
+/** Item → the challenge that unlocks it (the guns are free - these are the extras). */
 export const ARENA_CHALLENGES: Record<string, ArenaChallenge> = {
-    // SMGs
-    vector45: { kills: 150, with: { weapon: "vector" } },
-    scorpion: { kills: 250, with: { category: "smg" } },
-    // assault rifles / LMGs
-    m4a1: { kills: 150, with: { weapon: "hk416" } },
-    ak74: { kills: 300, with: { category: "rifle" } },
-    an94: { kills: 50, with: { weapon: "ak74" } },
-    grozas: { kills: 150, with: { weapon: "groza" } },
-    imbel: { kills: 150, with: { weapon: "famas" } },
-    pkm: { kills: 150, with: { weapon: "pkp" } },
-    // snipers / DMRs
-    scarssr: { kills: 300, with: { weapon: "scar" } },
-    mosin: { kills: 150, with: { weapon: "scout_elite" } },
-    sv98: { kills: 150, with: { weapon: "mosin" } },
-    awc: { kills: 150, with: { weapon: "sv98" } },
-    garand: { kills: 150, with: { weapon: "m39" } },
-    barrett: { kills: 400, with: { category: "sniper" } },
-    // shotguns
-    hawk: { kills: 150, with: { weapon: "mp220" } },
-    spas12: { kills: 150, with: { weapon: "spas16" } },
-    m1014: { kills: 150, with: { weapon: "saiga" } },
-    usas: { kills: 250, with: { category: "shotgun" } },
-    // pistols: the dual version of a pistol, by playing that pistol
-    p30l_dual: { kills: 75, with: { weapon: "p30l" } },
-    ots38_dual: { kills: 75, with: { weapon: "ots38" } },
-    colt45_dual: { kills: 75, with: { weapon: "colt45" } },
-    deagle_dual: { kills: 100, with: { weapon: "deagle" } },
-    sw500: { kills: 100, with: { weapon: "deagle_dual" } },
-    // throwables
+    // grenades: by grenade kills - the frag (everyone's) unlocks smoke and dynamite, any
+    // grenade's kills the MIRV
+    smoke: { kills: 10, with: { weapon: "frag" } },
+    dynamite: { kills: 25, with: { weapon: "frag" } },
     mirv: { kills: 50, with: { category: "throwable" } },
     // perks: Broken Arrow by the air strike kill streak's strobes
     broken_arrow: { kills: 50, with: { weapon: "strobe" } },

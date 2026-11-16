@@ -1256,6 +1256,11 @@ function playerIpCell(p, fallbackLabel) {
   return name + slug;
 }
 
+/** a placement - spectators are saved as rank 999 */
+function rankText(r) {
+  return Number(r) === 999 ? 'SPEC' : '#' + r;
+}
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1809,7 +1814,7 @@ function renderXpUserDetail(data) {
       <td>\${esc(g.mapName)} · \${mode}\${g.removed ? ' ' + modBadge('removed') : ''}</td>
       <td>\${g.kills}</td>
       <td>\${g.damage}</td>
-      <td>\${g.rank}</td>
+      <td>\${rankText(g.rank)}</td>
       <td>\${fmtSecs(g.timeAlive)}</td>
       <td><strong>\${g.xp.toLocaleString()}</strong></td>
       <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${adminNavLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\\'s chat' })}</td>
@@ -2097,7 +2102,7 @@ function xpGameRowHtml(g, i) {
     '<td>' + (g.players != null ? g.players : '–') + '</td>' +
     '<td>' + g.kills + '</td>' +
     '<td>' + g.damage + '</td>' +
-    '<td>' + g.rank + '</td>' +
+    '<td>' + rankText(g.rank) + '</td>' +
     '<td>' + fmtSecs(g.timeAlive) + '</td>' +
     '<td><strong>' + g.xp.toLocaleString() + '</strong></td>' +
     '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + modBadge(g.modStatus) + '</span></td>' +
@@ -2156,7 +2161,7 @@ function renderGameRoster(data) {
       '<td>' + p.assists + '</td>' +
       '<td>' + p.damage + '</td>' +
       '<td>' + p.damageTaken + '</td>' +
-      '<td>' + p.rank + '</td>' +
+      '<td>' + rankText(p.rank) + '</td>' +
       '<td>' + fmtSecs(p.timeAlive) + '</td>' +
       '<td><strong>' + p.xp.toLocaleString() + '</strong></td>' +
       '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + badge + '</span></td>' +
@@ -2525,7 +2530,7 @@ function renderLbPlayer(data, name) {
       '<td>' + esc(g.mapName) + ' · ' + mode + (g.removed ? ' ' + modBadge('removed') : '') + '</td>' +
       '<td>' + g.kills + '</td>' +
       '<td>' + g.damage + '</td>' +
-      '<td>' + g.rank + '</td>' +
+      '<td>' + rankText(g.rank) + '</td>' +
       '<td>' + fmtSecs(g.timeAlive) + '</td>' +
       '<td style="white-space:nowrap;">' + navLink(hReplays(g.gameId), 'replay', { title: 'Open in the Replays tab' }) + '</td>' +
       '</tr>';
@@ -5045,7 +5050,7 @@ function renderAccountDetail(data) {
     <td style="font-size:11px;white-space:nowrap;">\${fmtDate(m.createdAt)}</td>
     <td>\${esc(m.mapId||'?')}</td>
     <td>\${esc(m.teamMode||'?')}</td>
-    <td>#\${m.rank}</td>
+    <td>\${rankText(m.rank)}</td>
     <td>\${m.kills}</td>
     <td>\${m.damageDealt}</td>
     <td>\${m.timeAlive}s</td>

@@ -22,6 +22,8 @@ import type { ModeRules } from "./modeRules";
 export interface RespawnSettings {
     /** seconds a killed player is gone (watching their killer) */
     respawnDelay: number;
+    /** the same in the warmup (default: respawnDelay) */
+    warmupRespawnDelay?: number;
     /** seconds after a respawn without damage */
     spawnProtection: number;
     /** match length (s) once the warmup is over */
@@ -282,7 +284,8 @@ export abstract class RespawnRules implements ModeRules {
     /** Gone for a moment: hidden, no inputs, no damage, the camera on the killer - see
      *  update() for the respawn. */
     protected hideUntilRespawn(victim: Player, killer: Player | undefined): void {
-        this.respawnAt.set(victim, this.clock + this.settings.respawnDelay);
+        const delay = this.running ? this.settings.respawnDelay : (this.settings.warmupRespawnDelay ?? this.settings.respawnDelay);
+        this.respawnAt.set(victim, this.clock + delay);
         const target = this.spectateTarget(victim, killer);
         if (target) victim.spectating = target;
         // spectators watching the victim: on to the killer (else someone else)
@@ -293,6 +296,7 @@ export abstract class RespawnRules implements ModeRules {
         victim.moveLeft = victim.moveRight = victim.moveUp = victim.moveDown = false;
         victim.cancelAction();
         victim.setDirty();
+        this.clearResist(victim);
         // the team top left: dead until the respawn
         this.statusChanged(victim);
     }
@@ -387,6 +391,25 @@ export abstract class RespawnRules implements ModeRules {
             until: Math.max(this.clock + r.seconds, now?.until ?? 0),
             reduction: Math.max(r.reduction, now && now.until > this.clock ? now.reduction : 0),
         });
+        this.sendResist(player);
+    }
+
+    /** The player's client: the resistance running now (the HUD next to the health bar). */
+    protected sendResist(player: Player): void {
+        if (player.bot || player.spectator) return;
+        const r = this.resist.get(player);
+        const msg = new net.ArenaResistMsg();
+        if (r && r.until > this.clock) {
+            msg.reduction = r.reduction;
+            msg.seconds = r.until - this.clock;
+        }
+        player.msgsToSend.push({ type: net.MsgType.ArenaResist, msg });
+    }
+
+    /** Gone (a death, a new spawn): the resistance ends - and the HUD's with it. */
+    protected clearResist(player: Player): void {
+        if (!this.resist.delete(player)) return;
+        this.sendResist(player);
     }
 
     /** The soda / pill resistance running now (0..1). */

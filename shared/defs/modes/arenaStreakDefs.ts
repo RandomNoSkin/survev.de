@@ -22,19 +22,19 @@ export interface ArenaStreakTier {
 
 export const ARENA_STREAKS: ArenaStreakTier[] = [
     /** a flare gun in the melee slot: one shot calls in a crate, then it's gone */
-    { kind: "airdrop", name: "Airdrop", kills: 3, options: ["flare_gun", "supply_flare_gun"] },
+    { kind: "airdrop", name: "Airdrop", kills: 2, options: ["flare_gun", "supply_flare_gun"] },
     /** an 8x scope until the death */
-    { kind: "eagle_eye", name: "Eagle Eye", kills: 5, options: ["8xscope"] },
+    { kind: "eagle_eye", name: "Eagle Eye", kills: 3, options: ["8xscope"] },
     /** a minigun (or the endless M249 [+]) instead of the loadout, until the magazine is empty */
-    { kind: "juggernaut", name: "Juggernaut", kills: 7, options: ["m134", "modified_m249"] },
+    { kind: "juggernaut", name: "Juggernaut", kills: 5, options: ["m134", "modified_m249"] },
     /** a strobe: an air strike where it lands */
-    { kind: "airstrike", name: "Air Strike", kills: 10, options: ["strobe"] },
+    { kind: "airstrike", name: "Air Strike", kills: 7, options: ["strobe"] },
 ];
 
 /** What each kill streak (variant) does - shown in the loadout menu. */
 export const ARENA_STREAK_DESCRIPTIONS: Record<string, string> = {
     flare_gun: "A flare gun in your melee slot. Fire it to call in a crate with the weapon you picked below.",
-    supply_flare_gun: "A supply flare in your melee slot. Fire it to call in a crate with a level 3 helmet and a level 2 vest.",
+    supply_flare_gun: "A supply flare in your melee slot. Fire it to call in a crate with a level 3 helmet.",
     m134: "A full M134 and a level 3 helmet - nothing else. You get your loadout back once the minigun is empty.",
     modified_m249: "An M249 [+] with endless ammo and the normal arena armor, until you die.",
     "8xscope": "An 8x scope until you die.",
@@ -53,9 +53,9 @@ export const ARENA_JUGGERNAUTS: Record<string, { helmet?: string; chest?: string
 };
 
 /** The guns a player can have the flare's airdrop bring (picked in the loadout menu). */
-export const ARENA_AIRDROP_WEAPONS = ["awc", "barrett", "sv98", "spas12", "usas", "pkm", "scarssr"];
-/** What the supply flare's crate holds: better armor (full level 3 was too much). */
-export const ARENA_SUPPLY_DROP_LOOT = ["helmet03", "chest02"];
+export const ARENA_AIRDROP_WEAPONS = ["awc", "barrett", "sv98", "usas", "pkm", "scarssr", "vector45", "ash12"];
+/** What the supply flare's crate holds: a better helmet (a level 2 vest was too much). */
+export const ARENA_SUPPLY_DROP_LOOT = ["helmet03"];
 /** Called in crates come this much faster than usual (the plane and the fall). */
 export const ARENA_AIRDROP_TIME_FACTOR = 0.4;
 
