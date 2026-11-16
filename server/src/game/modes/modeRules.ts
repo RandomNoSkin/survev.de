@@ -38,6 +38,8 @@ export interface ModeRules {
     ignoresVest?(params: DamageParams): boolean;
     /** The kill streak key (Input.UseKillstreak): true when something was fired. */
     useKillstreak?(player: Player): boolean;
+    /** The speed a haste (Windwalk, ...) gives (default: GameConfig.player.hasteSpeedBonus). */
+    hasteSpeed?(player: Player, type: number, usual: number): number;
     /** The speed holding a weapon gives (default: its def's `speed.equip`). */
     equipSpeed?(player: Player, weapon: string, usual: number): number;
     /** Whether the player may drop this item (default: yes). */
@@ -65,8 +67,8 @@ export interface ModeRules {
     partyRoom?(): number;
     /** Whether the player may pick up this loot at all (default: the map's `pickup`). */
     allowsPickup?(player: Player, lootType: string): boolean;
-    /** The gun slot a picked up gun goes into, replacing what's there (the arena: main
-     *  guns slot 1, pistols slot 2); undefined: the usual choice. */
+    /** The gun slot a picked up gun goes into, replacing what's there; undefined: the
+     *  usual choice (a free slot, else the gun in hand). */
     gunPickupSlot?(player: Player, gunType: string): number | undefined;
     /** Whether the match may start (and its clock run) - instead of the usual "two
      *  players are in" (Gun Game: after its warmup). */

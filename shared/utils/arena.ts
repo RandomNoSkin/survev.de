@@ -3,7 +3,7 @@
  * client (the arena menu): levels from XP, what is unlocked, challenge progress, which
  * loadout slot an item belongs in. The tables themselves are in shared/defs/modes/arenaDefs.ts.
  */
-import { ARENA_QUICKSWITCH } from "../defs/modes/arenaPerkDefs";
+import { ARENA_PERK_DEFS } from "../defs/modes/arenaPerkDefs";
 import {
     ARENA_AIRDROP_WEAPONS,
     ARENA_DEFAULT_STREAKS,
@@ -20,6 +20,8 @@ import {
     ARENA_MAX_LEVEL,
     ARENA_PERKS,
     ARENA_STARTER_ITEMS,
+    ARENA_WEAPON_BUDGET,
+    ARENA_WEAPON_POINTS,
     type ArenaChallenge,
     type ArenaLoadout,
     arenaXpForLevel,
@@ -33,11 +35,11 @@ export type ArenaSlot = keyof ArenaLoadout;
 
 /** The default loadout. */
 export const ARENA_DEFAULT_LOADOUT: ArenaLoadout = { primary: "hk416", pistol: "p30l", throwable: "frag", perk: "takedown" };
-/** What an empty slot holds (and what guests pick from): one per starter main gun. */
+/** What an empty slot holds (and what guests pick from). */
 export const ARENA_PRESET_LOADOUTS: ArenaLoadout[] = [
     ARENA_DEFAULT_LOADOUT,
-    { primary: "mp5", pistol: "p30l", throwable: "frag", perk: "takedown" },
-    { primary: "m870", pistol: "p30l", throwable: "frag", perk: "takedown" },
+    { primary: "m870", pistol: "mp5", throwable: "frag", perk: "takedown" },
+    { primary: "mk12", pistol: "mp5", throwable: "frag", perk: "takedown" },
 ];
 
 /** Level and progress for an amount of arena XP. */
@@ -51,14 +53,22 @@ export function arenaLevelFromXp(xp: number): { level: number; into: number; nee
     return { level, into: level >= ARENA_MAX_LEVEL ? 0 : left, needed: level >= ARENA_MAX_LEVEL ? 0 : arenaXpForLevel(level) };
 }
 
-/** Every item the arena knows: starters, level unlocks, challenge unlocks. */
+/** Every item the arena knows: the guns, starters, level unlocks, challenge unlocks. */
 export function arenaItems(): string[] {
-    return [...new Set([...ARENA_STARTER_ITEMS, ...Object.values(ARENA_LEVEL_UNLOCKS).flat(), ...Object.keys(ARENA_CHALLENGES), ...ARENA_PERKS])];
+    return [
+        ...new Set([
+            ...Object.keys(ARENA_WEAPON_POINTS),
+            ...ARENA_STARTER_ITEMS,
+            ...Object.values(ARENA_LEVEL_UNLOCKS).flat(),
+            ...Object.keys(ARENA_CHALLENGES),
+            ...ARENA_PERKS,
+        ]),
+    ];
 }
 
-/** The level that unlocks `type` (1 for the starters), if a level does. */
+/** The level that unlocks `type` (1 for the starters and the guns), if a level does. */
 export function arenaUnlockLevel(type: string): number | undefined {
-    if (ARENA_STARTER_ITEMS.includes(type)) return 1;
+    if (ARENA_STARTER_ITEMS.includes(type) || ARENA_WEAPON_POINTS[type] !== undefined) return 1;
     for (const [level, items] of Object.entries(ARENA_LEVEL_UNLOCKS)) {
         if (items.includes(type)) return Number(level);
     }
@@ -66,29 +76,40 @@ export function arenaUnlockLevel(type: string): number | undefined {
 }
 
 /** Which loadout slot an item goes in (undefined: none - not an arena item, or a kill
- *  streak's: those are picked apart, see ArenaStreakSettings). */
+ *  streak's: those are picked apart, see ArenaStreakSettings). A gun: "primary" - it fits
+ *  either gun slot (see arenaFitsSlot). */
 export function arenaSlotOf(type: string): ArenaSlot | undefined {
     if (ARENA_STREAK_ITEMS.includes(type) || ARENA_EXTRA_PERKS.includes(type)) return undefined;
     const def = GameObjectDefs.typeToDefSafe(type) as { type?: string } | undefined;
     if (!def) return undefined;
-    if (def.type === "gun") return gunCategory(type) === "pistol" ? "pistol" : "primary";
+    if (def.type === "gun") return "primary";
     if (def.type === "throwable") return "throwable";
     if (def.type === "perk") return "perk";
     return undefined;
 }
 
-/** Main guns that may go into the pistol slot as well (a secondary). */
-export const ARENA_ALSO_SECONDARY = ["p90", "mp220"];
+/** A gun slot (the two guns share the point budget). */
+export const isArenaGunSlot = (slot: ArenaSlot) => slot === "primary" || slot === "pistol";
 
-/**
- * Whether an item may go into a loadout slot - its own, or a main gun allowed as
- * secondary (any main gun with the Quickswitch perk: `perk` is the loadout's).
- */
-export function arenaFitsSlot(type: string, slot: ArenaSlot, perk?: string): boolean {
-    const own = arenaSlotOf(type);
-    if (!own) return false;
-    if (own === slot) return true;
-    return slot === "pistol" && own === "primary" && (ARENA_ALSO_SECONDARY.includes(type) || perk === ARENA_QUICKSWITCH);
+/** What a gun costs in a loadout (undefined: it can't go into one - airdrop / event only). */
+export function arenaWeaponPoints(type: string): number | undefined {
+    return ARENA_WEAPON_POINTS[type];
+}
+
+/** The points the two guns of a loadout with `perk` may cost together (Quickswitch: more). */
+export function arenaWeaponBudget(perk?: string): number {
+    return ARENA_WEAPON_BUDGET + (perk ? (ARENA_PERK_DEFS[perk]?.budgetBonus ?? 0) : 0);
+}
+
+/** What the two guns of a loadout cost together. */
+export function arenaLoadoutPoints(loadout: Pick<ArenaLoadout, "primary" | "pistol">): number {
+    return (ARENA_WEAPON_POINTS[loadout.primary] ?? 0) + (ARENA_WEAPON_POINTS[loadout.pistol] ?? 0);
+}
+
+/** Whether an item may go into a loadout slot: a gun with points into either gun slot. */
+export function arenaFitsSlot(type: string, slot: ArenaSlot): boolean {
+    if (isArenaGunSlot(slot)) return ARENA_WEAPON_POINTS[type] !== undefined;
+    return arenaSlotOf(type) === slot;
 }
 
 /** Kills counted per weapon - skins count for their base weapon. */
@@ -117,7 +138,7 @@ export function challengeProgress(challenge: ArenaChallenge, kills: Record<strin
 
 /** Everything a player with `level` and these kills may put into a loadout. */
 export function arenaUnlocked(level: number, kills: Record<string, number>): Set<string> {
-    const out = new Set<string>(ARENA_STARTER_ITEMS);
+    const out = new Set<string>([...ARENA_STARTER_ITEMS, ...Object.keys(ARENA_WEAPON_POINTS)]);
     for (const [l, items] of Object.entries(ARENA_LEVEL_UNLOCKS)) {
         if (Number(l) <= level) for (const it of items) out.add(it);
     }
@@ -131,26 +152,41 @@ export function arenaUnlocked(level: number, kills: Record<string, number>): Set
     return out;
 }
 
-/** A loadout made valid: every slot holds an unlocked item of its kind, else the fallback's. */
+/**
+ * A loadout made valid: every slot holds an unlocked item of its kind - or nothing ("",
+ * a cleared slot) - else the fallback's; two different guns within the point budget
+ * (else the second gun goes - the fallback's, then the cheapest that fits).
+ */
 export function sanitizeArenaLoadout(
     loadout: Partial<ArenaLoadout> | undefined,
     unlocked: Set<string>,
     fallback: ArenaLoadout = ARENA_DEFAULT_LOADOUT,
 ): ArenaLoadout {
     const out = { ...fallback };
-    // the perk first: Quickswitch decides what the pistol slot may hold
-    const ok = (slot: ArenaSlot, perk?: string) => {
+    const ok = (slot: ArenaSlot) => {
         const type = loadout?.[slot];
-        return !!type && unlocked.has(type) && arenaFitsSlot(type, slot, perk);
+        // (empty: the player cleared it)
+        if (type === "") return true;
+        return !!type && unlocked.has(type) && arenaFitsSlot(type, slot);
     };
-    if (ok("perk")) out.perk = loadout!.perk!;
-    for (const slot of ["primary", "pistol", "throwable"] as ArenaSlot[]) {
-        if (ok(slot, out.perk)) out[slot] = loadout![slot]!;
+    for (const slot of ["perk", "primary", "pistol", "throwable"] as ArenaSlot[]) {
+        if (ok(slot)) out[slot] = loadout![slot]!;
     }
-    // (a fallback's main gun as secondary without Quickswitch: its pistol back)
-    if (!arenaFitsSlot(out.pistol, "pistol", out.perk)) out.pistol = ARENA_DEFAULT_LOADOUT.pistol;
-    // one gun once (the MP220 as main gun and secondary: only by picking up another in game)
-    if (out.pistol === out.primary) out.pistol = fallback.pistol !== out.primary ? fallback.pistol : ARENA_DEFAULT_LOADOUT.pistol;
+    const budget = arenaWeaponBudget(out.perk);
+    const fits = (primary: string, second: string) =>
+        (primary !== second || !primary) && arenaLoadoutPoints({ primary, pistol: second }) <= budget;
+    if (!fits(out.primary, out.pistol)) {
+        // the main gun stays; a second one that fits (the fallback's, the default's, the cheapest)
+        const cheapest = Object.keys(ARENA_WEAPON_POINTS).sort((a, b) => ARENA_WEAPON_POINTS[a] - ARENA_WEAPON_POINTS[b]);
+        const second = [fallback.pistol, ARENA_DEFAULT_LOADOUT.pistol, ...cheapest].find((t) => fits(out.primary, t));
+        if (second) {
+            out.pistol = second;
+        } else {
+            // (a main gun no second gun fits with: the default's two)
+            out.primary = ARENA_DEFAULT_LOADOUT.primary;
+            out.pistol = ARENA_DEFAULT_LOADOUT.pistol;
+        }
+    }
     return out;
 }
 
@@ -174,7 +210,9 @@ export function sanitizeArenaStreaks(settings: Partial<ArenaStreakSettings> | un
 
 
 const zItem = z.string().min(1).max(64);
-export const zArenaLoadout = z.object({ primary: zItem, pistol: zItem, throwable: zItem, perk: zItem });
+/** a loadout slot: an item, or "" (cleared) */
+const zSlot = z.string().max(64);
+export const zArenaLoadout = z.object({ primary: zSlot, pistol: zSlot, throwable: zSlot, perk: zSlot });
 export const zArenaLoadoutRequest = z.object({
     slot: z.number().int().min(0).max(ARENA_LOADOUT_SLOTS - 1),
     loadout: zArenaLoadout,

@@ -309,6 +309,7 @@ export enum MsgType {
     ModeStandings,
     ArenaLoadoutSelect,
     Killstreak,
+    ArenaResist,
 }
 
 export enum PickupMsgType {
@@ -358,6 +359,7 @@ export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg.ts";
 export { RoleSelectMsg } from "./roleSelectMsg.ts";
 export { ArenaLoadoutAction, ArenaLoadoutSelectMsg } from "./arenaLoadoutSelectMsg.ts";
 export { KillstreakMsg } from "./killstreakMsg.ts";
+export { ArenaResistMsg } from "./arenaResistMsg.ts";
 export { ArenaRolesMsg } from "./arenaRolesMsg.ts";
 export { JoinFeedMsg } from "./joinFeedMsg.ts";
 export { PickupMsg } from "./pickupMsg.ts";

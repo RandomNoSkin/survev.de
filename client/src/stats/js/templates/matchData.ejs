@@ -60,7 +60,7 @@
               %>
               <tr class='main single-player <%= teamIdx % 2 == 0 ? 'match-row-dark' : 'match-row-light' %> <%= d.player_id == env.localId ? 'match-row-local' : '' %>'>
                   <% if (showRank) { %>
-                      <td class='data-rank' scope="row">#<%= d.rank %></td>
+                      <td class='data-rank' scope="row"><%= d.rank === 999 ? 'SPEC' : '#' + d.rank %></td>
                   <% } else { %>
                       <td></td>
                   <% } %>

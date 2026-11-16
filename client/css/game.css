@@ -742,6 +742,36 @@ body.hud-edit-mode .hud-drag-wrapper.hud-view-hidden {
   cursor: pointer;
 }
 
+/* "Spectator Buttons" (HUD editor, spectator view) */
+.hud-spec-buttons-head {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 8px;
+}
+
+.hud-spec-buttons-head .hud-settings-label {
+  font-weight: bold;
+}
+
+.hud-spec-button-row .hud-settings-label {
+  padding-left: 4px;
+}
+
+.hud-spec-button-row {
+  cursor: grab;
+}
+
+.hud-spec-button-row.dragging {
+  opacity: 0.4;
+}
+
+.hud-spec-grip {
+  flex-shrink: 0;
+  width: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  user-select: none;
+}
+
 /* While editing, HUD wrappers accept pointer events (normally `none` via
  * `.click-through` on several of them, so gameplay clicks pass through to the canvas)
  * and get a dashed outline so it's obvious what's draggable. */
@@ -2038,25 +2068,82 @@ body.hud-preview-mode #hud-preview-backdrop {
   width: 100%;
 }
 
+/* advanced spectator's options: their own HUD element, by default under the buttons */
+#ui-spectate-adv-wrap {
+  position: relative;
+  pointer-events: all;
+  width: max-content;
+}
+
 #ui-spectate-buttons {
-  display: inline-block;
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: top;
   padding: 8px 8px 0px 8px;
   text-align: center;
   width: 192px;
 }
 
+/* under the buttons, not next to them (no panel sticking out into the screen) */
 #ui-spectate-advanced-options {
-  display: inline-block;
-  padding: 8px 8px 0px 8px;
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  padding: 8px;
   text-align: center;
-  width: 232px;
+  width: 208px;
   margin-top: 4px;
-  vertical-align: top;
+}
+
+#btn-adv-collapse {
+  margin-bottom: 0;
+}
+
+/* order / hidden ones: HUD editor (see specButtons.ts); Leave stays on top */
+#ui-spectate-buttons a.spec-user-hidden {
+  display: none !important;
+}
+
+/* Leave: red, on top, a gap to the rest */
+#ui-spectate-options a#btn-spectate-quit {
+  overflow: hidden;
+  margin-bottom: 24px;
+  background: #c74848;
+  border-bottom: 2px solid #8f3030;
+  box-shadow: inset 0 -2px #8f3030;
+}
+
+/* Leave is held: a fill runs through it */
+.spec-leave-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+#btn-spectate-quit.holding .spec-leave-fill {
+  width: 100%;
+  transition: width 0.8s linear;
+}
+
+.spec-leave-text {
+  position: relative;
 }
 
 /* Advanced spectator options: Camera / View / Overlays groups of compact two-column chips */
+/* opens to the right of the Options button, in a box of its own */
 #ui-spectate-advanced-list {
-  padding-bottom: 8px;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 4px);
+  box-sizing: border-box;
+  width: 232px;
+  padding: 2px 8px 8px 8px;
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 5px;
 }
 
 .spectate-adv-section {
@@ -2117,13 +2204,15 @@ body.hud-preview-mode #hud-preview-backdrop {
   opacity: 0.9;
 }
 
-#ui-spectate-options a.active {
+#ui-spectate-options a.active,
+#ui-spectate-adv-wrap a.active {
   background: #6fcf6f;
   border-bottom: 2px solid #4a9a4a;
   box-shadow: inset 0 -2px #4a9a4a;
 }
 
-#ui-spectate-options a {
+#ui-spectate-options a,
+#ui-spectate-adv-wrap a {
   position: relative;
   color: white;
   font-size: 16px;
@@ -2132,10 +2221,6 @@ body.hud-preview-mode #hud-preview-backdrop {
   border-bottom: 2px solid #387c79;
   box-shadow: inset 0 -2px #387c79;
   cursor: pointer;
-}
-
-#btn-spectate-prev-player {
-  margin-bottom: 24px;
 }
 
 #ui-spectate-stats {
@@ -4788,13 +4873,25 @@ span.ui-stats-header-value {
   }
 
   #ui-spectate-buttons {
-    display: inline-block;
     width: 124px;
     padding: 8px 8px 4px 8px;
     text-align: center;
   }
 
-  #ui-spectate-options a {
+  #ui-spectate-advanced-options {
+    width: 140px;
+  }
+
+  /* (phones: next to the buttons, the column grows upwards from the bottom) */
+  #ui-spectate-adv-wrap {
+    position: absolute;
+    bottom: 0px;
+    left: 146px;
+    z-index: 1;
+  }
+
+  #ui-spectate-options a,
+  #ui-spectate-adv-wrap a {
     position: relative;
     color: white;
     height: 28px;
@@ -4806,10 +4903,6 @@ span.ui-stats-header-value {
     border-bottom: 2px solid #387c79;
     box-shadow: none;
     cursor: pointer;
-  }
-
-  #btn-spectate-prev-player {
-    margin-bottom: 12px !important;
   }
 
   #btn-spectate-view-stats {
@@ -7377,4 +7470,61 @@ body.hud-edit-mode #hud-wrap-domination:empty::before {
 .dom-streak .dom-streak-next {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.75);
+}
+
+/* arena modes: damage resistance (soda / pill / Takedown / revive) - in place of the
+   adrenaline bar while it runs (that one is always full in the arena) */
+#hud-wrap-boostBar {
+  position: relative;
+}
+#hud-wrap-boostBar.arena-resist-on #ui-boost-counter {
+  visibility: hidden;
+}
+#ui-arena-resist {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* in the gap between the ammo counter and the health bar */
+  top: 3px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+#ui-arena-resist .arena-resist-icon {
+  flex: none;
+  width: 12px;
+  height: 14px;
+  background: #6fc4ff;
+  clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%);
+}
+#ui-arena-resist .arena-resist-pct {
+  flex: none;
+}
+#ui-arena-resist .arena-resist-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+#ui-arena-resist .arena-resist-bar i {
+  display: block;
+  height: 100%;
+  background: #6fc4ff;
+}
+#ui-arena-resist .arena-resist-time {
+  flex: none;
+  min-width: 26px;
+  text-align: right;
+  color: #6fc4ff;
 }

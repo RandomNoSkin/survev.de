@@ -1,4 +1,5 @@
 import { DominationHud } from "./ui/modes/dominationHud";
+import { ResistIndicator } from "./ui/modes/resistIndicator";
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
@@ -106,6 +107,8 @@ export class Game {
     m_gameOver!: boolean;
     m_wonGame!: boolean;
     m_spectating!: boolean;
+    /** Arena modes: the damage resistance next to the health bar (ArenaResistMsg) */
+    m_resistHud: ResistIndicator | null = null;
     /** Domination: score bar, zones, loadout picker (see ui/modes/dominationHud.ts) */
     m_domHud?: DominationHud;
     /** joined with "Spectate" (not a player watching the killer until the respawn) */
@@ -539,6 +542,8 @@ export class Game {
             console.error("Domination HUD failed to close", err);
         }
         this.m_domHud = undefined;
+        this.m_resistHud?.destroy();
+        this.m_resistHud = null;
         if (this.initialized) {
             this.initialized = false;
             this.m_updatePass = false;
@@ -2322,6 +2327,13 @@ export class Game {
                         assistCountText,
                     );
                 }
+                break;
+            }
+            case net.MsgType.ArenaResist: {
+                const msg = new net.ArenaResistMsg();
+                msg.deserialize(stream);
+                this.m_resistHud ??= new ResistIndicator();
+                this.m_resistHud.set(msg.reduction, msg.seconds);
                 break;
             }
             case net.MsgType.Killstreak: {

@@ -1,6 +1,6 @@
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
-import { DOMINATION_RESPAWN_DELAY_S, DOMINATION_ZONES } from "../../../../shared/defs/modes/dominationDefs";
+import { DOMINATION_RESPAWN_DELAY_S, DOMINATION_WARMUP_RESPAWN_DELAY_S, DOMINATION_ZONES } from "../../../../shared/defs/modes/dominationDefs";
 import { GameObjectDefs } from "../../../../shared/defs/register";
 import { ArenaLoadoutAction } from "../../../../shared/net/arenaLoadoutSelectMsg";
 import { ModePhase, type ModeZone } from "../../../../shared/net/modeStandingsMsg";
@@ -11,12 +11,26 @@ import { ARENA_STREAKS } from "../../../../shared/defs/modes/arenaStreakDefs";
 import { arenaIconOf } from "../arenaMenu";
 import type { Renderer } from "../../renderer";
 
+/** A dashed circle: `dashes` arcs with gaps between them. */
+function dashedCircle(g: PIXI.Graphics, x: number, y: number, r: number, dashes = 16) {
+    const step = (Math.PI * 2) / dashes;
+    for (let i = 0; i < dashes; i++) {
+        const a0 = i * step;
+        const a1 = a0 + step * 0.55;
+        g.moveTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r);
+        g.arc(x, y, r, a0, a1);
+    }
+}
+
+/** What an underground zone says it is (map, minimap, the ground above it). */
+const UNDERGROUND_TAG = "▼ UNDERGROUND";
+
 /** Seen from the player: neutral, own team, enemy (as in other team shooters). */
 const NEUTRAL = 0xd8d8d8;
 const OWN = 0x3d8bff;
 const ENEMY = 0xe0433a;
 const css = (c: number) => `#${c.toString(16).padStart(6, "0")}`;
-const SLOT_LABELS = ["Main gun", "Pistol", "Throwable", "Perk"];
+const SLOT_LABELS = ["Gun 1", "Gun 2", "Throwable", "Perk"];
 const nameOf = (type: string) => (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name ?? type;
 
 /**
@@ -56,8 +70,17 @@ export class DominationHud {
     private over = false;
     private changeBtn = $("<div/>", { id: "ui-dom-change-loadout", text: "Change loadout" });
     private world = new PIXI.Container();
-    private worldZones: Array<{ gfx: PIXI.Graphics; label: PIXI.Text }> = [];
-    minimap = new PIXI.Graphics();
+    /** the underground zones (the bunker / basement layer) */
+    private worldUnder = new PIXI.Container();
+    /** per zone: its area and letter on its own layer, and (underground zones) a dashed
+     *  marker on the ground above so players up there see it's below them */
+    private worldZones: Array<{ gfx: PIXI.Graphics; label: PIXI.Text; ghost: PIXI.Graphics; ghostLabel: PIXI.Text }> = [];
+    /** the zones on the minimap: the circles and their letters */
+    minimap = new PIXI.Container();
+    private minimapGfx = new PIXI.Graphics();
+    private minimapLabels: PIXI.Text[] = [];
+    /** "▼ UNDERGROUND" under an underground zone's letter */
+    private minimapTags: PIXI.Text[] = [];
 
     private zones: ModeZone[] = [];
     /** the progress drawn per zone - eased towards the last sent one, so the ring moves smoothly */
@@ -81,7 +104,7 @@ export class DominationHud {
          *  respawn overlay, no kill streak (the game's own spectate UI does the rest) */
         private spectator = false,
     ) {
-        // the player's loadouts, 4 types each (main gun, pistol, throwable, perk)
+        // the player's loadouts, 4 types each (two guns, throwable, perk)
         if (!spectator) for (let i = 0; i < loadoutTypes.length; i += 4) this.loadouts.push(loadoutTypes.slice(i, i + 4));
 
         // the team scores (own blue, enemy red) take the "Alive" counter's place - the
@@ -118,6 +141,7 @@ export class DominationHud {
         if (this.loadouts.length) this.openMenu();
 
         renderer.addPIXIObj(this.world, 0, 5);
+        renderer.addPIXIObj(this.worldUnder, 1, 5);
     }
 
     /** The game's own spectate line (#ui-spectate-text) - without its spectate menu. */
@@ -148,7 +172,8 @@ export class DominationHud {
         this.menu.remove();
         this.changeBtn.remove();
         this.world.destroy({ children: true });
-        this.minimap.destroy();
+        this.worldUnder.destroy({ children: true });
+        this.minimap.destroy({ children: true });
     }
 
     /** own team / enemy / neutral for a teamId */
@@ -232,7 +257,9 @@ export class DominationHud {
     /** The local player died: the button to the loadout menu until the respawn. */
     onLocalDeath() {
         if (this.over || this.spectator) return;
-        this.respawnUntil = performance.now() + DOMINATION_RESPAWN_DELAY_S * 1000;
+        // (the warmup: a short one - see DOMINATION_WARMUP_RESPAWN_DELAY_S)
+        const delay = this.phase === ModePhase.Running ? DOMINATION_RESPAWN_DELAY_S : DOMINATION_WARMUP_RESPAWN_DELAY_S;
+        this.respawnUntil = performance.now() + delay * 1000;
     }
 
     /**
@@ -271,7 +298,7 @@ export class DominationHud {
         const header = $("<div/>", { class: "dom-menu-header" });
         this.loadouts.forEach((types, slot) => {
             const opt = $("<div/>", { class: `dom-menu-option${slot === this.picked ? " dom-menu-option-picked" : ""}` }).append(
-                $("<div/>", { class: "dom-menu-option-icon" }).css("background-image", `url(${arenaIconOf(types[0])})`),
+                $("<div/>", { class: "dom-menu-option-icon" }).css("background-image", `url(${arenaIconOf(types.find((t) => !!t) ?? "")})`),
                 $("<div/>", { class: "dom-menu-option-name", text: `Loadout ${slot + 1}` }),
             );
             opt.on("click", () => {
@@ -288,8 +315,8 @@ export class DominationHud {
             body.append(
                 $("<div/>", { class: "dom-menu-item" }).append(
                     $("<div/>", { class: "dom-menu-item-label", text: SLOT_LABELS[i] ?? "" }),
-                    $("<div/>", { class: "dom-menu-item-icon" }).css("background-image", `url(${arenaIconOf(type)})`),
-                    $("<div/>", { class: "dom-menu-item-name", text: nameOf(type) }),
+                    $("<div/>", { class: "dom-menu-item-icon" }).css("background-image", type ? `url(${arenaIconOf(type)})` : "none"),
+                    $("<div/>", { class: "dom-menu-item-name", text: type ? nameOf(type) : "Empty" }),
                 ),
             );
         });
@@ -368,20 +395,64 @@ export class DominationHud {
             });
             label.anchor.set(0.5, 0.5);
             label.alpha = 0.55;
-            this.world.addChild(gfx, label);
-            this.worldZones.push({ gfx, label });
+            const ghost = new PIXI.Graphics();
+            const ghostLabel = new PIXI.Text(`${DOMINATION_ZONES[this.worldZones.length]?.name ?? "?"}\n${UNDERGROUND_TAG}`, {
+                fontFamily: "Arial",
+                fontSize: 40,
+                fontWeight: "bold",
+                fill: 0xffffff,
+                align: "center",
+                stroke: 0x000000,
+                strokeThickness: 6,
+            });
+            ghostLabel.anchor.set(0.5, 0.5);
+            this.world.addChild(gfx, label, ghost, ghostLabel);
+            this.worldZones.push({ gfx, label, ghost, ghostLabel });
         }
+        // (stairs: layer 2 ground side, 3 underground side)
+        const localLayer = local.layer & 1;
         this.world.visible = local.layer === 0;
+        this.worldUnder.visible = localLayer === 1;
         // screen pixels per world unit (m_pixels is the zoom only)
         const px = camera.m_scaleToScreen(1);
-        this.minimap.clear();
+        this.minimapGfx.clear();
+        if (!this.minimapGfx.parent) this.minimap.addChild(this.minimapGfx);
+        while (this.minimapLabels.length < this.zones.length) {
+            const text = new PIXI.Text(DOMINATION_ZONES[this.minimapLabels.length]?.name ?? "?", {
+                fontFamily: "Arial",
+                fontSize: 32,
+                fontWeight: "bold",
+                fill: 0xffffff,
+                stroke: 0x000000,
+                strokeThickness: 5,
+            });
+            text.anchor.set(0.5, 0.5);
+            const tag = new PIXI.Text(UNDERGROUND_TAG, {
+                fontFamily: "Arial",
+                fontSize: 32,
+                fontWeight: "bold",
+                fill: 0xffffff,
+                stroke: 0x000000,
+                strokeThickness: 6,
+            });
+            tag.anchor.set(0.5, 0);
+            this.minimap.addChild(text, tag);
+            this.minimapLabels.push(text);
+            this.minimapTags.push(tag);
+        }
+        this.minimapLabels.forEach((t, i) => (t.visible = i < this.zones.length));
+        this.minimapTags.forEach((t, i) => (t.visible = i < this.zones.length && this.zones[i].layer === 1));
         let status = "";
         const now = performance.now();
         const ease = Math.min(1, ((now - this.lastRender) / 1000) * 12);
         this.lastRender = now;
         this.zones.forEach((z, i) => {
-            const { gfx, label } = this.worldZones[i];
+            const { gfx, label, ghost, ghostLabel } = this.worldZones[i];
+            const under = z.layer === 1;
             const color = this.colorOf(z.owner);
+            // on its own layer (an underground zone only shows underground)
+            const parent = z.layer === 1 ? this.worldUnder : this.world;
+            if (gfx.parent !== parent) parent.addChild(gfx, label);
             // (a jump - taken, neutral, the other team - is drawn right away)
             const shown = this.shownProgress[i];
             const progress = shown === undefined || Math.abs(z.progress - shown) > 0.3
@@ -406,24 +477,62 @@ export class DominationHud {
             label.position.set(screen.x, screen.y);
             label.scale.set((px * 5) / 64);
             label.tint = color;
+            // on the ground above an underground zone: a dashed ring and "B ▼ UNDERGROUND"
+            ghost.clear();
+            ghost.visible = ghostLabel.visible = under;
+            if (under) {
+                ghost.position.set(screen.x, screen.y);
+                ghost.lineStyle(Math.max(3, px * 0.3), color, 0.9);
+                dashedCircle(ghost, 0, 0, r, 20);
+                ghostLabel.position.set(screen.x, screen.y);
+                ghostLabel.scale.set((px * 2.2) / 40);
+                ghostLabel.tint = color;
+            }
 
             const m = minimapPos(z.pos);
-            this.minimap.beginFill(color, 0.85);
-            this.minimap.lineStyle(1.5, 0x000000, 0.6);
             const mr = Math.max(4, z.rad * minimapScale);
-            this.minimap.drawCircle(m.x, m.y, mr);
-            this.minimap.endFill();
+            if (under) {
+                // underground: a dark disc with a dashed ring in the zone's color
+                this.minimapGfx.lineStyle(0);
+                this.minimapGfx.beginFill(0x15181c, 0.9);
+                this.minimapGfx.drawCircle(m.x, m.y, mr);
+                this.minimapGfx.endFill();
+                this.minimapGfx.lineStyle(Math.max(2, mr * 0.25), color, 1);
+                dashedCircle(this.minimapGfx, m.x, m.y, mr, 12);
+            } else {
+                // on the ground: a solid disc in the zone's color
+                this.minimapGfx.beginFill(color, 0.85);
+                this.minimapGfx.lineStyle(1.5, 0x000000, 0.6);
+                this.minimapGfx.drawCircle(m.x, m.y, mr);
+                this.minimapGfx.endFill();
+            }
+            // its letter in the middle (underground: in the zone's color on the dark disc)
+            const letter = this.minimapLabels[i];
+            letter.position.set(m.x, m.y);
+            letter.scale.set(Math.max(11, mr * 1.1) / 32);
+            letter.tint = under ? color : 0xffffff;
+            const tag = this.minimapTags[i];
+            tag.visible = under;
+            tag.position.set(m.x, m.y + mr + 2);
+            tag.scale.set(Math.max(8, mr * 0.45) / 32);
             // the capture progress on the map too: a ring in the taking team's color
             if (taking) {
-                this.minimap.lineStyle(Math.max(2, mr * 0.35), this.colorOf(taking), 1);
-                this.minimap.arc(m.x, m.y, mr + Math.max(1.5, mr * 0.2), -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+                this.minimapGfx.lineStyle(Math.max(2, mr * 0.35), this.colorOf(taking), 1);
+                this.minimapGfx.arc(m.x, m.y, mr + Math.max(1.5, mr * 0.2), -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
             }
 
             // where the local player stands
             // (only in the match - the warmup takes nothing)
-            if (this.phase === ModePhase.Running && !local.watchingOther && local.layer === 0 && v2.distance(local.pos, z.pos) <= z.rad) {
+            // right above an underground zone: it doesn't count up here
+            if (
+                this.phase === ModePhase.Running && !dead && under && local.layer === 0
+                && v2.distance(local.pos, z.pos) <= z.rad && !status
+            ) {
+                status = `Zone ${DOMINATION_ZONES[i]?.name ?? "?"} is underground - take the stairs down`;
+            }
+            if (this.phase === ModePhase.Running && !dead && local.layer === z.layer && v2.distance(local.pos, z.pos) <= z.rad) {
                 const mine = this.myTeamId();
-                const name = DOMINATION_ZONES[i]?.name ?? "?";
+                const name = `${DOMINATION_ZONES[i]?.name ?? "?"}${z.layer === 1 ? " (underground)" : ""}`;
                 if (z.contested) status = `Zone ${name}: contested`;
                 else if (z.owner === mine && z.progress >= 1) status = `Zone ${name}: holding${z.mult > 1 ? ` · ${z.mult}x points` : ""}`;
                 else if (z.owner && z.owner !== mine) status = `Zone ${name}: neutralizing ${Math.round((1 - z.progress) * 100)}%`;

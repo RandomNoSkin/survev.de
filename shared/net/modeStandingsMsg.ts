@@ -25,6 +25,8 @@ export interface ModeZone {
     contested: boolean;
     /** the holder's point multiplier right now (holders standing in it), 1: none */
     mult: number;
+    /** 0: on the ground, 1: underground (only players on that layer count) */
+    layer: number;
 }
 
 /**
@@ -71,6 +73,7 @@ export class ModeStandingsMsg implements AbstractMsg {
             s.writeUint8(Math.round(Math.max(0, Math.min(1, z.progress)) * 255));
             s.writeBoolean(z.contested);
             s.writeUint8(Math.max(1, Math.min(255, Math.round(z.mult))));
+            s.writeBits(z.layer & 1, 1);
         });
         /* STRIP_FROM_PROD_CLIENT:END */
     }
@@ -96,6 +99,7 @@ export class ModeStandingsMsg implements AbstractMsg {
             progress: s.readUint8() / 255,
             contested: s.readBoolean(),
             mult: s.readUint8(),
+            layer: s.readBits(1),
         }));
     }
 }

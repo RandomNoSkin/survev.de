@@ -5,7 +5,10 @@ import {
     ARENA_SPAWN_AMMO_BY_CATEGORY,
     ARENA_SPAWN_AMMO_MULT,
     ARENA_JUGGERNAUT_M249_KILLS,
+    ARENA_KILL_AMMO_FRACTION,
     ARENA_REVIVE_HEALTH,
+    ARENA_REVIVE_S,
+    ARENA_WINDWALK_SPEED_FACTOR,
     ARENA_XP,
 } from "../../../../shared/defs/modes/arenaDefs";
 import {
@@ -20,7 +23,7 @@ import {
     type ArenaStreakTier,
 } from "../../../../shared/defs/modes/arenaStreakDefs";
 import * as netMsgs from "../../../../shared/net/net";
-import { ARENA_FAST_REVIVE_S, ARENA_INERT_PERKS, ARENA_PERK_DEFS } from "../../../../shared/defs/modes/arenaPerkDefs";
+import { ARENA_FAST_REVIVE_S, ARENA_INERT_PERKS, ARENA_PERK_DEFS, ARENA_SELF_REVIVE_S } from "../../../../shared/defs/modes/arenaPerkDefs";
 import {
     DOMINATION_ABANDON_S,
     DOMINATION_ASSIST_MIN_DAMAGE,
@@ -40,6 +43,7 @@ import {
     DOMINATION_POINT_INTERVAL_S,
     DOMINATION_PRIVATE_WAIT_S,
     DOMINATION_RESPAWN_DELAY_S,
+    DOMINATION_WARMUP_RESPAWN_DELAY_S,
     DOMINATION_SCORE_LIMIT,
     DOMINATION_SPAWN_DEPTH,
     DOMINATION_START_CLUSTER_RAD,
@@ -49,6 +53,9 @@ import {
     DOMINATION_TEAM_SIZE,
     DOMINATION_TIME_LIMIT_S,
     DOMINATION_ZONE_MAX_MULTIPLIER,
+    DOMINATION_BIG_BUILDING_ZONES,
+    DOMINATION_UNDERGROUND_CHANCE,
+    DOMINATION_UNDERGROUND_ZONES,
     DOMINATION_ZONE_RAD,
     DOMINATION_ZONES,
 } from "../../../../shared/defs/modes/dominationDefs";
@@ -57,8 +64,7 @@ import { GameConfig, type InventoryItem } from "../../../../shared/gameConfig";
 import { ArenaLoadoutAction } from "../../../../shared/net/arenaLoadoutSelectMsg";
 import type * as net from "../../../../shared/net/net";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
-import { ARENA_QUICKSWITCH } from "../../../../shared/defs/modes/arenaPerkDefs";
-import { ARENA_ALSO_SECONDARY, ARENA_DEFAULT_LOADOUT, ARENA_PRESET_LOADOUTS, arenaSlotOf } from "../../../../shared/utils/arena";
+import { ARENA_DEFAULT_LOADOUT, ARENA_PRESET_LOADOUTS, arenaSlotOf } from "../../../../shared/utils/arena";
 import { coldet } from "../../../../shared/utils/coldet";
 import { collider } from "../../../../shared/utils/collider";
 import { math } from "../../../../shared/utils/math";
@@ -93,6 +99,18 @@ interface Zone {
     pointTimer: number;
     /** the holder's point multiplier (holders standing in it) */
     mult: number;
+    /** 0: on the ground, 1: underground - only players on that layer count */
+    layer: number;
+    /** inside the big building's ground floor: no cover put in (holding the entrances is the advantage) */
+    indoor?: boolean;
+}
+
+/** Where a zone goes. */
+interface ZoneSpot {
+    pos: Vec2;
+    rad: number;
+    layer: number;
+    indoor?: boolean;
 }
 
 /** Cover that holds: indestructible, or plated (only armor piercing rounds break it). */
@@ -158,6 +176,7 @@ export class Domination extends RespawnRules {
 
     protected readonly settings = {
         respawnDelay: DOMINATION_RESPAWN_DELAY_S,
+        warmupRespawnDelay: DOMINATION_WARMUP_RESPAWN_DELAY_S,
         spawnProtection: DOMINATION_SPAWN_PROTECTION_S,
         timeLimit: DOMINATION_TIME_LIMIT_S,
         minPlayers: DOMINATION_MIN_PLAYERS,
@@ -197,8 +216,9 @@ export class Domination extends RespawnRules {
     private inMenu = new Map<Player, number>();
     /** when each player last got their items, and their shots then (see onLoadoutSelect) */
     private spawned = new Map<Player, { at: number; shots: number }>();
-    /** which way the sides lie (x or y), drawn per match */
-    private readonly horizontal = Math.random() < 0.5;
+    /** which way the sides lie (x or y), drawn per match - a big building in the middle:
+     *  the way its zone lies best (see layoutZones) */
+    private horizontal = Math.random() < 0.5;
 
     /** the match start only: where each team spawns in a bunch (see onMatchStart) */
     private startSpots = new Map<Side, Vec2>();
@@ -351,14 +371,77 @@ export class Domination extends RespawnRules {
         return best ? v2.copy(best) : undefined;
     }
 
+    /** A spot in a building's own coordinates, in the world. */
+    private buildingPoint(b: { pos: Vec2; rot: number; scale: number }, p: { x: number; y: number }): Vec2 {
+        return v2.add(b.pos, v2.rotate(v2.mul(v2.create(p.x, p.y), b.scale), b.rot));
+    }
+
+    /**
+     * Zone B in the big building in the middle (club, reserve, hydra bunker - the map
+     * def's locationSpawns), if there is one near the center: underground (sometimes,
+     * when it has an underground part) or on its ground floor. Undefined: none.
+     */
+    private middleBuildingSpot(): ZoneSpot | undefined {
+        const map = this.game.map;
+        const center = v2.create(map.width / 2, map.height / 2);
+        const maxDist = Math.min(map.width, map.height) * 0.2;
+        const find = (table: Record<string, { pos: { x: number; y: number }; rad: number }>, layer: number) => {
+            for (const b of map.buildings) {
+                const spot = table[b.type];
+                if (!spot || b.layer !== layer) continue;
+                const pos = this.buildingPoint(b, spot.pos);
+                if (v2.distance(pos, center) <= maxDist) return { pos, rad: spot.rad, layer, indoor: layer === 0 };
+            }
+            return undefined;
+        };
+        const under = find(DOMINATION_UNDERGROUND_ZONES, 1);
+        const ground = find(DOMINATION_BIG_BUILDING_ZONES, 0);
+        if (under && (!ground || Math.random() < DOMINATION_UNDERGROUND_CHANCE)) return under;
+        return ground;
+    }
+
     /**
      * Random zones, fair for both sides: A somewhere in side 1's part, C its mirror
      * through the center (as far from side 2 as A is from side 1), B around the center.
-     * A building close by takes a zone (players love fighting over a house).
+     * A building close by takes a zone (players love fighting over a house); a big
+     * building in the middle takes B (sometimes underground - only that layer counts).
      */
-    private layoutZones(): Vec2[] {
+    private layoutZones(): ZoneSpot[] {
         const rand = (a: number, b: number) => a + Math.random() * (b - a);
         const size = Math.min(this.game.map.width, this.game.map.height);
+        const ground = (pos: Vec2): ZoneSpot => ({ pos, rad: DOMINATION_ZONE_RAD, layer: 0 });
+        const middle = this.middleBuildingSpot();
+        if (middle) {
+            // the sides along the axis the zone lies most centered on (as fair as can be)
+            const off = v2.sub(middle.pos, v2.create(this.game.map.width / 2, this.game.map.height / 2));
+            this.horizontal = Math.abs(off.x) <= Math.abs(off.y);
+            // B in the middle: A off to one side across, C its mirror across the middle
+            // line (not through the center - that puts all three in a row): a triangle,
+            // A as far from side 1 as C from side 2
+            const flip = (p: Vec2) => {
+                const { t, across } = this.axisOf(p);
+                return this.pointAt(1 - t, across);
+            };
+            const apart = (p: Vec2, q: Vec2) => v2.distance(p, q) >= size * 0.26;
+            // (B may sit a bit off the center: a few tries until A and C keep away from it)
+            // A and C on the side across away from B (B may lie off the middle line: the
+            // other side keeps the three out of a row)
+            const bAcross = this.axisOf(middle.pos).across;
+            const away = bAcross > 0.5 ? -1 : bAcross < 0.5 ? 1 : Math.random() < 0.5 ? -1 : 1;
+            let roughA = this.pointAt(0.15, 0.5 + away * 0.28);
+            for (let i = 0; i < 12; i++) {
+                const p = this.pointAt(rand(0.14, 0.22), 0.5 + away * rand(0.2, 0.3));
+                const offLine = Math.abs(this.axisOf(p).across - bAcross) >= 0.12;
+                if (offLine && apart(p, middle.pos) && apart(flip(p), middle.pos)) {
+                    roughA = p;
+                    break;
+                }
+            }
+            const a = this.buildingNear(roughA, 14, [middle.pos]) ?? roughA;
+            const c = this.buildingNear(flip(a), 10, [a, middle.pos]) ?? flip(a);
+            const [za, zc] = apart(a, middle.pos) && apart(c, middle.pos) ? [a, c] : [roughA, flip(roughA)];
+            return this.axisOf(za).t <= this.axisOf(zc).t ? [ground(za), middle, ground(zc)] : [ground(zc), middle, ground(za)];
+        }
         // a triangle: A and its mirror C near the axis through the center (the mirror
         // flips them across, so only there are both far from B), B on the middle line
         // off to one side - as far from both team sides, and not in a row with A and C
@@ -373,9 +456,9 @@ export class Domination extends RespawnRules {
         const b = this.buildingNear(roughB, 14, [a, c]) ?? roughB;
         // keep them apart (a building pick can pull them together)
         const apart = (p: Vec2, q: Vec2) => v2.distance(p, q) >= size * 0.28;
-        if (!apart(a, b) || !apart(b, c)) return [roughA, roughB, this.mirror(roughA)].sort((p, q) => this.axisOf(p).t - this.axisOf(q).t);
+        const spots = !apart(a, b) || !apart(b, c) ? [roughA, roughB, this.mirror(roughA)] : [a, b, c];
         // A is side 1's (the low end), C side 2's
-        return this.axisOf(a).t <= this.axisOf(c).t ? [a, b, c] : [c, b, a];
+        return spots.sort((p, q) => this.axisOf(p).t - this.axisOf(q).t).map(ground);
     }
 
     /** Hard cover (indestructible obstacles, walls) near a zone, else some stones. */
@@ -386,7 +469,10 @@ export class Domination extends RespawnRules {
      * wall pieces in one direction. Until DOMINATION_COVER_MIN directions have one,
      * the empty ones get sandbags or a stone (crowded spots get more tries).
      */
-    private ensureCover(pos: Vec2): void {
+    private ensureCover(pos: Vec2, layer = 0, indoor = false): void {
+        // underground / inside the big building: only what the building has - holding its
+        // entrances is the advantage (and the surface above an underground zone isn't the zone)
+        if (layer !== 0 || indoor) return;
         const map = this.game.map;
         const rad = DOMINATION_ZONE_RAD;
         const sectors = DOMINATION_COVER_SECTORS;
@@ -456,8 +542,10 @@ export class Domination extends RespawnRules {
         const spots = this.layoutZones();
         this.zones = DOMINATION_ZONES.map((z, i) => ({
             name: z.name,
-            pos: spots[i],
-            rad: DOMINATION_ZONE_RAD,
+            pos: spots[i].pos,
+            rad: spots[i].rad,
+            layer: spots[i].layer,
+            indoor: spots[i].indoor,
             owner: 0,
             capTeam: 0,
             progress: 0,
@@ -466,7 +554,7 @@ export class Domination extends RespawnRules {
             pointTimer: 0,
             mult: 1,
         }));
-        for (const z of this.zones) this.ensureCover(z.pos);
+        for (const z of this.zones) this.ensureCover(z.pos, z.layer, z.indoor);
     }
 
     // ── players ─────────────────────────────────────────────────────────────
@@ -528,7 +616,7 @@ export class Domination extends RespawnRules {
             this.zones = [];
             this.ensureZones();
         } else {
-            for (const z of this.zones) this.ensureCover(z.pos);
+            for (const z of this.zones) this.ensureCover(z.pos, z.layer, z.indoor);
         }
         // the first spawn: each team in a tight bunch around one spot on its side
         this.startSpots.clear();
@@ -574,14 +662,7 @@ export class Domination extends RespawnRules {
             wm.setWeapon(slot, gun ? type : "", gun ? wm.getAmmoStats(gun).maxClip : 0);
             // its ammo: twice what it drops with in the battle royale (both guns of one
             // ammo type add up), at most what the backpack holds
-            // (pistols and shotguns four times, shotguns at most 30 shells)
-            if (gun && player.invManager.isValid(gun.ammo)) {
-                const ammo = gun.ammo;
-                const rule = ARENA_SPAWN_AMMO_BY_CATEGORY[gunCategory(type)];
-                const cap = Math.min(player.invManager.getMaxCapacity(ammo), rule?.max ?? Infinity);
-                const add = gun.ammoSpawnCount * (rule?.mult ?? ARENA_SPAWN_AMMO_MULT);
-                player.invManager.set(ammo, Math.min(cap, player.invManager.get(ammo) + add));
-            }
+            this.giveGunAmmo(player, type, 1);
         }
         wm.setWeapon(GameConfig.WeaponSlot.Melee, this.ownMelee.get(player) ?? "fists", 0);
         if (player.invManager.isValid(loadout.throwable)) {
@@ -590,15 +671,46 @@ export class Domination extends RespawnRules {
         } else {
             wm.setWeapon(GameConfig.WeaponSlot.Throwable, "", 0);
         }
-        wm.setCurWeapIndex(GameConfig.WeaponSlot.Primary, true, true, true, false);
+        // in hand: the first gun there is (a cleared loadout may have none - the melee)
+        const hand = [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary].find((sl) => !!player.weapons[sl].type)
+            ?? GameConfig.WeaponSlot.Melee;
+        wm.setCurWeapIndex(hand, true, true, true, false);
 
         player.boost = 100;
-        this.resist.delete(player);
+        this.clearResist(player);
         player.damageHistory.length = 0;
         this.spawned.set(player, { at: this.clock, shots: player.shotsFired });
         player.inventoryDirty = true;
         player.weapsDirty = true;
         player.setDirty();
+    }
+
+    /**
+     * Ammo for a gun: `fraction` of what it spawns with (ARENA_SPAWN_AMMO_MULT times its
+     * battle royale drop - pistols and shotguns more, see ARENA_SPAWN_AMMO_BY_CATEGORY),
+     * at most what the backpack holds.
+     */
+    private giveGunAmmo(player: Player, type: string, fraction: number): void {
+        const gun = GunDefs[type];
+        if (!gun || !player.invManager.isValid(gun.ammo)) return;
+        const ammo = gun.ammo;
+        const rule = ARENA_SPAWN_AMMO_BY_CATEGORY[gunCategory(type)];
+        const cap = Math.min(player.invManager.getMaxCapacity(ammo), rule?.max ?? Infinity);
+        const add = Math.ceil(gun.ammoSpawnCount * (rule?.mult ?? ARENA_SPAWN_AMMO_MULT) * fraction);
+        const has = player.invManager.get(ammo);
+        if (has < cap) player.invManager.set(ammo, Math.min(cap, has + add));
+    }
+
+    /** A kill: ammo for the killer's guns (ARENA_KILL_AMMO_FRACTION of the spawn ammo each). */
+    private giveKillAmmo(killer: Player): void {
+        if (killer.dead || killer.downed || this.isJuggernaut(killer)) return;
+        for (const slot of [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary]) {
+            const type = killer.weapons[slot].type;
+            if (type && !ARENA_STREAK_ITEMS.includes(type)) this.giveGunAmmo(killer, type, ARENA_KILL_AMMO_FRACTION);
+        }
+        killer.inventoryDirty = true;
+        // an empty gun in hand reloads with it
+        if (killer.weapons[killer.curWeapIdx]?.ammo <= 0) killer.weaponManager.tryReload();
     }
 
     /**
@@ -706,6 +818,7 @@ export class Domination extends RespawnRules {
                 enemyKill.weaponKills.set("strobe", (enemyKill.weaponKills.get("strobe") ?? 0) + 1);
             }
             this.onStreakKill(enemyKill);
+            this.giveKillAmmo(enemyKill);
             this.addXp(enemyKill, ARENA_XP.kill);
             for (const assister of this.assistersOf(victim, enemyKill)) {
                 assister.assists++;
@@ -713,7 +826,7 @@ export class Domination extends RespawnRules {
             }
         }
         this.endStreakActive(victim);
-        this.dropLoadout(victim, enemyKill);
+        this.dropLoadout(victim);
         this.streak.set(victim, 0);
         this.streakDirty.add(victim);
         this.broadcastKill(victim, params, enemyKill);
@@ -762,10 +875,17 @@ export class Domination extends RespawnRules {
         return (source as Player).perks.some((p) => ARENA_PERK_DEFS[p.type]?.ignoresVest);
     }
 
-    /** Mass Medicate / Revivify: almost instant. */
-    reviveDuration(reviver: Player, _target: Player): number | undefined {
+    /** Much shorter than in the battle royale (ARENA_REVIVE_S); Mass Medicate / Revivify: almost instant. */
+    reviveDuration(reviver: Player, target: Player): number | undefined {
+        // Revivify: up on your own
+        if (reviver === target) return ARENA_SELF_REVIVE_S;
         const fast = reviver.perks.some((p) => ARENA_PERK_DEFS[p.type]?.fastRevive);
-        return fast ? ARENA_FAST_REVIVE_S : undefined;
+        return fast ? ARENA_FAST_REVIVE_S : ARENA_REVIVE_S;
+    }
+
+    /** Windwalk: a smaller burst of speed than in the battle royale. */
+    hasteSpeed(_player: Player, type: number, usual: number): number {
+        return type === GameConfig.HasteType.Windwalk ? usual * ARENA_WINDWALK_SPEED_FACTOR : usual;
     }
 
     /** Longer with fewer players: 12 → 10 s, 8-10 → 20 s, 4-6 → 30 s, 2 → 50 s. */
@@ -795,31 +915,14 @@ export class Domination extends RespawnRules {
         return [...dealt].filter(([, n]) => n >= DOMINATION_ASSIST_MIN_DAMAGE).map(([p]) => p);
     }
 
-    /** A dead player's guns, throwable and perk lie where they fell - the only loot there is. */
-    private dropLoadout(victim: Player, killer?: Player): void {
+    /** A dead player's guns and perk lie where they fell - the only loot there is. */
+    private dropLoadout(victim: Player): void {
         const lootBarn = this.game.lootBarn;
         const pos = victim.pos;
-        const at = () => v2.add(pos, v2.mul(v2.randomUnit(), 0.5));
         // what the last death left (and nobody took) goes now - one pile per player
         for (const old of this.drops.get(victim) ?? []) if (!old.destroyed) old.destroy();
         const drops: Loot[] = [];
         this.drops.set(victim, drops);
-        // the killer's perk may want more (Scavenger: the grenades and half the ammo)
-        const extra = killer && this.running ? this.victimDropsOf(killer) : undefined;
-        if (extra) {
-            for (const [item, count] of Object.entries(victim.inventory)) {
-                if (count <= 0) continue;
-                const type = (GameObjectDefs.typeToDefSafe(item) as { type?: string } | undefined)?.type;
-                const n = type === "ammo"
-                    ? Math.floor(count * extra.ammoFraction)
-                    : type === "throwable" && extra.throwables && !ARENA_STREAK_ITEMS.includes(item)
-                      ? count
-                      : 0;
-                if (n <= 0) continue;
-                const loot = lootBarn.addLootWithoutAmmo(item, at(), victim.layer, n);
-                if (loot) drops.push(loot);
-            }
-        }
         // nothing else drops (no throwables either): empty the backpack first, so the loaded rounds of the guns
         // don't overflow it onto the ground when the guns are taken away
         victim.invManager.wipeInventory();
@@ -842,15 +945,6 @@ export class Domination extends RespawnRules {
             if (loot) drops.push(loot);
             victim.removePerk(perk.type);
         }
-    }
-
-    /** What the perk of a killer adds to their victim's drops (Scavenger). */
-    private victimDropsOf(killer: Player): { throwables: boolean; ammoFraction: number } | undefined {
-        for (const perk of killer.perks) {
-            const drops = ARENA_PERK_DEFS[perk.type]?.victimDrops;
-            if (drops) return drops;
-        }
-        return undefined;
     }
 
     damageReduction(player: Player, params?: DamageParams): number {
@@ -1112,33 +1206,6 @@ export class Domination extends RespawnRules {
         return [call?.player.arenaStreaks.airdropWeapon ?? ARENA_DEFAULT_STREAKS.airdropWeapon];
     }
 
-    /**
-     * A picked up gun replaces the one of its kind the player carries (main gun /
-     * pistol), whichever slot it's in - after a slot swap too, so there are never two
-     * main guns; with none of its kind, a free slot.
-     */
-    gunPickupSlot(player: Player, gunType: string): number | undefined {
-        const kind = arenaSlotOf(gunType);
-        const slots = [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary];
-        // carried already (an MP220 as the secondary): that one
-        // a gun for either slot (the MP220): into the one in hand (main gun / secondary) -
-        // a second one too (two only this way: the loadout allows one)
-        if (ARENA_ALSO_SECONDARY.includes(gunType) && slots.includes(player.curWeapIdx)) return player.curWeapIdx;
-        // Quickswitch: two main guns - a main gun replaces the one in hand (else a free slot)
-        if (kind === "primary" && player.hasPerk(ARENA_QUICKSWITCH)) {
-            if (slots.includes(player.curWeapIdx)) return player.curWeapIdx;
-            const free = slots.find((s) => !player.weapons[s].type);
-            return free ?? GameConfig.WeaponSlot.Primary;
-        }
-        const exact = slots.find((s) => player.weapons[s].type === gunType);
-        if (exact !== undefined) return exact;
-        const same = slots.find((s) => player.weapons[s].type && arenaSlotOf(player.weapons[s].type) === kind);
-        if (same !== undefined) return same;
-        const free = slots.find((s) => !player.weapons[s].type);
-        if (free !== undefined) return free;
-        return kind === "pistol" ? GameConfig.WeaponSlot.Secondary : GameConfig.WeaponSlot.Primary;
-    }
-
     // ── the zones ───────────────────────────────────────────────────────────
 
     protected updateMode(dt: number): void {
@@ -1150,7 +1217,7 @@ export class Domination extends RespawnRules {
         this.updateStreaks();
 
         const players = this.game.playerBarn.livingPlayers.filter(
-            (p) => !p.disconnected && !p.spectator && !p.downed && !this.respawnAt.has(p) && p.layer === 0,
+            (p) => !p.disconnected && !p.spectator && !p.downed && !this.respawnAt.has(p),
         );
         for (const zone of this.zones) this.updateZone(zone, players, dt);
 
@@ -1164,7 +1231,7 @@ export class Domination extends RespawnRules {
 
     /** A side's players in the zone (only on a capture / neutralize - the XP). */
     private inZone(zone: Zone, players: Player[], side: Side): Player[] {
-        return players.filter((p) => this.sideOf(p) === side && v2.distance(p.pos, zone.pos) <= zone.rad);
+        return players.filter((p) => this.sideOf(p) === side && p.layer === zone.layer && v2.distance(p.pos, zone.pos) <= zone.rad);
     }
 
     private updateZone(zone: Zone, players: Player[], dt: number): void {
@@ -1172,6 +1239,8 @@ export class Domination extends RespawnRules {
         const radSq = zone.rad * zone.rad;
         const count = [0, 0];
         for (const p of players) {
+            // only on the zone's layer (not on the stairs either)
+            if (p.layer !== zone.layer) continue;
             const dx = p.pos.x - zone.pos.x;
             const dy = p.pos.y - zone.pos.y;
             if (dx * dx + dy * dy <= radSq) count[this.sideOf(p) - 1]++;
@@ -1326,6 +1395,7 @@ export class Domination extends RespawnRules {
             progress: z.progress,
             contested: z.contested,
             mult: z.mult,
+            layer: z.layer,
         }));
     }
 

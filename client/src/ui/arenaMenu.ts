@@ -24,19 +24,25 @@ import {
     type ArenaSlot,
     arenaItems,
     arenaFitsSlot,
+    arenaLoadoutPoints,
     arenaUnlockLevel,
+    arenaWeaponBudget,
+    arenaWeaponPoints,
     challengeProgress,
+    isArenaGunSlot,
+    sanitizeArenaLoadout,
 } from "../../../shared/utils/arena";
 import type { Account } from "../account";
 import { helpers } from "../helpers";
 
 const SLOT_LABELS: Record<ArenaSlot, string> = {
-    primary: "Main gun",
-    pistol: "Pistol",
+    primary: "Gun 1",
+    pistol: "Gun 2",
     throwable: "Throwable",
     perk: "Perk",
 };
 const CATEGORY_LABELS: Partial<Record<GunCategory, string>> = {
+    pistol: "Pistols",
     smg: "SMGs",
     rifle: "Assault rifles & LMGs",
     sniper: "Snipers & DMRs",
@@ -50,16 +56,14 @@ const STREAK_TAB = -1;
 const ARENA_ICONS: Record<string, string> = {
     steelskin: "img/loot/loot-perk-steelskin-arena.svg",
 };
-export const arenaIconOf = (type: string) => ARENA_ICONS[type] ?? helpers.getSvgFromGameType(type);
+export const arenaIconOf = (type: string) => (type ? (ARENA_ICONS[type] ?? helpers.getSvgFromGameType(type)) : "");
 
-/** The pistol slot's groups: pistols, dual pistols, main guns allowed as secondary. */
-/** The pistol slot's groups: pistols, dual pistols - then main guns (the MP220 / P90, or
- *  any with Quickswitch) by their category like in the main gun slot. */
-function pistolGroup(type: string): string {
-    if (gunCategory(type) !== "pistol") return CATEGORY_LABELS[gunCategory(type)] ?? "Other";
-    return (GunDefs[type] as { isDual?: boolean }).isDual ? "Dual pistols" : "Pistols";
+/** The gun groups in the order shown. */
+const GUN_GROUPS = ["Pistols", "Dual pistols", "SMGs", "Assault rifles & LMGs", "Snipers & DMRs", "Shotguns", "Other"];
+function gunGroup(type: string): string {
+    if (gunCategory(type) === "pistol" && (GunDefs[type] as { isDual?: boolean }).isDual) return "Dual pistols";
+    return CATEGORY_LABELS[gunCategory(type)] ?? "Other";
 }
-const PISTOL_GROUPS = ["Pistols", "Dual pistols"];
 
 /** Names the game has none for (kills counted under their own name). */
 const ARENA_NAMES: Record<string, string> = {
@@ -67,7 +71,7 @@ const ARENA_NAMES: Record<string, string> = {
     "8xscope": "Eagle Eye (8x scope)",
 };
 
-const nameOf = (type: string) => ARENA_NAMES[type] ?? defName(type);
+const nameOf = (type: string) => (type ? (ARENA_NAMES[type] ?? defName(type)) : "Empty");
 const defName = (type: string) => (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name ?? type;
 
 /**
@@ -120,7 +124,7 @@ export class ArenaMenu {
             this.panel.append(
                 $("<div/>", {
                     class: "arena-status",
-                    text: "Log in to unlock weapons and save your loadouts. Without an account you play the default loadout (M416, P30L, Frag, Takedown).",
+                    text: "Log in to save your loadouts and unlock perks and kill streaks. Without an account you play the default loadouts.",
                 }),
             );
             return;
@@ -166,15 +170,28 @@ export class ArenaMenu {
             return;
         }
 
+        // the two guns' points
+        const used = arenaLoadoutPoints(this.loadout);
+        const budget = arenaWeaponBudget(this.loadout.perk);
+        const bonus = budget - arenaWeaponBudget();
+        this.panel.append(
+            $("<div/>", { class: "arena-points" }).append(
+                $("<div/>", { class: "arena-points-text", text: `Weapon points: ${used} / ${budget}${bonus ? ` (+${bonus} ${nameOf(this.loadout.perk)})` : ""}` }),
+                $("<div/>", { class: "arena-xp-bar arena-points-bar" }).append($("<i/>").css("width", `${Math.min(100, (used / budget) * 100)}%`)),
+            ),
+        );
+
         const slots = $("<div/>", { class: "arena-slots" });
         for (const slot of Object.keys(SLOT_LABELS) as ArenaSlot[]) {
             const type = this.loadout[slot];
+            const points = isArenaGunSlot(slot) ? arenaWeaponPoints(type) : undefined;
             slots.append(
                 $("<div/>", { class: `arena-slot${slot === this.editing ? " arena-slot-active" : ""}` })
                     .append(
                         $("<div/>", { class: "arena-slot-label", text: SLOT_LABELS[slot] }),
                         this.icon(type),
                         $("<div/>", { class: "arena-slot-name", text: nameOf(type) }),
+                        points !== undefined ? $("<div/>", { class: "arena-item-points", text: `${points} pts` }) : "",
                     )
                     .on("click", () => {
                         this.editing = slot;
@@ -182,52 +199,75 @@ export class ArenaMenu {
                     }),
             );
         }
-        this.panel.append(slots, this.renderChoices(p));
+        const actions = $("<div/>", { class: "arena-actions" }).append(
+            $("<button/>", { type: "button", class: "arena-clear", text: "Clear loadout", title: "Empty every slot of this loadout" })
+                .on("click", () => this.clearLoadout()),
+        );
+        this.panel.append(slots, actions, this.renderChoices(p));
     }
 
     private icon(type: string) {
-        return $("<div/>", { class: "arena-icon" }).css("background-image", `url(${arenaIconOf(type)})`);
+        const icon = arenaIconOf(type);
+        return $("<div/>", { class: `arena-icon${icon ? "" : " arena-icon-empty"}` }).css("background-image", icon ? `url(${icon})` : "none");
     }
 
-    /** Everything for the slot being edited: unlocked ones to pick, locked ones with how to get them. */
+    /** Every slot of the loadout empty - pick it again from scratch (no gun's points in the way). */
+    private clearLoadout() {
+        const p = this.profile;
+        if (!p) return;
+        this.editing = "primary";
+        this.save({ primary: "", pistol: "", throwable: "", perk: "" });
+    }
+
+    /**
+     * Everything for the slot being edited: unlocked ones to pick, locked ones with how to
+     * get them. A gun slot: every gun by its kind, cheapest first - those too expensive
+     * with the other gun greyed out.
+     */
     private renderChoices(p: ArenaProfileResponse) {
         const unlocked = new Set(p.unlocked);
-        const items = arenaItems().filter((t) => arenaFitsSlot(t, this.editing, this.loadout.perk));
-        const order = (t: string) => arenaUnlockLevel(t) ?? 100 + (ARENA_CHALLENGES[t]?.kills ?? 0) / 1000;
+        const gunSlot = isArenaGunSlot(this.editing);
+        const items = arenaItems().filter((t) => arenaFitsSlot(t, this.editing));
+        const order = (t: string) =>
+            gunSlot
+                ? (arenaWeaponPoints(t) ?? 0)
+                : (arenaUnlockLevel(t) ?? 100 + (ARENA_CHALLENGES[t]?.kills ?? 0) / 1000);
         items.sort((a, b) => order(a) - order(b));
 
         const wrap = $("<div/>", { class: "arena-choices" });
         const groups = new Map<string, string[]>();
         for (const t of items) {
-            const group = this.editing === "primary" && GunDefs[t]
-                ? (CATEGORY_LABELS[gunCategory(t)] ?? "Other")
-                : this.editing === "pistol" && GunDefs[t]
-                  ? pistolGroup(t)
-                  : "";
+            const group = gunSlot ? gunGroup(t) : "";
             groups.set(group, [...(groups.get(group) ?? []), t]);
         }
-        // the secondary slot: the pistols first, the main guns' categories after them
-        const ordered = [...groups].sort(([a], [b]) => {
-            if (this.editing !== "pistol") return 0;
-            const ia = PISTOL_GROUPS.indexOf(a);
-            const ib = PISTOL_GROUPS.indexOf(b);
-            return (ia < 0 ? PISTOL_GROUPS.length : ia) - (ib < 0 ? PISTOL_GROUPS.length : ib);
-        });
+        const ordered = [...groups].sort(([a], [b]) => GUN_GROUPS.indexOf(a) - GUN_GROUPS.indexOf(b));
+        // the other gun: one gun once, and both within the budget
+        const other = this.editing === "primary" ? this.loadout.pistol : this.editing === "pistol" ? this.loadout.primary : "";
+        const budget = arenaWeaponBudget(this.loadout.perk);
+        const left = budget - (arenaWeaponPoints(other) ?? 0);
         for (const [group, list] of ordered) {
             if (group) wrap.append($("<div/>", { class: "arena-group", text: group }));
             const grid = $("<div/>", { class: "arena-grid" });
             for (const t of list) {
-                // (the other gun slot holds it already: one gun once)
-                const other = this.editing === "primary" ? this.loadout.pistol : this.editing === "pistol" ? this.loadout.primary : "";
-                const taken = t === other;
-                const open = unlocked.has(t) && !taken;
+                const points = gunSlot ? arenaWeaponPoints(t) : undefined;
+                const taken = gunSlot && t === other;
+                const tooMuch = points !== undefined && points > left;
+                const open = unlocked.has(t) && !taken && !tooMuch;
                 const picked = this.loadout[this.editing] === t;
-                const card = $("<div/>", { class: `arena-item${open ? "" : " arena-item-locked"}${picked ? " arena-item-picked" : ""}` }).append(
+                const req = taken
+                    ? "In your other slot"
+                    : !unlocked.has(t)
+                      ? this.requirement(t, p)
+                      : tooMuch
+                        ? `Too many points (${left} left)`
+                        : "";
+                const card = $("<div/>", { class: `arena-item${open || picked ? "" : " arena-item-locked"}${picked ? " arena-item-picked" : ""}` }).append(
                     this.icon(t),
                     $("<div/>", { class: "arena-item-name", text: nameOf(t) }),
+                    points !== undefined ? $("<div/>", { class: "arena-item-points", text: `${points} pts` }) : "",
                     // a perk: what it does in the arena
                     ARENA_PERK_DEFS[t] ? $("<div/>", { class: "arena-item-desc", text: ARENA_PERK_DEFS[t].description }) : "",
-                    open ? "" : $("<div/>", { class: "arena-item-req", text: taken ? "In your other slot" : this.requirement(t, p) }),
+                    open || picked ? "" : $("<div/>", { class: "arena-item-req", text: req }),
                 );
                 if (open && !picked) card.on("click", () => this.pick(t));
                 grid.append(card);
@@ -237,7 +277,7 @@ export class ArenaMenu {
         return wrap;
     }
 
-    /** "Level 12" or "150 kills with M416 (37/150)". */
+    /** "Level 12" or "50 kills with throwables (37/50)". */
     private requirement(type: string, p: ArenaProfileResponse): string {
         const level = arenaUnlockLevel(type);
         if (level) return `Level ${level}`;
@@ -341,9 +381,17 @@ export class ArenaMenu {
     private pick(type: string) {
         const p = this.profile;
         if (!p) return;
-        const loadout = { ...this.loadout, [this.editing]: type };
-        // no Quickswitch any more: a main gun as secondary goes back to a pistol
-        if (!arenaFitsSlot(loadout.pistol, "pistol", loadout.perk)) loadout.pistol = ARENA_DEFAULT_LOADOUT.pistol;
+        // (a perk with fewer points - Quickswitch off: the second gun gets one that fits)
+        const loadout = sanitizeArenaLoadout({ ...this.loadout, [this.editing]: type }, new Set(p.unlocked), this.loadout);
+        // the next empty slot is the one to fill (after a clear)
+        const next = (["primary", "pistol", "throwable", "perk"] as ArenaSlot[]).find((sl) => !loadout[sl]);
+        if (next && this.loadout[this.editing] === "") this.editing = next;
+        this.save(loadout);
+    }
+
+    private save(loadout: ArenaLoadout) {
+        const p = this.profile;
+        if (!p) return;
         p.loadouts[this.slot] = loadout;
         this.render();
         this.account.ajaxRequest("/api/user/arena/loadout", { slot: this.slot, loadout }, (err, res: { loadout: ArenaLoadout }) => {
@@ -395,7 +443,7 @@ export class ArenaProgressPanel {
                     class: "ap-note",
                     text: this.account.loggedIn
                         ? "Couldn't load your arena progress."
-                        : "Log in to level up in the arena and unlock weapons. Guests play the starter loadouts.",
+                        : "Log in to level up in the arena and unlock perks and kill streaks. Guests play the starter loadouts.",
                 }),
             );
             return;
@@ -428,14 +476,14 @@ export class ArenaProgressPanel {
         }
         root.append(progress);
 
-        // the weapon challenges closest to done - always open (the pass's "How to earn XP" box)
+        // the challenges closest to done - always open (the pass's "How to earn XP" box)
         const unlocked = new Set(p.unlocked);
         const open = Object.entries(ARENA_CHALLENGES)
             .filter(([t]) => !unlocked.has(t))
             .map(([t, ch]) => ({ t, ch, done: Math.min(ch.kills, challengeProgress(ch, p.kills)) }))
             .sort((a, b) => b.done / b.ch.kills - a.done / a.ch.kills)
             .slice(0, 3);
-        const box = $("<div/>", { class: "ap-challenges" }).append($("<div/>", { class: "ap-challenges-title", text: "Weapon challenges" }));
+        const box = $("<div/>", { class: "ap-challenges" }).append($("<div/>", { class: "ap-challenges-title", text: "Challenges" }));
         if (!open.length) box.append($("<div/>", { class: "ap-challenge", text: "All done!" }));
         for (const { t, ch, done } of open) {
             box.append(

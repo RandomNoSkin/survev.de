@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { type Domination, isHardCover, splitIntoTeams } from "../../server/src/game/modes/domination.ts";
 import type { Player } from "../../server/src/game/objects/player.ts";
-import { ARENA_AFK_KICK_S, ARENA_BOOST_RESIST, ARENA_MAX_THROWABLES, ARENA_SPAWN_AMMO_MULT, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S, ARENA_CHALLENGES, ARENA_REVIVE_HEALTH, ARENA_GEAR, ARENA_LEVEL_UNLOCKS, ARENA_PERKS, ARENA_STARTER_ITEMS } from "../../shared/defs/modes/arenaDefs.ts";
-import { ARENA_FAST_REVIVE_S } from "../../shared/defs/modes/arenaPerkDefs.ts";
+import { ARENA_AFK_KICK_S, ARENA_BOOST_RESIST, ARENA_MAX_THROWABLES, ARENA_SPAWN_AMMO_MULT, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S, ARENA_CHALLENGES, ARENA_REVIVE_HEALTH, ARENA_REVIVE_S, ARENA_GEAR, ARENA_LEVEL_UNLOCKS, ARENA_PERKS, ARENA_STARTER_ITEMS } from "../../shared/defs/modes/arenaDefs.ts";
+import { ARENA_FAST_REVIVE_S, ARENA_SELF_REVIVE_S } from "../../shared/defs/modes/arenaPerkDefs.ts";
 import {
     DOMINATION_CAPTURE_S,
     DOMINATION_COVER_MIN,
@@ -13,6 +13,7 @@ import {
     DOMINATION_NEUTRALIZE_S,
     DOMINATION_POINT_INTERVAL_S,
     DOMINATION_RESPAWN_DELAY_S,
+    DOMINATION_WARMUP_RESPAWN_DELAY_S,
     DOMINATION_ABANDON_S,
     DOMINATION_SCORE_LIMIT,
     DOMINATION_START_CLUSTER_RAD,
@@ -60,9 +61,10 @@ function leave(game: ReturnType<typeof createGame>, p: Player) {
     game.handleSocketClose(p.socketId);
 }
 
-function moveTo(players: Player[], pos: { x: number; y: number }) {
+function moveTo(players: Player[], pos: { x: number; y: number }, layer = 0) {
     for (const p of players) {
         v2.set(p.pos, pos);
+        p.layer = layer;
         p.game.grid.updateObject(p);
     }
 }
@@ -101,13 +103,13 @@ describe("domination", () => {
     test("standing in a zone takes it; an enemy zone goes neutral first; both teams in it: nothing moves", () => {
         const { game, rules, red, blue } = domination(2);
         const b = rules.zones[1];
-        moveTo(red, b.pos);
+        moveTo(red, b.pos, b.layer);
         moveTo(blue, rules.pointAt(0.95));
         tick(game, DOMINATION_CAPTURE_S / 1.5 + 0.3);
         expect(b.owner).toBe(1);
 
         // blue comes in too: contested, frozen
-        moveTo(blue, b.pos);
+        moveTo(blue, b.pos, b.layer);
         tick(game, 1);
         expect(b.contested).toBe(true);
         expect(b.owner).toBe(1);
@@ -125,7 +127,7 @@ describe("domination", () => {
     test("a held zone gives a point every few seconds, not while enemies are in it", () => {
         const { game, rules, red, blue } = domination(1);
         const a = rules.zones[0];
-        moveTo(red, a.pos);
+        moveTo(red, a.pos, a.layer);
         moveTo(blue, rules.pointAt(0.95));
         tick(game, DOMINATION_CAPTURE_S + 0.2);
         expect(a.owner).toBe(1);
@@ -142,7 +144,7 @@ describe("domination", () => {
         tick(game, DOMINATION_POINT_INTERVAL_S);
         expect(a.mult).toBe(1);
         expect(rules.teamScore(1)).toBe(sAway + 1);
-        moveTo(blue, a.pos);
+        moveTo(blue, a.pos, a.layer);
         const s1 = rules.teamScore(1);
         tick(game, DOMINATION_POINT_INTERVAL_S * 2);
         expect(rules.teamScore(1)).toBe(s1);
@@ -151,7 +153,7 @@ describe("domination", () => {
     test("the point multiplier: x(1 + holders in the zone), at most x3", () => {
         const { game, rules, red, blue } = domination(3);
         const a = rules.zones[0];
-        moveTo(red, a.pos);
+        moveTo(red, a.pos, a.layer);
         moveTo(blue, rules.pointAt(0.95));
         tick(game, DOMINATION_CAPTURE_S + 0.2);
         expect(a.owner).toBe(1);
@@ -198,22 +200,28 @@ describe("domination", () => {
         expect(rules.arenaXp(r)).toBeGreaterThan(0);
     });
 
-    test("picking up: a gun replaces the one of its kind - also after a slot swap; nothing but loadout items", () => {
-        const { rules, red } = domination(1);
+    test("picking up: a free gun slot first, else the gun in hand - any gun in either slot; nothing but loadout items", () => {
+        const { game, rules, red } = domination(1);
         const [p] = red;
-        expect(rules.gunPickupSlot(p, "ak47")).toBe(GameConfig.WeaponSlot.Primary);
-        expect(rules.gunPickupSlot(p, "deagle")).toBe(GameConfig.WeaponSlot.Secondary);
-        // slots swapped: the main gun sits in slot 2 now - another main gun still replaces it
-        const [a, b] = [p.weapons[0].type, p.weapons[1].type];
-        p.weaponManager.setWeapon(GameConfig.WeaponSlot.Primary, b, 0);
-        p.weaponManager.setWeapon(GameConfig.WeaponSlot.Secondary, a, 0);
-        expect(rules.gunPickupSlot(p, "ak47")).toBe(GameConfig.WeaponSlot.Secondary);
-        expect(rules.gunPickupSlot(p, "deagle")).toBe(GameConfig.WeaponSlot.Primary);
-        // the MP220 (main gun or secondary): into the slot in hand
-        p.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Secondary);
-        expect(rules.gunPickupSlot(p, "mp220")).toBe(GameConfig.WeaponSlot.Secondary);
+        const pickup = (type: string) => {
+            const loot = game.lootBarn.addLootWithoutAmmo(type, v2.copy(p.pos), p.layer, 1)!;
+            p.pickupLoot(loot);
+            return loot;
+        };
+        // one gun only (the second slot empty): a picked up gun goes there - also a
+        // main gun while holding the main gun (it used to replace that one)
+        p.weaponManager.setWeapon(GameConfig.WeaponSlot.Secondary, "", 0);
         p.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
-        expect(rules.gunPickupSlot(p, "mp220")).toBe(GameConfig.WeaponSlot.Primary);
+        pickup("ak47");
+        expect([p.weapons[0].type, p.weapons[1].type]).toStrictEqual(["hk416", "ak47"]);
+        // both full: the one in hand goes
+        p.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Secondary);
+        pickup("mp220");
+        expect([p.weapons[0].type, p.weapons[1].type]).toStrictEqual(["hk416", "mp220"]);
+        p.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
+        pickup("deagle");
+        expect([p.weapons[0].type, p.weapons[1].type]).toStrictEqual(["deagle", "mp220"]);
+        void rules;
         expect(rules.allowsPickup(p, "ak47")).toBe(true);
         expect(rules.allowsPickup(p, "frag")).toBe(true);
         expect(rules.allowsPickup(p, "takedown")).toBe(true);
@@ -291,10 +299,21 @@ describe("domination", () => {
             const { game, rules } = domination(1);
             const [a, b, c] = rules.zones;
             const mid = game.map.center;
-            // C is (about - a building may take it) A's mirror
-            expect(v2.distance(v2.create(game.map.width - a.pos.x, game.map.height - a.pos.y), c.pos)).toBeLessThan(15);
+            // C is (about - a building may take it) A's mirror: through the center, or -
+            // B in the big building in the middle - across the middle line
+            const across = (rules as any).horizontal
+                ? v2.create(game.map.width - a.pos.x, a.pos.y)
+                : v2.create(a.pos.x, game.map.height - a.pos.y);
+            const mirrored = Math.min(
+                v2.distance(v2.create(game.map.width - a.pos.x, game.map.height - a.pos.y), c.pos),
+                v2.distance(across, c.pos),
+            );
+            expect(mirrored).toBeLessThan(15);
+            expect([a.layer, c.layer]).toStrictEqual([0, 0]);
             expect(v2.distance(b.pos, mid)).toBeLessThan(game.map.width * 0.38);
             for (const z of rules.zones) {
+                // (underground / inside the big building: only its own walls - nothing put in)
+                if (z.layer !== 0 || z.indoor) continue;
                 // hard cover inside the zone, in (nearly) every direction around its middle
                 const sectors = new Set(
                     game.map.obstacles
@@ -355,11 +374,82 @@ describe("domination", () => {
         }
     });
 
+    test("a dead player is sent to their own client as dead (no body standing around) until the respawn", () => {
+        const { game, rules, red, blue } = domination(1);
+        const [r] = red;
+        const [b] = blue;
+        expect(r.respawnHidden).toBe(false);
+        kill(r, b);
+        expect(rules.isHidden(r)).toBe(true);
+        expect(r.respawnHidden).toBe(true);
+        expect(r.dead).toBe(false);
+        tick(game, DOMINATION_RESPAWN_DELAY_S + 0.2);
+        expect(rules.isHidden(r)).toBe(false);
+        expect(r.respawnHidden).toBe(false);
+    });
+
+    test("a cleared loadout spawns with what's left: one gun in hand, or only the melee", () => {
+        const { rules, red } = domination(1);
+        const [p] = red;
+        const give = (l: { primary: string; pistol: string; throwable: string; perk: string }) => {
+            p.arenaLoadouts = [l];
+            p.arenaLoadoutIdx = 0;
+            (rules as any).giveSpawnItems(p);
+        };
+        give({ primary: "", pistol: "mp5", throwable: "", perk: "" });
+        expect([p.weapons[0].type, p.weapons[1].type]).toStrictEqual(["", "mp5"]);
+        expect(p.curWeapIdx).toBe(GameConfig.WeaponSlot.Secondary);
+        expect(p.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("");
+        expect(p.perks.filter((x) => x.droppable)).toHaveLength(0);
+        give({ primary: "", pistol: "", throwable: "", perk: "" });
+        expect(p.curWeapIdx).toBe(GameConfig.WeaponSlot.Melee);
+    });
+
+    test("the warmup: a short respawn", () => {
+        const { game, rules, red, blue } = domination(1, false);
+        expect(rules.running).toBe(false);
+        const [r] = red;
+        rules.onLoadoutSelect(r, ArenaLoadoutAction.Deploy);
+        rules.onLoadoutSelect(blue[0], ArenaLoadoutAction.Deploy);
+        // (in and past the spawn protection)
+        tick(game, DOMINATION_SPAWN_PROTECTION_S + 0.3);
+        kill(r, blue[0]);
+        expect(rules.isHidden(r)).toBe(true);
+        tick(game, DOMINATION_WARMUP_RESPAWN_DELAY_S + 0.2);
+        expect(rules.isHidden(r)).toBe(false);
+    });
+
+    test("a big building in the middle takes B - underground: only players down there take it", () => {
+        let found: ReturnType<typeof domination> | undefined;
+        for (let i = 0; i < 40 && !found; i++) {
+            const d = domination(1);
+            expect(v2.distance(d.rules.zones[1].pos, d.game.map.center)).toBeLessThan(d.game.map.width * 0.25);
+            if (d.rules.zones[1].layer === 1) found = d;
+        }
+        expect(found, "no underground zone B in 40 maps").toBeDefined();
+        const { game, rules, red, blue } = found!;
+        const b = rules.zones[1];
+        moveTo(blue, rules.pointAt(0.97));
+        // right above it, on the ground: nothing
+        moveTo(red, b.pos, 0);
+        tick(game, DOMINATION_CAPTURE_S + 0.5);
+        expect(b.owner).toBe(0);
+        expect(b.progress).toBe(0);
+        // down there: taken
+        moveTo(red, b.pos, 1);
+        tick(game, DOMINATION_CAPTURE_S + 0.5);
+        expect(b.owner).toBe(1);
+        // the clients get its layer
+        const msg = new net.ModeStandingsMsg();
+        (rules as any).fillStandings(msg);
+        expect(msg.zones[1].layer).toBe(1);
+    });
+
     test("a half-done capture stays when everyone leaves", () => {
         const { game, rules, red, blue } = domination(1);
         const b = rules.zones[1];
         moveTo(blue, rules.pointAt(0.97));
-        moveTo(red, b.pos);
+        moveTo(red, b.pos, b.layer);
         tick(game, 2);
         const p = b.progress;
         expect(p).toBeGreaterThan(0.2);
@@ -608,22 +698,9 @@ describe("domination", () => {
         expect(p.hasPerk("steelskin")).toBe(false);
     });
 
-    test("Scavenger: the victim also drops their grenades and half their ammo", () => {
-        const { game, red, blue } = domination(1);
-        const [r] = red;
-        const [b] = blue;
-        r.removePerk("takedown");
-        r.addPerk("scavenger", true);
-        const ammo = b.invManager.get("556mm");
-        kill(b, r);
-        const lying = game.lootBarn.loots.filter((l) => !l.destroyed);
-        expect(lying.find((l) => l.type === "frag")?.count).toBe(3);
-        expect(lying.find((l) => l.type === "556mm")?.count).toBe(Math.floor(ammo / 2));
-    });
-
-    test("perks: Takedown and Scavenger from the start, the others by level in their order; P90 and MP220 go as secondary", () => {
+    test("perks: Takedown from the start, the others by level in their order; any gun goes in either gun slot", () => {
         expect(ARENA_STARTER_ITEMS).toContain("takedown");
-        expect(ARENA_STARTER_ITEMS).toContain("scavenger");
+        expect(ARENA_PERKS).not.toContain("scavenger");
         const levelOf = (perk: string) => Number(Object.entries(ARENA_LEVEL_UNLOCKS).find(([, items]) => items.includes(perk))?.[0]);
         const order = ["aoe_heal", "endless_ammo", "firepower", "flak_jacket", "windwalk", "self_revive", "steelskin", "bonus_assault"];
         for (let i = 1; i < order.length; i++) expect(levelOf(order[i])).toBeGreaterThan(levelOf(order[i - 1]));
@@ -644,10 +721,11 @@ describe("domination", () => {
         expect(r1.downed).toBe(true);
         expect(rules.isHidden(r1)).toBe(false);
         expect(b.kills).toBe(0);
-        // a revive takes the usual time
+        // a revive: much shorter than in the battle royale
         moveTo([r2], r1.pos);
         r2.revive(r1);
-        expect(r2.action.duration).toBe(GameConfig.player.reviveDuration);
+        expect(r2.action.duration).toBe(ARENA_REVIVE_S);
+        expect(ARENA_REVIVE_S).toBeLessThan(GameConfig.player.reviveDuration / 2);
         r2.cancelAction();
         // giving up: dead, respawning, the knocker has the kill
         expect(rules.giveUp(r1)).toBe(true);
@@ -678,7 +756,10 @@ describe("domination", () => {
         expect(rules.reviveDuration(b1, b2)).toBe(ARENA_FAST_REVIVE_S);
         // Revivify: knocked even alone, and quick to get up
         b2.addPerk("self_revive", true);
-        expect(rules.reviveDuration(b2, b2)).toBe(ARENA_FAST_REVIVE_S);
+        expect(rules.reviveDuration(b2, b2)).toBe(ARENA_SELF_REVIVE_S);
+        // a teammate with Revivify gets others up fast too; without a perk: the arena's usual
+        expect(rules.reviveDuration(b2, b1)).toBe(ARENA_FAST_REVIVE_S);
+        expect([ARENA_REVIVE_S, ARENA_FAST_REVIVE_S, ARENA_SELF_REVIVE_S]).toStrictEqual([3, 1, 1.5]);
     });
 
     test("a party of 6 joins through join tokens as one team; the game tells how big a party still fits", () => {
@@ -715,7 +796,7 @@ describe("domination", () => {
         expect(r1.downed).toBe(true);
         moveTo([r2], r1.pos);
         r2.revive(r1);
-        for (let t = 0; t < GameConfig.player.reviveDuration + 0.5; t += 0.05) r2.game.update(0.05);
+        for (let t = 0; t < ARENA_REVIVE_S + 0.5; t += 0.05) r2.game.update(0.05);
         expect(r1.downed).toBe(false);
         // (the always full adrenaline heals a little from there in the ticks after)
         expect(r1.health).toBeGreaterThanOrEqual(ARENA_REVIVE_HEALTH);
@@ -803,8 +884,9 @@ describe("domination", () => {
     test("dominationMapScale: a full 6v6 the map as made, fewer smaller", () => {
         expect(dominationMapScale(12)).toBe(1);
         expect(dominationMapScale(20)).toBe(1);
-        expect(dominationMapScale(6)).toBeCloseTo(0.71, 2);
-        expect(dominationMapScale(2)).toBe(0.65);
+        expect(dominationMapScale(10)).toBeCloseTo(0.91, 2);
+        expect(dominationMapScale(6)).toBe(0.8);
+        expect(dominationMapScale(2)).toBe(0.8);
     });
 
     test("a spectator watching a player who dies: on to the killer, else someone else", () => {

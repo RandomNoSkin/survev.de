@@ -1,12 +1,21 @@
 import { describe, expect, test } from "vitest";
+import * as net from "../../shared/net/net.ts";
 import type { Domination } from "../../server/src/game/modes/domination.ts";
 import type { Player } from "../../server/src/game/objects/player.ts";
 import { GunDefs } from "../../shared/defs/gameObjects/gunDefs.ts";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { ObjectType } from "../../shared/net/objectSerializeFns.ts";
 import { collider } from "../../shared/utils/collider.ts";
-import { ARENA_BOOST_RESIST, ARENA_PERKS, ARENA_REVIVE_HEALTH, ARENA_TAKEDOWN } from "../../shared/defs/modes/arenaDefs.ts";
-import { ARENA_FAST_REVIVE_S, ARENA_PERK_DEFS } from "../../shared/defs/modes/arenaPerkDefs.ts";
+import {
+    ARENA_BOOST_RESIST,
+    ARENA_KILL_AMMO_FRACTION,
+    ARENA_PERKS,
+    ARENA_REVIVE_HEALTH,
+    ARENA_SPAWN_AMMO_MULT,
+    ARENA_TAKEDOWN,
+    ARENA_WINDWALK_SPEED_FACTOR,
+} from "../../shared/defs/modes/arenaDefs.ts";
+import { ARENA_FAST_REVIVE_S, ARENA_PERK_DEFS, ARENA_SELF_REVIVE_S } from "../../shared/defs/modes/arenaPerkDefs.ts";
 import { DOMINATION_SPAWN_PROTECTION_S } from "../../shared/defs/modes/dominationDefs.ts";
 import { GameConfig, GameMode, TeamMode } from "../../shared/gameConfig.ts";
 import { arenaSlotOf, arenaUnlockLevel, sanitizeArenaLoadout } from "../../shared/utils/arena.ts";
@@ -85,6 +94,32 @@ describe("arena perks", () => {
         }
     });
 
+    test("soda 20% for 9 s, pill 30% for 15 s - the player's client is told (the HUD next to the health bar)", () => {
+        expect(ARENA_BOOST_RESIST.soda).toStrictEqual({ reduction: 0.2, seconds: 9 });
+        expect(ARENA_BOOST_RESIST.painkiller).toStrictEqual({ reduction: 0.3, seconds: 15 });
+        const { rules, red, blue } = domination();
+        const [r] = red;
+        const sent = () =>
+            (r.msgsToSend as Array<{ type: number; msg: unknown }>)
+                .filter((m) => m.type === net.MsgType.ArenaResist)
+                .map((m) => m.msg as net.ArenaResistMsg);
+        r.msgsToSend.length = 0;
+        rules.onBoostUsed(r, "painkiller");
+        expect(sent().at(-1)).toMatchObject({ reduction: 0.3 });
+        expect(sent().at(-1)!.seconds).toBeCloseTo(15, 1);
+        // round trip
+        const stream = new net.MsgStream(new ArrayBuffer(64));
+        stream.serializeMsg(net.MsgType.ArenaResist, sent().at(-1)!);
+        const read = new net.MsgStream(stream.getBuffer());
+        expect(read.deserializeMsgType()).toBe(net.MsgType.ArenaResist);
+        const back = new net.ArenaResistMsg();
+        back.deserialize(read.getStream());
+        expect([back.reduction, back.seconds]).toStrictEqual([0.3, 15]);
+        // dead: gone, the client told so
+        shoot(r, blue[0], 1000);
+        expect(sent().at(-1)).toMatchObject({ reduction: 0, seconds: 0 });
+    });
+
     test("Takedown: a kill gives +10 health, a short damage resistance and a short burst of speed", () => {
         const { rules, red, blue } = domination();
         const [r] = red;
@@ -99,22 +134,21 @@ describe("arena perks", () => {
         expect(r.hasteType).toBe(GameConfig.HasteType.Takedown);
     });
 
-    test("Scavenger: the victim also drops their grenades and half their ammo", () => {
-        const { game, rules, red, blue } = domination();
+    test("every kill gives ammo back (no Scavenger any more) - the victim drops no ammo, no grenades", () => {
+        const { game, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
-        withPerk(rules, r, "scavenger");
-        const ammo = b.invManager.get("556mm");
+        expect(ARENA_PERKS).not.toContain("scavenger");
+        // (the main gun's ammo, some of it shot)
+        const ammo = GunDefs[r.weapons[0].type].ammo as "556mm";
+        const full = r.invManager.get(ammo);
+        r.invManager.set(ammo, 10);
         shoot(b, r, 1000);
-        const lying = game.lootBarn.loots.filter((l) => !l.destroyed);
-        expect(lying.find((l) => l.type === "frag")?.count).toBe(3);
-        expect(lying.find((l) => l.type === "556mm")?.count).toBe(Math.floor(ammo / 2));
-        // without it: neither
-        const { game: game2, red: red2, blue: blue2 } = domination();
-        shoot(blue2[0], red2[0], 1000);
-        const plain = game2.lootBarn.loots.filter((l) => !l.destroyed).map((l) => l.type);
-        expect(plain).not.toContain("frag");
-        expect(plain).not.toContain("556mm");
+        const expected = Math.min(full, 10 + Math.ceil(GunDefs[r.weapons[0].type].ammoSpawnCount * ARENA_SPAWN_AMMO_MULT * ARENA_KILL_AMMO_FRACTION));
+        expect(r.invManager.get(ammo)).toBe(expected);
+        const lying = game.lootBarn.loots.filter((l) => !l.destroyed).map((l) => l.type);
+        expect(lying).not.toContain("frag");
+        expect(lying).not.toContain(ammo);
     });
 
     test("Mass Medicate: a revive in a moment; a soda gives nearby teammates the damage resistance too", () => {
@@ -231,6 +265,10 @@ describe("arena perks", () => {
         });
         tick(game, 0.2);
         expect(walker.hasteType).toBe(GameConfig.HasteType.Windwalk);
+        // a smaller burst than in the battle royale
+        const usual = GameConfig.player.hasteSpeedBonus;
+        expect(rules.hasteSpeed(walker, GameConfig.HasteType.Windwalk, usual)).toBeCloseTo(usual * ARENA_WINDWALK_SPEED_FACTOR);
+        expect(rules.hasteSpeed(walker, GameConfig.HasteType.Takedown, usual)).toBe(usual);
     });
 
     test("Hollow-Points: bullets go through vests (a level 3 vest takes as much as none), helmets still count", () => {
@@ -287,8 +325,8 @@ describe("arena perks", () => {
         expect(p.downed).toBe(true);
         expect(rules.isHidden(p)).toBe(false);
         p.revive(p.getPlayerToRevive());
-        expect(p.action.duration).toBe(ARENA_FAST_REVIVE_S);
-        tick(game, ARENA_FAST_REVIVE_S + 0.2);
+        expect(p.action.duration).toBe(ARENA_SELF_REVIVE_S);
+        tick(game, ARENA_SELF_REVIVE_S + 0.2);
         expect(p.downed).toBe(false);
         expect(p.health).toBeGreaterThanOrEqual(ARENA_REVIVE_HEALTH);
         // a bandage: half the time
@@ -302,18 +340,12 @@ describe("arena perks", () => {
         expect(arenaSlotOf("broken_arrow")).toBeUndefined();
     });
 
-    test("Quickswitch (level 18, before Steelskin): two main guns - in the loadout and when picking one up", () => {
-        expect(arenaUnlockLevel("quickswitch")).toBe(18);
+    test("Quickswitch: +50 points for the two guns - in the loadout", () => {
         expect(arenaUnlockLevel("quickswitch")!).toBeLessThan(arenaUnlockLevel("steelskin")!);
-        const all = new Set(["hk416", "ak47", "p30l", "frag", "quickswitch", "takedown"]);
-        // with it: a main gun as secondary; without: back to a pistol
-        expect(sanitizeArenaLoadout({ primary: "hk416", pistol: "ak47", throwable: "frag", perk: "quickswitch" }, all).pistol).toBe("ak47");
-        expect(sanitizeArenaLoadout({ primary: "hk416", pistol: "ak47", throwable: "frag", perk: "takedown" }, all).pistol).not.toBe("ak47");
-        // in the match: a main gun replaces the one in hand
-        const { rules, red } = domination(1);
-        const [r] = red;
-        r.addPerk("quickswitch", false);
-        r.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Secondary);
-        expect(rules.gunPickupSlot(r, "ak47")).toBe(GameConfig.WeaponSlot.Secondary);
+        expect(ARENA_PERK_DEFS.quickswitch.budgetBonus).toBe(50);
+        const all = new Set(["m249", "m1014", "p30l", "frag", "quickswitch", "takedown"]);
+        // with it: two strong guns; without: the second one goes
+        expect(sanitizeArenaLoadout({ primary: "m249", pistol: "m1014", throwable: "frag", perk: "quickswitch" }, all).pistol).toBe("m1014");
+        expect(sanitizeArenaLoadout({ primary: "m249", pistol: "m1014", throwable: "frag", perk: "takedown" }, all).pistol).not.toBe("m1014");
     });
 });

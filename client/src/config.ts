@@ -212,6 +212,8 @@ const defaultConfig = {
     /** HUD editor grid, px (0 = off): drawn while editing, dragged elements snap their
      *  top-left corner to it (hold Alt to place freely). */
     hudGridSize: 0,
+    /** The spectator bar's buttons: their order and the ones hidden (see specButtons.ts). */
+    hudSpecButtons: { order: [] as string[], hidden: ["next", "prev"] as string[] },
     /** Renders the loop via a non-vsync setTimeout(0) instead of PIXI's default
      *  requestAnimationFrame ticker, to exceed the monitor's refresh rate (see
      *  Game#setRenderLoopMode in main.ts). Off by default: rAF/vsync stays the norm. */

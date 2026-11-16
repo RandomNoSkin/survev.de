@@ -613,7 +613,7 @@ export class GameView {
                     }
                 }
                 return `<tr class="${hl}">
-                    <td>#${p.rank || "—"}</td>
+                    <td>${p.rank === 999 ? "SPEC" : `#${p.rank || "—"}`}</td>
                     <td class="gv-stats-name">${nameCell}</td>
                     <td>${p.kills}</td>
                     <td>${p.damageDealt}</td>

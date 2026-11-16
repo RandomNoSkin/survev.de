@@ -10,8 +10,8 @@ export interface ArenaPerkDef {
     replacesEffect?: boolean;
     /** the vest worn with it (instead of ARENA_GEAR.chest) */
     chest?: string;
-    /** what an enemy killed by its carrier drops on top of the loadout */
-    victimDrops?: { throwables: boolean; ammoFraction: number };
+    /** more loadout points for the two guns (on top of ARENA_WEAPON_BUDGET) */
+    budgetBonus?: number;
     /** revives (teammates; with self_revive itself) take only ARENA_FAST_REVIVE_S */
     fastRevive?: boolean;
     /** factor on how long medical items take */
@@ -24,11 +24,10 @@ export interface ArenaPerkDef {
     noArenaEffect?: boolean;
 }
 
-/** The perk that lets the pistol slot hold a main gun (two main guns). */
-export const ARENA_QUICKSWITCH = "quickswitch";
-
 /** A revive with a fast-revive perk (Mass Medicate, Revivify), in seconds. */
-export const ARENA_FAST_REVIVE_S = 0.5;
+export const ARENA_FAST_REVIVE_S = 1;
+/** Getting up on your own with Revivify (knocked, nobody else reviving), in seconds. */
+export const ARENA_SELF_REVIVE_S = 1.5;
 
 export const ARENA_PERK_DEFS: Record<string, ArenaPerkDef> = {
     takedown: { description: "Every kill: +10 health, 15% less damage for 8 s and 2 s of extra speed." },
@@ -45,16 +44,13 @@ export const ARENA_PERK_DEFS: Record<string, ArenaPerkDef> = {
         ignoresVest: true,
     },
     quickswitch: {
-        description: "Carry two main guns: your secondary slot takes a main gun instead of a pistol.",
+        description: "+50 loadout points: carry two stronger guns.",
+        budgetBonus: 50,
     },
     steelskin: {
         description: "Spawn with a level 3 vest instead of level 1.",
         replacesEffect: true,
         chest: "chest03",
-    },
-    scavenger: {
-        description: "Enemies you kill also drop their grenades and half their ammo.",
-        victimDrops: { throwables: true, ammoFraction: 0.5 },
     },
     flak_jacket: {
         description: "Take 60% less damage from explosions.",

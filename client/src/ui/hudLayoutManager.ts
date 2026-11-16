@@ -1,4 +1,5 @@
 import { type ConfigManager, HUD_ELEMENT_DEFAULTS, type HudElementConfig } from "../config";
+import { SPEC_BUTTONS, SPEC_BUTTONS_DEFAULT, applySpecButtons, specButtonOrder } from "./specButtons";
 import { hideTeamOverviewPreview, showTeamOverviewPreview } from "./teamOverview";
 
 /** One customizable HUD element: a stable id, the CSS id of its `.hud-drag-wrapper`
@@ -78,6 +79,14 @@ export const HUD_ELEMENTS: HudElementDef[] = [
         hasClickAction: false,
         usesExternalDisplayGate: true,
     },
+    {
+        // advanced spectator's options panel - placed apart from the bar's buttons
+        id: "spectatorOptions",
+        wrapperId: "ui-spectate-adv-wrap",
+        label: "Spectator Options",
+        hasClickAction: false,
+        usesExternalDisplayGate: true,
+    },
     { id: "teamHealthBars", wrapperId: "ui-team", label: "Team Health Bars", hasClickAction: false },
     { id: "aliveCount", wrapperId: "ui-leaderboard", label: "Alive Count", hasClickAction: false },
     {
@@ -112,7 +121,7 @@ const GAME_ELEMENTS = [
 const VIEW_ELEMENTS: Record<HudView, string[]> = {
     game: GAME_ELEMENTS,
     team: [...GAME_ELEMENTS, "teamHealthBars"],
-    spectator: ["spectatorBar", "teamHealthBars", "minimap", "killfeed", "killLeader", "gunGameLevel", "domination", "aliveCount", "fpsCounter", "pingCounter"],
+    spectator: ["spectatorBar", "spectatorOptions", "teamHealthBars", "minimap", "killfeed", "killLeader", "gunGameLevel", "domination", "aliveCount", "fpsCounter", "pingCounter"],
     map: ["teamOverview", "aliveCount", "killfeed"],
     // Gun Game / Domination: their own boxes, with the minimap and the scope row to place them by
     modes: ["gunGameLevel", "domination", "killstreak", "minimap", "scopeRow", "ammoCounter", "perkRow"],
@@ -176,6 +185,7 @@ export class HudLayoutManager {
                 // what happens naturally when a live drag ends.
                 this.onMinimapDrag?.(null);
             }
+            if (!key || key === "hudSpecButtons") applySpecButtons(this.config.get("hudSpecButtons"));
         });
         this.setupDragging();
         this.setupResizing();
@@ -485,6 +495,11 @@ export class HudLayoutManager {
         // without a live game that JS never runs, so it'd otherwise never appear here.
         const spectatorBar = document.getElementById("ui-spectate-options");
         if (spectatorBar) spectatorBar.style.display = "block";
+        // the options panel too (opened), to place it
+        const specOptions = document.getElementById("ui-spectate-adv-wrap");
+        if (specOptions) specOptions.style.display = "block";
+        const specPanel = document.getElementById("ui-spectate-advanced-options");
+        if (specPanel) specPanel.style.display = "block";
 
         // #ui-leaderboard-alive is display:none by default (ui2.ts picks solo-count vs.
         // faction-split display depending on team mode) - force it on with a placeholder
@@ -554,6 +569,10 @@ export class HudLayoutManager {
         }
         const spectatorBar = document.getElementById("ui-spectate-options");
         if (spectatorBar) spectatorBar.style.display = "";
+        const specOptions = document.getElementById("ui-spectate-adv-wrap");
+        if (specOptions) specOptions.style.display = "";
+        const specPanel = document.getElementById("ui-spectate-advanced-options");
+        if (specPanel) specPanel.style.display = "none";
 
         const leaderboardAlive = document.getElementById("ui-leaderboard-alive");
         if (leaderboardAlive) leaderboardAlive.style.display = "";
@@ -615,6 +634,7 @@ export class HudLayoutManager {
         this.config.set("hudLayout", {});
         this.config.set("hudGlobalScale", 1);
         this.config.set("hudGlobalOpacity", 1);
+        this.config.set("hudSpecButtons", SPEC_BUTTONS_DEFAULT);
     }
 
     /** Pushes every registered element's current config onto its wrapper's inline
@@ -861,6 +881,85 @@ export class HudLayoutManager {
             for (const def of HUD_ELEMENTS) {
                 if (inView.has(def.id)) list.appendChild(this.buildSettingsRow(def));
             }
+            if (this.editView === "spectator") list.append(...this.buildSpecButtonRows());
         }
+    }
+
+    /** "Spectator Buttons": each of the bar's buttons on/off, dragged into order
+     *  (Leave isn't in it: always on top). */
+    private buildSpecButtonRows(): HTMLElement[] {
+        const cfg = this.config.get("hudSpecButtons") ?? SPEC_BUTTONS_DEFAULT;
+        const order = specButtonOrder(cfg);
+        const save = (patch: Partial<typeof cfg>) => {
+            this.config.set("hudSpecButtons", { order, hidden: cfg.hidden ?? [], ...patch });
+            this.renderSettingsPanel();
+        };
+
+        const head = document.createElement("div");
+        head.className = "hud-settings-row hud-spec-buttons-head";
+        const title = document.createElement("span");
+        title.className = "hud-settings-label";
+        title.textContent = "Spectator Buttons";
+        title.title = "Drag to reorder - Leave always stays on top";
+        const reset = document.createElement("a");
+        reset.className = "hud-settings-reset-btn btn-darken";
+        reset.textContent = "↺";
+        reset.title = "Default buttons and order";
+        reset.addEventListener("click", () => save(SPEC_BUTTONS_DEFAULT));
+        head.append(title, reset);
+
+        const box = document.createElement("div");
+        box.className = "hud-spec-button-list";
+        let dragged: HTMLElement | null = null;
+        const rows = order.map((id) => {
+            const def = SPEC_BUTTONS.find((b) => b.id === id)!;
+            const row = document.createElement("div");
+            row.className = "hud-settings-row hud-spec-button-row";
+            row.draggable = true;
+            row.dataset.id = id;
+
+            const grip = document.createElement("span");
+            grip.className = "hud-spec-grip";
+            grip.textContent = "⠿";
+            const label = document.createElement("span");
+            label.className = "hud-settings-label";
+            label.textContent = def.label;
+
+            const visLabel = document.createElement("label");
+            visLabel.className = "hud-settings-checkbox-label";
+            visLabel.title = "Visible";
+            const vis = document.createElement("input");
+            vis.type = "checkbox";
+            vis.checked = !(cfg.hidden ?? []).includes(id);
+            vis.addEventListener("change", () => {
+                const hidden = (cfg.hidden ?? []).filter((h) => h !== id);
+                save({ hidden: vis.checked ? hidden : [...hidden, id] });
+            });
+            visLabel.append(vis, this.makeIconGlyph("👁"));
+            row.append(grip, label, visLabel);
+
+            row.addEventListener("dragstart", (e) => {
+                dragged = row;
+                row.classList.add("dragging");
+                e.dataTransfer?.setData("text/plain", id);
+                if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+            });
+            // the row moves along while dragging, the order is saved on the drop
+            row.addEventListener("dragover", (e) => {
+                if (!dragged || dragged === row) return;
+                e.preventDefault();
+                const rect = row.getBoundingClientRect();
+                box.insertBefore(dragged, e.clientY < rect.top + rect.height / 2 ? row : row.nextSibling);
+            });
+            row.addEventListener("dragend", () => {
+                row.classList.remove("dragging");
+                dragged = null;
+                const next = [...box.querySelectorAll<HTMLElement>(".hud-spec-button-row")].map((el) => el.dataset.id!);
+                if (next.join() !== order.join()) save({ order: next });
+            });
+            return row;
+        });
+        box.append(...rows);
+        return [head, box];
     }
 }

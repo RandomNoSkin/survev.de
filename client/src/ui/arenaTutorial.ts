@@ -121,8 +121,8 @@ function dominationPicture() {
 function loadoutPicture() {
     const loadout = $("<div/>", { class: "at-feature" }).append(
         $("<div/>", { class: "at-feature-icons" }).append(
-            tile("hk416", "Main"),
-            tile("p30l", "Pistol"),
+            tile("hk416", "Gun 1"),
+            tile("p30l", "Gun 2"),
             tile("frag", "Throwable"),
             tile("takedown", "Perk"),
         ),
@@ -147,7 +147,7 @@ const PAGES: TutorialPage[] = [
                 ? [
                     "Fast matches where you respawn - no looting, no circle.",
                     "You spawn with your own loadout and full adrenaline. Dead players drop their guns, pick them up for your slots.",
-                    "Every match gives arena XP: level up to unlock guns and perks, or unlock them with weapon challenges.",
+                    "Every gun is free: split 100 points between your two guns. Arena XP levels unlock perks, throwables and kill streaks.",
                 ]
                 : [
                     "Fast matches where you respawn - no looting, no circle.",
@@ -182,7 +182,7 @@ const PAGES: TutorialPage[] = [
         title: "Loadouts & Kill Streaks",
         picture: loadoutPicture,
         lines: () => [
-            "Build up to 3 loadouts in Arena Loadouts - a main gun, a pistol, a throwable and a perk.",
+            "Build up to 3 loadouts in Arena Loadouts - two guns (100 points to split: a strong gun goes with a weak one), a throwable and a perk.",
             "Kills in a row without dying earn kill streaks: airdrops, Eagle Eye, the Juggernaut, air strikes. Press the kill streak key (5) to use one.",
             "Pick which kill streaks you want in the Killstreaks tab - or none at all.",
         ],
