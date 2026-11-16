@@ -375,6 +375,7 @@ export class ReplayPlayer {
             enemyLabels: a.enemyLabels,
             nadeEsp: a.nadeEsp,
             visionRadius: a.visionRadius,
+            crosshair: a.crosshair,
             layer: a.layer,
             zoomLevel: a.zoomLevel,
             freecamInitialized: a.freecamInitialized,

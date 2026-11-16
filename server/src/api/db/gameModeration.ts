@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { GameConfig } from "../../../../shared/gameConfig";
+import { server } from "../apiServer";
 import { db } from "./index";
 import { computeMatchXp, matchBoostMultiplier } from "./passReconcile";
 import { setPassXp } from "./passXp";
@@ -118,6 +119,31 @@ async function restoreXp(gameId: string, userId: string, deltas: XpDelta[]): Pro
     }
 }
 
+/**
+ * Sends every region the full list of tagged games (any moderation row: sus, botted,
+ * removed, resolved) so retention never deletes their replays. A game whose last flag
+ * is cleared drops out of the list and ages out normally again. Runs at API start,
+ * every few minutes, and shortly after a flag is set (see scheduleReplayKeepSync).
+ */
+export async function syncReplayKeeps(): Promise<void> {
+    const rows = await db.selectDistinct({ gameId: gameModerationTable.gameId }).from(gameModerationTable);
+    const gameIds = rows.map((r) => r.gameId);
+    await Promise.all(
+        Object.values(server.regions).map((region) => region.setReplayKeeps(gameIds).catch(() => false)),
+    );
+}
+
+let keepSyncTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Debounced syncReplayKeeps after a game was flagged - a burst of flags syncs once. */
+export function scheduleReplayKeepSync(): void {
+    if (keepSyncTimer) return;
+    keepSyncTimer = setTimeout(() => {
+        keepSyncTimer = undefined;
+        syncReplayKeeps().catch((err) => server.logger.warn("Failed to sync kept replays", err));
+    }, 5000);
+}
+
 async function upsertModeration(
     gameId: string,
     userId: string,
@@ -143,6 +169,7 @@ async function upsertModeration(
                 resolveNote: "",
             },
         });
+    scheduleReplayKeepSync();
 }
 
 /**

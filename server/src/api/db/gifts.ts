@@ -2,7 +2,7 @@ import { and, desc, eq, gte, ilike, inArray, ne, type SQL, sql } from "drizzle-o
 import {
     getItemCategory,
     MARKET_LISTING_TTL_MS,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     GiftFriesResponse,
     GiftItemResponse,
@@ -15,6 +15,7 @@ import { isBlockedBetween } from "./blocks";
 import { getGoldenFries } from "./goldenFries";
 import { db } from "./index";
 import { getOwnedLoadouts } from "./loadouts";
+import { playerIcon, playerIconColumns } from "./playerIcon";
 import { resolveRoleTag } from "./roleTag";
 import {
     auctionsTable,
@@ -239,12 +240,15 @@ export async function searchUsers(
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            owner: usersTable.owner,
             admin: usersTable.admin,
             moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showOwnerPrefix: usersTable.showOwnerPrefix,
             showAdminPrefix: usersTable.showAdminPrefix,
             showModPrefix: usersTable.showModPrefix,
             showPremiumPrefix: usersTable.showPremiumPrefix,
+            ...playerIconColumns,
         })
         .from(usersTable)
         .where(
@@ -260,6 +264,7 @@ export async function searchUsers(
         slug: r.slug,
         username: r.username,
         roleTag: resolveRoleTag(r),
+        icon: playerIcon(r),
     }));
 }
 
@@ -282,9 +287,11 @@ export async function getItemOwners(
         .select({
             slug: usersTable.slug,
             username: usersTable.username,
+            owner: usersTable.owner,
             admin: usersTable.admin,
             moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showOwnerPrefix: usersTable.showOwnerPrefix,
             showAdminPrefix: usersTable.showAdminPrefix,
             showModPrefix: usersTable.showModPrefix,
             showPremiumPrefix: usersTable.showPremiumPrefix,
@@ -297,9 +304,11 @@ export async function getItemOwners(
             usersTable.id,
             usersTable.slug,
             usersTable.username,
+            usersTable.owner,
             usersTable.admin,
             usersTable.moderator,
             usersTable.premiumUntil,
+            usersTable.showOwnerPrefix,
             usersTable.showAdminPrefix,
             usersTable.showModPrefix,
             usersTable.showPremiumPrefix,
@@ -337,9 +346,11 @@ export async function getGiftNotifications(userId: string): Promise<GiftNotifica
             itemType: giftNotificationsTable.itemType,
             // The sender's CURRENT role tag (fromName/fromSlug are a snapshot taken at
             // gift-send time, but there's no reason to freeze the tag too).
+            fromOwner: usersTable.owner,
             fromAdmin: usersTable.admin,
             fromModerator: usersTable.moderator,
             fromPremiumUntil: usersTable.premiumUntil,
+            fromShowOwnerPrefix: usersTable.showOwnerPrefix,
             fromShowAdminPrefix: usersTable.showAdminPrefix,
             fromShowModPrefix: usersTable.showModPrefix,
             fromShowPremiumPrefix: usersTable.showPremiumPrefix,
@@ -358,9 +369,11 @@ export async function getGiftNotifications(userId: string): Promise<GiftNotifica
         id: r.id,
         fromName: r.fromName || r.fromSlug,
         fromRoleTag: resolveRoleTag({
+            owner: r.fromOwner,
             admin: r.fromAdmin,
             moderator: r.fromModerator,
             premiumUntil: r.fromPremiumUntil,
+            showOwnerPrefix: r.fromShowOwnerPrefix,
             showAdminPrefix: r.fromShowAdminPrefix,
             showModPrefix: r.fromShowModPrefix,
             showPremiumPrefix: r.fromShowPremiumPrefix,

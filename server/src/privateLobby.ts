@@ -1,3 +1,4 @@
+import type { ArenaStreakSettings } from "../../shared/defs/modes/arenaStreakDefs";
 import { randomUUID } from "crypto";
 import type { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -6,22 +7,35 @@ import {
     DEFAULT_CUSTOM_LOADOUT,
     MAX_EXTRA_CUSTOM_LOADOUTS,
     validateCustomLoadout,
-} from "../../shared/defs/customLoadout";
-import type { CustomLoadoutConfig } from "../../shared/defs/customLoadout";
+} from "../../shared/defs/lobby/customLoadout";
+import type { CustomLoadoutConfig } from "../../shared/defs/lobby/customLoadout";
+import { validateCustomMap } from "../../shared/defs/lobby/customMap";
+import { validateWeaponStats, WEAPON_STATS_NAME_MAX_LEN } from "../../shared/defs/lobby/weaponStats";
 import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
+import { gunGameMapScale } from "../../shared/defs/modes/gunGameDefs";
+import type { ArenaLoadout } from "../../shared/defs/modes/arenaDefs";
+import { getJoinArenaLoadouts, getJoinArenaStreaks } from "./api/db/arena";
+import { GameMode, TeamMode } from "../../shared/gameConfig";
 import type { FindGameError } from "../../shared/types/api";
 import type { RoleTag } from "../../shared/types/user";
 import {
     type ClientRoomData,
     type ClientToServerPrivateLobbyMsg,
+    type AdminLobbyInfo,
     type PrivateLobbyErrorMsg,
     type PrivateLobbyErrorType,
+    type PrivateLobbyJoinGameMsg,
     type PrivateLobbyMenuPlayer,
     type PrivateLobbyPlayGameMsg,
+    type PublicLobby,
+    LOBBY_SPECIAL_MODES,
+    PRIVATE_LOBBY_PLAYER_LIMIT_MAX,
+    type PublicLobbyDetails,
     type RoomData,
     type ServerToClientPrivateLobbyMsg,
     zPrivateLobbyClientMsg,
 } from "../../shared/types/privateLobby";
+import { math } from "../../shared/utils/math";
 import { assert, util } from "../../shared/utils/util";
 import type { ApiServer } from "./api/apiServer";
 import { validateSessionToken } from "./api/auth";
@@ -55,14 +69,23 @@ function sanitizeLoadoutName(loadout: CustomLoadoutConfig): CustomLoadoutConfig 
     return loadout;
 }
 
-class Player {
+export class Player {
     room?: Room;
 
     name = "Player";
 
     inGame = false;
+    /** `inGame` as a spectator: the next match may start without waiting for them. */
+    spectatingGame = false;
+    /** The next match's join, held back until they've left the one they still spectate. */
+    pendingJoin?: PrivateLobbyJoinGameMsg["data"];
+    pendingJoinTimer?: ReturnType<typeof setTimeout>;
     afk = false;
     spectator = false;
+    /** Joined from the public spectator menu: locked to spectating, never sees the join code. */
+    publicSpectator = false;
+    /** An admin watching invisibly (Room.watchers) - never in `room.players`. */
+    stealth = false;
 
     /** Lobby-local team slot index. Reassigned by the leader via `assignTeam`. */
     teamId = 0;
@@ -84,6 +107,7 @@ class Player {
         return {
             name: this.name,
             inGame: this.inGame,
+            spectatingGame: this.spectatingGame,
             isLeader: this.isLeader,
             playerId: this.playerId,
             teamId: this.teamId,
@@ -101,6 +125,8 @@ class Player {
     encodedIp: string;
     admin: boolean;
     premium: boolean;
+    /** a site owner (account flag, not the display tag) - for the owner lobby settings */
+    owner: boolean;
     /** The lobby member list's display tag - resolved once at connection time from the
      *  full account row (see PrivateLobbyMenu#onOpen), independent of `admin`/`premium`
      *  above (which stay as-is: they feed FindGamePrivateBody for the actual game join,
@@ -115,9 +141,11 @@ class Player {
         admin = false,
         premium = false,
         roleTag: RoleTag = null,
+        owner = false,
     ) {
         this.admin = admin;
         this.premium = premium;
+        this.owner = owner;
         this.roleTag = roleTag;
         this.encodedIp = hashIp(ip);
         // disconnect if didn't join a room in 5 seconds
@@ -145,8 +173,29 @@ class Player {
     }
 }
 
-class Room {
+/** Each settings change goes to every member (custom maps make that big): at most this often. */
+const PROPS_INTERVAL_MS = 250;
+/** How long a member still spectating the last match gets to leave it before the next join is sent anyway. */
+const PENDING_JOIN_TIMEOUT_MS = 4000;
+/** See onMsg; keep in sync with the client check (privateLobby.ts). */
+const MAX_LOBBY_MSG_BYTES = 256 * 1024;
+
+export class Room {
     players: Player[] = [];
+    /** Admins watching invisibly: get the state and join matches as invisible spectators,
+     *  but aren't members - nobody else sees them, and they can't change anything. */
+    watchers: Player[] = [];
+    readonly createdAt = Date.now();
+
+    private lastPropsAt = 0;
+    private pendingProps: { from: Player; props: ClientRoomData } | undefined;
+    private propsTimer: ReturnType<typeof setTimeout> | undefined;
+
+    /** Listing id for the public spectator menu - deliberately unrelated to the join code. */
+    readonly publicId = randomUUID().replace(/-/g, "").slice(0, 16);
+
+    /** The match the lobby most recently started; only meaningful while members are in it. */
+    currentGameId: string | null = null;
 
     /**
      * Explicit lobby ownership — set to the room's creator on first join, and
@@ -164,15 +213,19 @@ class Room {
         enabledGameModeIdxs: [],
         gameModeIdx: 0,
         maxPlayers: 1,
+        modeMaxPlayers: 1,
         teamSize: 1,
         teamCount: 1,
         enabledArenaRoles: [],
         allowMembersJoinTeams: true,
+        joinAsSpectator: false,
         publicSpectating: true,
         advancedSettings: false,
         customLoadoutEnabled: false,
         customLoadout: DEFAULT_CUSTOM_LOADOUT,
         extraCustomLoadouts: [],
+        customMapEnabled: false,
+        weaponStatsEnabled: false,
     };
 
     constructor(
@@ -210,6 +263,9 @@ class Room {
             if (nonSpectatorCount >= this.data.maxPlayers) return;
         }
 
+        // not placed yet - the Player default (team 0) would otherwise count itself as an
+        // occupant in firstOpenTeamSlot, pushing a solo lobby's first player to slot 1
+        player.teamId = -1;
         this.players.push(player);
         player.room = this;
         if (!this.leader) this.leader = player;
@@ -228,12 +284,13 @@ class Room {
             this.queueImportedPlayer(importGroupId, player);
         } else {
             player.teamId = this.firstOpenTeamSlot();
+            if (player.teamId < 0) player.spectator = true;
         }
 
         this.sendState();
     }
 
-    /** Returns the lowest-index team slot that still has room for another player. */
+    /** Returns the lowest-index team slot that still has room for another player, or -1 when every team is full. */
     firstOpenTeamSlot(): number {
         const counts = new Array(this.data.teamCount).fill(0);
         for (const p of this.players) {
@@ -242,7 +299,7 @@ class Room {
         for (let i = 0; i < counts.length; i++) {
             if (counts[i] < this.data.teamSize) return i;
         }
-        return 0;
+        return -1;
     }
 
     /** True if `teamId` is a valid slot index that still has room for another player. */
@@ -291,6 +348,7 @@ class Room {
 
         for (const player of players) {
             player.teamId = teamId >= 0 ? teamId : this.firstOpenTeamSlot();
+            if (player.teamId < 0) player.spectator = true;
         }
 
         this.sendState();
@@ -300,6 +358,16 @@ class Room {
         if (player.room !== this) return;
 
         player.lastMsgTime = Date.now();
+        // invisible watchers only keep the connection alive and report back from matches
+        if (player.stealth) {
+            if (msg.type === "keepAlive") player.send("keepAlive", {});
+            else if (msg.type === "gameComplete") {
+                player.inGame = false;
+                player.spectatingGame = false;
+                if (player.pendingJoin) this.deliverPendingJoin(player);
+            }
+            return;
+        }
         switch (msg.type) {
             case "changeName": {
                 player.setName(msg.data.name);
@@ -312,6 +380,7 @@ class Room {
             }
             case "gameComplete": {
                 player.inGame = false;
+                player.spectatingGame = false;
                 if (
                     !this.currentGameWinnerRecorded &&
                     msg.data?.wonGame &&
@@ -321,6 +390,7 @@ class Room {
                     const tid = msg.data.lobbyTeamId;
                     this.teamScores.set(tid, (this.teamScores.get(tid) ?? 0) + 1);
                 }
+                if (player.pendingJoin) this.deliverPendingJoin(player);
                 this.sendState();
                 break;
             }
@@ -330,9 +400,17 @@ class Room {
                 this.sendState();
                 break;
             }
+            case "setTeamScore": {
+                if (!player.isLeader) break;
+                const { teamId, score } = msg.data;
+                if (score > 0) this.teamScores.set(teamId, score);
+                else this.teamScores.delete(teamId);
+                this.sendState();
+                break;
+            }
             case "setRoomProps": {
                 if (!player.isLeader) break;
-                this.setProps(msg.data);
+                this.queueProps(player, msg.data);
                 break;
             }
             case "kick": {
@@ -346,6 +424,7 @@ class Room {
                 break;
             }
             case "assignTeam": {
+                if (this.players[msg.data.playerId]?.publicSpectator) break;
                 if (!player.isLeader) {
                     // Non-leaders may only move themselves, and only when the setting allows it
                     if (!this.data.allowMembersJoinTeams) break;
@@ -356,6 +435,12 @@ class Room {
             }
             case "swapTeam": {
                 if (!player.isLeader) break;
+                if (
+                    this.players[msg.data.playerId]?.publicSpectator
+                    || this.players[msg.data.targetPlayerId]?.publicSpectator
+                ) {
+                    break;
+                }
                 this.swapTeam(msg.data.playerId, msg.data.targetPlayerId);
                 break;
             }
@@ -381,13 +466,20 @@ class Room {
             }
             case "setSpectator": {
                 if (player.spectator === msg.data.spectator) break;
+                if (player.publicSpectator) break;
+                // leaving the spectators means picking a team, which members may only
+                // do themselves while the leader allows it
+                if (!msg.data.spectator && !player.isLeader && !this.data.allowMembersJoinTeams) {
+                    break;
+                }
+                const openSlot = msg.data.spectator ? -1 : this.firstOpenTeamSlot();
                 if (!msg.data.spectator) {
                     // returning to regular player — check capacity
                     const nonSpectatorCount = this.players.filter(p => !p.spectator).length;
-                    if (nonSpectatorCount >= this.data.maxPlayers) break;
+                    if (nonSpectatorCount >= this.data.maxPlayers || openSlot < 0) break;
                 }
                 player.spectator = msg.data.spectator;
-                player.teamId = msg.data.spectator ? -1 : this.firstOpenTeamSlot();
+                player.teamId = openSlot;
                 this.sendState();
                 break;
             }
@@ -398,6 +490,14 @@ class Room {
     assignTeam(playerId: number, teamId: number) {
         const player = this.players[playerId];
         if (!player) return;
+        // -1 = the spectator section (drag & drop target)
+        if (teamId === -1) {
+            if (player.spectator) return;
+            player.spectator = true;
+            player.teamId = -1;
+            this.sendState();
+            return;
+        }
         if (teamId < 0 || teamId >= this.data.maxPlayers) return;
 
         // Spectators joining a team leave spectator status; check capacity first.
@@ -427,6 +527,10 @@ class Room {
         const teamId = player.teamId;
         player.teamId = target.teamId;
         target.teamId = teamId;
+        // swapping with a spectator trades places with the spectator section too
+        const spectator = player.spectator;
+        player.spectator = target.spectator;
+        target.spectator = spectator;
 
         this.sendState();
     }
@@ -464,6 +568,7 @@ class Room {
             arenaMode: base.arenaMode,
             unlimitedAdren: base.unlimitedAdren,
             unlimitedAmmo: base.unlimitedAmmo,
+            showPlayersOnMap: base.showPlayersOnMap,
             allowPickup: base.allowPickup,
         };
     }
@@ -471,10 +576,64 @@ class Room {
     /** Leader-only: hands lobby ownership over to another player. */
     promote(playerId: number) {
         const player = this.players[playerId];
-        if (!player || player === this.leader) return;
+        // a leader would get the join code and every leader action
+        if (!player || player === this.leader || player.publicSpectator) return;
 
         this.leader = player;
         this.sendState();
+    }
+
+    /**
+     * Applies leader settings at most every PROPS_INTERVAL_MS; changes in between are
+     * merged into the latest one (it carries the full room data anyway).
+     */
+    queueProps(from: Player, props: ClientRoomData) {
+        this.pendingProps = { from, props };
+        const wait = this.lastPropsAt + PROPS_INTERVAL_MS - Date.now();
+        if (wait <= 0) {
+            this.flushProps();
+        } else {
+            this.propsTimer ??= setTimeout(() => {
+                this.propsTimer = undefined;
+                this.flushProps();
+            }, wait);
+        }
+    }
+
+    private flushProps() {
+        const pending = this.pendingProps;
+        this.pendingProps = undefined;
+        // the lobby closed or the leader changed in the meantime
+        if (!pending || !this.players.length || pending.from !== this.leader) return;
+        this.lastPropsAt = Date.now();
+        this.setProps(pending.props);
+    }
+
+    /**
+     * The arena mode the lobby plays (Gun Game, Domination), if any: the owner's "Game
+     * Modes" pick, else the picked mode itself when it is one (an arena mode in the
+     * region's mode list - anyone can pick that one, it runs with the same rules).
+     */
+    private get specialGameMode(): GameMode | undefined {
+        const own = this.data.specialMode;
+        if (own !== undefined && LOBBY_SPECIAL_MODES[own]) return own;
+        const picked = (this.privateLobbyMenu.server.modesByRegion[this.data.region] ?? [])[this.data.gameModeIdx]?.gameMode;
+        return picked && LOBBY_SPECIAL_MODES[picked as GameMode] ? (picked as GameMode) : undefined;
+    }
+
+    /** The special mode's settings (map, teams) - see specialGameMode. */
+    private get specialMode() {
+        const mode = this.specialGameMode;
+        return mode !== undefined ? LOBBY_SPECIAL_MODES[mode] : undefined;
+    }
+
+    /** Team size / count for the selected mode - or the special mode's (Gun Game: solo,
+     *  Domination: two teams). */
+    private applyModeSize() {
+        const mode = (this.privateLobbyMenu.server.modesByRegion[this.data.region] ?? [])[this.data.gameModeIdx];
+        const special = this.specialMode;
+        this.data.teamSize = special ? special.teamSize : (mode?.teamMode ?? TeamMode.Solo);
+        this.data.teamCount = special?.teams ?? Math.max(1, Math.floor(this.data.maxPlayers / this.data.teamSize));
     }
 
     setProps(props: ClientRoomData) {
@@ -499,14 +658,34 @@ class Room {
         this.data.gameModeIdx = gameModeIdx;
 
         const mode = modes[gameModeIdx];
-        const mapDef = MapDefs[mode.mapName as keyof typeof MapDefs] as MapDef;
+        const owner = !!this.leader?.owner;
+        this.data.specialMode = owner && props.specialMode !== undefined && LOBBY_SPECIAL_MODES[props.specialMode as GameMode]
+            ? (props.specialMode as GameMode)
+            : undefined;
+        this.data.xpEnabled = owner && typeof props.xpEnabled === "boolean" ? props.xpEnabled : undefined;
+        // a special mode plays on its own map
+        const special = this.specialMode;
+        const mapDef = MapDefs[(special?.mapName ?? mode.mapName) as keyof typeof MapDefs] as MapDef;
 
-        this.data.maxPlayers = mapDef.gameMode.maxPlayers;
-        this.data.teamSize = mode.teamMode;
-        this.data.teamCount = Math.max(
-            1,
-            Math.floor(this.data.maxPlayers / this.data.teamSize),
-        );
+        // player limit: the leader may move the mode's capacity, but never below the
+        // players already in teams (nobody gets pushed out by it); a mode switch
+        // starts over from the new mode's capacity
+        const modeMax = mapDef.gameMode.maxPlayers;
+        const requested = gameModeIdx === previousGameModeIdx ? props.playerLimit : undefined;
+        let playerLimit: number | undefined;
+        if (typeof requested === "number" && Number.isFinite(requested)) {
+            const inTeams = this.players.filter((p) => !p.spectator).length;
+            playerLimit = Math.round(math.clamp(
+                requested,
+                Math.max(1, inTeams),
+                Math.max(modeMax, PRIVATE_LOBBY_PLAYER_LIMIT_MAX),
+            ));
+            if (playerLimit === modeMax) playerLimit = undefined;
+        }
+        this.data.playerLimit = playerLimit;
+        this.data.modeMaxPlayers = modeMax;
+        this.data.maxPlayers = playerLimit ?? modeMax;
+        this.applyModeSize();
 
         // Arena-mode maps describe a pool of selectable roles (e.g. Sniper/Medic);
         // the leader can narrow that pool down to the ones they want played.
@@ -523,7 +702,14 @@ class Room {
         this.data.enabledArenaRoles = enabledArenaRoles;
 
         this.data.allowMembersJoinTeams = props.allowMembersJoinTeams ?? true;
+        this.data.joinAsSpectator = props.joinAsSpectator ?? false;
         this.data.publicSpectating = props.publicSpectating ?? true;
+        if (!this.data.publicSpectating) {
+            for (const p of this.players.filter((p) => p.publicSpectator)) {
+                p.send("error", { type: "spectating_disabled" });
+                this.removePlayer(p);
+            }
+        }
         this.data.advancedSettings = props.advancedSettings ?? false;
         this.data.customLoadoutEnabled = props.customLoadoutEnabled ?? false;
         this.data.customLoadout = sanitizeLoadoutName(validateCustomLoadout(
@@ -534,6 +720,11 @@ class Room {
         )
             .slice(0, MAX_EXTRA_CUSTOM_LOADOUTS)
             .map((loadout) => sanitizeLoadoutName(validateCustomLoadout(loadout)));
+        this.data.customMapEnabled = props.customMapEnabled ?? false;
+        this.data.customMap = props.customMap ? validateCustomMap(props.customMap) : undefined;
+        this.data.weaponStatsEnabled = props.weaponStatsEnabled ?? false;
+        this.data.weaponStats = props.weaponStats ? validateWeaponStats(props.weaponStats) : undefined;
+        this.data.weaponStatsName = props.weaponStatsName?.trim().slice(0, WEAPON_STATS_NAME_MAX_LEN) || undefined;
 
         // players assigned to a loadout slot that no longer exists fall back to
         // the base "Custom Loadout" (index 0)
@@ -558,29 +749,28 @@ class Room {
             this.data.customLoadout.allowPickup = mapDef.gameMode.pickup ?? true;
         }
 
-        // kick players that don't fit on the new max players — but never the
-        // leader (who's the only one able to trigger this): since ownership no
-        // longer follows player order, they could otherwise end up anywhere in
-        // the list and kick themselves, closing the lobby mid-update (see
-        // removePlayer/close). Spectators don't consume slots.
+        // players that don't fit the new max players move to the spectators
+        // (latest joiners first) instead of being kicked - never the leader, who
+        // keeps their spot. Spectators don't consume slots.
         let nonSpectators = this.players.filter(p => !p.spectator);
         while (nonSpectators.length > this.data.maxPlayers) {
-            let kickTarget: Player | undefined;
+            let overflow: Player | undefined;
             for (let i = nonSpectators.length - 1; i >= 0; i--) {
                 if (nonSpectators[i] !== this.leader) {
-                    kickTarget = nonSpectators[i];
+                    overflow = nonSpectators[i];
                     break;
                 }
             }
-            if (!kickTarget) break;
-            this.kick(this.players.indexOf(kickTarget));
+            if (!overflow) break;
+            overflow.spectator = true;
+            overflow.teamId = -1;
             nonSpectators = this.players.filter(p => !p.spectator);
         }
 
         // re-bucket players that fell outside the new team layout, or that now
         // overflow their team's capacity (e.g. switching from 2v2 to 1v1 while
         // doubled up) — players keep their slot if it still fits, otherwise they
-        // move to the first team with room (or become unassigned if none fits).
+        // move to the first team with room (or become spectators if none fits).
         // Spectators are excluded: they always keep teamId = -1.
         //
         // Bounds checks use maxPlayers (not teamCount): private lobbies allow
@@ -608,6 +798,8 @@ class Room {
             }
             player.teamId = slot;
             if (slot >= 0) teamCounts[slot]++;
+            // no team has room left: watch instead of hanging around unassigned
+            else player.spectator = true;
         }
 
         this.sendState();
@@ -622,7 +814,37 @@ class Room {
         this.removePlayer(player);
     }
 
+    /** An admin starts watching invisibly; mid-match they're sent straight into it. */
+    async addWatcher(player: Player) {
+        player.stealth = true;
+        player.spectator = true;
+        player.teamId = -1;
+        player.room = this;
+        this.watchers.push(player);
+        clearTimeout(player.disconnectTimeout);
+        this.sendState();
+
+        const gameId = this.currentGameId;
+        if (!gameId || !this.players.some((p) => p.inGame)) return;
+        try {
+            const res = await this.privateLobbyMenu.server.findGameById(this.data.region, gameId, player.admin, true);
+            const match = res?.res?.[0];
+            if (match && player.room === this && !player.inGame) {
+                this.sendJoin(player, { ...match, spectator: true });
+                this.sendState();
+            }
+        } catch (err) {
+            this.privateLobbyMenu.logger.warn("Invisible watcher couldn't join the running match", err);
+        }
+    }
+
     removePlayer(player: Player) {
+        if (util.removeFrom(this.watchers, player)) {
+            player.room = undefined;
+            clearTimeout(player.pendingJoinTimer);
+            player.socket.close();
+            return;
+        }
         if (!util.removeFrom(this.players, player)) {
             return;
         }
@@ -646,12 +868,15 @@ class Room {
 
     /** Disconnects every remaining member (e.g. after the leader leaves) and removes the room. */
     close(reason: PrivateLobbyErrorType) {
-        for (const player of this.players) {
+        if (this.propsTimer) clearTimeout(this.propsTimer);
+        this.pendingProps = undefined;
+        for (const player of [...this.players, ...this.watchers]) {
             player.send("error", { type: reason });
             player.room = undefined;
             player.socket.close();
         }
         this.players = [];
+        this.watchers = [];
 
         this.privateLobbyMenu.removeRoom(this);
     }
@@ -664,9 +889,12 @@ class Room {
      */
     forceQuitGame() {
         let pulledAnyone = false;
-        for (const player of this.players) {
+        for (const player of [...this.players, ...this.watchers]) {
             if (!player.inGame) continue;
             player.inGame = false;
+            player.spectatingGame = false;
+            player.pendingJoin = undefined;
+            clearTimeout(player.pendingJoinTimer);
             player.send("forceQuit", {});
             pulledAnyone = true;
         }
@@ -677,7 +905,8 @@ class Room {
 
     async findGame(data: PrivateLobbyPlayGameMsg["data"]) {
         if (this.data.findingGame) return;
-        if (this.players.some((p) => p.inGame)) return;
+        // spectators still watching the last match don't count - they're moved along
+        if (this.players.some((p) => p.inGame && !p.spectatingGame)) return;
         if (!this.players.length) return;
         const roomLeader = this.players[0];
         if (!roomLeader) return;
@@ -697,7 +926,7 @@ class Room {
 
         // Strips cosmetics the account no longer owns (traded/rented away) from the
         // stored loadout before the game server trusts it — see getOwnedLoadouts.
-        const loadouts = await getOwnedLoadouts(userIds);
+        const loadouts = await getOwnedLoadouts(userIds, { forGame: true });
 
         const regionModes = this.privateLobbyMenu.server.modesByRegion[region] ?? [];
         const mode = regionModes[this.data.gameModeIdx];
@@ -715,6 +944,18 @@ class Room {
             this.data.findingGame = false;
             this.sendState();
             return;
+        }
+
+        // arena modes: everyone's saved arena loadouts (checked against their unlocks)
+        const special = this.specialMode;
+        const specialGameMode = this.specialGameMode;
+        const arenaLoadouts = new Map<Player, ArenaLoadout[]>();
+        const arenaStreaks = new Map<Player, ArenaStreakSettings>();
+        if (specialGameMode === GameMode.Domination) {
+            for (const p of regularPlayers) {
+                arenaLoadouts.set(p, await getJoinArenaLoadouts(p.userId));
+                arenaStreaks.set(p, await getJoinArenaStreaks(p.userId));
+            }
         }
 
         // group regular players by their assigned team slot, preserving join order;
@@ -741,13 +982,16 @@ class Room {
                     roleTag: p.roleTag,
                     loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
                     customLoadout: this.getPlayerCustomLoadout(p),
+                    arenaLoadouts: arenaLoadouts.get(p),
+                    arenaStreaks: arenaStreaks.get(p),
                 } satisfies FindGamePrivateBody["playerData"][0];
             }),
         );
 
         // Generate tokens for spectators so the game server can authenticate them.
+        // Invisible watchers come along as invisible spectators.
         const specTokenMap = new Map<Player, string>();
-        const spectators = spectatorPlayers.map((p) => {
+        const spectators = [...spectatorPlayers, ...this.watchers].map((p) => {
             const token = randomUUID();
             specTokenMap.set(p, token);
             return {
@@ -756,6 +1000,7 @@ class Room {
                 ip: p.ip,
                 admin: p.admin,
                 roleTag: p.roleTag,
+                stealth: p.stealth || undefined,
             } satisfies FindGamePrivateBody["playerData"][0];
         });
 
@@ -766,8 +1011,12 @@ class Room {
             this.data.advancedSettings && this.data.customLoadoutEnabled;
 
         const res = await this.privateLobbyMenu.server.createPrivateGame({
-            mapName: mode.mapName,
-            teamMode: mode.teamMode,
+            mapName: special ? special.mapName : mode.mapName,
+            teamMode: special ? special.teamMode : mode.teamMode,
+            gameMode: special ? specialGameMode : mode.gameMode,
+            xpEnabled: this.leader?.owner ? this.data.xpEnabled : undefined,
+            // Gun Game: the map grows / shrinks with the player limit
+            mapScale: specialGameMode === GameMode.GunGame ? gunGameMapScale(this.data.maxPlayers) : undefined,
             region,
             version: data.version,
             teams,
@@ -777,6 +1026,16 @@ class Room {
             customLoadout: this.data.advancedSettings ? this.data.customLoadout : undefined,
             customLoadoutEnabled,
             publicSpectating: this.data.publicSpectating,
+            maxPlayers: this.data.maxPlayers,
+            weaponStats:
+                this.data.advancedSettings && this.data.weaponStatsEnabled && this.leaderHasPremium()
+                    ? this.data.weaponStats
+                    : undefined,
+            // special modes bring their own map
+            customMap:
+                !special && this.data.advancedSettings && this.data.customMapEnabled && this.leaderHasPremium()
+                    ? this.data.customMap
+                    : undefined,
         });
 
         if ("error" in res) {
@@ -797,16 +1056,15 @@ class Room {
 
         this.data.lastError = "";
         this.currentGameWinnerRecorded = false;
+        this.currentGameId = res.gameId;
 
         for (const player of regularPlayers) {
-            player.inGame = true;
-            player.afk = false;
             const token = tokenMap.get(player);
             if (!token) {
                 this.privateLobbyMenu.logger.warn(`Missing token for player ${player.name}`);
                 continue;
             }
-            player.send("joinGame", {
+            this.sendJoin(player, {
                 zone: "",
                 data: token,
                 gameId: res.gameId,
@@ -816,10 +1074,8 @@ class Room {
             });
         }
 
-        for (const player of spectatorPlayers) {
-            player.inGame = true;
-            player.afk = false;
-            player.send("joinGame", {
+        for (const player of [...spectatorPlayers, ...this.watchers]) {
+            this.sendJoin(player, {
                 zone: "",
                 data: specTokenMap.get(player) ?? "",
                 gameId: res.gameId,
@@ -833,17 +1089,130 @@ class Room {
         this.sendState();
     }
 
+    /**
+     * Sends a member into the new match. Someone still spectating the previous one is
+     * pulled out first and joins once their client reports back (gameComplete) - or
+     * after a short timeout, in case it never does.
+     */
+    sendJoin(player: Player, join: PrivateLobbyJoinGameMsg["data"]) {
+        player.afk = false;
+        if (player.inGame) {
+            player.pendingJoin = join;
+            player.send("forceQuit", {});
+            clearTimeout(player.pendingJoinTimer);
+            player.pendingJoinTimer = setTimeout(() => {
+                if (player.room === this && player.pendingJoin) {
+                    this.deliverPendingJoin(player);
+                    this.sendState();
+                }
+            }, PENDING_JOIN_TIMEOUT_MS);
+            return;
+        }
+        player.inGame = true;
+        player.spectatingGame = !!join.spectator;
+        player.send("joinGame", join);
+    }
+
+    deliverPendingJoin(player: Player) {
+        const join = player.pendingJoin;
+        clearTimeout(player.pendingJoinTimer);
+        player.pendingJoin = undefined;
+        if (!join) return;
+        player.inGame = true;
+        player.spectatingGame = !!join.spectator;
+        player.send("joinGame", join);
+    }
+
+    /** Premium lobby features (custom map, custom weapon stats): Premium accounts and staff. */
+    leaderHasPremium(): boolean {
+        const l = this.leader;
+        return !!l && (l.premium || l.admin || l.roleTag === "owner" || l.roleTag === "mod");
+    }
+
+    /**
+     * Turns the Premium features off while the leader can't use them (also after the
+     * lobby passed to someone without Premium); the settings themselves stay.
+     */
+    private enforcePremium() {
+        const premium = this.leaderHasPremium();
+        this.data.leaderPremium = premium;
+        if (!premium && this.leader) {
+            this.data.customMapEnabled = false;
+            this.data.weaponStatsEnabled = false;
+        }
+        // owner settings (Game Modes, XP) only while a site owner leads the lobby
+        const owner = !!this.leader?.owner;
+        this.data.leaderOwner = owner;
+        if (!owner && this.leader && (this.data.specialMode !== undefined || this.data.xpEnabled !== undefined)) {
+            this.data.specialMode = undefined;
+            this.data.xpEnabled = undefined;
+            this.applyModeSize();
+        }
+    }
+
     sendState() {
+        this.enforcePremium();
         const players = this.players.map((p) => p.data);
         const teamScores = Object.fromEntries(this.teamScores);
+        const publicRoom = { ...this.data, roomUrl: "" };
         for (const player of this.players) {
             player.send("state", {
                 localPlayerId: player.playerId,
-                room: this.data,
+                room: player.publicSpectator ? publicRoom : this.data,
                 players,
                 teamScores,
+                publicSpectator: player.publicSpectator || undefined,
             });
         }
+        // watchers see everyone plus themselves (marked) as the last spectator; locked like
+        // public spectators, but with the real room data
+        for (const watcher of this.watchers) {
+            const self = {
+                ...watcher.data,
+                name: `${watcher.name} (invisible)`,
+                playerId: players.length,
+                isLeader: false,
+                teamId: -1,
+                spectator: true,
+            };
+            watcher.send("state", {
+                localPlayerId: self.playerId,
+                room: this.data,
+                players: [...players, self],
+                teamScores,
+                publicSpectator: true,
+                stealth: true,
+            });
+        }
+    }
+
+    /** Everything the admin dashboard's lobby list shows. */
+    adminInfo(): AdminLobbyInfo {
+        const mode = this.privateLobbyMenu.server.modesByRegion[this.data.region]?.[this.data.gameModeIdx];
+        return {
+            code: this.id,
+            region: this.data.region,
+            createdAt: this.createdAt,
+            leaderName: this.leader?.name ?? "",
+            mapName: mode?.mapName ?? "",
+            teamMode: mode?.teamMode ?? this.data.teamSize,
+            maxPlayers: this.data.maxPlayers,
+            publicSpectating: this.data.publicSpectating,
+            advancedSettings: this.data.advancedSettings,
+            inGame: !!this.currentGameId && this.players.some((p) => p.inGame),
+            gameId: this.currentGameId,
+            stealthWatchers: this.watchers.length,
+            members: this.players.map((p) => ({
+                name: p.name,
+                roleTag: p.roleTag,
+                isLeader: p.isLeader,
+                teamId: p.spectator ? -1 : p.teamId,
+                spectator: p.spectator,
+                inGame: p.inGame,
+                afk: p.afk,
+            })),
+            teamScores: Object.fromEntries(this.teamScores),
+        };
     }
 }
 
@@ -862,6 +1231,7 @@ function generateLobbyCode(): string {
 
 export class PrivateLobbyMenu {
     rooms = new Map<string, Room>();
+    roomsByPublicId = new Map<string, Room>();
 
     logger = new ServerLogger("PrivateLobbyMenu");
 
@@ -929,6 +1299,7 @@ export class PrivateLobbyMenu {
                 let userId: string | null = null;
                 let admin = false;
                 let premium = false;
+                let owner = false;
                 let roleTag: RoleTag = null;
                 const sessionId = getCookie(c, "session") ?? null;
 
@@ -938,12 +1309,14 @@ export class PrivateLobbyMenu {
                         userId = account.user?.id || null;
                         admin = account.user?.admin ?? false;
                         premium = isPremiumActive(account.user?.premiumUntil ?? null);
+                        owner = account.user?.owner ?? false;
                         roleTag = account.user ? resolveRoleTag(account.user) : null;
 
                         if (account.user?.banned) {
                             userId = null;
                             admin = false;
                             premium = false;
+                            owner = false;
                             roleTag = null;
                         }
                     } catch (err) {
@@ -988,6 +1361,7 @@ export class PrivateLobbyMenu {
                             admin,
                             premium,
                             roleTag,
+                            owner,
                         );
                     },
 
@@ -1032,8 +1406,9 @@ export class PrivateLobbyMenu {
         admin: boolean,
         premium: boolean,
         roleTag: RoleTag = null,
+        owner = false,
     ) {
-        const player = new Player(ws, this, userId, ip, admin, premium, roleTag);
+        const player = new Player(ws, this, userId, ip, admin, premium, roleTag, owner);
         ws.raw!.player = player;
 
         let players = this.playersByIp.get(player.encodedIp);
@@ -1047,9 +1422,11 @@ export class PrivateLobbyMenu {
     onMsg(ws: WSContext<SocketData>, data: string) {
         let msg: ClientToServerPrivateLobbyMsg;
         try {
-            // setRoomProps carries the full ClientRoomData, including up to
-            // MAX_EXTRA_CUSTOM_LOADOUTS+1 CustomLoadoutConfigs (~3.5KB at max).
-            assert(data.length < 8192);
+            // setRoomProps carries the full ClientRoomData: up to
+            // MAX_EXTRA_CUSTOM_LOADOUTS+1 CustomLoadoutConfigs (every perk ~0.7KB each),
+            // a custom map (loot pools, placements) and weapon stats. Too small a limit
+            // closes the leader's socket when they save a big map.
+            assert(data.length < MAX_LOBBY_MSG_BYTES);
             msg = JSON.parse(data);
             zPrivateLobbyClientMsg.parse(msg);
         } catch {
@@ -1091,26 +1468,42 @@ export class PrivateLobbyMenu {
                     break;
                 }
                 case "join": {
+                    if (msg.data.publicId !== undefined) {
+                        const room = this.roomsByPublicId.get(msg.data.publicId);
+                        if (!room || !room.data.publicSpectating) {
+                            player.send("error", { type: "join_not_found" });
+                            break;
+                        }
+                        player.spectator = true;
+                        player.publicSpectator = true;
+                        player.setName(msg.data.playerData.name);
+                        room.addPlayer(player);
+                        break;
+                    }
+
                     const room = this.rooms.get(msg.data.roomUrl);
                     if (!room) {
                         player.send("error", { type: "join_not_found" });
                         break;
                     }
 
-                    player.spectator = !!msg.data.spectator;
-
-                    if (!player.spectator) {
-                        const nonSpectatorCount = room.players.filter(p => !p.spectator).length;
-                        if (nonSpectatorCount >= room.data.maxPlayers) {
-                            player.send("error", { type: "join_full" });
-                            break;
-                        }
+                    // invisible watching is admin-only; anyone else just joins normally
+                    if (msg.data.stealth && player.admin) {
+                        player.setName(msg.data.playerData.name);
+                        void room.addWatcher(player);
+                        break;
                     }
 
+                    player.spectator = !!msg.data.spectator || room.data.joinAsSpectator;
+
+                    // no room in the lobby / the linked team: watch instead of being turned away
                     const teamId = msg.data.teamId;
-                    if (!player.spectator && teamId !== undefined && !room.teamSlotHasRoom(teamId)) {
-                        player.send("error", { type: "team_full" });
-                        break;
+                    if (!player.spectator) {
+                        const nonSpectatorCount = room.players.filter(p => !p.spectator).length;
+                        const lobbyFull = nonSpectatorCount >= room.data.maxPlayers
+                            || (teamId === undefined && room.firstOpenTeamSlot() < 0);
+                        const teamFull = teamId !== undefined && !room.teamSlotHasRoom(teamId);
+                        if (lobbyFull || teamFull) player.spectator = true;
                     }
 
                     player.setName(msg.data.playerData.name);
@@ -1178,11 +1571,68 @@ export class PrivateLobbyMenu {
 
         const room = new Room(this, roomUrl, data);
         this.rooms.set(roomUrl, room);
+        this.roomsByPublicId.set(room.publicId, room);
         return room;
     }
 
     removeRoom(room: Room) {
         this.rooms.delete(room.id);
+        this.roomsByPublicId.delete(room.publicId);
+    }
+
+    private toPublicLobby(room: Room): PublicLobby {
+        const mode = this.server.modesByRegion[room.data.region]?.[room.data.gameModeIdx];
+        const players = room.players.filter((p) => !p.spectator);
+        const inGame = !!room.currentGameId && players.some((p) => p.inGame);
+        return {
+            publicId: room.publicId,
+            region: room.data.region,
+            leaderName: room.leader?.name ?? "",
+            leaderRoleTag: room.leader?.roleTag ?? null,
+            mapName: mode?.mapName ?? "",
+            teamMode: mode?.teamMode ?? room.data.teamSize,
+            playerCount: players.length,
+            maxPlayers: room.data.maxPlayers,
+            spectatorCount: room.players.length - players.length,
+            inGame,
+            gameId: inGame ? room.currentGameId : null,
+        };
+    }
+
+    /** Every open lobby, for the admin dashboard - newest first. */
+    listAllLobbies(): AdminLobbyInfo[] {
+        return [...this.rooms.values()]
+            .filter((room) => room.players.length)
+            .map((room) => room.adminInfo())
+            .sort((a, b) => b.createdAt - a.createdAt);
+    }
+
+    /** Lobbies listed in the public spectator menu (Public Spectating on). */
+    listPublicLobbies(): PublicLobby[] {
+        const out: PublicLobby[] = [];
+        for (const room of this.rooms.values()) {
+            if (room.data.publicSpectating && room.players.length) {
+                out.push(this.toPublicLobby(room));
+            }
+        }
+        return out;
+    }
+
+    getPublicLobbyDetails(publicId: string): PublicLobbyDetails | null {
+        const room = this.roomsByPublicId.get(publicId);
+        if (!room || !room.data.publicSpectating || !room.players.length) return null;
+        return {
+            lobby: this.toPublicLobby(room),
+            members: room.players.map((p) => ({
+                name: p.name,
+                roleTag: p.roleTag,
+                teamId: p.spectator ? -1 : p.teamId,
+                spectator: p.spectator,
+                inGame: p.inGame,
+                afk: p.afk,
+            })),
+            teamScores: Object.fromEntries(room.teamScores),
+        };
     }
 
     disconnectPlayers(encodedIp: string) {

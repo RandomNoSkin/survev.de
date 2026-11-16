@@ -21,7 +21,7 @@ import {
     MARKET_MAX_LISTINGS,
     MARKET_MAX_PRICE,
     type ShopCategory,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     BuyListingResponse,
     CancelListingResponse,
@@ -42,6 +42,7 @@ import {
     offersTable,
     usersTable,
 } from "./schema";
+import { addTradeEvent } from "./tradeEvents";
 
 const PAGE_SIZE = 30;
 
@@ -245,6 +246,7 @@ export async function buyListing(
                     sellerId: marketListingsTable.sellerId,
                     sellerSlug: marketListingsTable.sellerSlug,
                     price: marketListingsTable.price,
+                    type: marketListingsTable.type,
                 });
             if (!listing) throw new MarketError("unavailable");
             if (listing.sellerId === buyerId) throw new MarketError("own_listing");
@@ -333,6 +335,7 @@ export async function buyListing(
                     balanceAfter: sellerBal?.balance ?? 0,
                 },
             ]);
+            await addTradeEvent(tx, listing.sellerId, "sold", listing.type, listing.price, buyerSlug);
 
             return buyerBal.balance;
         });
@@ -382,9 +385,11 @@ async function queryListings(conds: SQL[], page: number): Promise<MarketListResp
             sellerSlug: marketListingsTable.sellerSlug,
             createdAt: marketListingsTable.createdAt,
             sellerUsername: usersTable.username,
+            sellerOwner: usersTable.owner,
             sellerAdmin: usersTable.admin,
             sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowOwnerPrefix: usersTable.showOwnerPrefix,
             sellerShowAdminPrefix: usersTable.showAdminPrefix,
             sellerShowModPrefix: usersTable.showModPrefix,
             sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
@@ -414,9 +419,11 @@ async function queryListings(conds: SQL[], page: number): Promise<MarketListResp
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
         sellerRoleTag: resolveRoleTag({
+            owner: r.sellerOwner,
             admin: r.sellerAdmin,
             moderator: r.sellerModerator,
             premiumUntil: r.sellerPremiumUntil,
+            showOwnerPrefix: r.sellerShowOwnerPrefix,
             showAdminPrefix: r.sellerShowAdminPrefix,
             showModPrefix: r.sellerShowModPrefix,
             showPremiumPrefix: r.sellerShowPremiumPrefix,
@@ -510,9 +517,11 @@ export async function getUnackedSales(userId: string): Promise<SaleNotification[
             price: marketListingsTable.price,
             buyerUsername: usersTable.username,
             buyerSlug: usersTable.slug,
+            buyerOwner: usersTable.owner,
             buyerAdmin: usersTable.admin,
             buyerModerator: usersTable.moderator,
             buyerPremiumUntil: usersTable.premiumUntil,
+            buyerShowOwnerPrefix: usersTable.showOwnerPrefix,
             buyerShowAdminPrefix: usersTable.showAdminPrefix,
             buyerShowModPrefix: usersTable.showModPrefix,
             buyerShowPremiumPrefix: usersTable.showPremiumPrefix,
@@ -534,9 +543,11 @@ export async function getUnackedSales(userId: string): Promise<SaleNotification[
         price: r.price,
         buyerName: r.buyerUsername || r.buyerSlug || "someone",
         buyerRoleTag: resolveRoleTag({
+            owner: r.buyerOwner,
             admin: r.buyerAdmin,
             moderator: r.buyerModerator,
             premiumUntil: r.buyerPremiumUntil,
+            showOwnerPrefix: r.buyerShowOwnerPrefix,
             showAdminPrefix: r.buyerShowAdminPrefix,
             showModPrefix: r.buyerShowModPrefix,
             showPremiumPrefix: r.buyerShowPremiumPrefix,

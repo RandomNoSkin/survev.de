@@ -1,4 +1,6 @@
-import { and, eq, gte, max, type SQL, sql, sum } from "drizzle-orm";
+import { and, eq, gte, lt, max, type SQL, sql, sum } from "drizzle-orm";
+import { GameMode } from "../../../../shared/gameConfig.ts";
+import { statsMonth } from "../../../../shared/statsPeriods.ts";
 import {
     ALL_MAPS,
     type UserStatsRequest,
@@ -34,7 +36,10 @@ export async function userStatsSqlQuery(
     userId: string,
     mapIdFilter: string,
     interval: UserStatsRequest["interval"],
+    /** a calendar month "YYYY-MM" (UTC) - wins over the interval */
+    month?: string,
 ): Promise<UserStatsResponse> {
+    const monthRange = month ? statsMonth(month) : undefined;
     const withSelect = db.$with("mode_stats").as(
         db
             .select({
@@ -75,10 +80,18 @@ export async function userStatsSqlQuery(
             .where(
                 and(
                     eq(matchDataTable.userId, userId),
+                    // all maps: battle royale games only (a Gun Game would skew the averages)
                     mapIdFilter !== ALL_MAPS
                         ? eq(matchDataTable.mapId, parseInt(mapIdFilter))
-                        : undefined,
-                    interval in intervalFilter ? intervalFilter[interval] : undefined,
+                        : eq(matchDataTable.gameMode, GameMode.Standard),
+                    monthRange
+                        ? and(
+                              gte(matchDataTable.createdAt, new Date(monthRange.start)),
+                              lt(matchDataTable.createdAt, new Date(monthRange.end)),
+                          )
+                        : interval in intervalFilter
+                          ? intervalFilter[interval]
+                          : undefined,
                 ),
             )
             .groupBy(matchDataTable.teamMode),
@@ -90,9 +103,11 @@ export async function userStatsSqlQuery(
             slug: usersTable.slug,
             username: usersTable.username,
             banned: usersTable.banned,
+            owner: usersTable.owner,
             admin: usersTable.admin,
             moderator: usersTable.moderator,
             premiumUntil: usersTable.premiumUntil,
+            showOwnerPrefix: usersTable.showOwnerPrefix,
             showAdminPrefix: usersTable.showAdminPrefix,
             showModPrefix: usersTable.showModPrefix,
             showPremiumPrefix: usersTable.showPremiumPrefix,
@@ -130,9 +145,11 @@ export async function userStatsSqlQuery(
             usersTable.slug,
             usersTable.username,
             usersTable.banned,
+            usersTable.owner,
             usersTable.admin,
             usersTable.moderator,
             usersTable.premiumUntil,
+            usersTable.showOwnerPrefix,
             usersTable.showAdminPrefix,
             usersTable.showModPrefix,
             usersTable.showPremiumPrefix,
@@ -141,9 +158,11 @@ export async function userStatsSqlQuery(
         .limit(1);
 
     const userStats = res[0] as UserStatsResponse & {
+        owner: boolean;
         admin: boolean;
         moderator: boolean;
         premiumUntil: Date | null;
+        showOwnerPrefix: boolean;
         showAdminPrefix: boolean;
         showModPrefix: boolean;
         showPremiumPrefix: boolean;

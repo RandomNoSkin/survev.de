@@ -1,9 +1,9 @@
-import { GameConfig, type InventoryItem } from "../gameConfig";
-import { GameObjectDefs } from "./register.ts";
-import { type GunDef, GunDefs } from "./gameObjects/gunDefs";
-import { MeleeDefs } from "./gameObjects/meleeDefs";
-import { PerkDefs } from "./gameObjects/perkDefs";
-import { _allowedMeleeSkins } from "./gameObjects/unlockDefs";
+import { GameConfig, type InventoryItem } from "../../gameConfig";
+import { GameObjectDefs } from "../register.ts";
+import { type GunDef, GunDefs } from "../gameObjects/gunDefs";
+import { MeleeDefs } from "../gameObjects/meleeDefs";
+import { PerkDefs } from "../gameObjects/perkDefs";
+import { _allowedMeleeSkins } from "../gameObjects/unlockDefs";
 
 /**
  * Leader-configured loadout applied to every player when a private lobby's
@@ -22,7 +22,7 @@ export interface CustomLoadoutConfig {
     backpack: string;
     /** 1xscope/2xscope/4xscope/8xscope/15xscope */
     scope: string;
-    /** up to 3 perk type ids */
+    /** perk type ids, any number (deduplicated) */
     perks: string[];
     /** grenade + heal counts */
     inventory: Partial<Record<InventoryItem, number>>;
@@ -32,6 +32,9 @@ export interface CustomLoadoutConfig {
     unlimitedAdren: boolean;
     /** Only applies when `arenaMode` is false: grants the "Endless Ammo" perk. Default false. */
     unlimitedAmmo: boolean;
+    /** Only applies when `arenaMode` is false (Arena Mode always shows them): marks every
+     *  enemy's position on the map. Default false. */
+    showPlayersOnMap: boolean;
     /** Whether players can pick up items from the ground, overriding the map's `gameMode.pickup`. Default false; auto-set to match the map's `gameMode.arenaMode` when Custom Loadout is turned on. */
     allowPickup: boolean;
 }
@@ -53,6 +56,7 @@ export const DEFAULT_CUSTOM_LOADOUT: CustomLoadoutConfig = {
     arenaMode: false,
     unlimitedAdren: false,
     unlimitedAmmo: false,
+    showPlayersOnMap: false,
     allowPickup: false,
 };
 
@@ -87,6 +91,8 @@ export const CUSTOM_LOADOUT_AMMOS = [
     "308sub",
     "45acp",
     "flare",
+    // Scrap Metal (building / repairing), carried like ammo
+    "construction_item",
 ] as const;
 export const CUSTOM_LOADOUT_PERKS = Object.keys(PerkDefs).filter(
     (k) => GameObjectDefs.typeToDefSafe(k)?.type === "perk",
@@ -124,8 +130,7 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
         : "1xscope";
 
     const perks = [...new Set(input.perks ?? [])]
-        .filter((perk) => CUSTOM_LOADOUT_PERKS.includes(perk))
-        .slice(0, 3);
+        .filter((perk) => CUSTOM_LOADOUT_PERKS.includes(perk));
 
     const level = backpackLevel(backpack);
     const inventory: Partial<Record<InventoryItem, number>> = {};
@@ -138,6 +143,7 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
     const arenaMode = input.arenaMode ?? false;
     const unlimitedAdren = input.unlimitedAdren ?? false;
     const unlimitedAmmo = input.unlimitedAmmo ?? false;
+    const showPlayersOnMap = input.showPlayersOnMap ?? false;
     const allowPickup = input.allowPickup ?? false;
 
     const name = (input.name ?? "").trim().slice(0, CUSTOM_LOADOUT_NAME_MAX_LEN) || undefined;
@@ -154,6 +160,7 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
         arenaMode,
         unlimitedAdren,
         unlimitedAmmo,
+        showPlayersOnMap,
         allowPickup,
     };
 }
@@ -163,6 +170,11 @@ export function validateCustomLoadout(input: Partial<CustomLoadoutConfig>): Cust
  * Arena Mode settings: "arena" (unlimited ammo + adrenaline) when Arena Mode is on,
  * or "endless_ammo" when Arena Mode is off but Unlimited Ammo is on.
  */
+/** Whether a lobby's advanced settings put every enemy's position on the map. */
+export function showsPlayersOnMap(settings: Pick<CustomLoadoutConfig, "arenaMode" | "showPlayersOnMap"> | undefined): boolean {
+    return !!settings && (settings.arenaMode || settings.showPlayersOnMap);
+}
+
 export function getArenaModeExtraPerks(settings: Pick<CustomLoadoutConfig, "arenaMode" | "unlimitedAmmo">): string[] {
     if (settings.arenaMode) return ["arena"];
     if (settings.unlimitedAmmo) return ["endless_ammo"];

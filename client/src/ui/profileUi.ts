@@ -534,8 +534,12 @@ export class ProfileUi {
 
     render() {
         // Loading icon
-        const loading = this.account.requestsInFlight > 0;
-        $(".account-loading").css("opacity", loading ? 1 : 0);
+        // only profile/loadout/pass - shop, market and friends load quietly in the background
+        const loading = this.account.joinRequestsInFlight > 0;
+        $(".account-loading").css({
+            opacity: loading ? 1 : 0,
+            "animation-play-state": loading ? "running" : "paused",
+        });
 
         let usernameText = helpers.htmlEscape(this.account.profile.username || "");
         if (!this.account.loggedIn) {

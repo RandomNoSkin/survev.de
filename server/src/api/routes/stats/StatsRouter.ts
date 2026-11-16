@@ -5,6 +5,7 @@ import { matchDataRouter } from "./match_data.ts";
 import { matchHistoryRouter } from "./match_history.ts";
 import { serverStatsRouter } from "./serverStats.ts";
 import { UserLoadoutRouter } from "./user_loadout.ts";
+import { UserProfileStatsRouter } from "./user_profile_stats.ts";
 import { UserStatsRouter } from "./user_stats.ts";
 import { weaponStatsRouter } from "./weapon_stats.ts";
 
@@ -12,6 +13,7 @@ export const StatsRouter = new Hono();
 
 StatsRouter.route("/user_stats", UserStatsRouter);
 StatsRouter.route("/user_loadout", UserLoadoutRouter);
+StatsRouter.route("/user_profile_stats", UserProfileStatsRouter);
 StatsRouter.route("/match_history", matchHistoryRouter);
 StatsRouter.route("/match_data", matchDataRouter);
 StatsRouter.route("/leaderboard", leaderboardRouter);

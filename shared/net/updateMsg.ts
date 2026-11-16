@@ -1,5 +1,5 @@
 import { GameConfig, type Plane as PlaneType } from "../gameConfig.ts";
-import type { RoleTag } from "../types/user.ts";
+import type { DisplayRoleTag } from "../types/user.ts";
 import { v2, type Vec2 } from "./../utils/v2.ts";
 import { type AbstractMsg, BitSizes, type BitStream, Constants } from "./net.ts";
 import { decodeRoleTag, encodeRoleTag } from "./roleTagCodec.ts";
@@ -52,6 +52,11 @@ function serializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
     if (data.spectatorCountDirty) {
         s.writeUint8(data.spectatorCount);
     }
+
+    // cursor distance (the direction is the player's `dir`): where their crosshair is,
+    // for spectators and replays
+    s.writeBoolean(data.aimDirty);
+    if (data.aimDirty) s.writeFloat(data.aimLen, 0, Constants.MouseMaxDist, 8);
 
     s.writeAlignToNextByte();
 }
@@ -106,6 +111,10 @@ function deserializeActivePlayer(s: BitStream, data: LocalDataWithDirty) {
     data.spectatorCountDirty = s.readBoolean();
     if (data.spectatorCountDirty) {
         data.spectatorCount = s.readUint8();
+    }
+    data.aimDirty = s.readBoolean();
+    if (data.aimDirty) {
+        data.aimLen = s.readFloat(0, Constants.MouseMaxDist, 8);
     }
     s.readAlignToNextByte();
 }
@@ -207,9 +216,14 @@ export interface PlayerInfo {
     teamId: number;
     groupId: number;
     name: string;
-    /** The [ADMIN]/[MOD]/[PREM] tag the client shows before the name - server-resolved
-     *  priority (ADMIN > MOD > PREM), see resolveRoleTag on the server. */
-    roleTag: RoleTag;
+    /** The [ADMIN]/[MOD]/[PREM]/[BOT] tag the client shows before the name -
+     *  server-resolved priority (ADMIN > MOD > PREM), see resolveRoleTag on the server.
+     *  [BOT] is not an account role and is set directly on AI players. */
+    roleTag: DisplayRoleTag;
+    /** Clan tag shown before the name ("" = none / hidden by the player). */
+    clanTag: string;
+    /** Index into CLAN_TAG_COLORS. */
+    clanColor: number;
 
     loadout: {
         heal: string;
@@ -224,6 +238,8 @@ function serializePlayerInfo(s: BitStream, data: PlayerInfo) {
     s.writeUint8(data.groupId);
     s.writeString(data.name);
     s.writeUint8(encodeRoleTag(data.roleTag));
+    s.writeString(data.clanTag ?? "", 6);
+    s.writeUint8(data.clanColor ?? 0);
 
     s.writeGameType(data.loadout.heal);
     s.writeGameType(data.loadout.boost);
@@ -238,6 +254,8 @@ function deserializePlayerInfo(s: BitStream, data: PlayerInfo) {
     data.groupId = s.readUint8();
     data.name = s.readString();
     data.roleTag = decodeRoleTag(s.readUint8());
+    data.clanTag = s.readString(6);
+    data.clanColor = s.readUint8();
     data.loadout = {} as PlayerInfo["loadout"];
     data.loadout.heal = s.readGameType();
     data.loadout.boost = s.readGameType();
@@ -343,6 +361,9 @@ export class UpdateMsg implements AbstractMsg {
     killLeaderKills = 0;
     killLeaderDirty = false;
     ack = 0;
+    /** ms the server held the acked input before this update went out (its netSync
+     *  batching) - the client takes it off the measured ping. */
+    ackDelay = 0;
 
     serialize(s: BitStream) {
         /* STRIP_FROM_PROD_CLIENT:START */
@@ -485,6 +506,11 @@ export class UpdateMsg implements AbstractMsg {
 
                 if (emote.isPing) {
                     s.writeMapPos(emote.pos!);
+                    // a ping from before this player joined: its remaining map life
+                    s.writeBoolean(emote.restoredLife !== undefined);
+                    if (emote.restoredLife !== undefined) {
+                        s.writeUint16(Math.min(65535, Math.round(emote.restoredLife * 10)));
+                    }
                 }
                 s.writeAlignToNextByte();
             });
@@ -542,6 +568,7 @@ export class UpdateMsg implements AbstractMsg {
         }
 
         s.writeUint8(this.ack);
+        s.writeUint8(this.ackDelay);
         const idx = s.byteIndex;
         s.byteIndex = flagsIdx;
         s.writeUint16(flags);
@@ -716,6 +743,7 @@ export class UpdateMsg implements AbstractMsg {
 
                 if (emote.isPing) {
                     emote.pos = s.readMapPos();
+                    if (s.readBoolean()) emote.restoredLife = s.readUint16() / 10;
                 }
                 s.readAlignToNextByte();
                 return emote;
@@ -777,6 +805,7 @@ export class UpdateMsg implements AbstractMsg {
             this.killLeaderDirty = true;
         }
         this.ack = s.readUint8();
+        this.ackDelay = s.readUint8();
     }
 }
 
@@ -831,6 +860,9 @@ export interface Emote {
     itemType: string;
     isPing: boolean;
     pos?: Vec2;
+    /** Set on pings re-sent to a player who joined after they were made: seconds the
+     *  map marker has left (no sound / world indicator for those). */
+    restoredLife?: number;
 }
 
 export interface Airstrike {
@@ -885,6 +917,8 @@ export interface LocalData {
         loadedThrowable?: string;
     }>;
     spectatorCount: number;
+    /** distance from the player to their cursor, world units (see InputMsg.toMouseLen) */
+    aimLen: number;
 }
 
 export interface LocalDataWithDirty extends LocalData {
@@ -900,6 +934,7 @@ export interface LocalDataWithDirty extends LocalData {
     inventoryDirty: boolean;
     weapsDirty: boolean;
     spectatorCountDirty: boolean;
+    aimDirty: boolean;
 }
 
 // the non-optional properties are used by both server and client

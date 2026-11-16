@@ -1,5 +1,5 @@
 import type { MapDefKey } from "./shared/defs/mapDefs.ts";
-import type { TeamMode } from "./shared/gameConfig.ts";
+import type { GameMode, TeamMode } from "./shared/gameConfig.ts";
 import type { ProxyDef } from "./shared/types/api.ts";
 import type { DeepPartial } from "./shared/utils/util.ts";
 import type { Vec2 } from "./shared/utils/v2.ts";
@@ -64,6 +64,17 @@ export interface ConfigType {
          * client retries shortly instead of spawning unbounded processes.
          */
         maxGames: number;
+    };
+
+    /**
+     * Owner-only control page (roles, server control, system status), served by the API
+     * server on its own port. Always bound to 127.0.0.1 - never proxy it through nginx;
+     * reach it on a remote box via `ssh -L <port>:127.0.0.1:<port>`.
+     */
+    superAdmin: {
+        adress: string;
+        enabled: boolean;
+        port: number;
     };
 
     /**
@@ -181,6 +192,15 @@ export interface ConfigType {
          * The team mode, "Solo", "Duo" or "Squad" are the only supported values
          */
         teamMode: TeamMode;
+        /**
+         * The rules (Standard battle royale, Gun Game, ...) - see GameMode. Default Standard.
+         */
+        gameMode?: GameMode;
+        /**
+         * Shown in the arena view of the client (the BR | ARENA switch next to Social)
+         * instead of the battle royale one - for the arena modes (Domination, Gun Game).
+         */
+        arena?: boolean;
         /**
          * Enables / disables the mode, will apply a "disabled" effect to the button client-side
          */
@@ -431,6 +451,29 @@ export interface ConfigType {
          * If the "mock" test account is enabled, used for testing account features without requiring discord or google oauth2 keys
          */
         allowMockAccount: boolean;
+    };
+
+    /**
+     * Server-side AI bots.
+     *
+     * These are real `Player` objects driven by a server-side brain instead of a
+     * socket, so they move, shoot and take damage through exactly the same code paths
+     * a human does. They are skipped in network serialization, replay recording,
+     * population counts and match-data saving.
+     *
+     * IMPORTANT (small/OOM-prone boxes): the caps below are the CPU/RAM budget for the
+     * whole subsystem. When `enabled` is false no bot code runs at all — no nav graph
+     * is built and a normal match costs exactly nothing.
+     */
+    bots: {
+        /** Master on/off switch. */
+        enabled: boolean;
+        /** Difficulty used when `/spawnbot` is called without an argument. */
+        defaultDifficulty: "easy" | "normal" | "hard" | "expert";
+        /** Hard ceiling on bots per game, regardless of what a request asks for. */
+        maxBotsPerGame: number;
+        /** Display-name pool. Bots additionally carry a `[BOT]` name tag. */
+        names: string[];
     };
 
     /**

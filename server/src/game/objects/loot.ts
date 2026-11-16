@@ -113,11 +113,12 @@ export class LootBarn {
 
         if (!def || !("lootImg" in def)) {
             this.game.logger.warn("Invalid loot type:", type);
-            return;
+            return undefined;
         }
 
         const loot = new Loot(this.game, type, pos, layer, count, pushSpeed, dir);
         this._addLoot(loot);
+        return loot;
     }
 
     addLoot(
@@ -135,7 +136,7 @@ export class LootBarn {
 
         if (!def || !("lootImg" in def)) {
             this.game.logger.warn("Invalid loot type:", type);
-            return;
+            return undefined;
         }
 
         const loot = new Loot(this.game, type, pos, layer, count, pushSpeed, dir);
@@ -152,7 +153,7 @@ export class LootBarn {
 
         if (def.type === "gun" && GameObjectDefs.typeToDef(def.ammo) && !loot.isPreloadedGun) {
             const ammoCount = useCountForAmmo ? count : def.ammoSpawnCount;
-            if (ammoCount <= 0) return;
+            if (ammoCount <= 0) return loot;
             const halfAmmo = Math.ceil(ammoCount / 2);
 
             const leftAmmo = new Loot(
@@ -179,6 +180,7 @@ export class LootBarn {
                 this._addLoot(rightAmmo);
             }
         }
+        return loot;
     }
 
     private _addLoot(loot: Loot) {
@@ -272,6 +274,8 @@ export class Loot extends BaseGameObject {
     bounds: AABB;
 
     isPreloadedGun = false;
+    /** a gun dropped with these rounds in its magazine (ModeRules.lootKeepsClip) */
+    clip?: number;
     hasOwner = false;
     ownerId = 0;
     isOld = false;

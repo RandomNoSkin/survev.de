@@ -1319,7 +1319,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         cleave: true,
         autoAttack: false,
         switchDelay: 0.25,
-        damage: 35,
+        damage: 25,
         obstacleDamage: 1,
         attack: {
             offset: {
@@ -1946,7 +1946,6 @@ const SkinDefs: Record<string, MeleeDef> = {
     cutlass_gold: defineMeleeSkin("cutlass", {
         name: "Gold Cutlass",
         noPotatoSwap: true,
-        damage: 35,
         // perk: "pirate",
         lootImg: { sprite: "loot-melee-cutlass-gold.img" },
         worldImg: { sprite: "loot-melee-cutlass-gold.img" },

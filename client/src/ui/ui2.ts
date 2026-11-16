@@ -20,7 +20,7 @@ import {
     Input,
     type InventoryItem,
 } from "../../../shared/gameConfig";
-import { PickupMsgType } from "../../../shared/net/net";
+import { Constants, PickupMsgType } from "../../../shared/net/net";
 import { collider } from "../../../shared/utils/collider";
 import { math } from "../../../shared/utils/math";
 import { util } from "../../../shared/utils/util";
@@ -37,7 +37,10 @@ import type { Localization } from "./localization";
 
 const maxKillFeedLines = 6;
 const touchHoldDuration = 0.75 * 1000;
-const perkUiCount = 4;
+// one HUD slot per perk a player can carry; slots past the 4 in index.html are cloned
+const perkUiCount = Constants.MaxPerks;
+// the shipped row width; more rows stack upwards instead of reaching over the minimap
+const PERKS_PER_ROW = 4;
 
 enum InteractionType {
     None,
@@ -63,6 +66,59 @@ function isLmb(e: MouseEvent) {
 function isRmb(e: MouseEvent) {
     return e.button == 2;
 }
+/** The main health bar's colour for a health value (grey at full, white, then reds;
+ *  red while downed) - also used by the big map's team overview. */
+export function healthBarRgb(health: number, downed: boolean): number[] {
+    const steps = [
+        {
+            health: 100,
+            color: [179, 179, 179],
+        },
+        {
+            health: 100,
+            color: [255, 255, 255],
+        },
+        {
+            health: 75,
+            color: [255, 255, 255],
+        },
+        {
+            health: 75,
+            color: [255, 158, 158],
+        },
+        {
+            health: 25,
+            color: [255, 82, 82],
+        },
+        {
+            health: 25,
+            color: [255, 0, 0],
+        },
+        {
+            health: 0,
+            color: [255, 0, 0],
+        },
+    ];
+
+    let endIdx = 0;
+    const ceil = Math.ceil(health);
+
+    while (steps[endIdx].health > ceil && endIdx < steps.length - 1) {
+        endIdx++;
+    }
+
+    const stepA = steps[math.max(endIdx - 1, 0)];
+    const stepB = steps[endIdx];
+    const t = math.delerp(health, stepA.health, stepB.health);
+    const rgb = [
+        Math.floor(math.lerp(t, stepA.color[0], stepB.color[0])),
+        Math.floor(math.lerp(t, stepA.color[1], stepB.color[1])),
+        Math.floor(math.lerp(t, stepA.color[2], stepB.color[2])),
+    ];
+
+    return downed ? [255, 0, 0] : rgb;
+}
+
 // These functions, copy and diff, only work if both
 // arguments have the same internal structure
 function copy(src: any, dst: any, path?: any) {
@@ -465,6 +521,21 @@ export class UiManager2 {
                 )[0] as HTMLImageElement,
             };
             this.dom.gear.push(L);
+        }
+        // index.html only ships 4 perk slots; build the rest from the last one. Slots
+        // fill right-to-left like the shipped ones and wrap into rows stacked upwards.
+        const perkTemplate = domElemById("ui-perk-3");
+        for (let i = 4; i < perkUiCount; i++) {
+            if (document.getElementById(`ui-perk-${i}`)) continue;
+            const slot = perkTemplate.cloneNode(true) as HTMLElement;
+            slot.id = `ui-perk-${i}`;
+            slot.style.display = "none";
+            const col = i % PERKS_PER_ROW;
+            const row = Math.floor(i / PERKS_PER_ROW);
+            if (col === 0) slot.style.left = "4px";
+            else slot.style.right = `${(col - 1) * 60}px`;
+            slot.style.bottom = `${row * 66}px`;
+            perkTemplate.parentElement!.appendChild(slot);
         }
         for (let i = 0; i < perkUiCount; i++) {
             const perk = domElemById(`ui-perk-${i}`);
@@ -1214,56 +1285,7 @@ export class UiManager2 {
 
         // Health
         if (patch.health || patch.downed) {
-            const steps = [
-                {
-                    health: 100,
-                    color: [179, 179, 179],
-                },
-                {
-                    health: 100,
-                    color: [255, 255, 255],
-                },
-                {
-                    health: 75,
-                    color: [255, 255, 255],
-                },
-                {
-                    health: 75,
-                    color: [255, 158, 158],
-                },
-                {
-                    health: 25,
-                    color: [255, 82, 82],
-                },
-                {
-                    health: 25,
-                    color: [255, 0, 0],
-                },
-                {
-                    health: 0,
-                    color: [255, 0, 0],
-                },
-            ];
-
-            let endIdx = 0;
-            const health = Math.ceil(state.health);
-
-            while (steps[endIdx].health > health && endIdx < steps.length - 1) {
-                endIdx++;
-            }
-
-            const stepA = steps[math.max(endIdx - 1, 0)];
-            const stepB = steps[endIdx];
-            const t = math.delerp(state.health, stepA.health, stepB.health);
-            let rgb = [
-                Math.floor(math.lerp(t, stepA.color[0], stepB.color[0])),
-                Math.floor(math.lerp(t, stepA.color[1], stepB.color[1])),
-                Math.floor(math.lerp(t, stepA.color[2], stepB.color[2])),
-            ];
-
-            if (state.downed) {
-                rgb = [255, 0, 0];
-            }
+            const rgb = healthBarRgb(state.health, state.downed);
 
             dom.health.inner.style.backgroundColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 1.0)`;
             dom.health.inner.style.width = `${state.health}%`;
@@ -1863,9 +1885,13 @@ export class UiManager2 {
         return `${killerTxt} knocked ${youTxt} out`;
     }
 
-    getJoinedText(name: string, roleTag: "admin" | "mod" | "premium" | null = null){
+    getJoinedText(
+        name: string,
+        roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        clan: { clanTag?: string; clanColor?: number } | null = null,
+    ){
         const joinTxt = this.localization.translate("game-joined");
-        return `${helpers.formatUsername(name, roleTag)} ${joinTxt}`;
+        return `${helpers.formatUsername(name, roleTag, clan)} ${joinTxt}`;
     }
 
     getEnemieText(group1: string[]){
@@ -1885,7 +1911,7 @@ export class UiManager2 {
         const itemTxt = this.localization.translate(`game-${item}`);
         const txt = this.localization.translate("pinged-item");
         
-        return `${player} ${txt} ${itemTxt}`;
+        return `${helpers.htmlEscape(player)} ${txt} ${itemTxt}`;
     }
 
     addChatMessage(text: string, color: string, outlineColor: string) {
@@ -1902,7 +1928,16 @@ export class UiManager2 {
     }
 
 
-    getChatMessage(player: string, text:string, chatType?: number){
+    getChatMessage(
+        player: string,
+        text: string,
+        chatType?: number,
+        roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        clan: { clanTag?: string; clanColor?: number } | null = null,
+    ){
+        // the kill feed renders via innerHTML, so both name and text must be escaped
+        const name = helpers.formatUsername(player, roleTag, clan);
+        const body = helpers.htmlEscape(text);
 
         let channel = "";
         switch(chatType){
@@ -1918,9 +1953,13 @@ export class UiManager2 {
                 channel = "SPEC";
                 break;
             }
+            case(3):{
+                // a spectator writing in ALL
+                return `[ALL] <span class="chat-spec-tag">[SPEC]</span> ${name}: ${body}`;
+            }
         }
-        if(channel !== "") return `[${channel}]  [${player}]: ${text}`;
-        return `[${player}]: ${text}`;
+        if(channel !== "") return `[${channel}]  ${name}: ${body}`;
+        return `${name}: ${body}`;
     }
 
     getAdminChatMessage(player: string, text:string){

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import NanoTimer from "nanotimer";
 import { platform } from "os";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
+import { GameMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import { Config } from "../config";
 import { gameLogger } from "../utils/betterLogger";
@@ -155,11 +156,17 @@ export class SingleThreadGameManager implements GameManager {
         }
     }
 
+    /** Region population reported to clients - bots excluded so they never make a region
+     *  look busier than it is. */
     getPlayerCount(): number {
         return this.games.reduce((a, b) => {
             return (
                 a +
-                (b ? b.playerBarn.livingPlayers.filter((p) => !p.disconnected).length : 0)
+                (b
+                    ? b.playerBarn.livingPlayers.filter(
+                          (p) => !p.disconnected && !p.bot,
+                      ).length
+                    : 0)
             );
         }, 0);
     }
@@ -212,7 +219,10 @@ export class SingleThreadGameManager implements GameManager {
             .filter((game) => {
                 return (
                     game.canJoin &&
+                    // a party only where it fits together (Domination: on one side)
+                    (game.partyRoom === undefined || game.partyRoom >= body.playerData.length) &&
                     game.teamMode === body.teamMode &&
+                    game.gameMode === (body.gameMode ?? GameMode.Standard) &&
                     game.mapName === body.mapName
                 );
             })
@@ -223,6 +233,7 @@ export class SingleThreadGameManager implements GameManager {
         if (!game) {
             game = await this.newGame({
                 teamMode: body.teamMode,
+                gameMode: body.gameMode,
                 mapName: body.mapName as keyof typeof MapDefs,
             });
         }
@@ -239,13 +250,20 @@ export class SingleThreadGameManager implements GameManager {
     async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
         const game = await this.newGame({
             teamMode: body.teamMode,
+            gameMode: body.gameMode,
             mapName: body.mapName as keyof typeof MapDefs,
+            maxPlayers: body.maxPlayers,
+            rulesMapName: body.rulesMapName,
+            weaponStats: body.weaponStats,
+            xpEnabled: body.xpEnabled,
+            mapScale: body.mapScale,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
             advancedSettings: body.advancedSettings,
             customLoadout: body.customLoadout,
             customLoadoutEnabled: body.customLoadoutEnabled,
             publicSpectating: body.publicSpectating,
+            customMap: body.customMap,
         });
 
         game.addGroupedJoinTokens(body.teams);

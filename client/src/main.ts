@@ -1,3 +1,5 @@
+import { ArenaMenu, ArenaProgressPanel } from "./ui/arenaMenu";
+import { ArenaTutorial, tutorialContext, tutorialPages } from "./ui/arenaTutorial";
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
 import { GameConfig } from "../../shared/gameConfig";
@@ -41,6 +43,7 @@ import { LoadoutDisplay } from "./ui/opponentDisplay";
 import { OwnersUi } from "./ui/ownersUi";
 import { Pass } from "./ui/pass";
 import { PremiumUi } from "./ui/premiumUi";
+import { TradeUi } from "./ui/tradeUi";
 import { PrivateLobbyMenu } from "./ui/privateLobby";
 import { ProfileUi } from "./ui/profileUi";
 import { ShopUi } from "./ui/shopUi";
@@ -55,12 +58,15 @@ import { loadStaticDomImages } from "./ui/ui2";
 const PRIVATE_LOBBY_CODE_LENGTH = 6;
 
 // Matches lobby codes, optionally suffixed with "-<teamId>" for team-specific
-// invite links/codes (e.g. "ABC123-2"), or "-s" for spectator links. Group 2
-// captures the team slot index or "s" when present.
+// invite links/codes (e.g. "ABC123-2"), "-s" for spectator links, or "-g" for an
+// admin watching invisibly (from the dashboard). Group 2 captures the suffix.
 // See Room.addPlayer in server/src/privateLobby.ts.
 const PRIVATE_LOBBY_CODE_REGEX = new RegExp(
-    `^([0-9a-zA-Z]{${PRIVATE_LOBBY_CODE_LENGTH}})(?:-(\\d+|s))?$`,
+    `^([0-9a-zA-Z]{${PRIVATE_LOBBY_CODE_LENGTH}})(?:-(\\d+|s|g))?$`,
 );
+
+/** How long after start the game assets begin loading (see loadMenuAssets). */
+const MENU_ASSETS_DELAY_MS = 1500;
 
 export class Application {
     nameInput = $("#player-name-input-solo");
@@ -68,6 +74,7 @@ export class Application {
     playMode0Btn = $("#btn-start-mode-0");
     playMode1Btn = $("#btn-start-mode-1");
     playMode2Btn = $("#btn-start-mode-2");
+    playMode3Btn = $("#btn-start-mode-3");
     spectatorModeBtn = $("#btn-spectator-menu");
     muteBtns = $(".btn-sound-toggle");
     aimLineBtn = $("#btn-game-aim-line");
@@ -81,6 +88,7 @@ export class Application {
     gameAreaWrapper = $("#game-area-wrapper");
     playButtons = $(".play-button-container");
     playLoading = $(".play-loading-outer");
+    playLoadingSpinners = $(".play-loading-spinner");
     errorModal = new MenuModal($("#modal-notification"));
     refreshModal = new MenuModal($("#modal-refresh"));
     notVerifiedModal = new MenuModal($("#modal-not-verified"));
@@ -91,6 +99,35 @@ export class Application {
     hudLayoutManager = new HudLayoutManager(this.config);
 
     account!: Account;
+    /** main menu → Arena Loadouts (created on first open) */
+    arenaMenu?: ArenaMenu;
+    arenaTutorial?: ArenaTutorial;
+
+    /** The arena modes playable in the selected region now (mapNames). */
+    private arenaModesOn(): string[] {
+        return this.siteInfo.getModesForSelectedRegion().filter((m) => m.arena && m.enabled).map((m) => m.mapName);
+    }
+
+    /**
+     * The multiplayer client's tour, for the modes playable now (its last page opens
+     * the arena loadouts). `onlyUnseen`: the pages not seen yet only, then marked seen.
+     */
+    openArenaTutorial(onlyUnseen: boolean) {
+        if (!this.siteInfo.loaded) return;
+        const ctx = tutorialContext(this.arenaModesOn());
+        let pages = tutorialPages(ctx);
+        if (onlyUnseen) {
+            const seen = this.config.get("arenaTutorialPages") ?? [];
+            pages = pages.filter((id) => !seen.includes(id));
+            if (!pages.length) return;
+            this.config.set("arenaTutorialPages", [...new Set([...seen, ...pages])]);
+        }
+        this.arenaTutorial ??= new ArenaTutorial(() => {
+            this.arenaMenu ??= new ArenaMenu(this.account);
+            this.arenaMenu.open();
+        });
+        this.arenaTutorial.open(ctx, pages);
+    }
     loadoutMenu!: LoadoutMenu;
     pass!: Pass;
     profileUi!: ProfileUi;
@@ -99,6 +136,7 @@ export class Application {
     ownersUi!: OwnersUi;
     auctionUi!: AuctionUi;
     premiumUi!: PremiumUi;
+    tradeUi!: TradeUi;
     socialUi!: SocialUi;
 
     pingTest = new PingTest();
@@ -151,6 +189,7 @@ export class Application {
     constructor() {
         this.account = new Account(this.config);
         this.loadoutMenu = new LoadoutMenu(this.account, this.localization);
+        this.loadoutMenu.crateUi.audioManager = this.audioManager;
         this.pass = new Pass(this.account, this.loadoutMenu, this.localization);
         this.profileUi = new ProfileUi(
             this.account,
@@ -162,12 +201,13 @@ export class Application {
         this.shopUi = new ShopUi(this.account, this.localization);
         this.shopUi.marketUi = this.marketUi;
         $("#golden-fries-shop-btn").on("click", () => this.shopUi.open());
-        // The shop's "Owners" tab (who owns a cosmetic); clicking an owner opens their
-        // storefront on the Market tab.
+        // "Owners" (who owns a cosmetic) lives in the Social panel; clicking an owner opens
+        // their storefront on the shop's Market tab.
         this.ownersUi = new OwnersUi(this.account, this.localization);
         this.shopUi.ownersUi = this.ownersUi;
         this.ownersUi.onOpenStorefront = (slug) => {
-            this.shopUi.selectTab("market");
+            this.socialUi.modal.hide();
+            this.shopUi.openAt("market", "browse");
             this.marketUi.openStorefront(slug);
         };
         // The Auction house tab (bid on / put up items).
@@ -178,6 +218,36 @@ export class Application {
         this.shopUi.premiumUi = this.premiumUi;
         // The Social panel (gift skins / Golden Fries), opened from the top-right button.
         this.socialUi = new SocialUi(this.account, this.localization);
+        this.socialUi.ownersUi = this.ownersUi;
+        this.shopUi.socialUi = this.socialUi;
+        // Buy orders ("Make offer"), the Sell tab, Recently sold and trade notifications.
+        this.tradeUi = new TradeUi(this.account, this.localization, this.marketUi, this.auctionUi);
+        this.shopUi.tradeUi = this.tradeUi;
+        this.tradeUi.isInGame = () => !!this.game?.connected;
+        this.tradeUi.onPending = () => this.shopUi.renderTradesBadge();
+        this.tradeUi.onOpenShop = (where) => {
+            if (where === "market") this.shopUi.openAt("market");
+            else if (where === "auctions") this.shopUi.openAt("market", "auctions");
+            else if (where === "requests" || where === "orders") this.shopUi.openAt("trades", where);
+            else this.shopUi.openAt("trades");
+        };
+        this.marketUi.onSellCta = () => this.shopUi.selectTab("sell");
+        // Social: invite friends to the team / private lobby you're in, join theirs.
+        this.socialUi.toast = (html, onClick) => this.tradeUi.toast(html, onClick);
+        this.socialUi.getInviteTarget = () => {
+            const code = (url: string) => url.replace(/^#/, "");
+            if (this.privateLobbyMenu.active && this.privateLobbyMenu.roomData.roomUrl && !this.privateLobbyMenu.publicSpectator) {
+                return { kind: "lobby", code: code(this.privateLobbyMenu.roomData.roomUrl) };
+            }
+            if (this.teamMenu.active && this.teamMenu.roomData.roomUrl) {
+                return { kind: "team", code: code(this.teamMenu.roomData.roomUrl) };
+            }
+            return null;
+        };
+        this.socialUi.onJoinInvite = (invite) => {
+            if (!this.active) return; // mid-game: the toast only shows in the menu anyway
+            this.tryJoinTeam(false, invite.code);
+        };
         this.profileUi.socialUi = this.socialUi;
         // Let the Social panel spectate a friend's current game.
         this.socialUi.onSpectate = (region, gameId) =>
@@ -239,6 +309,10 @@ export class Application {
             this.localization,
             this.account,
             this.joinGameAsSpectator.bind(this),
+            (publicId) => {
+                this.teamMenu.leave();
+                this.privateLobbyMenu.connect(false, "", undefined, undefined, true, publicId);
+            },
         );
     }
 
@@ -290,21 +364,52 @@ export class Application {
 
             this.playMode0Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(0);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode0Btn, 0));
                 });
             });
             this.playMode1Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(1);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode1Btn, 1));
                 });
             });
             this.playMode2Btn.on("click", () => {
                 SDK.requestMidGameAd(() => {
-                    this.tryQuickStartGame(2);
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode2Btn, 2));
+                });
+            });
+            this.playMode3Btn.on("click", () => {
+                SDK.requestMidGameAd(() => {
+                    this.tryQuickStartGame(this.modeIdxOf(this.playMode3Btn, 3));
                 });
             });
             this.spectatorModeBtn.on("click", () => {
                 this.spectatorMenu.loadSpectatorMenu();
+            });
+            // the main menu's battle royale / multiplayer (arena modes) view; the button
+            // names the other one
+            const applyView = () => {
+                const arena = this.config.get("clientView") === "arena";
+                $(document.body).toggleClass("client-view-arena", arena);
+                $("#btn-client-view").text(arena ? "Battle Royale" : "Multiplayer");
+                // the right column: multiplayer opens on the arena progress, BR on the pass
+                this.showArenaProgress(arena);
+                this.siteInfo.updatePageFromInfo();
+                this.refreshUi();
+            };
+            $("#btn-client-view").on("click", (e) => {
+                // (it sits in the account box, whose click opens the account menu)
+                e.stopPropagation();
+                this.config.set("clientView", this.config.get("clientView") === "arena" ? "br" : "arena");
+                applyView();
+                // in the multiplayer client: a short tour of what's new there (the
+                // first time all of it; a mode switched on later: only its pages)
+                if (this.config.get("clientView") === "arena") this.openArenaTutorial(true);
+            });
+            $("#btn-arena-tutorial").on("click", () => this.openArenaTutorial(false));
+            applyView();
+            $("#btn-arena-loadouts").on("click", () => {
+                this.arenaMenu ??= new ArenaMenu(this.account);
+                this.arenaMenu.open();
             });
 
             this.serverSelect.on("change", () => {
@@ -434,28 +539,9 @@ export class Application {
                 this.game?.free();
                 this.privateLobbyMenu.leave();
             });
-            const r = $("#news-current").data("date");
-            const a = new Date(r).getTime();
-            $(".right-column-toggle").on("click", () => {
-                if (this.newsDisplayed) {
-                    //$("#news-wrapper").fadeOut(250);
-                    //$("#pass-wrapper").fadeIn(250);
-                    $("#news-wrapper").css("display", "none");
-                    $("#pass-wrapper").css("display", "block");
-                } else {
-                    this.config.set("lastNewsTimestamp", a);
-                    $(".news-toggle").find(".account-alert").css("display", "none");
-                    //$("#news-wrapper").fadeIn(250);
-                    //$("#pass-wrapper").fadeOut(250);
-                    $("#news-wrapper").css("display", "block");
-                    $("#pass-wrapper").css("display", "none");
-                }
-                this.newsDisplayed = !this.newsDisplayed;
-            });
-            const i = this.config.get("lastNewsTimestamp")!;
-            if (a > i) {
-                $(".news-toggle").find(".account-alert").css("display", "block");
-            }
+            // the right column: the battle pass <-> the arena progress (the news aren't
+            // reachable from here anymore)
+            $(".right-column-toggle").on("click", () => this.showArenaProgress(!this.arenaProgressShown));
             this.setDOMFromConfig();
             this.setAppActive(true);
             const domCanvas = document.querySelector<HTMLCanvasElement>("#cvs")!;
@@ -493,7 +579,11 @@ export class Application {
                 this.audioManager,
                 this.config,
             );
-            this.resourceManager.loadMapAssets("main");
+            // the game's atlases (~11 MB) and sounds (~375 files) aren't needed by the
+            // menu - fetching them right away competed with the site info / account
+            // requests on a first visit. They start shortly after, or right away when
+            // the loadout preview needs them; a game loads its own map's on join.
+            setTimeout(() => this.loadMenuAssets(), MENU_ASSETS_DELAY_MS);
             this.input = new InputHandler(document.getElementById("game-touch-area")!);
             this.inputBinds = new InputBinds(this.input, this.config);
             this.inputBindUi = new InputBindUi(
@@ -502,6 +592,7 @@ export class Application {
                 this.localization,
             );
             const onJoin = () => {
+                this.loadMenuAssets();
                 this.loadoutDisplay!.free();
                 this.game!.init();
                 this.onResize();
@@ -535,6 +626,9 @@ export class Application {
                     this.onJoinGameError(errMsg);
                 }
                 if (errMsg == "kicked_by_admin") {
+                    this.onJoinGameError(errMsg);
+                }
+                if (errMsg == "kicked_afk") {
                     this.onJoinGameError(errMsg);
                 }
                 if (errMsg == "player_not_verified") {
@@ -599,9 +693,26 @@ export class Application {
             );
             if (storefrontParam) {
                 history.replaceState(null, "", window.location.pathname);
-                this.shopUi.open();
-                this.shopUi.selectTab("market");
+                this.shopUi.openAt("market", "browse");
                 this.marketUi.openStorefront(storefrontParam);
+            }
+
+            // A clan invite link (?clan=CODE): show it on the Social panel's Clans tab once
+            // logged in (a logged-out visitor sees the "log in" prompt there first).
+            const clanParam = new URLSearchParams(window.location.search).get("clan");
+            if (clanParam) {
+                history.replaceState(null, "", window.location.pathname);
+                const openClan = () => this.socialUi.openClanLink(clanParam);
+                if (this.account.loggedIn) {
+                    openClan();
+                } else {
+                    const onLogin = () => {
+                        this.account.removeEventListener("login", onLogin);
+                        openClan();
+                    };
+                    this.account.addEventListener("login", onLogin);
+                    if (!this.account.loggingIn) openClan();
+                }
             }
 
             SDK.gameLoadComplete();
@@ -632,27 +743,26 @@ export class Application {
         const passType = GameConfig.serverSettings.currentPass;
         const events = (GameConfig.serverSettings.xpBoostEvents as any)?.[passType];
         const now = Date.now();
-        let activeMaps: string[] = [];
-        let activeBoost = 2;
+        // map name -> boost; first matching event wins, same as the server
+        const activeBoosts: Record<string, number> = {};
         if (events) {
             for (const ev of Object.values(events) as any[]) {
                 if (
                     now >= new Date(ev.start).getTime() &&
                     now <= new Date(ev.end).getTime()
                 ) {
-                    activeMaps = ev.maps;
-                    activeBoost = ev.boost;
-                    break;
+                    for (const m of ev.maps) activeBoosts[m] ??= ev.boost;
                 }
             }
         }
         $(".xp-boost-badge").remove();
-        if (!loggedIn || activeMaps.length === 0) return;
+        if (!loggedIn || Object.keys(activeBoosts).length === 0) return;
 
         const modes = this.siteInfo.getModesForSelectedRegion();
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
             const mode = modes[i];
-            if (!mode?.enabled || !activeMaps.includes(mode.mapName)) continue;
+            if (!mode?.enabled || !(mode.mapName in activeBoosts)) continue;
+            const activeBoost = activeBoosts[mode.mapName];
             const btnEl = document.getElementById(`btn-start-mode-${i}`);
             if (!btnEl || !$(btnEl).is(":visible")) continue;
             const r = btnEl.getBoundingClientRect();
@@ -676,7 +786,7 @@ export class Application {
      */
     resolveRegionSelection() {
         const group = this.config.get("regionGroup")!;
-        const cats = this.siteInfo.getCategoriesForGroup(group);
+        const cats = this.siteInfo.getCategoriesForView(group);
         let playlist = this.config.get("playlist")!;
         if (!cats.some((c) => c.category === playlist)) {
             playlist = cats[0]?.category ?? "default";
@@ -751,6 +861,12 @@ export class Application {
                         this.playLoading.css({
                             "pointer-events": lock ? "initial" : "none",
                         });
+                        if (lock) this.playLoadingSpinners.css("animation-play-state", "running");
+                    },
+                    // stop spinning once faded out: an invisible running animation
+                    // still makes the browser render every frame
+                    complete: () => {
+                        if (!lock) this.playLoadingSpinners.css("animation-play-state", "paused");
                     },
                 },
             );
@@ -797,6 +913,8 @@ export class Application {
      */
     forceQuitGame() {
         if (!this.game) {
+            // still report back - the lobby may be holding the next match's join for us
+            this.privateLobbyMenu.onGameComplete();
             this.setAppActive(true);
             this.setPlayLockout(false);
             return;
@@ -949,20 +1067,38 @@ export class Application {
         this.serverWarning.html(this.errorMessage);
 
         const updateButton = (ele: JQuery<HTMLElement>, gameModeIdx: number) => {
+            // a mode button the region doesn't use (yet) has no l10n key
+            const l10n = ele.data("l10n");
+            if (this.quickPlayPendingModeIdx !== gameModeIdx && !l10n) return;
             ele.html(
                 this.quickPlayPendingModeIdx === gameModeIdx
                     ? '<div class="ui-spinner"></div>'
-                    : this.localization.translate(ele.data("l10n")),
+                    : this.localization.translate(l10n),
             );
         };
 
-        updateButton(this.playMode0Btn, 0);
-        updateButton(this.playMode1Btn, 1);
-        updateButton(this.playMode2Btn, 2);
+        updateButton(this.playMode0Btn, this.modeIdxOf(this.playMode0Btn, 0));
+        updateButton(this.playMode1Btn, this.modeIdxOf(this.playMode1Btn, 1));
+        updateButton(this.playMode2Btn, this.modeIdxOf(this.playMode2Btn, 2));
+        updateButton(this.playMode3Btn, this.modeIdxOf(this.playMode3Btn, 3));
+    }
+
+    private menuAssetsRequested = false;
+
+    /** The default map's atlases + sounds (incl. the shared atlas the game HUD is built
+     *  from at Game.init). Once only, and never once a game is running - that game
+     *  loaded its own map's, and loading "main" over them would unload the running
+     *  map's atlases. Called before a game/replay starts too, in case the delayed
+     *  load hasn't happened yet. */
+    loadMenuAssets() {
+        if (this.menuAssetsRequested || !this.resourceManager) return;
+        this.menuAssetsRequested = true;
+        if (this.game?.initialized) return;
+        this.resourceManager.loadMapAssets("main");
     }
 
     waitOnAccount(cb: () => void) {
-        if (this.account.requestsInFlight == 0) {
+        if (this.account.joinRequestsInFlight == 0) {
             cb();
         } else {
             // Wait some maximum amount of time for pending account requests
@@ -973,9 +1109,9 @@ export class Application {
             const runOnce = () => {
                 cb();
                 clearTimeout(timeout);
-                this.account.removeEventListener("requestsComplete", runOnce);
+                this.account.removeEventListener("joinRequestsComplete", runOnce);
             };
-            this.account.addEventListener("requestsComplete", runOnce);
+            this.account.addEventListener("joinRequestsComplete", runOnce);
         }
     }
 
@@ -1026,7 +1162,8 @@ export class Application {
             const match = !create ? raw.match(PRIVATE_LOBBY_CODE_REGEX) : null;
             const roomUrl = match ? match[1] : raw;
             const suffix = match?.[2];
-            const isSpectator = suffix === "s";
+            const isStealth = suffix === "g";
+            const isSpectator = suffix === "s" || isStealth;
             const teamId =
                 !isSpectator && suffix !== undefined ? Number(suffix) : undefined;
 
@@ -1047,10 +1184,43 @@ export class Application {
                     undefined,
                     teamId,
                     isSpectator,
+                    undefined,
+                    isStealth,
                 );
                 this.refreshUi();
             }
         }
+    }
+
+    /** The right column shows the arena progress (else the battle pass). */
+    arenaProgressShown = false;
+    arenaProgress?: ArenaProgressPanel;
+
+    showArenaProgress(show: boolean) {
+        this.arenaProgressShown = show;
+        $("#news-wrapper").css("display", "none");
+        $("#pass-wrapper").css("display", show ? "none" : "block");
+        $("#arena-progress-wrapper").css("display", show ? "block" : "none");
+        if (show) {
+            if (!this.arenaProgress) {
+                this.arenaProgress = new ArenaProgressPanel(this.account, $("#arena-progress-block"), () => {
+                    this.arenaMenu ??= new ArenaMenu(this.account);
+                    this.arenaMenu.open();
+                });
+                // on page load the login is still on its way - load again once it's done
+                // (and after a later login)
+                this.account.addEventListener("login", () => {
+                    if (this.arenaProgressShown) this.arenaProgress?.load();
+                });
+            }
+            this.arenaProgress.load();
+        }
+    }
+
+    /** A play button's mode (its index in the region's modes - the view picks which show). */
+    modeIdxOf(btn: JQuery<HTMLElement>, fallback: number): number {
+        const idx = btn.data("modeIdx");
+        return typeof idx === "number" ? idx : fallback;
     }
 
     tryQuickStartGame(gameModeIdx: number) {
@@ -1249,8 +1419,10 @@ export class Application {
             return;
         }
         this.game.m_replayMode = true;
+        this.loadMenuAssets();
         const player = new ReplayPlayer(this.game, token, initialPov);
-        player.load().catch((err) => {
+        // replays build the game HUD from the atlases too (see ResourceManager.ready)
+        this.resourceManager!.ready.then(() => player.load()).catch((err) => {
             console.error("Failed to start replay:", err);
             alert("Failed to load replay: " + (err?.message ?? err));
         });
@@ -1338,6 +1510,7 @@ export class Application {
             join_game_failed: this.localization.translate("index-failed-joining-game"),
             rate_limited: this.localization.translate("index-rate-limited"),
             kicked_by_admin: this.localization.translate("index-kicked-by-admin"),
+            kicked_afk: this.localization.translate("index-kicked-afk"),
             player_not_verified: this.localization.translate("index-player-not-verified"),
         };
         if (err == "invalid_protocol") {
@@ -1477,11 +1650,19 @@ export class Application {
         // LoadoutDisplay update
         if (this.active && this.loadoutDisplay && this.game && !this.game.initialized) {
             if (this.loadoutMenu.active) {
-                if (!this.loadoutDisplay.initialized) {
+                this.loadMenuAssets();
+                // its sprites come from the atlases - wait for their frame data
+                if (!this.loadoutDisplay.initialized && this.resourceManager?.atlasDefsReady) {
                     this.loadoutDisplay.init();
                 }
-                this.loadoutDisplay.show();
-                this.loadoutDisplay.update(dt, this.hasFocus);
+                if (this.loadoutDisplay.initialized) {
+                    this.loadoutDisplay.show();
+                    // no idle animation (and its punch sounds) behind the crate opening
+                    this.loadoutDisplay.update(
+                        dt,
+                        this.hasFocus && !this.loadoutMenu.crateUi.overlayOpen,
+                    );
+                }
             } else {
                 this.loadoutDisplay.hide();
             }
@@ -1496,6 +1677,18 @@ export class Application {
             this.spectatorMenu.update(dt);
         }
         this.input!.flush();
+
+        // In the menu the canvas is blank (the background is CSS) - no need to redraw
+        // it at the monitor's full rate. Full rate again for a game, the loadout
+        // preview, the spectator menu and replays.
+        const menuIdle =
+            this.active &&
+            !this.game?.initialized &&
+            !this.loadoutMenu.active &&
+            !this.spectatorMenu.spectatorMenuOpen &&
+            !this.replaySession;
+        const maxFps = menuIdle ? 30 : 0;
+        if (this.pixi!.ticker.maxFPS !== maxFps) this.pixi!.ticker.maxFPS = maxFps;
     }
 }
 

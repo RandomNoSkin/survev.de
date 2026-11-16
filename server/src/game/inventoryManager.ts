@@ -78,7 +78,8 @@ export class InventoryManager {
                 amount += PerkProperties.flak_jacket.mirvBonus;
             }
         }
-        return amount;
+        // a GameMode's own limit (the arena: at most 4 grenades)
+        return this.player.game.rules?.itemCap?.(this.player, item, amount) ?? amount;
     }
 
     enforceMaxCapacity(item: InventoryItem) {

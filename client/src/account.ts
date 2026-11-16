@@ -1,3 +1,4 @@
+import type { TagDisplay } from "../../shared/types/user";
 import type {
     AccountSettings,
     AuctionListResponse,
@@ -5,6 +6,8 @@ import type {
     BuyListingResponse,
     BuyPremiumResponse,
     BuyShopResponse,
+    OpenCrateResponse,
+    DumpItemResponse,
     CancelListingResponse,
     CreateAuctionResponse,
     EndAuctionResponse,
@@ -39,6 +42,14 @@ import type {
     UsernameRequest,
     UsernameResponse,
     UserSearchResponse,
+    BuyOrder,
+    BuyOrderActionResponse,
+    BuyOrderListResponse,
+    CreateBuyOrderResponse,
+    TradeEventsResponse,
+    TradeHistoryResponse,
+    InviteResponse,
+    PresenceResponse,
 } from "../../shared/types/user";
 import type { OAuthGrantEntry } from "../../shared/types/oauth";
 import type { ItemStatus } from "../../shared/utils/loadout";
@@ -67,9 +78,24 @@ export type PassType = {
     newItems: unknown;
 };
 
+/** Account requests a game join has to wait for: they decide the loadout, name and
+ *  quest data the join sends. Everything else (shop, market, friends, offers...) loads
+ *  in the background - waiting on those made Play take seconds on a busy server. */
+const JOIN_RELEVANT = [
+    "/api/user/profile",
+    "/api/user/loadout",
+    "/api/user/username",
+    "/api/user/get_pass",
+    "/api/user/set_quest",
+];
+
 export class Account {
     events: Record<string, Array<(...args: any[]) => void>> = {};
     requestsInFlight = 0;
+    /** Only the requests whose result goes into joining a game (see JOIN_RELEVANT) -
+     *  what Play waits for, and what the account / loadout loading spinners show.
+     *  Shop, market, friends etc. never hold a join up or spin a spinner. */
+    joinRequestsInFlight = 0;
     loggingIn = false;
     loggedIn = false;
     profile = {
@@ -81,6 +107,9 @@ export class Account {
         usernameChangeTime: 0,
         goldenFries: 0,
         premiumUntil: null as number | null,
+        owner: false,
+        admin: false,
+        moderator: false,
     };
 
     loadout = loadouts.defaultLoadout();
@@ -105,9 +134,12 @@ export class Account {
     settings: AccountSettings = {
         offersDisabled: false,
         loadoutPrivate: false,
+        trackDuels: true,
+        showOwnerPrefix: true,
         showAdminPrefix: true,
         showModPrefix: true,
         showPremiumPrefix: true,
+        tagDisplay: "both" as TagDisplay,
     };
     quests: Quest[] = [];
     questPriv = "";
@@ -120,7 +152,9 @@ export class Account {
             cb = data;
             data = null;
         }
+        const joinRelevant = JOIN_RELEVANT.includes(url);
         this.requestsInFlight++;
+        if (joinRelevant) this.joinRequestsInFlight++;
         this.emit("request", this);
 
         ajaxRequest(url, data, (err, res) => {
@@ -129,6 +163,9 @@ export class Account {
             this.emit("request", this);
             if (this.requestsInFlight == 0) {
                 this.emit("requestsComplete");
+            }
+            if (joinRelevant && --this.joinRequestsInFlight == 0) {
+                this.emit("joinRequestsComplete");
             }
         });
     }
@@ -166,6 +203,12 @@ export class Account {
         }
 
         if (helpers.getCookie("app-data")) {
+            // last visit's pass right away (same account only); get_pass refreshes it
+            const cached = this.config.get("cachedPass");
+            const slug = this.config.get("profile")?.slug;
+            if (cached && slug && cached.slug === slug) {
+                this.emit("pass", cached.pass, cached.quests, true);
+            }
             this.login();
             return;
         }
@@ -221,6 +264,7 @@ export class Account {
 
     logout() {
         this.config.set("profile", null);
+        this.config.set("cachedPass", null);
         this.config.set("sessionCookie", null);
         this.config.set("loadout", loadouts.defaultLoadout());
         this.ajaxRequest("/api/user/logout", () => {
@@ -263,6 +307,7 @@ export class Account {
                 this.settings = data.settings ?? {
                     offersDisabled: false,
                     loadoutPrivate: false,
+                    trackDuels: true,
                 };
                 // Validate the server loadout so older accounts (saved before newer
                 // loadout fields like death_effect existed) get the missing fields
@@ -447,6 +492,8 @@ export class Account {
                     return a.idx - b.idx;
                 });
                 this.emit("pass", this.pass, this.quests, true);
+                const slug = this.config.get("profile")?.slug;
+                if (slug) this.config.set("cachedPass", { slug, pass: this.pass, quests: this.quests });
                 // Reload the profile if new cosmetics OR Golden Fries were granted,
                 // so the items list and the top-left fries balance stay in sync.
                 if (this.pass.newItems || (res.goldenFriesAwarded ?? 0) > 0) {
@@ -512,6 +559,24 @@ export class Account {
                 // Refresh balance + inventory after a purchase.
                 this.loadProfile();
             }
+            cb(err, res);
+        });
+    }
+
+    /** Opens a crate with a key. No profile refresh here - the crate UI reloads it once
+     *  the reveal animation is done, so the item doesn't show up before it's revealed. */
+    openCrate(crate: string, key: string, cb: (err: unknown, res?: OpenCrateResponse) => void) {
+        this.ajaxRequest("/api/user/crate/open", { crate, key }, (err, res: OpenCrateResponse) => {
+            if (err) errorLogManager.storeGeneric("account", "open_crate_error");
+            cb(err, res);
+        });
+    }
+
+    /** Destroys one item instance for a flat amount of Golden Fries. */
+    dumpItem(itemId: number, cb: (err: unknown, res?: DumpItemResponse) => void) {
+        this.ajaxRequest("/api/user/item/dump", { itemId }, (err, res: DumpItemResponse) => {
+            if (err) errorLogManager.storeGeneric("account", "dump_item_error");
+            else if (res.success) this.loadProfile();
             cb(err, res);
         });
     }
@@ -727,6 +792,66 @@ export class Account {
     //
     // OFFERS (buy-offers on another player's item)
     //
+
+    //
+    // BUY ORDERS + TRADE HISTORY / NOTIFICATIONS
+    //
+
+    /** Every open order the caller placed + open orders for items they own. */
+    getBuyOrders(cb: (err: unknown, res?: BuyOrderListResponse) => void) {
+        this.ajaxRequest("/api/user/order/list", {}, cb);
+    }
+
+    /** The best open order per item type ("Wanted"). */
+    getTopBuyOrders(cb: (err: unknown, res?: { success: boolean; orders: BuyOrder[] }) => void) {
+        this.ajaxRequest("/api/user/order/top", {}, cb);
+    }
+
+    /** Places a buy order; the fries (offer + fee) are taken right away. */
+    createBuyOrder(type: string, amount: number, cb: (err: unknown, res?: CreateBuyOrderResponse) => void) {
+        this.ajaxRequest("/api/user/order/create", { type, amount }, (err, res: CreateBuyOrderResponse) => {
+            if (!err && res?.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
+    cancelBuyOrder(orderId: number, cb: (err: unknown, res?: BuyOrderActionResponse) => void) {
+        this.ajaxRequest("/api/user/order/cancel", { orderId }, (err, res: BuyOrderActionResponse) => {
+            if (!err && res?.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
+    /** Sells owned copy `itemId` to buy order `orderId`. */
+    fillBuyOrder(orderId: number, itemId: number, cb: (err: unknown, res?: BuyOrderActionResponse) => void) {
+        this.ajaxRequest("/api/user/order/fill", { orderId, itemId }, (err, res: BuyOrderActionResponse) => {
+            if (!err && res?.success) this.loadProfile();
+            cb(err, res);
+        });
+    }
+
+    /** Recent sales (of `type`, or of everything) + price stats of `type`. */
+    getTradeHistory(type: string | undefined, cb: (err: unknown, res?: TradeHistoryResponse) => void) {
+        this.ajaxRequest("/api/user/trade/history", type ? { type } : {}, cb);
+    }
+
+    getTradeEvents(cb: (err: unknown, res?: TradeEventsResponse) => void) {
+        this.ajaxRequest("/api/user/trade/events", {}, cb);
+    }
+
+    markTradeEventsSeen(ids: number[]) {
+        if (ids.length) this.ajaxRequest("/api/user/trade/events/seen", { ids }, () => {});
+    }
+
+    /** Heartbeat for the online status; the reply carries pending team/lobby invites. */
+    sendPresence(cb: (err: unknown, res?: PresenceResponse) => void) {
+        this.ajaxRequest("/api/user/presence", {}, cb);
+    }
+
+    /** Invites an online friend to the caller's team (kind "team") or private lobby. */
+    inviteFriend(slug: string, kind: "team" | "lobby", code: string, cb: (err: unknown, res?: InviteResponse) => void) {
+        this.ajaxRequest("/api/user/friends/invite", { slug, kind, code }, cb);
+    }
 
     getOffers(cb: (err: unknown, res?: OfferListResponse) => void) {
         this.ajaxRequest("/api/user/offer/list", {}, (err, res) => {

@@ -1,7 +1,9 @@
+import { DominationHud } from "./ui/modes/dominationHud";
+import { ResistIndicator } from "./ui/modes/resistIndicator";
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
-import { GameConfig, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
+import { GameConfig, GameMode, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { ObjectType } from "../../shared/net/objectSerializeFns";
 import { loadout as loadoutHelper } from "../../shared/utils/loadout";
@@ -105,6 +107,13 @@ export class Game {
     m_gameOver!: boolean;
     m_wonGame!: boolean;
     m_spectating!: boolean;
+    /** Arena modes: the damage resistance next to the health bar (ArenaResistMsg) */
+    m_resistHud: ResistIndicator | null = null;
+    /** Domination: score bar, zones, loadout picker (see ui/modes/dominationHud.ts) */
+    m_domHud?: DominationHud;
+    /** joined with "Spectate" (not a player watching the killer until the respawn) */
+    m_joinedAsSpectator = false;
+    private m_domHudErrorLogged = false;
     //m_spectateCooldown!: number;
     m_inputMsgTimeout!: number;
     m_prevInputMsg!: net.InputMsg;
@@ -131,6 +140,10 @@ export class Game {
 
     /** True when this Game is playing back a recorded replay (no socket, no input sent). */
     m_replayMode = false;
+    /** Obstacle types whose assets were already requested this map (see m_processGameUpdate). */
+    m_seenObjTypes = new Set<string>();
+    /** Group whose pings are on the map (see the spectate switch in m_processGameUpdate). */
+    m_pingGroupId: number | undefined;
     /** Current match's gameId - set by main.ts at join/spectate time, or by ReplayPlayer when loading a recording. Shown in the game-over header. */
     m_gameId = "";
     /** Bridge to the replay bar's visibility, set by ReplayPlayer while active (Game has no direct reference to it). */
@@ -168,6 +181,8 @@ export class Game {
      *  ping values bounce around too fast to actually read otherwise. */
     m_lastFpsCounterTime = 0;
     m_lastPingCounterTime = 0;
+    /** Ping samples since the counter last updated - it shows their median. */
+    m_pingCounterSamples: number[] = [];
 
     constructor(
         public m_pixi: PIXI.Application,
@@ -205,6 +220,11 @@ export class Game {
         questPriv: string,
         onConnectFail: () => void,
     ) {
+        // the HUD is built from the atlases on join - their frame data loads after startup
+        if (!this.m_resourceManager.atlasDefsReady) {
+            void this.m_resourceManager.ready.then(() => this.tryJoinGame(url, matchPriv, questPriv, onConnectFail));
+            return;
+        }
         if (!this.connecting && !this.connected && !this.initialized) {
             if (this.m_ws) {
                 this.m_ws.onerror = function () {};
@@ -298,6 +318,12 @@ export class Game {
         questPriv: string,
         onConnectFail: () => void,
     ) {
+        if (!this.m_resourceManager.atlasDefsReady) {
+            void this.m_resourceManager.ready.then(() =>
+                this.tryJoinGameAsSpectator(url, matchPriv, questPriv, onConnectFail),
+            );
+            return;
+        }
         if (!this.connecting && !this.connected && !this.initialized) {
             if (this.m_ws) {
                 this.m_ws.onerror = function () {};
@@ -334,14 +360,7 @@ export class Game {
                     this.m_sendMessage(net.MsgType.JoinAsSpectator, joinMessage, 8192);
                 };
                 this.m_ws.onmessage = (e) => {
-                    const msgStream = new net.MsgStream(e.data);
-                    while (true) {
-                        const type = msgStream.deserializeMsgType();
-                        if (type == net.MsgType.None) {
-                            break;
-                        }
-                        this.m_onMsg(type, msgStream.getStream());
-                    }
+                    this.m_handleIncomingBuffer(e.data);
                 };
                 this.m_ws.onclose = () => {
                     const displayingStats = this.m_uiManager?.displayingStats;
@@ -472,6 +491,7 @@ export class Game {
         this.m_gameOver = false;
         this.m_wonGame = false;
         this.m_spectating = false;
+        this.m_joinedAsSpectator = false;
         //this.m_spectateCooldown = 0;
         this.m_inputMsgTimeout = 0;
         this.m_prevInputMsg = new net.InputMsg();
@@ -481,6 +501,7 @@ export class Game {
         this.m_updatePassDelay = 0;
         this.m_localId = 0;
         this.m_activeId = 0;
+        this.m_pingGroupId = undefined;
         this.m_activePlayer = null as unknown as Player;
         this.m_validateAlpha = false;
         this.m_targetZoom = 1;
@@ -513,6 +534,16 @@ export class Game {
         }
         this.connecting = false;
         this.connected = false;
+        // the mode HUD goes with the game (its loadout menu sits on the body, its
+        // "Spectating" text on the shared HUD - nothing of it may stay for the next one)
+        try {
+            this.m_domHud?.destroy();
+        } catch (err) {
+            console.error("Domination HUD failed to close", err);
+        }
+        this.m_domHud = undefined;
+        this.m_resistHud?.destroy();
+        this.m_resistHud = null;
         if (this.initialized) {
             this.initialized = false;
             this.m_updatePass = false;
@@ -896,6 +927,7 @@ export class Game {
                 Input.EquipNextScope,
                 Input.StowWeapons,
                 Input.SwitchAmmo,
+                Input.UseKillstreak,
             ];
             for (let i = 0; i < checkInputs.length; i++) {
                 const input = checkInputs[i];
@@ -1151,6 +1183,9 @@ export class Game {
         this.m_uiManager.interactionTouched = false;
         this.m_uiManager.swapWeapSlots = false;
         this.m_uiManager.roleSelected = "";
+        // sent once - left set it re-sent the role and re-stored the whole config
+        // (localStorage) every single frame for the rest of an arena match
+        this.m_uiManager.roleArenaSelected = "";
 
         // Only send a InputMsg if the new data has changed from the previously sent data. For the look direction, we need to determine if the angle difference is large enough.
         let diff = false;
@@ -1415,6 +1450,41 @@ export class Game {
         this.m_decalBarn.m_render(this.m_camera, debug, this.m_activePlayer.layer);
         this.m_map.m_render(this.m_camera);
         this.m_gas.m_render(dt, this.m_camera);
+        // a mode HUD must never take the rest of the frame down with it
+        if (this.m_domHud) {
+            try {
+                const map = this.m_map;
+                const ui = this.m_uiManager;
+                const origin = ui.getMapPosFromWorldPos(v2.create(0, 0), map);
+                const unit = ui.getMapPosFromWorldPos(v2.create(1, 0), map);
+                this.m_domHud.render(
+                    this.m_camera,
+                    {
+                        pos: this.m_activePlayer.m_pos,
+                        layer: this.m_activePlayer.layer,
+                        // dead: watching a teammate (or the killer) until the respawn
+                        watchingOther: this.m_activeId !== this.m_localId,
+                        watchingName: this.m_activeId !== this.m_localId
+                            ? this.m_playerBarn.getPlayerName(this.m_activeId, this.m_localId, false)
+                            : "",
+                        // knocked: the interact key gives up (Revivify: it revives instead)
+                        streakKey: this.m_inputBinds.getBind(Input.UseKillstreak)?.toString() ?? "",
+                        giveUpKey: this.m_activeId === this.m_localId
+                            && this.m_activePlayer.m_netData.m_downed
+                            && !this.m_activePlayer.m_hasPerk("self_revive")
+                            ? (this.m_inputBinds.getBind(Input.Revive) ?? this.m_inputBinds.getBind(Input.Interact))?.toString() ?? "F"
+                            : undefined,
+                    },
+                    (pos) => ui.getMapPosFromWorldPos(pos, map),
+                    Math.abs(unit.x - origin.x),
+                );
+            } catch (err) {
+                if (!this.m_domHudErrorLogged) {
+                    this.m_domHudErrorLogged = true;
+                    console.error("Domination HUD render failed", err);
+                }
+            }
+        }
         this.m_uiManager.m_render(
             this.m_activePlayer.m_pos,
             this.m_gas,
@@ -1534,10 +1604,21 @@ export class Game {
         }
 
         // Update full objects
+        let newObjTypes: string[] | undefined;
         for (let i = 0; i < msg.fullObjects.length; i++) {
             const obj = msg.fullObjects[i];
+            // an obstacle type not seen yet (e.g. another map's airdrop crate on a
+            // custom map): make sure its atlas/sounds are there (no-op when they are)
+            if (obj.__type === ObjectType.Obstacle) {
+                const type = (obj as { type?: string }).type;
+                if (type && !this.m_seenObjTypes.has(type)) {
+                    this.m_seenObjTypes.add(type);
+                    (newObjTypes ??= []).push(type);
+                }
+            }
             this.m_objectCreator.m_updateObjFull(obj.__type, obj.__id, obj, ctx);
         }
+        if (newObjTypes) this.m_resourceManager.loadAssetsForObjects(newObjTypes);
 
         // Update partial objects
         for (let i = 0; i < msg.partObjects.length; i++) {
@@ -1573,7 +1654,11 @@ export class Game {
         if (msg.activePlayerData.weapsDirty) {
             this.m_uiManager.weapsDirty = true;
         }
-        if (this.m_spectating) {
+        // Gun Game: watching the killer until the respawn (~2 s) is no real spectating -
+        // keep the normal HUD instead of opening the spectate menu
+        // (a real spectator gets the full spectate UI, advanced spectating included)
+        const gunGameKillCam = this.m_uiManager.modeActive && !this.m_replayMode && !this.m_joinedAsSpectator;
+        if (this.m_spectating && !gunGameKillCam) {
             this.m_uiManager.setSpectateTarget(
                 this.m_activeId,
                 this.m_localId,
@@ -1617,6 +1702,16 @@ export class Game {
             this.m_explosionBarn.addExplosion(e.type, e.pos, e.layer);
         }
 
+        // Spectating another team now: its pings come with this update, the old
+        // team's go (map events stay)
+        const pingGroupId = this.m_playerBarn.getPlayerInfo(this.m_activeId)?.groupId;
+        if (pingGroupId !== undefined) {
+            if (this.m_pingGroupId !== undefined && pingGroupId !== this.m_pingGroupId) {
+                this.m_uiManager.clearPlayerPings();
+            }
+            this.m_pingGroupId = pingGroupId;
+        }
+
         // Create emotes and pings
         for (let i = 0; i < msg.emotes.length; i++) {
             const e = msg.emotes[i];
@@ -1656,17 +1751,22 @@ export class Game {
         this.m_updateRecvCount++;
         if (msg.ack == this.seq && this.seqInFlight) {
             this.seqInFlight = false;
-            const ping = now - this.seqSendTime;
+            // Input sent -> update acking it, minus the time the server held the input
+            // until its next network tick (up to ~30ms of batching, not latency).
+            const ping = Math.max(0, now - this.seqSendTime - msg.ackDelay);
             this.debugHUD.pingGraph.addEntry(ping);
             this.pings.push(ping);
-            // Opt-in ping counter (see hudLayoutManager.ts) - same measurement
-            // debugHUD's own ping graph already uses, just also written to the
-            // player-facing element, throttled to once/second (raw per-packet values
-            // bounce around too fast to actually read otherwise).
+            // Opt-in ping counter (see hudLayoutManager.ts): the median of the last
+            // second's samples, once a second (single samples jump around, and one
+            // late frame would show as a spike).
+            this.m_pingCounterSamples.push(ping);
             if (now - this.m_lastPingCounterTime >= 1000) {
                 this.m_lastPingCounterTime = now;
+                const samples = this.m_pingCounterSamples.sort((a, b) => a - b);
+                const median = samples[Math.floor(samples.length / 2)];
+                this.m_pingCounterSamples = [];
                 const pingEl = document.getElementById("ui-ping-counter");
-                if (pingEl) pingEl.textContent = String(ping);
+                if (pingEl) pingEl.textContent = String(median);
             }
         }
         if (this.lastUpdateTime > 0) {
@@ -1685,8 +1785,39 @@ export class Game {
                 msg.deserialize(stream);
                 this.onJoin();
                 this.teamMode = msg.teamMode;
+                this.m_uiManager.setGunGameLadder(msg.gameMode === GameMode.GunGame ? msg.modeTypes : null);
+                this.m_uiManager.setGameMode(
+                    msg.gameMode !== GameMode.Standard,
+                    msg.gameMode === GameMode.GunGame ? "Gun Game" : msg.gameMode === GameMode.Domination ? "Domination" : "",
+                );
+                this.m_domHud?.destroy();
+                this.m_domHud = undefined;
+                this.m_emoteBarn.respawns = msg.gameMode !== GameMode.Standard && !msg.spectator;
+                if (msg.gameMode === GameMode.Domination && !this.m_replayMode) {
+                    // (a broken HUD must not break the join - the rest of it still has to run)
+                    try {
+                        this.m_domHud = new DominationHud(
+                            this.m_renderer,
+                            msg.modeTypes,
+                            (slot, action) => {
+                                const pick = new net.ArenaLoadoutSelectMsg();
+                                pick.slot = slot;
+                                pick.action = action;
+                                this.m_sendMessage(net.MsgType.ArenaLoadoutSelect, pick, 16);
+                            },
+                            () => this.m_playerBarn.getPlayerInfo(msg.spectator ? this.m_activeId : this.m_localId)?.teamId ?? 0,
+                            msg.spectator,
+                        );
+                        this.m_uiManager.addMinimapLayer(this.m_domHud.minimap);
+                    } catch (err) {
+                        console.error("Domination HUD failed to start", err);
+                        this.m_domHud = undefined;
+                    }
+                }
                 this.m_localId = msg.playerId;
                 this.m_isAdmin = msg.isAdmin;
+                this.chatUi.setSpectator(msg.spectator);
+                this.m_joinedAsSpectator = msg.spectator;
                 // In replay mode the advanced spectator (freecam / zoom / ESP) is always
                 // available — it runs purely client-side on the recorded objects.
                 this.m_advancedSpectatorAllowed =
@@ -1729,6 +1860,14 @@ export class Game {
                     this.m_particleBarn,
                 );
                 this.m_resourceManager.loadMapAssets(this.m_map.mapName);
+                // objects from other maps (custom maps) need those maps' sprites and
+                // sounds. Placed ones here; whatever spawns later (airdrop crates) is
+                // picked up in m_processGameUpdate when it first shows up - the map's
+                // gameConfig (plane/crate setup) is stripped from the prod client.
+                this.m_seenObjTypes.clear();
+                const placed = new Set(msg.objects.map((o) => o.type));
+                for (const type of placed) this.m_seenObjTypes.add(type);
+                this.m_resourceManager.loadAssetsForObjects(placed);
                 this.m_map.renderMap(this.m_pixi.renderer, this.m_canvasMode);
                 this.m_bulletBarn.onMapLoad(this.m_map);
                 this.m_particleBarn.onMapLoad(this.m_map);
@@ -1776,6 +1915,8 @@ export class Game {
             case net.MsgType.Kill: {
                 const msg = new net.KillMsg();
                 msg.deserialize(stream);
+                // Domination: pick the next loadout while waiting to respawn
+                if (msg.killed && msg.targetId === this.m_localId) this.m_domHud?.onLocalDeath();
                 const sourceType = msg.itemSourceType || msg.mapSourceType;
                 const activeTeamId = this.m_playerBarn.getPlayerInfo(
                     this.m_activeId,
@@ -1805,11 +1946,12 @@ export class Game {
                     this.m_activeId,
                     true,
                 );
-                targetName = helpers.formatUsername(targetName, targetInfo.roleTag);
-                killerName = helpers.formatUsername(killerName, killerInfo.roleTag);
+                targetName = helpers.formatUsername(targetName, targetInfo.roleTag, targetInfo);
+                killerName = helpers.formatUsername(killerName, killerInfo.roleTag, killerInfo);
                 killfeedKillerName = helpers.formatUsername(
                     killfeedKillerName,
                     killfeedKillerInfo.roleTag,
+                    killfeedKillerInfo,
                 );
                 // Display the kill / downed notification for the active player
                 if (msg.killCreditId == this.m_activeId) {
@@ -1892,7 +2034,7 @@ export class Game {
                 const group1 = msg.group1;
                 const group2 = msg.group2;
                 if (group1.length <= 0) {
-                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.roleTag);
+                    const text = this.m_ui2Manager.getJoinedText(playerName, msg.roleTag, msg);
                     this.m_ui2Manager.addKillFeedMessage(text, "#fcba03");
                 } else {
                     const group1Text = this.m_ui2Manager.getEnemieText(group1);
@@ -2019,6 +2161,8 @@ export class Game {
                 const msg = new net.GameOverMsg();
                 msg.deserialize(stream);
                 this.m_gameOver = msg.gameOver;
+                // the match is over: nothing of the mode HUD over the game over screen
+                if (msg.gameOver) this.m_domHud?.onGameOver();
                 const localTeamId = this.m_playerBarn.getPlayerInfo(
                     this.m_localId,
                 ).teamId;
@@ -2119,12 +2263,21 @@ export class Game {
                             color = "#00f7ff";
                             break;
                         }
+                        case 2: {
+                            // spectators among themselves
+                            color = "#c3a6ff";
+                            break;
+                        }
                     }
+
+                    if (msg.color) color = msg.color;
 
                     const txt = this.m_ui2Manager.getChatMessage(
                         player,
                         text,
                         msg.chatType,
+                        msg.roleTag,
+                        msg,
                     );
                     this.m_ui2Manager.addChatMessage(txt, color, "#000000");
                 } else if (msg.type === net.KillFeedMsgType.AdminMsg) {
@@ -2156,6 +2309,7 @@ export class Game {
                     const targetNameHtml = helpers.formatUsername(
                         targetInfo.name,
                         targetInfo.roleTag,
+                        targetInfo,
                     );
                     // Add to killfeed
                     this.m_ui2Manager.addKillFeedMessage(
@@ -2173,6 +2327,57 @@ export class Game {
                         assistCountText,
                     );
                 }
+                break;
+            }
+            case net.MsgType.ArenaResist: {
+                const msg = new net.ArenaResistMsg();
+                msg.deserialize(stream);
+                this.m_resistHud ??= new ResistIndicator();
+                this.m_resistHud.set(msg.reduction, msg.seconds);
+                break;
+            }
+            case net.MsgType.Killstreak: {
+                const msg = new net.KillstreakMsg();
+                msg.deserialize(stream);
+                this.m_domHud?.setStreak(msg.streak, msg.ready, msg.active, msg.next);
+                break;
+            }
+            case net.MsgType.ModeStandings: {
+                const msg = new net.ModeStandingsMsg();
+                msg.deserialize(stream);
+                this.m_uiManager.setModeStandings(msg.entries, {
+                    phase: msg.phase,
+                    players: msg.players,
+                    needed: msg.needed,
+                    max: msg.max,
+                    seconds: msg.seconds,
+                    scoreLimit: msg.scoreLimit,
+                });
+                this.m_domHud?.setStandings(msg.phase, msg.teamIds, msg.teamScores, msg.scoreLimit, msg.zones);
+                break;
+            }
+            case net.MsgType.TeamInfo: {
+                const msg = new net.TeamInfoMsg();
+                msg.deserialize(stream);
+                // (the modes show their teams only top left - no detailed overview on the map)
+                if (!this.m_uiManager.modeActive) {
+                    this.m_uiManager.teamOverview.setData(msg.players, this.m_playerBarn, this.m_activeId);
+                }
+                // (no adrenaline bars in the modes - it's always full there)
+                this.m_uiManager.updateTeamBoost(this.m_uiManager.modeActive ? [] : msg.players);
+                break;
+            }
+            case net.MsgType.AdvancedSpectatorAllowed: {
+                // opens up mid-game, e.g. once the whole own team is dead
+                const msg = new net.AdvancedSpectatorAllowedMsg();
+                msg.deserialize(stream);
+                this.m_advancedSpectatorAllowed = msg.allowed || this.m_replayMode;
+                if (!this.m_advancedSpectatorAllowed && this.m_advSpec.enabled) {
+                    this.m_advSpec.enabled = false;
+                }
+                this.m_uiManager.updateAdvancedSpectatorUi();
+                this.m_uiManager.updateSpectateCycleButtons();
+                this.m_uiManager.updateSpectateText();
                 break;
             }
             case net.MsgType.PickupExtra: {

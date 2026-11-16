@@ -4,6 +4,25 @@
     %VITE_TURNSTILE_SCRIPT%
     <!-- Meta Properties -->
     <meta charset="UTF-8">
+    <!-- Startup API requests, sent before the app JS has even loaded (see src/prefetch.ts). -->
+    <script>
+      (function () {
+        try {
+          var P = (window.__svPrefetch = {});
+          var json = function (r) { return r.ok ? r.json() : Promise.reject(r.status); };
+          P["GET /api/site_info?language=en "] = fetch("/api/site_info?language=en").then(json);
+          if (document.cookie.indexOf("app-data=") !== -1) {
+            var post = function (url, body) {
+              var opts = { method: "POST", credentials: "same-origin", headers: { "X-Requested-With": "XMLHttpRequest" } };
+              if (body) { opts.headers["Content-Type"] = "application/json; charset=utf-8"; opts.body = JSON.stringify(body); }
+              return fetch(url, opts).then(json);
+            };
+            P["POST /api/user/profile "] = post("/api/user/profile");
+            P["POST /api/user/get_pass {\"tryRefreshQuests\":true}"] = post("/api/user/get_pass", { tryRefreshQuests: true });
+          }
+        } catch (e) {}
+      })();
+    </script>
     <title>survev.de - Competitive survev.io.</title>
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover, user-scalable=no">
     <link rel="manifest" href="manifest.json">
@@ -64,6 +83,8 @@
         </div>
       </div>
       <div id="ui-game" class="click-through">
+        <!-- teammates next to the big map, see ui/teamOverview.ts (HUD editor: "Team Overview") -->
+        <div id="hud-wrap-teamOverview" class="hud-drag-wrapper"><div id="ui-team-overview"></div></div>
         <div id="tablet-console"></div>
         <div id="ui-center">
           <div id="ui-game-menu">
@@ -354,6 +375,15 @@
           <div id="ui-chat-button"></div>
         </div>
         <div id="ui-top-left" class="js-ui-hud-show click-through">
+          <!-- Gun Game: top 3 + the watched player's step (instead of the teammates, there are none) -->
+          <div id="hud-wrap-gunGameLevel" class="js-ui-mobile-map-hidden hud-drag-wrapper">
+            <div id="ui-gungame-level-box" class="ui-bg-standard" style="display: none;">
+              <div class="ui-gungame-title">Gun Game</div>
+              <div id="ui-gungame-top"></div>
+              <div id="ui-gungame-level"></div>
+              <div id="ui-gungame-next"></div>
+            </div>
+          </div>
           <div id="ui-team" class="js-ui-mobile-map-hidden hud-drag-wrapper">
             <div class="ui-team-member ui-bg-standard" data-id="0">
               <div class="ui-team-member-name"></div>
@@ -361,6 +391,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
             <div class="ui-team-member ui-bg-standard" data-id="1">
@@ -369,6 +400,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
             <div class="ui-team-member ui-bg-standard" data-id="2">
@@ -377,6 +409,7 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
             <div class="ui-team-member ui-bg-standard" data-id="3">
@@ -385,6 +418,26 @@
               <div class="ui-team-member-status"></div>
               <div class="ui-team-member-health">
                 <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
+              </div>
+            </div>
+            <!-- 5th / 6th: arena teams of 6 (Domination) -->
+            <div class="ui-team-member ui-bg-standard" data-id="4">
+              <div class="ui-team-member-name"></div>
+              <div class="ui-team-member-color ui-background-green"></div>
+              <div class="ui-team-member-status"></div>
+              <div class="ui-team-member-health">
+                <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
+              </div>
+            </div>
+            <div class="ui-team-member ui-bg-standard" data-id="5">
+              <div class="ui-team-member-name"></div>
+              <div class="ui-team-member-color ui-background-lightblue"></div>
+              <div class="ui-team-member-status"></div>
+              <div class="ui-team-member-health">
+                <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
           </div>
@@ -422,6 +475,8 @@
             </div>
           </div>
         </div>
+        <!-- Arena modes: the kill streak box, right of the gas timer above the minimap (ui/modes/dominationHud.ts); movable in the HUD editor -->
+        <div id="hud-wrap-killstreak" class="js-ui-map-hidden hud-drag-wrapper"></div>
         <div id="ui-kill-leader-container">
           <div id="ui-kill-leader-wrapper" class="js-ui-map-hidden js-ui-hud-show hide-on-mobile">
             <div id="hud-wrap-killLeader" class="hud-drag-wrapper">
@@ -453,6 +508,10 @@
             </div>
             <div class="ui-kill-counter-header" data-l10n="game-kills">Kills</div>
           </div>
+        </div>
+        <!-- Domination: score bar + zones + status, under the scope row (ui/modes/dominationHud.ts); movable in the HUD editor -->
+        <div id="ui-domination-wrapper" class="js-ui-map-hidden">
+          <div id="hud-wrap-domination" class="hud-drag-wrapper"></div>
         </div>
         <div id="ui-top-center-scopes-wrapper">
           <div id="ui-top-center-scopes" class="click-through js-ui-map-hidden hud-drag-wrapper">
@@ -509,6 +568,10 @@
                   placeholder="Type message..." 
                   maxlength="100"
               />
+              <span id="ui-chat-highlight" style="display: none">
+                  <input id="ui-chat-highlight-color" type="color" value="#ff4d4d" title="Highlight color" />
+                  <button id="ui-chat-highlight-toggle" title="Highlight messages">HL</button>
+              </span>
               <button id="ui-chat-send">Send</button>
           </div>
           <div id="ui-pickup-message" class="notify-message"></div>
@@ -655,30 +718,14 @@
         <div id="ui-spectate-options-wrapper">
           <div id="ui-spectate-options" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
             <div id="ui-spectate-buttons" class="ui-bg-standard">
+              <!-- held, not clicked (UiManager): no leaving by a slip; on top,
+                   apart from the rest. The others: order / on-off in the HUD editor
+                   (specButtons.ts) - next / previous are off by default (arrow keys) -->
+              <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" title="Hold to leave the game"><span class="spec-leave-fill"></span><span class="spec-leave-text" data-l10n="game-leave-game">Leave Game</span></a>
               <a class="menu-option btn-darken" id="btn-spectate-next-player" data-l10n="game-next-teammate">Next Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-prev-player" data-l10n="game-previous-teammate">Previous Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-view-stats" data-l10n="game-view-match-stats">View Match Stats</a>
               <a class="menu-option btn-darken" id="btn-spectate-advanced" style="display: none;">Advanced Spectator</a>
-              <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" data-l10n="game-leave-game">Leave Game</a>
-            </div>
-            <div id="ui-spectate-advanced-options" class="ui-bg-standard" style="display: none;">
-              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">▾ Options</a>
-              <div id="ui-spectate-advanced-list">
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-freecam">Freecam</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zoom">Zoom</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-layer">Underground</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-transparent">Transparent Surfaces</a>
-                <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-transparent-collapse">▸ Sub-Options</a>
-                <div id="ui-spectate-transparent-sublist" style="display: none;">
-                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zone-transparent">Transparent Zone</a>
-                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-foliage-transparent">Transparent Foliage</a>
-                </div>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-enemies-map">Enemies on Map</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-esp">ESP Lines</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-labels">Player Info</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-nades">Grenade Info</a>
-                <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-vision">Vision Radius</a>
-              </div>
             </div>
             <div id="ui-spectate-stats" class="ui-bg-standard">
               <div id="ui-spectate-stats-header" data-l10n="game-your-results">Your Results</div>
@@ -686,6 +733,45 @@
                 <tbody id="ui-spectate-stats-data">
                 </tbody>
               </table>
+            </div>
+          </div>
+          <!-- advanced spectator's options: placed on its own in the HUD editor -->
+          <div id="ui-spectate-adv-wrap" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
+            <div id="ui-spectate-advanced-options" class="ui-bg-standard" style="display: none;">
+              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">Options ▸</a>
+              <div id="ui-spectate-advanced-list">
+                <div class="spectate-adv-section">Camera</div>
+                <div class="spectate-adv-grid">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-freecam">Freecam</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zoom">Zoom</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-layer">Underground</a>
+                </div>
+                <div class="spectate-adv-section">View</div>
+                <div class="spectate-adv-grid">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-transparent" title="Transparent roofs and surfaces">Transparent</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-enemies-map">Enemies on Map</a>
+                </div>
+                <!-- only while Transparent is on -->
+                <div class="spectate-adv-grid spectate-adv-subgrid" id="ui-spectate-transparent-sublist" style="display: none;">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-zone-transparent">↳ Zone</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-foliage-transparent">↳ Foliage</a>
+                </div>
+                <div class="spectate-adv-section">
+                  Overlays
+                  <span class="spectate-adv-section-links">
+                    <span class="spectate-adv-link" id="btn-adv-overlays-all">all</span>
+                    ·
+                    <span class="spectate-adv-link" id="btn-adv-overlays-none">none</span>
+                  </span>
+                </div>
+                <div class="spectate-adv-grid">
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-esp">ESP Lines</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-labels">Player Info</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-nades">Grenades</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-vision">Vision</a>
+                  <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-crosshair">Crosshair</a>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -883,9 +969,14 @@
             </div>
             <div class="account-overview">
               <div class="account-details-user account-details-block">
-                <div id="btn-social" class="account-social-btn" style="display:none" title="Social">
-                  <div id="social-alert-main" class="account-alert-main account-alert"></div>
-                  <span data-l10n="index-social">Social</span>
+                <div id="start-top-pills">
+                  <!-- switches the main menu between battle royale and multiplayer (the arena
+                       modes) - it names the other side (main.ts applyView) -->
+                  <div id="btn-client-view" class="client-view-btn">Multiplayer</div>
+                  <div id="btn-social" class="account-social-btn" style="display:none" title="Social">
+                    <div id="social-alert-main" class="account-alert-main account-alert"></div>
+                    <span data-l10n="index-social">Social</span>
+                  </div>
                 </div>
                 <div class="account-details">
                   <div class="account-avatar"></div>
@@ -965,6 +1056,9 @@
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-1" data-l10n="index-play-duo">Play Duo</a>
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-2" data-l10n="index-play-squad">Play Squad</a>
                 </div>
+                <div id="view-no-modes" style="display: none;">No multiplayer modes are running on this server right now - check back soon!</div>
+                <!-- a 4th mode (e.g. Gun Game), hidden unless the region has one -->
+                <a class="btn-green btn-darken menu-option" id="btn-start-mode-3" data-l10n="index-play-gungame-solo" style="display: none;">Play Gun Game</a>
                 <div class="btns-double-row">
                   <a class="btn-darken menu-option btn-team-option" id="btn-join-team" data-l10n="index-join-team">Join Team</a>
                   <a class="btn-darken menu-option btn-team-option" id="btn-create-team" data-l10n="index-create-team">Create Team</a>
@@ -976,6 +1070,9 @@
                 <!--<div id="btn-help" class="menu-option btn-darken" data-l10n="index-how-to-play">How to Play</div>-->
 
                 <a class="btn-green btn-darken menu-option" id="btn-spectator-menu">Spectate</a>
+                <!-- multiplayer only: loadouts, level, unlocks (ui/arenaMenu.ts) -->
+                <a class="btn-green btn-darken menu-option arena-view-only" id="btn-arena-loadouts">Arena Loadouts</a>
+                <a class="arena-view-only arena-tutorial-link" id="btn-arena-tutorial">How does Multiplayer work?</a>
                 <div id="start-help">
                   <h1 data-l10n="index-controls">Controls</h1>
                   <p><span class="help-action" data-l10n="index-movement"></span>: <span class="help-control" data-l10n="index-movement-ctrl"></span></p>
@@ -1113,47 +1210,64 @@
               </div>
             </div>
             <div id="spectator-menu" class="menu-column menu-block">
-              <div class="play-button-container">
-                <a class='btn-darken menu-option' id='btn-leave-spectator' data-l10n='index-leave-spectator'>Return</a>
-                <a class='btn-darken menu-option' id='btn-reload-games' data-l10n='index-reload-games'>Reload Games</a>
-                <div id="spectator-menu-header">Spectator Menu</div>
-                <div id="spectator-menu-contents">
-                    <div id="spectator-menu-options">
-                      <select id='server-select-spectate' class='server-select menu-option btn-hollow btn-hollow-selected'>
-                        <optgroup id='spectate-server-opts' label='Region' data-l10n='index-region'>
-                        </optgroup>
-                      </select>
-                      <select id='game-select-main' class='server-select menu-option btn-hollow btn-hollow-selected'>
-                        <optgroup id='game-opts' label='Games' data-l10n='index-games'>
-                        </optgroup>
-                      </select>
+              <div id="spectator-menu-top">
+                <div id="spectator-menu-header">Spectator Console</div>
+                <a class='btn-darken menu-option spectator-top-btn' id='btn-leave-spectator' data-l10n='index-leave-spectator'>Return</a>
+              </div>
+              <select id='server-select-spectate' style='display: none'>
+                <optgroup id='spectate-server-opts' label='Region' data-l10n='index-region'>
+                </optgroup>
+              </select>
+              <div id="spectator-region-tabs"></div>
+              <div id="spectator-error"></div>
+              <div id="spectator-menu-contents">
+                <div id="spectator-list-col">
+                  <div id="spectator-view-tabs">
+                    <a class="btn-hollow btn-darken spectator-view-tab btn-hollow-selected" data-view="matches">Matches<span class="spectator-region-tab-count" id="spectator-count-matches">0</span></a>
+                    <a class="btn-hollow btn-darken spectator-view-tab" data-view="lobbies">Lobbies<span class="spectator-region-tab-count" id="spectator-count-lobbies">0</span></a>
+                  </div>
+                  <div id="spectator-game-list"></div>
+                </div>
+                <div id="spectator-game-detail">
+                  <div id="spectator-detail-empty">Select a game to see who is playing.</div>
+                  <div id="spectator-detail-body">
+                    <div id="spectator-detail-head">
+                      <span id="spectator-detail-mode" class="spectator-mode-badge"></span>
+                      <span id="spectator-detail-map"></span>
+                      <span id="spectator-detail-private" class="spectator-lobby-badge">Lobby</span>
+                    </div>
+                    <div id="spectator-detail-stats">
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-detail-alive"></div><div class="spectator-stat-label">Alive</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-detail-runtime"></div><div class="spectator-stat-label">Runtime</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-detail-kills"></div><div class="spectator-stat-label">Kills</div></div>
+                    </div>
+                    <div class="spectator-section-title">Players</div>
+                    <div id="spectator-detail-players"></div>
+                    <div class="spectator-section-title" id="spectator-detail-feed-title">Recent kills</div>
+                    <div id="spectator-detail-feed"></div>
+                    <div class="spectator-actions">
                       <a class='btn-green btn-darken menu-option' id='btn-start-spectate' data-l10n='index-spectate'>Spectate</a>
+                      <a class='btn-hollow btn-darken menu-option' id='btn-join-game-lobby'>Join Lobby &amp; Spectate</a>
                     </div>
-
-                    <div id="spectator-menu-gameinfo">
-                      <div id="spectator-menu-gameinfo-header">Game Info</div>
-                      <div id="spectator-menu-gameinfo-contents">
-                        <div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-l10n='index-teamMode'>Team Mode:</span>
-                          <span class="spectator-menu-gameinfo-value" id="spectate-teamMode-name"></span>
-                        </div>
-                        <div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-l10n='index-playerCount'>Player Count:</span>
-                          <span class="spectator-menu-gameinfo-value" id="spectate-playerCount"></span>
-                        </div>
-                        <!--<div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-i10n="index-players">Players:</span>
-                          <button id="players-toggle" class="spectator-menu-toggle" type="button">Show</button>
-                        </div>
-                        <div id="spectate-players" class="spectator-menu-players collapsed"></div>-->
-                        <div class="spectator-menu-gameinfo-item">
-                          <span class="spectator-menu-gameinfo-label" data-l10n='index-runtime'>Runtime:</span>
-                          <span class="spectator-menu-gameinfo-value" id="spectate-runtime"></span>
-                        </div>
-                      </div>
+                  </div>
+                  <div id="spectator-lobby-body">
+                    <div id="spectator-lobby-head">
+                      <span id="spectator-lobby-mode" class="spectator-mode-badge"></span>
+                      <span id="spectator-lobby-title"></span>
+                      <span class="spectator-lobby-badge">Lobby</span>
                     </div>
-
-
+                    <div id="spectator-lobby-stats">
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-lobby-players"></div><div class="spectator-stat-label">Players</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-lobby-spectators"></div><div class="spectator-stat-label">Spectators</div></div>
+                      <div class="spectator-stat"><div class="spectator-stat-value" id="spectator-lobby-status"></div><div class="spectator-stat-label">Status</div></div>
+                    </div>
+                    <div class="spectator-section-title">Members</div>
+                    <div id="spectator-lobby-members"></div>
+                    <div id="spectator-lobby-actions" class="spectator-actions">
+                      <a class='btn-green btn-darken menu-option' id='btn-spectate-lobby-match'>Spectate Match</a>
+                      <a class='btn-hollow btn-darken menu-option' id='btn-join-lobby-spectator'>Join Lobby as Spectator</a>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1181,9 +1295,7 @@
                   <div id="pass-loading-spinner"></div>
                 </div>
                 <div id="pass-block" class="pass-column menu-block">
-                  <div class="right-column-toggle news-toggle">
-                    <div class="account-alert"></div>
-                  </div>
+                  <div class="right-column-toggle arena-progress-toggle" title="Arena progress"></div>
                   <div id="pass-name">
                     <span id="pass-name-text"></span>
                   </div>
@@ -1281,6 +1393,12 @@
                     </div>
                   </div>
                 </div>
+              </div>
+              <!-- multiplayer: arena level and unlocks (ui/arenaMenu.ts ArenaProgressPanel); the
+                   pass and this toggle into each other -->
+              <div id="arena-progress-wrapper" style="display: none;">
+                <div class="right-column-toggle pass-toggle" title="Battle pass"></div>
+                <div id="arena-progress-block" class="pass-column menu-block"></div>
               </div>
               <div id="news-wrapper" style="display: none!important;">
                 <div class="right-column-toggle pass-toggle" style="display: block!important;"></div>
@@ -1460,6 +1578,8 @@
               <div id="modal-customize-item-header">
                 <div id="modal-customize-item-name"></div>
                 <div id="modal-customize-item-rarity"></div>
+                <!-- random cosmetic for this category: now, or before every match -->
+                <div id="loadout-random-controls" class="loadout-random-controls"></div>
                 <div class="modal-customize-loading-container">
                   <div id="modal-customize-loading"></div>
                 </div>
@@ -1483,6 +1603,20 @@
                 </div>
                 <div class="loadout-setting-row">
                   <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Track 1v1s</div>
+                    <div class="loadout-setting-desc">Show your 1v1 duels on the stats page. When off, duels against you are hidden for everyone.</div>
+                  </div>
+                  <div id="setting-track-duels" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">Show [OWNER] tag</div>
+                    <div class="loadout-setting-desc">Show the owner tag next to your name (web &amp; in-game).</div>
+                  </div>
+                  <div id="setting-show-owner-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
+                </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
                     <div class="loadout-setting-name">Show [ADMIN] tag</div>
                     <div class="loadout-setting-desc">Show the golden admin tag next to your name (web &amp; in-game).</div>
                   </div>
@@ -1502,6 +1636,17 @@
                   </div>
                   <div id="setting-show-premium-prefix" class="loadout-toggle"><span class="loadout-toggle-knob"></span></div>
                 </div>
+                <div class="loadout-setting-row">
+                  <div class="loadout-setting-text">
+                    <div class="loadout-setting-name">In-game name tag</div>
+                    <div class="loadout-setting-desc">Which tag shows in front of your name in games: your role tag ([PREM], [MOD]…), your clan's [TAG], or both. Clan-only keeps your role tag while you're in no clan.</div>
+                  </div>
+                  <div id="setting-tag-display" class="loadout-seg">
+                    <div class="loadout-seg-btn" data-value="both">Both</div>
+                    <div class="loadout-seg-btn" data-value="role">Role</div>
+                    <div class="loadout-seg-btn" data-value="clan">Clan</div>
+                  </div>
+                </div>
                 <div id="loadout-settings-status" class="loadout-settings-status"></div>
                 <div class="loadout-settings-title loadout-settings-title-spaced">Connected accounts</div>
                 <div class="loadout-setting-row">
@@ -1514,6 +1659,8 @@
                 <div class="loadout-setting-desc">Third-party applications you've authorized to access your account data. <a href="/apps" target="_blank" rel="noopener">Manage your own apps &rarr;</a></div>
                 <div id="loadout-connected-apps-list"></div>
               </div>
+              <!-- Crates tab: key counts, the three lootboxes, drop chances -->
+              <div id="loadout-crates-panel" style="display:none"></div>
             </div>
             <div id="modal-customize-footer" class="modal-footer modal-footer-round">
               <div id="loadout-value-bar" class="loadout-value-bar"></div>
@@ -1521,6 +1668,8 @@
               <div id="modal-customize-item-lore"></div>
             </div>
             <div id="modal-customize-info-toggle" class="btn-darken" title="More info">Info</div>
+            <!-- crate opening animation (covers the left panel) -->
+            <div id="crate-open-overlay" style="display:none"></div>
           </div>
           <div id="modal-content-right-crosshair" class="modal-content-right modal-content-shadow">
             <div class="modal-spacer"></div>
@@ -1832,32 +1981,65 @@
             <span class="close close-corner"></span>
           </div>
           <div class="shop-tabs">
-            <div class="shop-tab shop-tab-active" data-shop-tab="daily">Deals<span id="shop-daily-dot" class="tab-dot"></span></div>
+            <div class="shop-tab shop-tab-active" data-shop-tab="store">Store<span id="shop-daily-dot" class="tab-dot"></span></div>
             <div class="shop-tab" data-shop-tab="market">Market<span id="shop-market-badge" class="tab-badge"></span></div>
-            <div class="shop-tab" data-shop-tab="auction">Auction<span id="shop-auction-badge" class="tab-badge"></span></div>
-            <div class="shop-tab" data-shop-tab="owners">Owners</div>
-            <div class="shop-tab" data-shop-tab="premium">Premium</div>
+            <div class="shop-tab" data-shop-tab="sell">Sell</div>
+            <div class="shop-tab" data-shop-tab="trades">My Trades<span id="shop-trades-badge" class="tab-badge"></span></div>
           </div>
           <div class="modal-body shop-body">
-            <div id="shop-daily-offers" class="shop-offers"></div>
-            <div id="shop-owners" style="display:none">
-              <div class="market-toolbar">
-                <input id="owners-item-search" class="market-search" type="text" placeholder="Pick an item…" autocomplete="off" />
-                <input id="owners-user-search" class="market-search" type="text" placeholder="Filter owners by name" autocomplete="off" />
-              </div>
-              <div id="owners-item-suggestions" class="owners-suggestions" style="display:none"></div>
-              <div id="owners-selected" class="owners-selected" style="display:none"></div>
-              <div id="owners-list" class="shop-offers owners-list"></div>
-              <div id="owners-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
+            <!-- Store: the daily / weekly shop and Premium -->
+            <div id="shop-store-nav" class="shop-subnav">
+              <div class="market-subtab market-subtab-active" data-store-view="deals">Deals</div>
+              <div class="market-subtab" data-store-view="premium">⭐ Premium</div>
             </div>
+            <div id="shop-daily-offers" class="shop-offers"></div>
+            <!-- Market: what other players sell, auction off and want to buy -->
+            <div id="shop-market-nav" style="display:none">
+              <div class="trade-hero">
+                <div class="trade-recent">
+                  <span class="trade-recent-label">🔥 Recently sold</span>
+                  <div id="trade-recent-list" class="trade-recent-list"></div>
+                </div>
+                <div id="trade-make-offer-btn" class="shop-buy-btn menu-option btn-darken trade-make-offer-btn" title="Offer a price for any item - every owner can sell it to you">＋ Make offer</div>
+              </div>
+              <div class="shop-subnav">
+                <div id="market-tab-browse" class="market-subtab market-subtab-active">Buy now</div>
+                <div class="market-subtab" data-market-view="auctions">🔨 Auctions<span id="shop-auction-badge" class="tab-badge"></span></div>
+                <div class="market-subtab" data-market-view="wanted">Wanted</div>
+              </div>
+            </div>
+            <div id="shop-wanted" class="shop-offers market-listings" style="display:none"></div>
+            <!-- Sell: your own items -->
+            <div id="shop-sell" style="display:none">
+              <div class="market-toolbar">
+                <input id="sell-search" class="market-search" type="text" placeholder="Search your items…" autocomplete="off" />
+                <select id="sell-category-filter" class="market-select">
+                  <option value="">All categories</option>
+                  <option value="outfit">Skins</option>
+                  <option value="melee">Melee</option>
+                  <option value="emote">Emotes</option>
+                  <option value="particle">Particles</option>
+                  <option value="death_effect">Death Effects</option>
+                  <option value="key">Keys</option>
+                </select>
+              </div>
+              <div class="sell-layout">
+                <div id="sell-grid" class="sell-grid"></div>
+                <div id="sell-detail" class="sell-detail"></div>
+              </div>
+            </div>
+            <!-- My Trades: everything you have going on -->
+            <div id="shop-trades-nav" class="shop-subnav" style="display:none">
+              <div class="market-subtab" data-trades-view="requests">Requests<span id="trades-requests-badge" class="tab-badge"></span></div>
+              <div id="market-tab-offers" class="market-subtab">Offers<span id="market-offers-badge" class="tab-badge"></span></div>
+              <div id="market-tab-private" class="market-subtab">Private<span id="market-private-badge" class="tab-badge"></span></div>
+              <div id="market-tab-mine" class="market-subtab">My listings</div>
+              <div class="market-subtab" data-trades-view="orders">My orders</div>
+            </div>
+            <div id="shop-requests" style="display:none"></div>
+            <div id="shop-myorders" style="display:none"></div>
             <div id="shop-market" style="display:none">
               <div class="market-toolbar">
-                <div class="market-subtabs">
-                  <div id="market-tab-browse" class="market-subtab market-subtab-active">Browse</div>
-                  <div id="market-tab-private" class="market-subtab">Private<span id="market-private-badge" class="tab-badge"></span></div>
-                  <div id="market-tab-mine" class="market-subtab">My Listings</div>
-                  <div id="market-tab-offers" class="market-subtab">Offers<span id="market-offers-badge" class="tab-badge"></span></div>
-                </div>
                 <input id="market-search" class="market-search" type="text" placeholder="Search name / source / owner" />
                 <select id="market-category-filter" class="market-select">
                   <option value="">All categories</option>
@@ -1866,6 +2048,7 @@
                   <option value="emote">Emotes</option>
                   <option value="particle">Particles</option>
                   <option value="death_effect">Death Effects</option>
+                  <option value="key">Keys</option>
                 </select>
                 <select id="market-rarity-filter" class="market-select">
                   <option value="">All rarities</option>
@@ -1890,6 +2073,7 @@
                   <option value="emote">Emotes</option>
                   <option value="particle">Particles</option>
                   <option value="death_effect">Death Effects</option>
+                  <option value="key">Keys</option>
                 </select>
                 <select id="auction-rarity-filter" class="market-select">
                   <option value="">All rarities</option>
@@ -1953,6 +2137,30 @@
           </div>
         </div>
       </div>
+      <div id="modal-make-offer" class="modal">
+        <div class="modal-content market-sell-content">
+          <div class="modal-header shop-header">
+            <h2>Make an offer</h2>
+            <span class="close close-corner"></span>
+          </div>
+          <div class="modal-body market-sell-body">
+            <div class="market-sell-hint">Name a price for any item. Every player who owns it can sell it to you - the first one who does gets the fries. You pay now; if nobody sells within 3 days you get everything back.</div>
+            <input id="offer-item-search" class="market-search" type="text" placeholder="Which item?" autocomplete="off" />
+            <div id="offer-item-suggestions" class="owners-suggestions" style="display:none"></div>
+            <div id="offer-item-selected" class="offer-item-selected"></div>
+            <div id="offer-item-stats" class="trade-stats"></div>
+            <div class="market-sell-row">
+              <label for="offer-amount">Your offer</label>
+              <input id="offer-amount" class="market-sell-price" type="number" min="1" />
+              <div class="shop-fries-icon"></div>
+            </div>
+            <div id="offer-total" class="market-sell-hint"></div>
+            <div id="offer-error" class="market-sell-error"></div>
+            <div id="offer-confirm" class="shop-buy-btn menu-option btn-darken">Place offer</div>
+          </div>
+        </div>
+      </div>
+      <div id="trade-toasts" class="trade-toasts"></div>
       <div id="modal-social" class="modal">
         <div class="modal-content">
           <div class="modal-header shop-header">
@@ -1960,16 +2168,26 @@
             <span class="close close-corner"></span>
           </div>
           <div class="shop-tabs social-tabs">
-            <div class="shop-tab shop-tab-active" data-social-tab="gift">Social Hub</div>
-            <div class="shop-tab" data-social-tab="friends">Friends<span id="social-friends-tab-badge" class="tab-badge"></span></div>
-            <div class="shop-tab" data-social-tab="clans">Clans</div>
+            <div class="shop-tab shop-tab-active" data-social-tab="friends">Friends<span id="social-friends-tab-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-social-tab="players">Players</div>
+            <div class="shop-tab" data-social-tab="clans">Clan<span id="social-clans-tab-badge" class="tab-badge"></span></div>
+            <div class="shop-tab" data-social-tab="discover">Discover Clans</div>
+            <div class="shop-tab" data-social-tab="league">Clan League</div>
+            <div class="shop-tab" data-social-tab="owners">Owners</div>
           </div>
           <div class="modal-body shop-body">
-            <div id="social-gift">
-              <div id="social-search-view">
-                <input id="social-user-search" class="market-search" type="text" placeholder="Search a player…" autocomplete="off" />
-                <div id="social-search-results" class="social-search-results"></div>
-              </div>
+            <!-- Friends: requests, playing now, online, everyone, recently played, blocked -->
+            <div id="social-friends">
+              <input id="social-friend-search" class="market-search social-search" type="text" placeholder="🔍 Add a friend or find a player…" autocomplete="off" />
+              <div id="social-friends-sections" class="social-list"></div>
+            </div>
+            <!-- Players: search anyone -->
+            <div id="social-players" style="display:none">
+              <input id="social-user-search" class="market-search social-search" type="text" placeholder="🔍 Search a player…" autocomplete="off" />
+              <div id="social-search-results" class="social-list"></div>
+            </div>
+            <!-- Gifting (opened from a player's ⋯ menu) -->
+            <div id="social-gift" style="display:none">
               <div id="social-fries-view" style="display:none">
                 <div class="social-subhead">
                   <span id="social-fries-back" class="social-back">← Back</span>
@@ -2007,20 +2225,20 @@
                 <div id="social-cosmetics-status" class="social-status"></div>
               </div>
             </div>
-            <div id="social-friends" style="display:none">
-              <div id="social-requests-head" class="social-friends-head" style="display:none">Friend requests</div>
-              <div id="social-requests-list" class="social-friends-list"></div>
-              <div id="social-sent-head" class="social-friends-head" style="display:none">Sent requests</div>
-              <div id="social-sent-list" class="social-friends-list"></div>
-              <div class="social-friends-head">Friends</div>
-              <div id="social-friends-list" class="social-friends-list"></div>
-              <div class="social-friends-head">Recently played</div>
-              <div id="social-recent-list" class="social-friends-list"></div>
-              <div id="social-blocked-head" class="social-friends-head" style="display:none">Blocked</div>
-              <div id="social-blocked-list" class="social-friends-list"></div>
-            </div>
             <div id="social-clans" style="display:none">
-              <div class="shop-status">Clans are coming soon.</div>
+              <div id="clan-view"></div>
+            </div>
+            <div id="social-discover" style="display:none"></div>
+            <div id="social-league" style="display:none"></div>
+            <div id="shop-owners" style="display:none">
+              <div class="market-toolbar">
+                <input id="owners-item-search" class="market-search" type="text" placeholder="Pick an item…" autocomplete="off" />
+                <input id="owners-user-search" class="market-search" type="text" placeholder="Filter owners by name" autocomplete="off" />
+              </div>
+              <div id="owners-item-suggestions" class="owners-suggestions" style="display:none"></div>
+              <div id="owners-selected" class="owners-selected" style="display:none"></div>
+              <div id="owners-list" class="shop-offers owners-list"></div>
+              <div id="owners-loadmore" class="market-loadmore menu-option btn-darken" style="display:none">Load more</div>
             </div>
           </div>
           <div id="social-confirm" class="social-confirm" style="display:none">

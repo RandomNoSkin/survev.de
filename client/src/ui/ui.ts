@@ -1,3 +1,4 @@
+import { ModePhase } from "../../../shared/net/modeStandingsMsg";
 import $ from "jquery";
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
@@ -31,6 +32,7 @@ import type { Localization } from "./localization";
 import { PieTimer } from "./pieTimer";
 import type { Touch } from "./touch";
 import type { UiManager2 } from "./ui2";
+import { TeamOverview } from "./teamOverview";
 
 function humanizeTime(time: number) {
     const hours = Math.floor(time / 3600);
@@ -72,6 +74,9 @@ interface ContainerWithMask extends PIXI.Container {
 }
 
 type PrevStatus = Pick<PlayerStatus, "downed" | "dead" | "disconnected" | "role">;
+/** How long the spectators' Leave button is held before it leaves. */
+const SPEC_LEAVE_HOLD_MS = 800;
+
 export class UiManager {
     m_pieTimer = new PieTimer();
     gameElem = $("#ui-game");
@@ -116,6 +121,8 @@ export class UiManager {
     topLeft = $("#ui-top-left");
     waitingForPlayers = true;
     waitingText = $("#ui-waiting-text");
+    /** its original content ("Waiting for players..."), Gun Game's warmup replaces it */
+    waitingTextHtml = this.waitingText.html();
     spectating = false;
     prevSpectatorCount = 0;
     spectatorCount = 0;
@@ -141,9 +148,27 @@ export class UiManager {
     announcement = $("#ui-announcement");
     killLeaderName = $("#ui-kill-leader-name");
     killLeaderCount = $("#ui-kill-leader-count");
+    /** Gun Game: this match's weapon ladder (null in every other mode) */
+    gunGameLadder: string[] | null = null;
+    /** a GameMode (Gun Game, Domination...) runs this game: its clock replaces the gas timer */
+    modeActive = false;
+    /** its name, for "... starts in" / "... started!" */
+    modeName = "";
+    gunGameLevel = -1;
+    gunGameBox = $("#ui-gungame-level-box");
+    gunGameLevelText = $("#ui-gungame-level");
+    gunGameNextText = $("#ui-gungame-next");
+    gunGameTop = $("#ui-gungame-top");
+    /** ModeStandingsMsg: everyone's step, best first */
+    modeStandings: Array<{ playerId: number; score: number }> = [];
+    /** ModeStandingsMsg: warmup / countdown / running, and its seconds */
+    modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, max: 0, seconds: 0 };
+    /** the watched player and their place, last drawn (redraw only on change) */
+    gunGameDrawn = "";
     mapContainer = $("#ui-map-container");
     mapContainerBottom = 52;
     mapInfo = $("#ui-map-info");
+    killstreakWrap = $("#hud-wrap-killstreak");
     mapInfoBottom = 218;
     gasState = {} as {
         mode: number;
@@ -184,6 +209,9 @@ export class UiManager {
     specPrev = false;
     specNextButton = $("#btn-spectate-next-player");
     specPrevButton = $("#btn-spectate-prev-player");
+    specQuitButton = $("#btn-spectate-quit");
+    /** Leave is held, not clicked (see SPEC_LEAVE_HOLD_MS) */
+    private specLeaveTimer: ReturnType<typeof setTimeout> | undefined;
 
     // Advanced spectator (admin only)
     specAdvancedButton = $("#btn-spectate-advanced");
@@ -198,10 +226,8 @@ export class UiManager {
     advZoomButton = $("#btn-adv-zoom");
     advLayerButton = $("#btn-adv-layer");
     advTransparentButton = $("#btn-adv-transparent");
-    advTransparentCollapseButton = $("#btn-adv-transparent-collapse");
+    // Zone / Foliage: only shown while Transparent is on
     advTransparentSublist = $("#ui-spectate-transparent-sublist");
-    // Starts collapsed, same as the outer Options list (advCollapsed).
-    advTransparentCollapsed = true;
     advZoneTransparentButton = $("#btn-adv-zone-transparent");
     advFoliageTransparentButton = $("#btn-adv-foliage-transparent");
     advEnemiesMapButton = $("#btn-adv-enemies-map");
@@ -209,6 +235,9 @@ export class UiManager {
     advLabelsButton = $("#btn-adv-labels");
     advNadesButton = $("#btn-adv-nades");
     advVisionButton = $("#btn-adv-vision");
+    advCrosshairButton = $("#btn-adv-crosshair");
+    advOverlaysAllButton = $("#btn-adv-overlays-all");
+    advOverlaysNoneButton = $("#btn-adv-overlays-none");
 
     // Touch specific buttons
     interactionElems = $("#ui-interaction-press, #ui-interaction");
@@ -268,6 +297,8 @@ export class UiManager {
 
     mapSprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
     bigmapDisplayed = false;
+    /** teammates' health/gear/heals next to the big map (team modes) */
+    teamOverview = new TeamOverview();
     screenScaleFactor = 1;
     minimapPos!: Vec2;
     /** In-progress minimap drag offset, set live by HudLayoutManager#onMinimapDrag
@@ -436,9 +467,25 @@ export class UiManager {
         if (device.touch) {
             this.resumeButton.css("display", "none");
         }
-        $("#btn-spectate-quit").on("click", () => {
-            this.quitGame();
-        });
+        // Leave: hold it (a fill runs through the button) - a slip of the mouse
+        // mustn't throw a spectator out
+        const cancelLeave = () => {
+            clearTimeout(this.specLeaveTimer);
+            this.specLeaveTimer = undefined;
+            this.specQuitButton.removeClass("holding");
+        };
+        this.specQuitButton
+            .off(".specleave")
+            .on("pointerdown.specleave", (e) => {
+                e.stopPropagation();
+                cancelLeave();
+                this.specQuitButton.addClass("holding");
+                this.specLeaveTimer = setTimeout(() => {
+                    cancelLeave();
+                    this.quitGame();
+                }, SPEC_LEAVE_HOLD_MS);
+            })
+            .on("pointerup.specleave pointerleave.specleave pointercancel.specleave", cancelLeave);
         $("#btn-game-quit").on("mousedown", (e) => {
             e.stopPropagation();
         });
@@ -490,9 +537,6 @@ export class UiManager {
         this.advTransparentButton.off("click.advspec").on("click.advspec", () => {
             this.toggleTransparent();
         });
-        this.advTransparentCollapseButton.off("click.advspec").on("click.advspec", () => {
-            this.toggleTransparentCollapse();
-        });
         this.advZoneTransparentButton.off("click.advspec").on("click.advspec", () => {
             this.toggleZoneTransparent();
         });
@@ -513,6 +557,15 @@ export class UiManager {
         });
         this.advVisionButton.off("click.advspec").on("click.advspec", () => {
             this.toggleVisionRadius();
+        });
+        this.advCrosshairButton.off("click.advspec").on("click.advspec", () => {
+            this.toggleCrosshair();
+        });
+        this.advOverlaysAllButton.off("click.advspec").on("click.advspec", () => {
+            this.setAllOverlays(true);
+        });
+        this.advOverlaysNoneButton.off("click.advspec").on("click.advspec", () => {
+            this.setAllOverlays(false);
         });
         // Collapse only hides the option list; the enabled features keep running.
         this.advCollapseButton.off("click.advspec").on("click.advspec", () => {
@@ -655,7 +708,8 @@ export class UiManager {
             $(".ui-team-member-health").find(".ui-bar-inner").css("width"),
         );
 
-        for (let i = 0; i < 4; i++) {
+        // up to 6: the arena's teams (Domination); squads use the first 4
+        for (let i = 0; i < GameConfig.groupColors.length; i++) {
             const parent = this.topLeft;
             const slotIdx = i;
             this.teamSelectors.push({
@@ -700,6 +754,7 @@ export class UiManager {
 
     m_free() {
         this.gasRenderer.free();
+        this.teamOverview.free();
 
         this.clearUI();
 
@@ -724,7 +779,9 @@ export class UiManager {
         this.fullScreenButton.off("click");
         this.resumeButton.off("mousedown");
         this.resumeButton.off("click");
-        $("#btn-spectate-quit").off("click");
+        this.specQuitButton.off(".specleave");
+        clearTimeout(this.specLeaveTimer);
+        this.specQuitButton.removeClass("holding");
         $("#btn-game-quit").off("mousedown");
         $("#btn-game-quit").off("click");
         this.specStatsButton.off("click");
@@ -799,6 +856,8 @@ export class UiManager {
     ) {
         const localPlayer = player;
 
+        if (this.gunGameLadder) this.updateGunGameLevel(player, playerBarn);
+
         if (this.weapsDirty) {
             this.resetWeapSlotStyling();
         }
@@ -812,7 +871,10 @@ export class UiManager {
             mode: gas.mode,
             time: timeLeft,
         };
-        if (this.gasState.mode != gasState.mode || this.gasState.time != gasState.time) {
+        if (
+            !this.modeActive
+            && (this.gasState.mode != gasState.mode || this.gasState.time != gasState.time)
+        ) {
             this.gasState = gasState;
             const gasMoving = this.gasState.mode == GasMode.Moving;
             this.mapInfo.removeClass("icon-pulse");
@@ -952,7 +1014,7 @@ export class UiManager {
                 // Team UI
                 this.updateTeam(
                     i,
-                    helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
+                    helpers.formatUsername(playerInfo.name, playerInfo.roleTag, playerInfo),
                     playerStatus.health!,
                     {
                         disconnected: playerStatus.disconnected,
@@ -1290,6 +1352,8 @@ export class UiManager {
         playerId: number,
         activePlayerId: number,
         playerBarn: PlayerBarn,
+        /** a ping from before we joined: the marker's remaining seconds, no pulse */
+        restoredLife?: number,
     ) {
         const pingDef = PingDefs[pingType];
         if (pingDef) {
@@ -1297,7 +1361,7 @@ export class UiManager {
                 const s = this.mapSpriteBarn.addSprite();
                 s.pos = v2.copy(pos);
                 s.scale = scale;
-                s.lifetime = pingDef.mapLife!;
+                s.lifetime = restoredLife ?? pingDef.mapLife!;
                 s.pulse = false;
                 s.zOrder = 100;
                 s.sprite.texture = PIXI.Texture.from(pingDef.mapTexture!);
@@ -1308,7 +1372,8 @@ export class UiManager {
                 const s = this.mapSpriteBarn.addSprite();
                 s.pos = v2.copy(pos);
                 s.scale = 0;
-                s.lifetime = pingDef.pingLife!;
+                // already pulsed out for a restored ping
+                s.lifetime = restoredLife !== undefined ? 0 : pingDef.pingLife!;
                 s.pulse = true;
                 s.zOrder = 99;
                 s.sprite.texture = PIXI.Texture.from("ping-map-pulse.img");
@@ -1336,9 +1401,11 @@ export class UiManager {
                 let tint = 0xffffff;
                 const activePlayerInfo = playerBarn.getPlayerInfo(activePlayerId);
                 const playerInfo = playerBarn.getPlayerInfo(playerId);
+                // the status (role) arrives with a later update than the infos - a ping
+                // re-sent on join came in before it and ended up white
                 const playerStatus = playerBarn.getPlayerStatus(playerId);
-                if (activePlayerInfo && playerInfo && playerStatus) {
-                    if (playerStatus.role == "leader") {
+                if (activePlayerInfo && playerInfo) {
+                    if (playerStatus?.role == "leader") {
                         // Use a special color if they are a faction leader
                         tint = 0x00ff00;
                     } else if (activePlayerInfo.groupId == playerInfo.groupId) {
@@ -1369,6 +1436,14 @@ export class UiManager {
                 pingSprites.push(pulseSprite);
             }
         }
+    }
+
+    /** Removes every player ping (map + pulse); map-event pings stay. */
+    clearPlayerPings() {
+        for (const id in this.playerPingSprites) {
+            for (const s of this.playerPingSprites[id]) s.free();
+        }
+        this.playerPingSprites = {};
     }
 
     /* not used? */
@@ -1739,7 +1814,7 @@ export class UiManager {
                     B.append(
                         $("<div/>", {
                             class: "ui-stats-info-player-name",
-                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag, playerInfo),
                         }),
                     );
                     B.append(
@@ -1975,11 +2050,11 @@ export class UiManager {
                     }).append([
                         $("<div/>", {
                             class: "ui-stats-col rank",
-                            text: stats.rank === 0 ? "#?" : "#" + stats.rank,
+                            text: stats.rank === 0 ? "#?" : stats.rank === 999 ? "SPEC" : "#" + stats.rank,
                         }),
                         $("<div/>", {
                             class: "ui-stats-col name",
-                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag),
+                            html: helpers.formatUsername(playerInfo.name, playerInfo.roleTag, playerInfo),
                         }),
                         $("<div/>", { class: "ui-stats-col", text: stats.kills }),
                         $("<div/>", { class: "ui-stats-col", text: stats.assists }),
@@ -1989,6 +2064,10 @@ export class UiManager {
                     ]);
                     if (stats.playerId == this.game.m_localId) {
                         playerRow.addClass("active-player");
+                    }
+                    // the whole team (yourself included) gets a side bar in team modes
+                    if (teamMode > TeamMode.Solo && playerInfo.teamId == teamId) {
+                        playerRow.addClass("teammate-player");
                     }
 
                     tableRowsContainer.append(playerRow);
@@ -2275,6 +2354,7 @@ export class UiManager {
             this.spectatedPlayerName = helpers.formatUsername(
                 name,
                 playerBarn.getPlayerInfo(targetId).roleTag,
+                playerBarn.getPlayerInfo(targetId),
             );
             this.updateSpectateText();
             this.actionSeq = -1;
@@ -2295,6 +2375,17 @@ export class UiManager {
             .html(freecam ? "Freecam" : this.spectatedPlayerName);
     }
 
+    private spectateTeamMode?: TeamMode;
+
+    /** Next/prev player buttons: solo only offers them with advanced spectator. */
+    updateSpectateCycleButtons() {
+        if (!this.spectating) return;
+        const hideSpec =
+            this.spectateTeamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
+        this.specPrevButton.css("display", hideSpec ? "none" : "block");
+        this.specNextButton.css("display", hideSpec ? "none" : "block");
+    }
+
     setSpectating(spectating: boolean, teamMode?: TeamMode) {
         if (this.spectating != spectating) {
             this.spectating = spectating;
@@ -2304,10 +2395,8 @@ export class UiManager {
                 // Advanced spectators may cycle through every player, so keep the
                 // next/prev buttons available even in solo (also works while freecam
                 // is active — the weapon HUD follows whichever player is selected).
-                const hideSpec =
-                    teamMode == TeamMode.Solo && !this.game.m_advancedSpectatorAllowed;
-                this.specPrevButton.css("display", hideSpec ? "none" : "block");
-                this.specNextButton.css("display", hideSpec ? "none" : "block");
+                this.spectateTeamMode = teamMode;
+                this.updateSpectateCycleButtons();
                 this.hideStats();
                 this.updateAdvancedSpectatorUi();
             } else {
@@ -2402,11 +2491,15 @@ export class UiManager {
         this.updateAdvancedSpectatorUi();
     }
 
-    // Same purely-visual, not-persisted collapse pattern as toggleCollapse() (the
-    // outer Options list) - only hides/shows the Zone/Foliage sub-buttons, doesn't
-    // touch their enabled state.
-    toggleTransparentCollapse() {
-        this.advTransparentCollapsed = !this.advTransparentCollapsed;
+    /** The "all" / "none" links of the Overlays group: every overlay on or off at once. */
+    setAllOverlays(on: boolean) {
+        const advSpec = this.game.m_advSpec;
+        advSpec.espLines = on;
+        advSpec.enemyLabels = on;
+        advSpec.nadeEsp = on;
+        advSpec.visionRadius = on;
+        advSpec.crosshair = on;
+        this.saveAdvSpec();
         this.updateAdvancedSpectatorUi();
     }
 
@@ -2440,6 +2533,12 @@ export class UiManager {
         this.updateAdvancedSpectatorUi();
     }
 
+    toggleCrosshair() {
+        this.game.m_advSpec.crosshair = !this.game.m_advSpec.crosshair;
+        this.saveAdvSpec();
+        this.updateAdvancedSpectatorUi();
+    }
+
     // Collapse only hides the option list; the enabled features keep running. Not
     // persisted, purely a UI convenience (matches the previous inline behavior).
     toggleCollapse() {
@@ -2466,8 +2565,8 @@ export class UiManager {
     // spectator); the sub-toggles only appear once the mode is enabled.
     updateAdvancedSpectatorUi() {
         const advSpec = this.game.m_advSpec;
-        // Server-authoritative: m_advancedSpectatorAllowed already encodes "is a
-        // spectator" + "admin or non-prod" (see Player.advSpecAllowed).
+        // Server-authoritative: m_advancedSpectatorAllowed comes from the server
+        // (JoinedMsg, then AdvancedSpectatorAllowedMsg; see Player.advSpecAllowed).
         const available = this.game.m_advancedSpectatorAllowed;
 
         this.specAdvancedButton.css("display", available ? "block" : "none");
@@ -2477,9 +2576,10 @@ export class UiManager {
         }
 
         this.specAdvancedButton.toggleClass("active", advSpec.enabled);
+        // (under the buttons - see game.css)
         this.specAdvancedOptions.css(
             "display",
-            advSpec.enabled ? "inline-block" : "none",
+            advSpec.enabled ? "block" : "none",
         );
         // The collapse header is shown when the mode is enabled; it toggles the
         // visibility of the option list without disabling any active feature.
@@ -2487,19 +2587,15 @@ export class UiManager {
             "display",
             advSpec.enabled && !this.advCollapsed ? "block" : "none",
         );
-        this.advCollapseButton.html(this.advCollapsed ? "▸ Options" : "▾ Options");
+        this.advCollapseButton.html(this.advCollapsed ? "Options ▸" : "Options ◂");
         this.advFreecamButton.toggleClass("active", advSpec.freecam);
         this.advZoomButton.toggleClass("active", advSpec.zoom);
         this.advLayerButton.toggleClass("active", advSpec.layer === 1);
         this.advTransparentButton.toggleClass("active", advSpec.transparentSurfaces);
-        // Same "shown when enabled, hidden/shown by its own collapse flag" pattern as
-        // specAdvancedList/advCollapsed above, just scoped to this one sub-group.
+        // Zone / Foliage refine Transparent, so they're only there while it's on
         this.advTransparentSublist.css(
             "display",
-            advSpec.enabled && !this.advTransparentCollapsed ? "block" : "none",
-        );
-        this.advTransparentCollapseButton.html(
-            this.advTransparentCollapsed ? "▸ Sub-Options" : "▾ Sub-Options",
+            advSpec.enabled && advSpec.transparentSurfaces ? "grid" : "none",
         );
         this.advZoneTransparentButton.toggleClass("active", advSpec.zoneTransparency);
         this.advFoliageTransparentButton.toggleClass("active", advSpec.foliageTransparency);
@@ -2508,6 +2604,7 @@ export class UiManager {
         this.advLabelsButton.toggleClass("active", advSpec.enemyLabels);
         this.advNadesButton.toggleClass("active", advSpec.nadeEsp);
         this.advVisionButton.toggleClass("active", advSpec.visionRadius);
+        this.advCrosshairButton.toggleClass("active", advSpec.crosshair);
     }
 
     setLocalStats(stats: PlayerStatsMsg["playerStats"]) {
@@ -2582,7 +2679,130 @@ export class UiManager {
             ? this.localization.translate("game-waiting-for-hunted")
             : this.localization.translate("game-waiting-for-new-leader");
         this.killLeaderName.html(valid ? playerName : waitTxt);
-        this.killLeaderCount.html(valid ? kills : 0);
+        // Gun Game: the leader is the highest step, and the number is that step
+        const count = valid ? kills : 0;
+        this.killLeaderCount.html(this.gunGameLadder ? `Lv ${count}` : String(count));
+    }
+
+    /** The game's GameMode (from the JoinedMsg): its name, and whether one runs at all. */
+    setGameMode(active: boolean, name: string) {
+        this.modeActive = active;
+        this.modeName = name;
+    }
+
+    /** A layer drawn on the minimap above the gas (a mode's zones). */
+    addMinimapLayer(layer: PIXI.Container) {
+        this.container.addChildAt(layer, this.container.getChildIndex(this.display.mapSprites));
+    }
+
+    /** Gun Game: the match's weapon ladder (from the JoinedMsg), or null for any other mode. */
+    setGunGameLadder(ladder: string[] | null) {
+        this.gunGameLadder = ladder?.length ? ladder : null;
+        this.gunGameLevel = -1;
+        this.gunGameDrawn = "";
+        this.modeStandings = [];
+        this.modeStatus = { phase: ModePhase.Running, players: 0, needed: 0, max: 0, seconds: 0 };
+        this.gunGameBox.css("display", this.gunGameLadder ? "block" : "none");
+        // the warmup text / match clock replaced the normal ones - back for other games
+        this.waitingText.html(this.waitingTextHtml);
+        this.gasState = {} as typeof this.gasState;
+        this.mapInfo.removeClass("icon-pulse");
+    }
+
+    /** ModeStandingsMsg - redrawn on the next frame. */
+    setModeStandings(
+        entries: Array<{ playerId: number; score: number }>,
+        status: { phase: ModePhase; players: number; needed: number; max: number; seconds: number; scoreLimit?: number },
+    ) {
+        const started = this.modeStatus.phase !== ModePhase.Running && status.phase === ModePhase.Running;
+        this.modeStandings = entries;
+        this.modeStatus = status;
+        this.gunGameDrawn = "";
+
+        // warmup / countdown in the top center (where "Waiting for players" goes)
+        if (status.phase === ModePhase.Running) {
+            this.setWaitingForPlayers(false);
+        } else {
+            this.waitingText
+                .text(
+                    status.phase === ModePhase.Waiting
+                        ? `Warmup - waiting for players (${status.players}/${status.max || status.needed}, starts at ${status.needed})`
+                        : `${this.modeName || "The match"} starts in ${status.seconds}...`,
+                )
+                .css("display", "block");
+            this.waitingForPlayers = true;
+        }
+        if (started) {
+            const limit = status.scoreLimit ? ` - first to ${status.scoreLimit}` : "";
+            this.displayAnnouncement(`${this.modeName || "The match"} started${limit}!`);
+        }
+
+        // the match clock where the gas timer goes
+        const seconds = status.phase === ModePhase.Running ? status.seconds : 0;
+        this.gasTimer.html(
+            status.phase === ModePhase.Running ? `${Math.floor(seconds / 60)}:${`0${seconds % 60}`.slice(-2)}` : "--:--",
+        );
+        this.mapInfo.toggleClass("icon-pulse", status.phase === ModePhase.Running && seconds <= 60);
+    }
+
+    /** Top 3 + "Level 4 / 13 · #5" and what the next kill gives. The level is read off
+     *  the weapon the watched player holds (their gun, or the melee on the last step);
+     *  the place comes from the standings. */
+    private updateGunGameLevel(player: Player, playerBarn: PlayerBarn) {
+        const ladder = this.gunGameLadder!;
+        // whose level: your own while you play - also during the kill cam after a death,
+        // when `player` is your killer - else (staff spectator) the watched player
+        const localId = this.game.m_localId;
+        const playing = !this.game.m_replayMode && this.modeStandings.some((e) => e.playerId === localId);
+        const watchedId = playing ? localId : player.__id;
+        // the level from the server's standings; until they arrive, from the held weapon
+        const placeIdx = this.modeStandings.findIndex((e) => e.playerId === watchedId);
+        let level = placeIdx >= 0 ? this.modeStandings[placeIdx].score - 1 : -1;
+        if (level < 0 && watchedId === player.__id) {
+            const weapons = player.m_localData.m_weapons;
+            // (the gun may sit in slot 2 after a slot swap)
+            level = ladder.indexOf(weapons[0]?.type || weapons[1]?.type || weapons[2]?.type || "");
+        }
+        if (this.modeStatus.phase !== ModePhase.Running) {
+            const { phase, players, needed, max, seconds } = this.modeStatus;
+            const key = `warmup|${phase}|${players}|${needed}|${max}|${seconds}`;
+            if (key === this.gunGameDrawn) return;
+            this.gunGameDrawn = key;
+            this.gunGameTop.empty();
+            this.gunGameLevelText.text("Warmup");
+            this.gunGameNextText.text(
+                phase === ModePhase.Waiting ? `Waiting for players ${players}/${max || needed} (starts at ${needed})` : `Starts in ${seconds}s`,
+            );
+            return;
+        }
+        if (level < 0 || level >= ladder.length) return;
+        const place = placeIdx + 1;
+        // names resolved here, not on arrival: a player who just joined may not be known yet
+        const top = this.modeStandings.slice(0, 3).map((e) => ({
+            ...e,
+            name: playerBarn.getPlayerName(e.playerId, player.__id, true),
+        }));
+        const key = `${watchedId}|${level}|${place}|${top.map((e) => `${e.name}:${e.score}`).join(",")}`;
+        if (key === this.gunGameDrawn) return;
+        this.gunGameDrawn = key;
+        this.gunGameLevel = level;
+
+        this.gunGameTop.empty();
+        top.forEach((e, i) => {
+            this.gunGameTop.append(
+                $("<div/>", { class: `ui-gungame-row${e.playerId === watchedId ? " ui-gungame-row-self" : ""}` }).append(
+                    $("<span/>", { class: "ui-gungame-place", text: `${i + 1}.` }),
+                    $("<span/>", { class: "ui-gungame-name", text: e.name }),
+                    $("<span/>", { class: "ui-gungame-score", text: `Lv ${e.score}` }),
+                ),
+            );
+        });
+
+        const name = (type: string) => (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name ?? type;
+        this.gunGameLevelText.text(`Level ${level + 1} / ${ladder.length}${place ? ` · #${place}` : ""}`);
+        this.gunGameNextText.text(
+            level + 1 < ladder.length ? `Next: ${name(ladder[level + 1])}` : `Win with the ${name(ladder[level])}!`,
+        );
     }
 
     displayMapLarge(clear?: boolean) {
@@ -2602,6 +2822,7 @@ export class UiManager {
             this.bigmapDisplayed ? "none" : "block",
         );
         $(".js-ui-map-show").css("display", this.bigmapDisplayed ? "block" : "none");
+        if (!this.modeActive) this.teamOverview.setMapOpen(this.bigmapDisplayed, this.game.m_playerBarn, this.game.m_activeId);
         this.updateSpectatorCountDisplay(true);
         this.redraw(this.game.m_camera);
     }
@@ -2877,8 +3098,24 @@ export class UiManager {
         }
     }
 
+    /** Teammates' adrenaline under their health bars in the top-left team list - the
+     *  values come with the team info (TeamInfoMsg), which only goes to the own group. */
+    updateTeamBoost(players: Array<{ playerId: number; boost: number; dead: boolean; disconnected: boolean }>) {
+        for (const sel of this.teamSelectors) {
+            const bar = sel.groupId.find(".ui-team-member-boost");
+            const p = players.find((x) => x.playerId === sel.playerId);
+            if (!p || p.dead || p.disconnected) {
+                bar.css("display", "none");
+                continue;
+            }
+            bar.css("display", "block");
+            bar.find(".ui-team-member-boost-fill").css("width", `${Math.round(p.boost)}%`);
+        }
+    }
+
     clearTeamUI() {
         $(".ui-team-member").css("display", "none");
+        $(".ui-team-member-boost").css("display", "none");
         $(".ui-team-indicator").css("display", "none");
         $(".ui-team-member-name").removeAttr("style");
         $(".ui-team-member-status").removeAttr("style");
@@ -3043,6 +3280,16 @@ export class UiManager {
                 minimapSize,
             );
             this.container.mask.endFill();
+
+            // the arena kill streak box (hud-wrap-killstreak): right next to the minimap,
+            // level with its bottom edge (top edge on small layouts) - whatever the size
+            // or the minimap's own drag offset; its own drag offset comes on top (transform)
+            const streakLeft = thisMinimapMargin + minimapSize + 10 + thisMinimapMarginXAdjust;
+            this.killstreakWrap.css(
+                layoutSm
+                    ? { left: streakLeft, top: thisMinimapMargin + thisMinimapMarginYAdjust, bottom: "auto" }
+                    : { left: streakLeft, bottom: thisMinimapMargin - thisMinimapMarginYAdjust, top: "auto" },
+            );
         }
     }
 

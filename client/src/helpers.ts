@@ -1,3 +1,4 @@
+import { clanTagColor } from "../../shared/utils/clan";
 import $ from "jquery";
 import type { MeleeDef } from "../../shared/defs/gameObjects/meleeDefs.ts";
 import type { OutfitDef } from "../../shared/defs/gameObjects/outfitDefs.ts";
@@ -12,6 +13,25 @@ const truncateCanvas = document.createElement("canvas");
 export function getParameterByName<T extends string>(name: string, url?: string): T {
     const searchParams = new URLSearchParams(url || window.location.search);
     return (searchParams.get(name) || "") as T;
+}
+
+const ammoBoxCache = new Map<number, string>();
+/**
+ * The ammo box icon in an ammo's color. In game it's one grey sprite tinted per type
+ * (multiplied), so the colors here are the sprite's own greys times the tint.
+ */
+function ammoBoxSvg(tint: number): string {
+    let hit = ammoBoxCache.get(tint);
+    if (hit) return hit;
+    const mul = (grey: number) => {
+        const c = [(tint >> 16) & 0xff, (tint >> 8) & 0xff, tint & 0xff].map((v) => Math.round((v * grey) / 255));
+        return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    };
+    // same shapes as img/loot/loot-ammo-box.svg
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="3.034" fill="${mul(0x33)}"/><rect width="90.517" height="90.517" x="18.741" y="18.742" rx="2.488" fill="${mul(0xb3)}"/><rect width="47.414" height="43.103" x="46.586" y="32" rx="2.962" fill="${mul(0xf2)}"/></svg>`;
+    hit = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    ammoBoxCache.set(tint, hit);
+    return hit;
 }
 
 export const helpers = {
@@ -93,10 +113,27 @@ export const helpers = {
      * use this instead of `htmlEscape(name)` wherever the caller also knows the
      * account's role tag.
      */
-    formatUsername: function(name = "", roleTag: "admin" | "mod" | "premium" | null = null) {
-        const escaped = helpers.htmlEscape(name);
+    formatUsername: function(
+        name = "",
+        roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        /** the player's clan [TAG] (in-game player info), shown right before the name */
+        clan: { clanTag?: string; clanColor?: number } | null = null,
+    ) {
+        let escaped = helpers.htmlEscape(name);
+        if (clan?.clanTag) {
+            escaped = `<span class="username-clan-tag" style="color:${clanTagColor(clan.clanColor ?? 0)}">[${helpers.htmlEscape(clan.clanTag)}]</span> ${escaped}`;
+        }
         if (!roleTag) return escaped;
-        const label = roleTag === "admin" ? "ADMIN" : roleTag === "mod" ? "MOD" : "PREM";
+        const label =
+            roleTag === "owner"
+                ? "OWNER"
+                : roleTag === "admin"
+                ? "ADMIN"
+                : roleTag === "mod"
+                  ? "MOD"
+                  : roleTag === "bot"
+                    ? "BOT"
+                    : "PREM";
         return `<span class="username-${roleTag}-tag">[${label}]</span> ${escaped}`;
     },
     truncateString: function(str: string, font: string, maxWidthPixels: number) {
@@ -200,10 +237,13 @@ export const helpers = {
             case "perk":
             case "xp":
                 return `img/loot/${def.lootImg?.sprite.slice(0, -4)}.svg`;
+            case "ammo":
+                return ammoBoxSvg(def.lootImg?.tint ?? 0xffffff);
             case "heal_effect":
             case "boost_effect":
                 return `img/particles/${def.texture?.slice(0, -4)}.svg`;
             case "death_effect":
+            case "crate_key":
                 return `img/loot/${def.texture?.slice(0, -4)}.svg`;
             case "emote":
                 return `img/emotes/${def.texture.slice(0, -4)}.svg`;

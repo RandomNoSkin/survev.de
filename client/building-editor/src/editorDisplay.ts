@@ -239,6 +239,8 @@ export class EditorDisplay {
             groupId: 0,
             name: "",
             roleTag: null,
+            clanTag: "",
+            clanColor: 0,
             loadout: {
                 heal: "heal_basic",
                 boost: "boost_basic",

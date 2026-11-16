@@ -1,9 +1,9 @@
 import { Config } from "../../server/src/config.ts";
 import { Game } from "../../server/src/game/game.ts";
 import type { MapDefKey } from "../../shared/defs/mapDefs.ts";
-import type { TeamMode } from "../../shared/gameConfig.ts";
+import type { GameMode, TeamMode } from "../../shared/gameConfig.ts";
 
-export function createGame(teamMode: TeamMode, mapName: MapDefKey) {
+export function createGame(teamMode: TeamMode, mapName: MapDefKey, gameMode?: GameMode) {
     // we dont want vitest spammed with stdout logs so only log warns and errors
     Config.logging.logDate = false;
     Config.logging.debugLogs = false;
@@ -13,7 +13,7 @@ export function createGame(teamMode: TeamMode, mapName: MapDefKey) {
 
     const game = new Game(
         "test",
-        { mapName, teamMode },
+        { mapName, teamMode, gameMode },
         () => {},
         () => {},
     );
@@ -21,7 +21,8 @@ export function createGame(teamMode: TeamMode, mapName: MapDefKey) {
     // don't need. Run the synchronous essentials here so the game actually ticks:
     // generate the map and flip allowJoin, otherwise Game.update() early-returns
     // (`if (!this.allowJoin) return`) and nothing progresses (revive, bleed, kills...).
-    game.map.init();
+    // (as Game.init: a mode that resets its map later gets a seeded one)
+    game.map.init(game.rules?.seededMap ? Math.floor(Math.random() * 1e9) + 1 : undefined);
     game.allowJoin = true;
     return game;
 }

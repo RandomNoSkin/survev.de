@@ -47,6 +47,7 @@ import {
     type SetPassUnlockResponse,
     type SettingsResponse,
     type ShopResponse,
+    type TagDisplay,
     type UsernameResponse,
     type UserSearchResponse,
     zAckAuctionsRequest,
@@ -54,6 +55,10 @@ import {
     zAckSalesRequest,
     zBuyListingRequest,
     zBuyShopRequest,
+    zOpenCrateRequest,
+    type OpenCrateResponse,
+    zDumpItemRequest,
+    type DumpItemResponse,
     zCancelListingRequest,
     zCounterOfferRequest,
     zCreateAuctionRequest,
@@ -69,6 +74,20 @@ import {
     zMakeOfferRequest,
     zMarketBrowseRequest,
     zOfferIdRequest,
+    zCreateBuyOrderRequest,
+    zBuyOrderIdRequest,
+    zFillBuyOrderRequest,
+    zTradeHistoryRequest,
+    zSeenTradeEventsRequest,
+    zInviteRequest,
+    type InviteResponse,
+    type PresenceResponse,
+    type BuyOrder,
+    type BuyOrderActionResponse,
+    type BuyOrderListResponse,
+    type CreateBuyOrderResponse,
+    type TradeEventsResponse,
+    type TradeHistoryResponse,
     zPlaceBidRequest,
     zPremiumReplayTokenRequest,
     zRefreshQuestRequest,
@@ -80,6 +99,17 @@ import {
     zUserSearchRequest,
 } from "../../../../../shared/types/user";
 import loadout from "../../../../../shared/utils/loadout";
+import {
+    cancelBuyOrder,
+    orderIdsForMyItems,
+    createBuyOrder,
+    fillBuyOrder,
+    getBuyOrders,
+    getTopBuyOrders,
+} from "../../db/buyOrders";
+import { getUnseenTradeEvents, markTradeEventsSeen } from "../../db/tradeEvents";
+import { getPriceStats, getRecentSales } from "../../db/tradeHistory";
+import { addInvite, isOnline, setOffline, takeInvites, touchPresence } from "../../presence";
 import { apiPrivateRouter, validateUserName } from "../../../utils/serverHelpers";
 import { server } from "../../apiServer";
 import {
@@ -139,10 +169,59 @@ import {
 } from "../../db/offers";
 import { grantPassItems } from "../../db/passGrants";
 import { buyPremium, grantPremiumPassXp, isPremiumActive } from "../../db/premium";
+import { grantPremiumRewards } from "../../db/premiumRewards";
 import { grantPremiumUnlocks } from "../../db/premiumUnlocks";
 import { itemsTable, matchDataTable, usersTable, userXpTable } from "../../db/schema";
+import {
+    type ClanActionResponse,
+    type ClanLinkInfoResponse,
+    type ClanLinkResponse,
+    type ClanListResponse,
+    type MyClanResponse,
+    zClanCodeRequest,
+    zClanEditRequest,
+    zClanIdRequest,
+    zClanInviteRespondRequest,
+    zClanLinkRequest,
+    zClanListRequest,
+    zClanRequestRespondRequest,
+    zClanRoleRequest,
+    zClanSlugRequest,
+    type ClanLeagueResponse,
+    type ClanStatsResponse,
+    zClanLeagueRequest,
+    zClanIdOptRequest,
+    zClanPoolDistributeRequest,
+    zClanPoolGiveRequest,
+    type ClanViewResponse,
+} from "../../../../../shared/utils/clan";
+import { clanIdOf, getClanLeague, getClanStats, giveFromPool, giveManyFromPool } from "../../db/clanStats";
+import {
+    cancelInvite,
+    createClan,
+    disbandClan,
+    getInviteCode,
+    getLinkInfo,
+    getClanView,
+    getMyClan,
+    inviteToClan,
+    kickMember,
+    leaveClan,
+    listClans,
+    requestJoin,
+    respondInvite,
+    respondRequest,
+    setMemberRole,
+    updateClan,
+    withdrawRequest,
+} from "../../db/clans";
+import { openCrate } from "../../db/crates";
+import { dumpItem } from "../../db/dump";
 import { buyShopOffer, getShopForUser } from "../../db/shop";
+import { isCrateType } from "../../../../../shared/defs/shop/crateConfig";
 import { signReplayToken } from "../../replayToken";
+import { getArenaProfile, saveArenaLoadout, saveArenaStreaks } from "../../db/arena";
+import { type ArenaProfileResponse, zArenaLoadoutRequest, zArenaStreaks } from "../../../../../shared/utils/arena";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
@@ -228,6 +307,9 @@ UserRouter.post("/profile", async (c) => {
                 usernameChangeTime: timeUntilNextChange,
                 goldenFries,
                 premiumUntil: premiumUntil ? premiumUntil.getTime() : null,
+                owner: user.owner,
+                admin: user.admin,
+                moderator: user.moderator,
             },
             loadout,
             items: items,
@@ -240,9 +322,12 @@ UserRouter.post("/profile", async (c) => {
             settings: {
                 offersDisabled: user.offersDisabled,
                 loadoutPrivate: user.loadoutPrivate,
+                trackDuels: user.trackDuels,
+                showOwnerPrefix: user.showOwnerPrefix,
                 showAdminPrefix: user.showAdminPrefix,
                 showModPrefix: user.showModPrefix,
                 showPremiumPrefix: user.showPremiumPrefix,
+                tagDisplay: user.tagDisplay as TagDisplay,
             },
             ...(await (async () => {
                 const offers = await getOffersForUser(user.id);
@@ -313,22 +398,31 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
     const {
         offersDisabled,
         loadoutPrivate,
+        trackDuels,
+        showOwnerPrefix,
         showAdminPrefix,
         showModPrefix,
         showPremiumPrefix,
+        tagDisplay,
     } = c.req.valid("json");
     const patch: Partial<{
         offersDisabled: boolean;
         loadoutPrivate: boolean;
+        trackDuels: boolean;
+        showOwnerPrefix: boolean;
         showAdminPrefix: boolean;
         showModPrefix: boolean;
         showPremiumPrefix: boolean;
+        tagDisplay: TagDisplay;
     }> = {};
     if (offersDisabled !== undefined) patch.offersDisabled = offersDisabled;
     if (loadoutPrivate !== undefined) patch.loadoutPrivate = loadoutPrivate;
+    if (trackDuels !== undefined) patch.trackDuels = trackDuels;
+    if (showOwnerPrefix !== undefined) patch.showOwnerPrefix = showOwnerPrefix;
     if (showAdminPrefix !== undefined) patch.showAdminPrefix = showAdminPrefix;
     if (showModPrefix !== undefined) patch.showModPrefix = showModPrefix;
     if (showPremiumPrefix !== undefined) patch.showPremiumPrefix = showPremiumPrefix;
+    if (tagDisplay !== undefined) patch.tagDisplay = tagDisplay;
     if (Object.keys(patch).length) {
         await db.update(usersTable).set(patch).where(eq(usersTable.id, user.id));
     }
@@ -337,9 +431,12 @@ UserRouter.post("/settings", validateParams(zSettingsRequest), async (c) => {
         settings: {
             offersDisabled: offersDisabled ?? user.offersDisabled,
             loadoutPrivate: loadoutPrivate ?? user.loadoutPrivate,
+            trackDuels: trackDuels ?? user.trackDuels,
+            showOwnerPrefix: showOwnerPrefix ?? user.showOwnerPrefix,
             showAdminPrefix: showAdminPrefix ?? user.showAdminPrefix,
             showModPrefix: showModPrefix ?? user.showModPrefix,
             showPremiumPrefix: showPremiumPrefix ?? user.showPremiumPrefix,
+            tagDisplay: tagDisplay ?? (user.tagDisplay as TagDisplay),
         },
     });
 });
@@ -427,6 +524,157 @@ UserRouter.post("/shop/buy", validateParams(zBuyShopRequest), async (c) => {
     return c.json<BuyShopResponse>(result, 200);
 });
 
+UserRouter.post("/crate/open", validateParams(zOpenCrateRequest), async (c) => {
+    const user = c.get("user")!;
+    const { crate, key } = c.req.valid("json");
+    if (!isCrateType(crate)) return c.json<OpenCrateResponse>({ success: false, error: "error" }, 200);
+    return c.json<OpenCrateResponse>(await openCrate(user.id, crate, key), 200);
+});
+
+// ── Clans ────────────────────────────────────────────────────────────────────
+UserRouter.post("/clan/mine", async (c) => {
+    const user = c.get("user")!;
+    return c.json<MyClanResponse>(await getMyClan(user.id), 200);
+});
+
+UserRouter.post("/clan/invite", validateParams(zClanSlugRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await inviteToClan(user.id, c.req.valid("json").slug), 200);
+});
+
+UserRouter.post("/clan/invite/cancel", validateParams(zClanSlugRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await cancelInvite(user.id, c.req.valid("json").slug), 200);
+});
+
+UserRouter.post("/clan/invite/respond", validateParams(zClanInviteRespondRequest), async (c) => {
+    const user = c.get("user")!;
+    const { clanId, accept } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await respondInvite(user.id, clanId, accept), 200);
+});
+
+UserRouter.post("/clan/request/respond", validateParams(zClanRequestRespondRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug, accept } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await respondRequest(user.id, slug, accept), 200);
+});
+
+UserRouter.post("/clan/request/withdraw", validateParams(zClanIdRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await withdrawRequest(user.id, c.req.valid("json").clanId), 200);
+});
+
+UserRouter.post("/clan/link", validateParams(zClanLinkRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanLinkResponse>(await getInviteCode(user.id, !!c.req.valid("json").regenerate), 200);
+});
+
+UserRouter.post("/clan/link/info", validateParams(zClanCodeRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanLinkInfoResponse>(await getLinkInfo(user.id, c.req.valid("json").code), 200);
+});
+
+UserRouter.post("/clan/link/request", validateParams(zClanCodeRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await requestJoin(user.id, c.req.valid("json").code), 200);
+});
+
+UserRouter.post("/clan/role", validateParams(zClanRoleRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug, role } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await setMemberRole(user.id, slug, role), 200);
+});
+
+/** The arena menu: level, kills per weapon, unlocks, the saved loadouts. */
+UserRouter.post("/arena", async (c) => {
+    const user = c.get("user")!;
+    return c.json<ArenaProfileResponse>(await getArenaProfile(user.id), 200);
+});
+
+/** Saves one arena loadout slot (locked items fall back to the default's). */
+UserRouter.post("/arena/loadout", validateParams(zArenaLoadoutRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slot, loadout } = c.req.valid("json");
+    return c.json({ loadout: await saveArenaLoadout(user.id, slot, loadout) }, 200);
+});
+
+/** Saves the kill streak picks (locked variants fall back to the defaults). */
+UserRouter.post("/arena/streaks", validateParams(zArenaStreaks), async (c) => {
+    const user = c.get("user")!;
+    return c.json({ streaks: await saveArenaStreaks(user.id, c.req.valid("json")) }, 200);
+});
+
+/** Any clan as other players see it (league / clan list popup). */
+UserRouter.post("/clan/view", validateParams(zClanIdRequest), async (c) => {
+    return c.json<ClanViewResponse>(await getClanView(c.req.valid("json").clanId), 200);
+});
+
+/** A week's stats of a clan (default: your own, this week). */
+UserRouter.post("/clan/stats", validateParams(zClanIdOptRequest), async (c) => {
+    const user = c.get("user")!;
+    const { clanId: reqClanId, week } = c.req.valid("json");
+    const ownClanId = await clanIdOf(user.id);
+    const clanId = reqClanId ?? ownClanId;
+    if (!clanId) return c.json({ error: "not_member" }, 404);
+    return c.json<ClanStatsResponse>(await getClanStats(clanId, week, clanId === ownClanId), 200);
+});
+
+/** A week's league (default: this week). */
+UserRouter.post("/clan/league", validateParams(zClanLeagueRequest), async (c) => {
+    const { metric, week } = c.req.valid("json");
+    return c.json<ClanLeagueResponse>(await getClanLeague(metric, week), 200);
+});
+
+/** Owner hands league reward keys from the clan pool to a member. */
+/** Owner / co-owner shares out a week's keys as suggested (several gifts, all or none). */
+UserRouter.post("/clan/pool/distribute", validateParams(zClanPoolDistributeRequest), async (c) => {
+    const user = c.get("user")!;
+    const { week, gifts } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await giveManyFromPool(user.id, gifts, week), 200);
+});
+
+UserRouter.post("/clan/pool/give", validateParams(zClanPoolGiveRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug, keyType, amount, week } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await giveFromPool(user.id, slug, keyType, amount, week), 200);
+});
+
+UserRouter.post("/clan/leave", async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await leaveClan(user.id), 200);
+});
+
+UserRouter.post("/clan/kick", validateParams(zClanSlugRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await kickMember(user.id, c.req.valid("json").slug), 200);
+});
+
+UserRouter.post("/clan/list", validateParams(zClanListRequest), async (c) => {
+    const { search, sort, offset } = c.req.valid("json");
+    return c.json<ClanListResponse>(await listClans(search, sort, offset), 200);
+});
+
+UserRouter.post("/clan/create", validateParams(zClanEditRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await createClan(user.id, c.req.valid("json")), 200);
+});
+
+UserRouter.post("/clan/update", validateParams(zClanEditRequest), async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await updateClan(user.id, c.req.valid("json")), 200);
+});
+
+UserRouter.post("/clan/disband", async (c) => {
+    const user = c.get("user")!;
+    return c.json<ClanActionResponse>(await disbandClan(user.id), 200);
+});
+
+UserRouter.post("/item/dump", validateParams(zDumpItemRequest), async (c) => {
+    const user = c.get("user")!;
+    const { itemId } = c.req.valid("json");
+    return c.json<DumpItemResponse>(await dumpItem(user.id, itemId), 200);
+});
+
 UserRouter.post("/premium/buy", async (c) => {
     const user = c.get("user")!;
     const result = await buyPremium(user.id);
@@ -439,6 +687,7 @@ UserRouter.post("/premium/buy", async (c) => {
         try {
             await grantPremiumPassXp(user.id);
             await grantPremiumUnlocks(user.id);
+            await grantPremiumRewards(user.id);
         } catch (err) {
             server.logger.error("premium/buy: failed to grant bonus pass XP/unlocks", err);
         }
@@ -684,6 +933,68 @@ UserRouter.post("/offer/list", async (c) => {
 });
 
 //
+// BUY ORDERS ("Make offer" on any copy of an item; fries held until filled / refunded)
+//
+
+UserRouter.post("/order/create", validateParams(zCreateBuyOrderRequest), async (c) => {
+    const user = c.get("user")!;
+    const { type, amount } = c.req.valid("json");
+    return c.json<CreateBuyOrderResponse>(await createBuyOrder(user.id, type, amount), 200);
+});
+
+UserRouter.post("/order/cancel", validateParams(zBuyOrderIdRequest), async (c) => {
+    const user = c.get("user")!;
+    const { orderId } = c.req.valid("json");
+    return c.json<BuyOrderActionResponse>(await cancelBuyOrder(user.id, orderId), 200);
+});
+
+UserRouter.post("/order/fill", validateParams(zFillBuyOrderRequest), async (c) => {
+    const user = c.get("user")!;
+    const { orderId, itemId } = c.req.valid("json");
+    return c.json<BuyOrderActionResponse>(await fillBuyOrder(user.id, orderId, itemId), 200);
+});
+
+UserRouter.post("/order/list", async (c) => {
+    const user = c.get("user")!;
+    return c.json<BuyOrderListResponse>(await getBuyOrders(user.id), 200);
+});
+
+/** The best open order per item type ("Wanted" in the market). */
+UserRouter.post("/order/top", async (c) => {
+    return c.json<{ success: boolean; orders: BuyOrder[] }>({ success: true, orders: await getTopBuyOrders() }, 200);
+});
+
+//
+// TRADE HISTORY + NOTIFICATIONS
+//
+
+UserRouter.post("/trade/history", validateParams(zTradeHistoryRequest), async (c) => {
+    const { type } = c.req.valid("json");
+    const [recent, stats] = await Promise.all([getRecentSales(type, type ? 10 : 20), type ? getPriceStats(type) : null]);
+    return c.json<TradeHistoryResponse>({ success: true, recent, stats }, 200);
+});
+
+/** Polled by the client: unseen trade events + what's waiting for the player. */
+UserRouter.post("/trade/events", async (c) => {
+    const user = c.get("user")!;
+    const [events, offers, orderIds] = await Promise.all([
+        getUnseenTradeEvents(user.id),
+        getOffersForUser(user.id),
+        orderIdsForMyItems(user.id),
+    ]);
+    const pendingOffers =
+        offers.incoming.filter((o) => o.status === "pending").length +
+        offers.outgoing.filter((o) => o.status === "countered").length;
+    return c.json<TradeEventsResponse>({ success: true, events, pending: { offers: pendingOffers, ordersForMyItems: orderIds.length, orderIds } }, 200);
+});
+
+UserRouter.post("/trade/events/seen", validateParams(zSeenTradeEventsRequest), async (c) => {
+    const user = c.get("user")!;
+    await markTradeEventsSeen(user.id, c.req.valid("json").ids);
+    return c.json({ success: true }, 200);
+});
+
+//
 // SOCIAL (public item ownership + player-to-player gifting)
 //
 
@@ -750,17 +1061,50 @@ UserRouter.post("/friends/list", async (c) => {
         getBlocked(user.id),
         server.getLivePlayers(),
     ]);
+    touchPresence(user.id);
     const friends: FriendEntry[] = detailed.map((f) => ({
         slug: f.slug,
         username: f.username,
         roleTag: f.roleTag,
+        icon: f.icon,
         lastGame: f.lastGame,
         live: liveMap.get(f.userId) ?? null,
+        online: isOnline(f.userId),
     }));
     return c.json<FriendsResponse>(
         { success: true, friends, incoming, outgoing, recent, blocked },
         200,
     );
+});
+
+/** Heartbeat while the site is open (online status for friends) + pending invites;
+ *  `{ offline: true }` (a beacon as the page closes) clears it right away. */
+UserRouter.post("/presence", async (c) => {
+    const user = c.get("user")!;
+    const body = (await c.req.json().catch(() => ({}))) as { offline?: boolean };
+    if (body?.offline === true) {
+        setOffline(user.id);
+        return c.json<PresenceResponse>({ success: true, invites: [] }, 200);
+    }
+    touchPresence(user.id);
+    return c.json<PresenceResponse>({ success: true, invites: takeInvites(user.id) }, 200);
+});
+
+/** Invites an online friend to the caller's team or private lobby. */
+UserRouter.post("/friends/invite", validateParams(zInviteRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slug, kind, code } = c.req.valid("json");
+    const friend = (await getFriendsDetailed(user.id)).find((f) => f.slug === slug);
+    if (!friend) return c.json<InviteResponse>({ success: false, error: "not_friend" }, 200);
+    if (!isOnline(friend.userId)) return c.json<InviteResponse>({ success: false, error: "offline" }, 200);
+    addInvite(friend.userId, {
+        fromSlug: user.slug,
+        fromUsername: user.username || user.slug,
+        fromRoleTag: null,
+        kind,
+        code,
+    });
+    return c.json<InviteResponse>({ success: true }, 200);
 });
 
 UserRouter.post("/friends/block", validateParams(zFriendActionRequest), async (c) => {

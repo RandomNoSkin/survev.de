@@ -73,7 +73,7 @@ export class TeamMenu {
         inGame: boolean;
         name: string;
         isLeader: boolean;
-        roleTag: "admin" | "mod" | "premium" | null;
+        roleTag: "owner" | "admin" | "mod" | "premium" | null;
     }> = [];
 
     prevPlayerCount = 0;
@@ -221,7 +221,7 @@ export class TeamMenu {
             this.roomData = {
                 roomUrl,
                 region: this.config.get("region")!,
-                gameModeIdx: this.config.get("gameModeIdx")!,
+                gameModeIdx: this.siteInfo.defaultTeamModeIdx() ?? this.config.get("gameModeIdx")!,
                 autoFill: this.config.get("teamAutoFill")!,
                 findingGame: false,
                 lastError: "",
@@ -620,7 +620,7 @@ export class TeamMenu {
                     playerId: number;
                     isLeader: boolean;
                     inGame: boolean;
-                    roleTag: "admin" | "mod" | "premium" | null;
+                    roleTag: "owner" | "admin" | "mod" | "premium" | null;
                     self: boolean;
                 } = {
                     name: "",

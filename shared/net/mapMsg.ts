@@ -119,6 +119,10 @@ function deserializeMapObj(s: BitStream): MapObj {
 
 export class MapMsg implements AbstractMsg {
     mapName = "" as MapDefKey;
+    /** Custom maps with the lobby's rules: the map whose gameMode/gameConfig apply ("" = mapName's own). */
+    rulesMapName = "";
+    /** Custom map colors over the biome's: index into CUSTOM_MAP_COLORS + 0xRRGGBB. */
+    colors: Array<{ idx: number; color: number }> = [];
     seed = 0;
     width = 0;
     height = 0;
@@ -132,6 +136,11 @@ export class MapMsg implements AbstractMsg {
     serialize(s: BitStream) {
         /* STRIP_FROM_PROD_CLIENT:START */
         s.writeString(this.mapName, Constants.MapNameMaxLen);
+        s.writeString(this.rulesMapName, Constants.MapNameMaxLen);
+        s.writeArray(this.colors, 3, (c) => {
+            s.writeBits(c.idx, 3);
+            s.writeBits(c.color, 24);
+        });
         s.writeUint32(this.seed);
         s.writeUint16(this.width);
         s.writeUint16(this.height);
@@ -158,6 +167,8 @@ export class MapMsg implements AbstractMsg {
 
     deserialize(s: BitStream) {
         this.mapName = s.readString(Constants.MapNameMaxLen) as MapDefKey;
+        this.rulesMapName = s.readString(Constants.MapNameMaxLen);
+        this.colors = s.readArray(3, () => ({ idx: s.readBits(3), color: s.readBits(24) }));
         this.seed = s.readUint32();
         this.width = s.readUint16();
         this.height = s.readUint16();

@@ -20,7 +20,7 @@ import {
     MARKET_LISTING_TTL_MS,
     MARKET_MAX_PRICE,
     type ShopCategory,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     Auction,
     AuctionListResponse,
@@ -39,6 +39,7 @@ import {
     offersTable,
     usersTable,
 } from "./schema";
+import { addTradeEvent } from "./tradeEvents";
 
 const PAGE_SIZE = 30;
 /** Second reference to `users`, joined on the current bidder (the seller already uses the base `usersTable`). */
@@ -169,6 +170,7 @@ export async function placeBid(
             const [auction] = await tx
                 .select({
                     sellerId: auctionsTable.sellerId,
+                    type: auctionsTable.type,
                     minBid: auctionsTable.minBid,
                     currentBid: auctionsTable.currentBid,
                     currentBidderId: auctionsTable.currentBidderId,
@@ -249,6 +251,11 @@ export async function placeBid(
                     reason: `auction:refund:${auctionId}`,
                     balanceAfter: prevBal?.balance ?? 0,
                 });
+                const [bidder] = await tx
+                    .select({ slug: usersTable.slug })
+                    .from(usersTable)
+                    .where(eq(usersTable.id, userId));
+                await addTradeEvent(tx, auction.currentBidderId, "outbid", auction.type, amount, bidder?.slug ?? null);
             }
 
             return bidderBal.balance;
@@ -286,8 +293,10 @@ async function settleAuctionTx(
             itemId: auctionsTable.itemId,
             sellerId: auctionsTable.sellerId,
             sellerSlug: auctionsTable.sellerSlug,
+            type: auctionsTable.type,
             currentBid: auctionsTable.currentBid,
             currentBidderId: auctionsTable.currentBidderId,
+            currentBidderSlug: auctionsTable.currentBidderSlug,
         })
         .from(auctionsTable)
         .where(and(eq(auctionsTable.id, id), eq(auctionsTable.status, "active")))
@@ -360,6 +369,8 @@ async function settleAuctionTx(
         reason: `auction:sell:${id}`,
         balanceAfter: sellerBal?.balance ?? 0,
     });
+    await addTradeEvent(tx, a.sellerId, "auction_sold", a.type, a.currentBid, a.currentBidderSlug);
+    await addTradeEvent(tx, a.currentBidderId, "auction_won", a.type, a.currentBid, a.sellerSlug);
 
     await tx
         .update(auctionsTable)
@@ -436,18 +447,22 @@ function mapAuction(
         currentBid: number | null;
         currentBidderId: string | null;
         currentBidderSlug: string | null;
+        currentBidderOwner?: boolean | null;
         currentBidderAdmin?: boolean | null;
         currentBidderModerator?: boolean | null;
         currentBidderPremiumUntil?: Date | null;
+        currentBidderShowOwnerPrefix?: boolean | null;
         currentBidderShowAdminPrefix?: boolean | null;
         currentBidderShowModPrefix?: boolean | null;
         currentBidderShowPremiumPrefix?: boolean | null;
         sellerId: string;
         sellerSlug: string;
         sellerUsername: string | null;
+        sellerOwner?: boolean | null;
         sellerAdmin?: boolean | null;
         sellerModerator?: boolean | null;
         sellerPremiumUntil?: Date | null;
+        sellerShowOwnerPrefix?: boolean | null;
         sellerShowAdminPrefix?: boolean | null;
         sellerShowModPrefix?: boolean | null;
         sellerShowPremiumPrefix?: boolean | null;
@@ -470,9 +485,11 @@ function mapAuction(
         currentBid: r.currentBid,
         currentBidderSlug: r.currentBidderSlug,
         currentBidderRoleTag: resolveRoleTag({
+            owner: r.currentBidderOwner,
             admin: r.currentBidderAdmin,
             moderator: r.currentBidderModerator,
             premiumUntil: r.currentBidderPremiumUntil,
+            showOwnerPrefix: r.currentBidderShowOwnerPrefix,
             showAdminPrefix: r.currentBidderShowAdminPrefix,
             showModPrefix: r.currentBidderShowModPrefix,
             showPremiumPrefix: r.currentBidderShowPremiumPrefix,
@@ -480,9 +497,11 @@ function mapAuction(
         sellerSlug: r.sellerSlug,
         sellerUsername: r.sellerUsername ?? "",
         sellerRoleTag: resolveRoleTag({
+            owner: r.sellerOwner,
             admin: r.sellerAdmin,
             moderator: r.sellerModerator,
             premiumUntil: r.sellerPremiumUntil,
+            showOwnerPrefix: r.sellerShowOwnerPrefix,
             showAdminPrefix: r.sellerShowAdminPrefix,
             showModPrefix: r.sellerShowModPrefix,
             showPremiumPrefix: r.sellerShowPremiumPrefix,
@@ -522,18 +541,22 @@ export async function getActiveAuctions(
             currentBid: auctionsTable.currentBid,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            currentBidderOwner: bidderUsersTable.owner,
             currentBidderAdmin: bidderUsersTable.admin,
             currentBidderModerator: bidderUsersTable.moderator,
             currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
+            currentBidderShowOwnerPrefix: bidderUsersTable.showOwnerPrefix,
             currentBidderShowAdminPrefix: bidderUsersTable.showAdminPrefix,
             currentBidderShowModPrefix: bidderUsersTable.showModPrefix,
             currentBidderShowPremiumPrefix: bidderUsersTable.showPremiumPrefix,
             sellerId: auctionsTable.sellerId,
             sellerSlug: auctionsTable.sellerSlug,
             sellerUsername: usersTable.username,
+            sellerOwner: usersTable.owner,
             sellerAdmin: usersTable.admin,
             sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowOwnerPrefix: usersTable.showOwnerPrefix,
             sellerShowAdminPrefix: usersTable.showAdminPrefix,
             sellerShowModPrefix: usersTable.showModPrefix,
             sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
@@ -604,15 +627,19 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
             sellerSlug: auctionsTable.sellerSlug,
             currentBidderId: auctionsTable.currentBidderId,
             currentBidderSlug: auctionsTable.currentBidderSlug,
+            sellerOwner: usersTable.owner,
             sellerAdmin: usersTable.admin,
             sellerModerator: usersTable.moderator,
             sellerPremiumUntil: usersTable.premiumUntil,
+            sellerShowOwnerPrefix: usersTable.showOwnerPrefix,
             sellerShowAdminPrefix: usersTable.showAdminPrefix,
             sellerShowModPrefix: usersTable.showModPrefix,
             sellerShowPremiumPrefix: usersTable.showPremiumPrefix,
+            currentBidderOwner: bidderUsersTable.owner,
             currentBidderAdmin: bidderUsersTable.admin,
             currentBidderModerator: bidderUsersTable.moderator,
             currentBidderPremiumUntil: bidderUsersTable.premiumUntil,
+            currentBidderShowOwnerPrefix: bidderUsersTable.showOwnerPrefix,
             currentBidderShowAdminPrefix: bidderUsersTable.showAdminPrefix,
             currentBidderShowModPrefix: bidderUsersTable.showModPrefix,
             currentBidderShowPremiumPrefix: bidderUsersTable.showPremiumPrefix,
@@ -648,9 +675,11 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 kind: "won" as const,
                 otherName: r.sellerSlug,
                 otherRoleTag: resolveRoleTag({
+                    owner: r.sellerOwner,
                     admin: r.sellerAdmin,
                     moderator: r.sellerModerator,
                     premiumUntil: r.sellerPremiumUntil,
+                    showOwnerPrefix: r.sellerShowOwnerPrefix,
                     showAdminPrefix: r.sellerShowAdminPrefix,
                     showModPrefix: r.sellerShowModPrefix,
                     showPremiumPrefix: r.sellerShowPremiumPrefix,
@@ -665,9 +694,11 @@ export async function getUnackedAuctions(userId: string): Promise<AuctionNotific
                 kind: "sold" as const,
                 otherName: r.currentBidderSlug ?? "someone",
                 otherRoleTag: resolveRoleTag({
+                    owner: r.currentBidderOwner,
                     admin: r.currentBidderAdmin,
                     moderator: r.currentBidderModerator,
                     premiumUntil: r.currentBidderPremiumUntil,
+                    showOwnerPrefix: r.currentBidderShowOwnerPrefix,
                     showAdminPrefix: r.currentBidderShowAdminPrefix,
                     showModPrefix: r.currentBidderShowModPrefix,
                     showPremiumPrefix: r.currentBidderShowPremiumPrefix,

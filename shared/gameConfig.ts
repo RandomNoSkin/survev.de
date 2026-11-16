@@ -163,6 +163,8 @@ export enum Input {
     AdvSpecFoliageTransparent,
     AdvSpecVisionRadius,
     HudClickOverride,
+    /** the arena's kill streak (Domination) */
+    UseKillstreak,
     Count,
 }
 
@@ -191,6 +193,8 @@ export enum MapId {
     CompSolo = 15,
     Local = 16,
     Custom = 17,
+    GunGame = 18,
+    Domination = 19,
 }
 
 export enum Plane {
@@ -222,6 +226,18 @@ export enum TeamMode {
     Squad = 4,
 }
 
+/**
+ * The rules a match is played by, independent of the team size (`TeamMode`): Standard
+ * is the normal battle royale; the others are run by a ModeRules module on the server
+ * (see server/src/game/modes/). Sent as a uint8.
+ */
+export enum GameMode {
+    Standard = 0,
+    GunGame = 1,
+    /** Arena: two teams hold the zones A / B / C */
+    Domination = 2,
+}
+
 export enum FactionTeam {
     Red = 1,
     Blue = 2,
@@ -232,7 +248,7 @@ export const GameConfig = {
     // the protocol we originated from was 78
     // remember to bump this every time a serialization function is changed
     // or a definition item added, removed or moved
-    protocolVersion: 1028,
+    protocolVersion: 1047,
     Action,
     Anim,
     DamageType,
@@ -248,6 +264,12 @@ export const GameConfig = {
         [TeamMode.Solo]: "solo",
         [TeamMode.Duo]: "duo",
         [TeamMode.Squad]: "squad",
+    },
+    GameMode,
+    GameModeToString: {
+        [GameMode.Standard]: "standard",
+        [GameMode.GunGame]: "gungame",
+        [GameMode.Domination]: "domination",
     },
     FactionTeam,
     WeaponSlot,
@@ -399,6 +421,38 @@ export const GameConfig = {
                     start: "2026-08-27T23:59:00",
                     end: "2026-08-31T23:59:59",
                     boost: 4,
+                },
+            },
+            pass_survivr4: {
+                "Weekend 1": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo"],
+                    start: "2026-11-06T00:00:00",
+                    end: "2026-11-08T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 2": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo", "two_vs_two"],
+                    start: "2026-11-13T00:00:00",
+                    end: "2026-11-15T23:59:59",
+                    boost: 2,
+                },
+                "Weekend 3": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo"],
+                    start: "2026-11-20T00:00:00",
+                    end: "2026-11-22T23:59:59",
+                    boost: 2,
+                },
+                "Scrims Weekend 3": {
+                    maps: ["scrims"],
+                    start: "2026-11-20T00:00:00",
+                    end: "2026-11-22T23:59:59",
+                    boost: 3,
+                },
+                "Weekend 4": {
+                    maps: ["local", "comp", "comp_duo", "comp_solo", "two_vs_two"],
+                    start: "2026-11-27T00:00:00",
+                    end: "2026-11-29T23:59:59",
+                    boost: 2,
                 },
             },
         } as Record<
@@ -557,7 +611,8 @@ export const GameConfig = {
         soundRangeMax: 92,
         fallOff: 0,
     },
-    groupColors: [0xffff00, 0xff00ff, 0xffff, 0xff5400],
+    // the last two only for the arena's teams of 6 (Domination)
+    groupColors: [0xffff00, 0xff00ff, 0xffff, 0xff5400, 0x4cff4c, 0x4a7dff],
     teamColors: [0xcc0000, 0x7eff],
     bullet: {
         maxReflect: 3,

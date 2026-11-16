@@ -1,5 +1,7 @@
 import type { MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
+import type { CustomMapConfig } from "../../shared/defs/lobby/customMap.ts";
+import type { WeaponStatsProfile } from "../../shared/defs/lobby/weaponStats.ts";
 import type { SavedPrivateLobbySettings } from "../../shared/types/privateLobby.ts";
 import loadout from "../../shared/utils/loadout.ts";
 import { util } from "../../shared/utils/util.ts";
@@ -144,11 +146,18 @@ const defaultConfig = {
     region: "na",
     /** Selected geographic region group (e.g. "eu", "asia"); resolves to `region`. */
     regionGroup: "" as string,
+    /** main menu: the battle royale or the arena view (the BR | ARENA switch) */
+    clientView: "br" as "br" | "arena",
+    /** the multiplayer client's tour pages already shown (a switch to it shows the others) */
+    arenaTutorialPages: [] as string[],
     /** Selected playlist category (e.g. "normal", "arena", "scrims"); resolves to `region`. */
     playlist: "" as string,
     gameModeIdx: 2,
     /** Private lobby settings the leader last configured, re-applied (minus `advancedSettings`) the next time they create a lobby. */
     privateLobbySettings: {} as SavedPrivateLobbySettings,
+    /** Saved custom map configs for private lobbies (see CustomMapModal). */
+    customMaps: [] as CustomMapConfig[],
+    weaponStatsProfiles: [] as WeaponStatsProfile[],
     teamAutoFill: true,
     language: "en" as Locale,
     prerollGamesPlayed: 0,
@@ -184,6 +193,9 @@ const defaultConfig = {
     goldenFriesSeen: 0,
     goldenFriesSeenSlug: "",
     cachedBgImg: "img/main_splash.png",
+    /** The last pass state get_pass returned, per account (slug) - shown right away on
+     *  the next visit instead of a spinner, then updated once get_pass answers. */
+    cachedPass: null as { slug: string; pass: unknown; quests: unknown[] } | null,
     version: 1,
     /** Per-element HUD customization (position/visibility/opacity/click), keyed by HUD
      *  element id. An absent id means "untouched" (see HUD_ELEMENT_DEFAULTS) - this
@@ -197,6 +209,11 @@ const defaultConfig = {
      *  HudElementConfig) - the "fade everything at once" switch, as opposed to each
      *  element's own opacity slider. */
     hudGlobalOpacity: 1,
+    /** HUD editor grid, px (0 = off): drawn while editing, dragged elements snap their
+     *  top-left corner to it (hold Alt to place freely). */
+    hudGridSize: 0,
+    /** The spectator bar's buttons: their order and the ones hidden (see specButtons.ts). */
+    hudSpecButtons: { order: [] as string[], hidden: ["next", "prev"] as string[] },
     /** Renders the loop via a non-vsync setTimeout(0) instead of PIXI's default
      *  requestAnimationFrame ticker, to exceed the monitor's refresh rate (see
      *  Game#setRenderLoopMode in main.ts). Off by default: rAF/vsync stays the norm. */

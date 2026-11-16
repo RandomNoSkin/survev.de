@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
-import { getMarketFee, getMarketTotal } from "../../../../shared/defs/shopConfig";
+import { getMarketFee, getMarketTotal } from "../../../../shared/defs/shop/shopConfig";
 import { db } from "./index";
 import {
     auctionsTable,

@@ -1,26 +1,17 @@
 import $ from "jquery";
 import {
-    CUSTOM_LOADOUT_AMMOS,
-    CUSTOM_LOADOUT_BACKPACKS,
-    CUSTOM_LOADOUT_CHESTS,
     CUSTOM_LOADOUT_GRENADES,
-    CUSTOM_LOADOUT_GUNS,
     CUSTOM_LOADOUT_HEALS,
-    CUSTOM_LOADOUT_HELMETS,
-    CUSTOM_LOADOUT_MELEES,
-    CUSTOM_LOADOUT_NAME_MAX_LEN,
-    CUSTOM_LOADOUT_PERKS,
-    CUSTOM_LOADOUT_SCOPES,
     type CustomLoadoutConfig,
     DEFAULT_CUSTOM_LOADOUT,
     MAX_EXTRA_CUSTOM_LOADOUTS,
     validateCustomLoadout,
-} from "../../../shared/defs/customLoadout";
-import { GameObjectDefs } from "../../../shared/defs/register.ts";
-import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
+} from "../../../shared/defs/lobby/customLoadout";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
+import { gunGameMapScale } from "../../../shared/defs/modes/gunGameDefs";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
-import { GameConfig, type InventoryItem } from "../../../shared/gameConfig";
+import { GameObjectDefs } from "../../../shared/defs/register";
+import { GameConfig, GameMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import type { FindGameMatchData } from "../../../shared/types/api";
 import type {
@@ -32,6 +23,7 @@ import type {
     SavedPrivateLobbySettings,
     ServerToClientPrivateLobbyMsg,
 } from "../../../shared/types/privateLobby";
+import { PRIVATE_LOBBY_PLAYER_LIMIT_MAX, TEAM_SCORE_MAX } from "../../../shared/types/privateLobby";
 import { api } from "../api";
 import type { AudioManager } from "../audioManager";
 import type { ConfigManager } from "../config";
@@ -40,6 +32,35 @@ import { helpers } from "../helpers";
 import type { PingTest } from "../pingTest";
 import { SDK } from "../sdk/sdk";
 import type { SiteInfo } from "../siteInfo";
+import type { CustomMapModal } from "./customMapModal";
+import type { LoadoutEditorModal } from "./loadoutEditorModal";
+import { decodeLobbySettings, encodeLobbySettings, type LobbyShareSettings } from "./lobbyShareCode";
+import type { WeaponStatsModal } from "./weaponStatsModal";
+
+/** A modal whose code (and instance) only loads the first time it's used - the
+ *  custom map editor, weapon stats and loadout editor are big and most players never
+ *  open them, so they stay out of the bundle the page needs to start. */
+function lazyModal<T>(create: () => Promise<T>) {
+    let value: T | undefined;
+    let pending: Promise<T> | undefined;
+    return {
+        /** the instance, if it was already loaded */
+        get current() {
+            return value;
+        },
+        use(fn: (modal: T) => void) {
+            if (value) {
+                fn(value);
+                return;
+            }
+            pending ??= create().then((v) => (value = v));
+            pending.then(fn).catch((err) => {
+                pending = undefined;
+                console.error("Failed to load modal", err);
+            });
+        },
+    };
+}
 import type { Localization } from "./localization";
 
 function errorTypeToString(type: string, localization: Localization) {
@@ -60,6 +81,7 @@ function errorTypeToString(type: string, localization: Localization) {
         mode_disabled: localization.translate("index-private-lobby-mode-disabled"),
         team_full: localization.translate("index-private-lobby-team-full"),
         host_left: localization.translate("index-private-lobby-host-left"),
+        spectating_disabled: "The host turned off public spectating.",
     } as Record<PrivateLobbyErrorType, string>;
     return typeMap[type as keyof typeof typeMap] || typeMap.lost_conn;
 }
@@ -103,24 +125,34 @@ export class PrivateLobbyMenu {
 
     /** Lobby-local id of the player currently selected for team reassignment (leader only). */
     selectedPlayerId = -1;
+    /** Player currently being dragged in the team grid, -1 when none. */
+    dragPlayerId = -1;
+    deferredGridRender = false;
     /** Team slots revealed via "Create Team" that are still empty; cleared once a player joins them. */
     extraEmptyTeamIds = new Set<number>();
     /** When true, "Create Team" is limited to one empty slot at a time. When false, unlimited. Default true. */
     limitEmptyTeams = true;
+    /** What the leader typed into the lobby-code box (kept across re-renders). */
+    shareCodeDraft = "";
+    /** Result of the last lobby-code load, shown under the box. */
+    shareCodeStatus: { ok: boolean; text: string } | undefined;
     /** Set when joining as part of a "Create Team" handoff so the lobby groups us with our teammates. */
     importGroupId: string | undefined;
     /** Set when joining via a team-specific invite link/code (e.g. "ABC123-2") so the lobby places us directly into that team slot. */
     teamId: number | undefined;
     /** Id of the currently selected settings tab (e.g. "arenaRoles"); reset to the first available tab whenever it stops applying. */
     activeSettingsTab: string | null = null;
-    /** Indices (0 = base "Custom Loadout", 1+ = `extraCustomLoadouts[index - 1]`) whose builder is collapsed while "Custom Loadout" remains enabled. Local UI state only. */
-    collapsedLoadouts = new Set<number>();
-    /** Index of the loadout whose name label is currently being edited inline (leader only), or null. Local UI state only. */
-    editingLoadoutName: number | null = null;
-    /** Uncommitted text of the inline rename input, kept so a refreshUi() (e.g. triggered by a member's action) doesn't reset what the leader is typing. */
-    editingLoadoutValue: string | null = null;
+    loadoutEditor: ReturnType<typeof lazyModal<LoadoutEditorModal>>;
+    customMapModal: ReturnType<typeof lazyModal<CustomMapModal>>;
+    weaponStatsModal: ReturnType<typeof lazyModal<WeaponStatsModal>>;
     /** True when the local client joined via a spectator invite link (`#CODE-s`). */
     spectator = false;
+    /** An admin asked to watch invisibly (`#CODE-g` link from the dashboard). */
+    stealth = false;
+    /** Set when joining from the spectator menu's lobby list instead of a join code. */
+    publicId: string | undefined = undefined;
+    /** Server-confirmed: we joined publicly, so we stay a spectator and never see the code. */
+    publicSpectator = false;
 
     hideUrl!: boolean;
 
@@ -135,6 +167,43 @@ export class PrivateLobbyMenu {
         public forceQuitCb: () => void,
         public joinGameAsSpectatorCb: (data: FindGameMatchData) => void,
     ) {
+        this.customMapModal = lazyModal(() => import("./customMapModal").then(({ CustomMapModal }) => new CustomMapModal({
+            config,
+            isLeader: () => this.isLeader,
+            getActive: () => this.roomData.customMap,
+            setActive: (map) => {
+                this.roomData.customMap = map;
+                this.roomData.customMapEnabled = !!map;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+            },
+        })));
+        this.weaponStatsModal = lazyModal(() => import("./weaponStatsModal").then(({ WeaponStatsModal }) => new WeaponStatsModal({
+            config,
+            isLeader: () => this.isLeader,
+            getActive: () =>
+                this.roomData.weaponStats
+                    ? { name: this.roomData.weaponStatsName ?? "Weapon stats", stats: this.roomData.weaponStats }
+                    : undefined,
+            setActive: (profile) => {
+                this.roomData.weaponStats = profile?.stats;
+                this.roomData.weaponStatsName = profile?.name;
+                this.roomData.weaponStatsEnabled = !!profile;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+            },
+        })));
+        this.loadoutEditor = lazyModal(() => import("./loadoutEditorModal").then(({ LoadoutEditorModal }) => new LoadoutEditorModal({
+            localization,
+            getLoadout: (index) => this.getLoadouts()[index],
+            getLabel: (index) => this.getLoadoutLabel(index),
+            getDefaultLabel: (index) => this.getDefaultLoadoutLabel(index),
+            canEdit: () => this.isLeader,
+            onChange: () => {
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+            },
+        })));
         // Listen for ui modifications
         // The server dropdown holds geographic groups (eu/asia/...); the playlist
         // within the group is chosen via the category tabs. Both resolve to a
@@ -242,6 +311,7 @@ export class PrivateLobbyMenu {
                 this.refreshUi();
             } else if (this.selectedPlayerId < 0) {
                 // No player selected — join this team yourself (spectators can join too)
+                if (this.publicSpectator) return;
                 const canJoin = this.isLeader || this.roomData.allowMembersJoinTeams;
                 if (!canJoin) return;
                 const localPlayer = this.getPlayerById(this.localPlayerId);
@@ -295,6 +365,8 @@ export class PrivateLobbyMenu {
         importGroupId?: string,
         teamId?: number,
         spectator = false,
+        publicId?: string,
+        stealth = false,
     ) {
         if (!this.active || roomUrl !== this.roomData.roomUrl) {
             const roomHost = api.resolveRoomHost();
@@ -311,6 +383,9 @@ export class PrivateLobbyMenu {
             this.importGroupId = importGroupId;
             this.teamId = teamId;
             this.spectator = spectator;
+            this.stealth = stealth;
+            this.publicId = publicId;
+            this.publicSpectator = false;
 
             // Load properties from config
             this.playerData = {
@@ -372,6 +447,8 @@ export class PrivateLobbyMenu {
                             importGroupId: this.importGroupId,
                             teamId: this.teamId,
                             spectator: this.spectator || undefined,
+                            publicId: this.publicId,
+                            stealth: this.stealth || undefined,
                         });
                     }
                 };
@@ -388,6 +465,7 @@ export class PrivateLobbyMenu {
     }
 
     leave(errType = "") {
+        this.closeScoreEditor();
         if (this.active) {
             // Captured before the reset below: `isLeader` defaults to true and is
             // only corrected once a "state" arrives, so a failed create/join
@@ -404,6 +482,8 @@ export class PrivateLobbyMenu {
             this.importGroupId = undefined;
             this.teamId = undefined;
             this.spectator = false;
+            this.publicId = undefined;
+            this.publicSpectator = false;
             this.refreshUi();
 
             // Save state to config for the menu
@@ -412,6 +492,12 @@ export class PrivateLobbyMenu {
                 this.config.set("region", this.roomData.region);
                 this.config.set("privateLobbySettings", {
                     allowMembersJoinTeams: this.roomData.allowMembersJoinTeams,
+                    joinAsSpectator: this.roomData.joinAsSpectator,
+                    customMapEnabled: this.roomData.customMapEnabled,
+                    customMap: this.roomData.customMap,
+                    weaponStatsEnabled: this.roomData.weaponStatsEnabled,
+                    weaponStats: this.roomData.weaponStats,
+                    weaponStatsName: this.roomData.weaponStatsName,
                     publicSpectating: this.roomData.publicSpectating,
                     advancedSettings: this.roomData.advancedSettings,
                     customLoadoutEnabled: this.roomData.customLoadoutEnabled,
@@ -478,6 +564,7 @@ export class PrivateLobbyMenu {
                 this.players = stateData.players;
                 this.teamScores = stateData.teamScores ?? {};
                 this.localPlayerId = stateData.localPlayerId;
+                this.publicSpectator = !!stateData.publicSpectator;
                 this.isLeader = this.getPlayerById(this.localPlayerId)!.isLeader;
 
                 // Override room properties with local values if we're
@@ -491,7 +578,9 @@ export class PrivateLobbyMenu {
                 }
                 this.refreshUi();
                 // Since the only way to get the roomID (ig?) is from state, each time receiving state, we can show the invite button
-                SDK.showInviteButton(stateData.room.roomUrl.replace("#", ""));
+                if (stateData.room.roomUrl) {
+                    SDK.showInviteButton(stateData.room.roomUrl.replace("#", ""));
+                }
                 break;
             }
             case "joinGame": {
@@ -527,6 +616,12 @@ export class PrivateLobbyMenu {
                     type,
                     data,
                 });
+                // the server closes the socket on anything bigger (MAX_LOBBY_MSG_BYTES)
+                if (msg.length >= 256 * 1024) {
+                    console.warn(`Lobby message "${type}" too big (${msg.length} bytes), not sent`);
+                    alert("These settings are too big to send to the lobby - remove some loot pools, placements or weapon changes.");
+                    return;
+                }
                 this.ws.send(msg);
             } else {
                 this.ws.close();
@@ -585,11 +680,109 @@ export class PrivateLobbyMenu {
         }
     }
 
+    /** Leader-only popup to set one team's win count, anchored under its score tag. */
+    openScoreEditor(teamId: number, label: string, anchor: JQuery) {
+        this.closeScoreEditor();
+        const value = this.teamScores[teamId] ?? 0;
+        const popup = $(`<div class="private-lobby-score-editor">
+            <div class="private-lobby-score-editor-title">${helpers.htmlEscape(label)} - wins</div>
+            <div class="private-lobby-score-editor-row">
+                <button class="private-lobby-score-step" data-step="-1">−</button>
+                <input type="number" min="0" max="${TEAM_SCORE_MAX}" step="1" value="${value}">
+                <button class="private-lobby-score-step" data-step="1">+</button>
+            </div>
+            <div class="private-lobby-score-editor-row">
+                <button class="private-lobby-score-cancel">Cancel</button>
+                <button class="private-lobby-score-save">Save</button>
+            </div>
+        </div>`);
+        const input = popup.find("input");
+        const read = () => {
+            const n = Math.round(Number(input.val()));
+            return Number.isFinite(n) ? Math.min(TEAM_SCORE_MAX, Math.max(0, n)) : 0;
+        };
+        const save = () => {
+            this.sendMessage("setTeamScore", { teamId, score: read() });
+            this.closeScoreEditor();
+        };
+        popup.find(".private-lobby-score-step").on("click", (e) => {
+            input.val(Math.min(TEAM_SCORE_MAX, Math.max(0, read() + Number($(e.currentTarget).attr("data-step")))));
+        });
+        popup.find(".private-lobby-score-save").on("click", save);
+        popup.find(".private-lobby-score-cancel").on("click", () => this.closeScoreEditor());
+        input.on("keydown", (e) => {
+            if (e.key === "Enter") save();
+            else if (e.key === "Escape") this.closeScoreEditor();
+        });
+        popup.on("mousedown click", (e) => e.stopPropagation());
+
+        $("body").append(popup);
+        const rect = anchor[0].getBoundingClientRect();
+        const width = popup.outerWidth() ?? 180;
+        popup.css({
+            left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+            top: rect.bottom + 6,
+        });
+        input.trigger("focus").trigger("select");
+        // any click outside closes it
+        setTimeout(() => $(document).on("mousedown.scoreEditor", () => this.closeScoreEditor()));
+    }
+
+    closeScoreEditor() {
+        $(".private-lobby-score-editor").remove();
+        $(document).off("mousedown.scoreEditor");
+    }
+
     /** Leader-only: pulls every in-game lobby member back to the lobby mid-match. */
     tryEndGame() {
         if (this.isLeader && this.players.some((p) => p.inGame)) {
             this.sendMessage("leaveGame");
         }
+    }
+
+    endDrag() {
+        this.dragPlayerId = -1;
+        this.teamGrid.removeClass("private-lobby-dragging");
+        this.teamGrid
+            .find(".private-lobby-drop-target, .private-lobby-player-dragging")
+            .removeClass("private-lobby-drop-target private-lobby-player-dragging");
+        if (this.deferredGridRender) {
+            this.deferredGridRender = false;
+            this.renderTeamGrid();
+        }
+    }
+
+    /** Lets a dragged player be dropped onto a team slot, or onto the spectators (-1). */
+    makeDropZone(el: JQuery<HTMLElement>, teamId: number) {
+        const accepts = () => {
+            const dragged = this.getPlayerById(this.dragPlayerId);
+            if (!dragged) return false;
+            if (teamId === -1) return !dragged.spectator;
+            if (!dragged.spectator && dragged.teamId === teamId) return false;
+            const size = this.players.filter((p) => !p.spectator && p.teamId === teamId).length;
+            return size < Math.max(1, this.roomData.teamSize);
+        };
+        el.on("dragover", (e) => {
+            if (!accepts()) return;
+            e.preventDefault();
+            el.addClass("private-lobby-drop-target");
+        });
+        el.on("dragleave", (e) => {
+            // dragleave also fires when moving onto a child; only clear on real exit
+            const next = (e.originalEvent as DragEvent).relatedTarget as Node | null;
+            if (!next || !el[0].contains(next)) el.removeClass("private-lobby-drop-target");
+        });
+        el.on("drop", (e) => {
+            if (!accepts()) return;
+            e.preventDefault();
+            const playerId = this.dragPlayerId;
+            this.endDrag();
+            if (teamId === -1 && playerId === this.localPlayerId) {
+                this.sendMessage("setSpectator", { spectator: true });
+            } else {
+                this.sendMessage("assignTeam", { playerId, teamId });
+            }
+        });
     }
 
     /** Renders a single player entry; reused for every team slot in the grid. */
@@ -712,8 +905,48 @@ export class PrivateLobbyMenu {
             );
         }
 
+        const canDrag =
+            !device.touch
+            && !this.publicSpectator
+            && !this.editingName
+            && (this.isLeader || (self && this.roomData.allowMembersJoinTeams));
+        if (canDrag) {
+            member.attr("draggable", "true").addClass("private-lobby-player-draggable");
+            member.on("dragstart", (e) => {
+                const dt = (e.originalEvent as DragEvent).dataTransfer;
+                dt?.setData("text/plain", String(player.playerId));
+                if (dt) dt.effectAllowed = "move";
+                this.dragPlayerId = player.playerId;
+                this.teamGrid.addClass("private-lobby-dragging");
+                // after the browser has captured the drag image
+                setTimeout(() => member.addClass("private-lobby-player-dragging"), 0);
+            });
+            member.on("dragend", () => this.endDrag());
+        }
+        // dropping one player onto another swaps them (leader only)
+        if (this.isLeader && !device.touch) {
+            const isSwapTarget = () =>
+                this.dragPlayerId >= 0 && this.dragPlayerId !== player.playerId;
+            member.on("dragover", (e) => {
+                if (!isSwapTarget()) return;
+                e.preventDefault();
+                e.stopPropagation();
+                member.addClass("private-lobby-drop-target");
+            });
+            member.on("dragleave", () => member.removeClass("private-lobby-drop-target"));
+            member.on("drop", (e) => {
+                if (!isSwapTarget()) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const from = this.dragPlayerId;
+                this.endDrag();
+                this.sendMessage("swapTeam", { playerId: from, targetPlayerId: player.playerId });
+            });
+        }
+
         member.on("click", (e) => {
-            if (this.editingName || !this.isLeader) return;
+            // touch fallback for drag & drop: tap one player, then a team or another player
+            if (!device.touch || this.editingName || !this.isLeader) return;
             e.stopPropagation();
             if (this.selectedPlayerId >= 0 && this.selectedPlayerId !== player.playerId) {
                 // A player was already selected — clicking a different one swaps their team slots
@@ -776,6 +1009,12 @@ export class PrivateLobbyMenu {
 
     /** Renders the leader-assignable team grid: one block per team slot, plus an "unassigned" overflow block. */
     renderTeamGrid() {
+        // state updates mid-drag would rebuild the grid and destroy the dragged element,
+        // which cancels the drag; catch up once it ends instead
+        if (this.dragPlayerId >= 0) {
+            this.deferredGridRender = true;
+            return;
+        }
         const grid = this.teamGrid;
         grid.empty();
 
@@ -841,13 +1080,26 @@ export class PrivateLobbyMenu {
             // Left: team name + invite code text
             const headerLeft = $("<div/>", { class: "private-lobby-spectator-label" });
             const wins = this.teamScores[t] ?? 0;
-            const winsTag =
-                wins > 0 ? ` <span class="private-lobby-team-wins">${wins}W</span>` : "";
             headerLeft.append(
                 $("<span/>", {
-                    html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})${winsTag}`,
+                    html: `${teamLabel} ${t + 1} (${members.length}/${teamSize})`,
                 }),
             );
+            // the leader can click the score to set it by hand (shown even at 0)
+            if (wins > 0 || this.isLeader) {
+                const winsTag = $("<span/>", {
+                    class: `private-lobby-team-wins${this.isLeader ? " private-lobby-team-wins-editable" : ""}${wins === 0 ? " private-lobby-team-wins-zero" : ""}`,
+                    text: `${wins}W`,
+                    title: this.isLeader ? "Edit score" : "",
+                });
+                if (this.isLeader) {
+                    winsTag.on("click", (e) => {
+                        e.stopPropagation();
+                        this.openScoreEditor(t, `${teamLabel} ${t + 1}`, winsTag);
+                    });
+                }
+                headerLeft.append(" ", winsTag);
+            }
             if (teamSize > 1 && this.roomData.roomUrl) {
                 const teamCodeText = $("<span/>", {
                     class: "private-lobby-invite-code-text",
@@ -861,7 +1113,7 @@ export class PrivateLobbyMenu {
             }
             header.append(headerLeft);
             // Right: copy icon
-            if (teamSize > 1) {
+            if (teamSize > 1 && this.roomData.roomUrl) {
                 const copyLinkBtn = $("<a/>", {
                     class: "private-lobby-team-copy-link",
                     title: this.localization.translate(
@@ -883,6 +1135,7 @@ export class PrivateLobbyMenu {
                 slot.append($("<div/>", { class: "private-lobby-player-empty" }));
             }
             team.append(slot);
+            this.makeDropZone(team, t);
             grid.append(team);
         }
 
@@ -912,6 +1165,7 @@ export class PrivateLobbyMenu {
             class: "private-lobby-team private-lobby-team-spectators",
         });
         spectatorSection.on("click", (e) => {
+            if (this.publicSpectator) return;
             if (localPlayerForSpectator) {
                 this.sendMessage("setSpectator", {
                     spectator: !localPlayerForSpectator.spectator,
@@ -948,7 +1202,8 @@ export class PrivateLobbyMenu {
             e.stopPropagation();
             this.copySpectatorInviteCode(e);
         });
-        spectatorHeader.append(copySpectatorBtn);
+        // public spectators never get the join code, so there is nothing to copy
+        if (this.roomData.roomUrl) spectatorHeader.append(copySpectatorBtn);
         spectatorSection.append(spectatorHeader);
 
         if (spectatorPlayers.length) {
@@ -958,6 +1213,7 @@ export class PrivateLobbyMenu {
             }
             spectatorSection.append(spectatorSlot);
         }
+        this.makeDropZone(spectatorSection, -1);
         grid.append(spectatorSection);
 
         // "Reset Scores" — leader-only, only shown when any team has wins
@@ -1111,6 +1367,10 @@ export class PrivateLobbyMenu {
             id: "general",
             label: this.localization.translate("index-private-lobby-tab-general"),
         });
+        // owner only (the server enforces it too): Gun Game, Domination
+        if (this.roomData.leaderOwner && this.isLeader) {
+            tabs.push({ id: "gameModes", label: "Game Modes" });
+        }
         if (this.getArenaModeRoles().length >= 2 && !this.roomData.customLoadoutEnabled) {
             tabs.push({
                 id: "arenaRoles",
@@ -1125,6 +1385,7 @@ export class PrivateLobbyMenu {
                 ),
             });
         }
+        tabs.push({ id: "lobbyCode", label: "Lobby Code" });
         return tabs;
     }
 
@@ -1168,7 +1429,34 @@ export class PrivateLobbyMenu {
             case "advancedSettings":
                 this.settingsContent.append(this.renderAdvancedSettingsTab());
                 break;
+            case "lobbyCode":
+                this.settingsContent.append(this.renderShareCodeTab());
+                break;
+            case "gameModes":
+                this.settingsContent.append(this.renderGameModesTab());
+                break;
         }
+    }
+
+    /** "Game Modes" tab (owner only): play a mode with its own map and rules instead of
+     *  the selected one. */
+    renderGameModesTab() {
+        const wrapper = $("<div/>", { class: "private-lobby-general-settings" });
+        const modes: Array<[GameMode | undefined, string, string]> = [
+            [undefined, "Selected mode", "The mode picked above, on its own map."],
+            [GameMode.GunGame, "Gun Game", "Everyone for themselves: every kill moves you up a ladder of guns. The map grows with the player limit."],
+            [GameMode.Domination, "Domination", "Two teams of up to 6 hold the zones A, B and C. Players join with their arena loadout - put them into the two teams."],
+        ];
+        for (const [mode, label, hint] of modes) {
+            const row = this.renderSettingRow(label, this.roomData.specialMode === mode, this.isLeader, () => {
+                if (this.roomData.specialMode === mode) return;
+                this.roomData.specialMode = mode;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+            });
+            wrapper.append(row, $("<div/>", { class: "private-lobby-setting-hint private-lobby-mode-hint", text: hint }));
+        }
+        return wrapper;
     }
 
     /** "General" tab: lobby-wide settings the leader can toggle. */
@@ -1189,6 +1477,20 @@ export class PrivateLobbyMenu {
                 },
             ),
         );
+        wrapper.append(
+            this.renderSettingRow(
+                this.localization.translate("index-private-lobby-join-as-spectator")
+                    || "New players join as spectators",
+                !!this.roomData.joinAsSpectator,
+                this.isLeader,
+                () => {
+                    this.roomData.joinAsSpectator = !this.roomData.joinAsSpectator;
+                    this.sendMessage("setRoomProps", this.roomData);
+                    this.refreshUi();
+                },
+            ),
+        );
+        wrapper.append(this.renderPlayerLimitRow());
         wrapper.append(
             this.renderSettingRow(
                 this.localization.translate("index-private-lobby-limit-empty-teams"),
@@ -1228,7 +1530,24 @@ export class PrivateLobbyMenu {
                 },
             ),
         );
-        if (this.roomData.advancedSettings) {
+        // owner settings: only the leader sees them, and only while they're a site owner
+        // (leaderOwner) - other members don't, even in an owner's lobby. The server
+        // enforces it either way.
+        if (this.roomData.leaderOwner && this.isLeader) {
+            wrapper.append(
+                this.renderSettingRow(
+                    "Matches earn XP",
+                    this.lobbyEarnsXp(),
+                    this.isLeader,
+                    () => {
+                        this.roomData.xpEnabled = !this.lobbyEarnsXp();
+                        this.sendMessage("setRoomProps", this.roomData);
+                        this.refreshUi();
+                    },
+                ),
+            );
+        }
+        if (!this.lobbyEarnsXp()) {
             wrapper.append(
                 $("<div/>", {
                     class: "private-lobby-advanced-settings-warning",
@@ -1239,6 +1558,186 @@ export class PrivateLobbyMenu {
             );
         }
         return wrapper;
+    }
+
+    /** XP: the owner's setting if there is one, else none with Advanced Settings. */
+    lobbyEarnsXp(): boolean {
+        return this.roomData.xpEnabled ?? !this.roomData.advancedSettings;
+    }
+
+    /** The lobby's settings as a shareable code (see lobbyShareCode.ts). */
+    lobbyShareSettings(): LobbyShareSettings {
+        const r = this.roomData;
+        return {
+            gameModeIdx: r.gameModeIdx,
+            playerLimit: r.playerLimit,
+            allowMembersJoinTeams: r.allowMembersJoinTeams,
+            joinAsSpectator: r.joinAsSpectator,
+            publicSpectating: r.publicSpectating,
+            advancedSettings: r.advancedSettings,
+            enabledArenaRoles: r.enabledArenaRoles,
+            customLoadoutEnabled: r.customLoadoutEnabled,
+            customLoadout: r.customLoadout,
+            extraCustomLoadouts: r.extraCustomLoadouts,
+            customMapEnabled: r.customMapEnabled,
+            customMap: r.customMap,
+            weaponStatsEnabled: r.weaponStatsEnabled,
+            weaponStats: r.weaponStats,
+            weaponStatsName: r.weaponStatsName,
+        };
+    }
+
+    /** Applies a pasted lobby code (leader only). Only known settings are taken, loadouts
+     *  are re-validated, and the server checks everything again (premium features etc). */
+    async loadShareCode(code: string) {
+        const s = await decodeLobbySettings(code);
+        if (!s) {
+            this.shareCodeStatus = { ok: false, text: "That isn't a valid lobby code." };
+            this.refreshUi();
+            return;
+        }
+        const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+        const r = this.roomData;
+        if (typeof s.gameModeIdx === "number" && r.enabledGameModeIdxs?.includes(s.gameModeIdx)) {
+            r.gameModeIdx = s.gameModeIdx;
+        }
+        r.playerLimit = typeof s.playerLimit === "number" ? s.playerLimit : undefined;
+        for (const key of [
+            "allowMembersJoinTeams",
+            "joinAsSpectator",
+            "publicSpectating",
+            "advancedSettings",
+            "customLoadoutEnabled",
+            "customMapEnabled",
+            "weaponStatsEnabled",
+        ] as const) {
+            const v = bool(s[key]);
+            if (v !== undefined) r[key] = v;
+        }
+        if (Array.isArray(s.enabledArenaRoles)) r.enabledArenaRoles = s.enabledArenaRoles.filter((x) => typeof x === "string");
+        const loadouts = this.sanitizeSavedSettings({ customLoadout: s.customLoadout, extraCustomLoadouts: s.extraCustomLoadouts });
+        if (loadouts?.customLoadout) r.customLoadout = loadouts.customLoadout;
+        if (loadouts?.extraCustomLoadouts) r.extraCustomLoadouts = loadouts.extraCustomLoadouts;
+        if (s.customMap) r.customMap = s.customMap;
+        if (s.weaponStats) r.weaponStats = s.weaponStats;
+        if (typeof s.weaponStatsName === "string") r.weaponStatsName = s.weaponStatsName;
+        this.sendMessage("setRoomProps", r);
+        this.shareCodeDraft = "";
+        this.shareCodeStatus = { ok: true, text: "Lobby settings loaded." };
+        this.refreshUi();
+    }
+
+    /** "Lobby Code" tab: this lobby's settings as a code to copy; the leader can paste one.
+     *  Everything stacked full-width (the content box only scrolls vertically). */
+    renderShareCodeTab() {
+        const box = $("<div/>", { class: "private-lobby-share-code" });
+        box.append($("<div/>", {
+            class: "private-lobby-setting-hint",
+            text: "Share your lobby setup - mode, player limit, loadouts, custom map, weapon stats and toggles. This is not an invite.",
+        }));
+
+        box.append($("<div/>", { class: "private-lobby-setting-label private-lobby-share-code-title", text: "This lobby's code" }));
+        const codeBox = $<HTMLTextAreaElement>("<textarea/>", {
+            class: "private-lobby-share-code-text",
+            readonly: true,
+            rows: 3,
+        });
+        codeBox.on("focus", () => codeBox.trigger("select"));
+        void encodeLobbySettings(this.lobbyShareSettings()).then((code) => codeBox.val(code));
+        const copy = $("<a/>", { class: "btn-game-menu btn-darken private-lobby-share-code-btn", text: "Copy code" });
+        copy.on("click", () => {
+            helpers.copyTextToClipboard(String(codeBox.val() ?? ""));
+            copy.text("Copied ✓");
+            setTimeout(() => copy.text("Copy code"), 1500);
+        });
+        box.append(codeBox, copy);
+
+        if (this.isLeader) {
+            box.append($("<div/>", { class: "private-lobby-setting-label private-lobby-share-code-title", text: "Load a code" }));
+            const input = $<HTMLTextAreaElement>("<textarea/>", {
+                class: "private-lobby-share-code-text",
+                rows: 3,
+                placeholder: "Paste a lobby code here",
+            });
+            input.val(this.shareCodeDraft);
+            input.on("input", () => {
+                this.shareCodeDraft = String(input.val() ?? "");
+            });
+            // typing in the box must not trigger game keybinds
+            input.on("keydown", (e) => e.stopPropagation());
+            const load = $("<a/>", { class: "btn-game-menu btn-darken private-lobby-share-code-btn", text: "Load" });
+            load.on("click", () => void this.loadShareCode(this.shareCodeDraft));
+            box.append(input, load);
+            if (this.shareCodeStatus) {
+                box.append($("<div/>", {
+                    class: `private-lobby-share-code-status${this.shareCodeStatus.ok ? "" : " private-lobby-share-code-error"}`,
+                    text: this.shareCodeStatus.text,
+                }));
+            }
+        }
+        return box;
+    }
+
+    /** Leader-adjustable player cap; the server keeps it at or above the players in teams. */
+    renderPlayerLimitRow() {
+        const inTeams = this.players.filter((p) => !p.spectator).length;
+        const min = Math.max(1, inTeams);
+        const modeMax = this.roomData.modeMaxPlayers || this.roomData.maxPlayers;
+        const max = Math.max(modeMax, PRIVATE_LOBBY_PLAYER_LIMIT_MAX);
+        const value = this.roomData.maxPlayers;
+
+        const row = $("<div/>", { class: "private-lobby-setting-row" });
+        const label = $("<span/>", { class: "private-lobby-setting-label", text: "Player limit" });
+        label.append($("<span/>", {
+            class: "private-lobby-setting-hint",
+            text: this.roomData.playerLimit !== undefined ? ` (mode: ${modeMax})` : "",
+        }));
+        // Gun Game sizes its map to the player limit
+        if (this.roomData.specialMode === GameMode.GunGame) {
+            label.append($("<span/>", {
+                class: "private-lobby-setting-hint",
+                text: ` · map size ${Math.round(gunGameMapScale(value) * 100)}%`,
+            }));
+        }
+        row.append(label);
+
+        const set = (v: number) => {
+            const limit = Math.round(Math.min(max, Math.max(min, v)));
+            if (limit === this.roomData.maxPlayers) return;
+            this.roomData.playerLimit = limit;
+            this.sendMessage("setRoomProps", this.roomData);
+        };
+        const stepper = $("<div/>", { class: "private-lobby-player-limit" });
+        const minus = $("<a/>", { class: "private-lobby-setting-toggle", text: "−" });
+        const input = $<HTMLInputElement>("<input/>", {
+            class: "private-lobby-player-limit-input",
+            type: "number",
+            min,
+            max,
+        });
+        input.val(value);
+        const plus = $("<a/>", { class: "private-lobby-setting-toggle", text: "+" });
+        if (this.isLeader) {
+            minus.toggleClass("private-lobby-setting-toggle-disabled", value <= min).on("click", () => set(value - 1));
+            plus.toggleClass("private-lobby-setting-toggle-disabled", value >= max).on("click", () => set(value + 1));
+            input.on("change", () => {
+                const v = Number(input.val());
+                if (Number.isFinite(v)) set(v);
+                input.val(this.roomData.maxPlayers);
+            });
+            input.on("keydown", (e) => {
+                if (e.key === "Enter") input.trigger("blur");
+                e.stopPropagation();
+            });
+            row.attr("title", `${min}–${max}: can't go below the ${inTeams} player(s) in teams`);
+        } else {
+            minus.addClass("private-lobby-setting-toggle-disabled");
+            plus.addClass("private-lobby-setting-toggle-disabled");
+            input.prop("disabled", true);
+        }
+        stepper.append(minus, input, plus);
+        row.append(stepper);
+        return row;
     }
 
     /** Renders a single label + ON/OFF toggle row for the General settings tab. */
@@ -1316,17 +1815,15 @@ export class PrivateLobbyMenu {
         if (this.roomData.customLoadoutEnabled) {
             this.roomData.customLoadout ??= structuredClone(DEFAULT_CUSTOM_LOADOUT);
             this.roomData.extraCustomLoadouts ??= [];
-            customLoadoutRow.append(this.renderLoadoutLabel(0, update));
-        } else {
-            customLoadoutRow.append(
-                $("<span/>", {
-                    class: "private-lobby-setting-label",
-                    html: this.localization.translate(
-                        "index-private-lobby-custom-loadout-toggle",
-                    ),
-                }),
-            );
         }
+        customLoadoutRow.append(
+            $("<span/>", {
+                class: "private-lobby-setting-label",
+                html: this.localization.translate(
+                    "index-private-lobby-custom-loadout-toggle",
+                ),
+            }),
+        );
         const customLoadoutControls = $("<div/>", {
             class: "private-lobby-setting-row-controls",
         });
@@ -1354,78 +1851,26 @@ export class PrivateLobbyMenu {
             });
         }
         customLoadoutControls.append(customLoadoutToggle);
-        if (this.roomData.customLoadoutEnabled) {
-            customLoadoutControls.append(this.renderCollapseToggle(0));
-        }
         customLoadoutRow.append(customLoadoutControls);
         wrapper.append(customLoadoutRow);
 
         if (this.roomData.customLoadoutEnabled) {
-            if (!this.collapsedLoadouts.has(0)) {
-                wrapper.append(
-                    this.renderCustomLoadoutBuilder(this.roomData.customLoadout, update),
-                );
+            const cards = $("<div/>", { class: "private-lobby-loadout-cards" });
+            for (let i = 0; i < this.getLoadouts().length; i++) {
+                cards.append(this.renderLoadoutCard(i, update));
             }
-
-            for (let i = 0; i < this.roomData.extraCustomLoadouts.length; i++) {
-                wrapper.append(this.renderExtraLoadoutSection(i + 1, update));
-            }
-
             if (
                 this.isLeader &&
                 this.roomData.extraCustomLoadouts.length < MAX_EXTRA_CUSTOM_LOADOUTS
             ) {
-                wrapper.append(this.renderAddLoadoutButton(update));
+                cards.append(this.renderAddLoadoutButton(update));
             }
+            wrapper.append(cards);
         }
 
+        wrapper.append(this.renderCustomMapSection());
+        wrapper.append(this.renderWeaponStatsSection());
         wrapper.append(this.renderArenaModeSettings());
-        return wrapper;
-    }
-
-    /** Renders the expand/collapse arrow toggling whether loadout `index`'s builder is shown. */
-    renderCollapseToggle(index: number) {
-        const collapsed = this.collapsedLoadouts.has(index);
-        const toggle = $("<a/>", {
-            class: "private-lobby-collapse-toggle",
-            html: collapsed ? "&#9658;" : "&#9660;",
-        });
-        toggle.on("click", () => {
-            if (collapsed) this.collapsedLoadouts.delete(index);
-            else this.collapsedLoadouts.add(index);
-            this.refreshUi();
-        });
-        return toggle;
-    }
-
-    /** Renders an extra loadout's header (label, collapse arrow, remove button) and, when expanded, its builder. `loadoutIndex` is 1-based (1 = `extraCustomLoadouts[0]`, "Custom Loadout 01"). */
-    renderExtraLoadoutSection(loadoutIndex: number, update: () => void) {
-        const wrapper = $("<div/>", { class: "private-lobby-custom-loadout" });
-
-        const row = $("<div/>", { class: "private-lobby-setting-row" });
-        row.append(this.renderLoadoutLabel(loadoutIndex, update));
-        const controls = $("<div/>", { class: "private-lobby-setting-row-controls" });
-        controls.append(this.renderCollapseToggle(loadoutIndex));
-        if (this.isLeader) {
-            const remove = $("<a/>", { class: "private-lobby-setting-remove" });
-            remove.on("click", () => {
-                this.roomData.extraCustomLoadouts.splice(loadoutIndex - 1, 1);
-                this.collapsedLoadouts.delete(loadoutIndex);
-                update();
-            });
-            controls.append(remove);
-        }
-        row.append(controls);
-        wrapper.append(row);
-
-        if (!this.collapsedLoadouts.has(loadoutIndex)) {
-            wrapper.append(
-                this.renderCustomLoadoutBuilder(
-                    this.roomData.extraCustomLoadouts[loadoutIndex - 1],
-                    update,
-                ),
-            );
-        }
         return wrapper;
     }
 
@@ -1444,9 +1889,181 @@ export class PrivateLobbyMenu {
             copy.name = undefined;
             this.roomData.extraCustomLoadouts.push(copy);
             update();
+            this.loadoutEditor.use((m) => m.open(this.roomData.extraCustomLoadouts.length));
         });
         row.append(btn);
         return row;
+    }
+
+    /** "Custom Map" switch plus a card for the lobby's map that opens the map modal. */
+    /** Premium lobby features: locked row with a badge when the leader has no Premium. */
+    renderPremiumLockedRow(label: string, what: string) {
+        const wrap = $("<div/>", { class: "private-lobby-custom-loadout" });
+        wrap.append(this.renderSettingRow(
+            `${label} <span class="private-lobby-premium-badge">PREMIUM</span>`,
+            false,
+            false,
+            () => {},
+        ));
+        wrap.append($("<div/>", {
+            class: "private-lobby-premium-hint",
+            text: this.isLeader
+                ? `${what} need a Premium account.`
+                : `${what} need a Premium lobby leader.`,
+        }));
+        return wrap;
+    }
+
+    renderWeaponStatsSection() {
+        if (!this.roomData.leaderPremium) return this.renderPremiumLockedRow("Custom Weapon Stats", "Custom weapon stats");
+        const wrap = $("<div/>", { class: "private-lobby-custom-loadout" });
+        wrap.append(
+            this.renderSettingRow("Custom Weapon Stats", !!this.roomData.weaponStatsEnabled, this.isLeader, () => {
+                this.roomData.weaponStatsEnabled = !this.roomData.weaponStatsEnabled;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+                if (this.roomData.weaponStatsEnabled && !this.roomData.weaponStats) {
+                    this.weaponStatsModal.use((m) => m.open());
+                }
+            }),
+        );
+        if (!this.roomData.weaponStatsEnabled) return wrap;
+
+        const stats = this.roomData.weaponStats ?? {};
+        const names = Object.keys(stats).map(
+            (type) => (GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined)?.name ?? type,
+        );
+        const card = $("<div/>", {
+            class: "private-lobby-loadout-card",
+            title: this.isLeader ? "Click to manage weapon stat profiles" : "Click to view",
+        });
+        const info = $("<div/>", { class: "private-lobby-loadout-card-info" });
+        const hasProfile = !!this.roomData.weaponStats;
+        info.append($("<div/>", {
+            class: "private-lobby-loadout-card-name",
+            text: hasProfile
+                ? this.roomData.weaponStatsName ?? "Weapon stats"
+                : this.isLeader ? "Choose or create a profile" : "No profile chosen yet",
+        }));
+        if (hasProfile) {
+            info.append($("<div/>", {
+                class: "private-lobby-loadout-card-meta",
+                text: names.length
+                    ? `${names.length} changed: ${names.slice(0, 4).join(", ")}${names.length > 4 ? ` +${names.length - 4}` : ""}`
+                    : "no changes",
+            }));
+        }
+        card.append(info);
+        card.on("click", () => this.weaponStatsModal.use((m) => m.open()));
+        wrap.append(card);
+        return wrap;
+    }
+
+    renderCustomMapSection() {
+        if (!this.roomData.leaderPremium) return this.renderPremiumLockedRow("Custom Map", "Custom maps");
+        const wrap = $("<div/>", { class: "private-lobby-custom-loadout" });
+        wrap.append(
+            this.renderSettingRow("Custom Map", !!this.roomData.customMapEnabled, this.isLeader, () => {
+                this.roomData.customMapEnabled = !this.roomData.customMapEnabled;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+                if (this.roomData.customMapEnabled && !this.roomData.customMap) {
+                    this.customMapModal.use((m) => m.open());
+                }
+            }),
+        );
+        if (!this.roomData.customMapEnabled) return wrap;
+
+        const map = this.roomData.customMap;
+        const card = $("<div/>", {
+            class: "private-lobby-loadout-card",
+            title: this.isLeader ? "Click to manage maps" : "Click to view",
+        });
+        const info = $("<div/>", { class: "private-lobby-loadout-card-info" });
+        if (map) {
+            const template = (MapDefs as Record<string, { desc?: { name?: string } }>)[map.template]?.desc?.name ?? map.template;
+            const changes = Object.keys(map.spawns).length + Object.keys(map.densityOverrides).length;
+            const meta = [
+                template,
+                map.size ? `${map.size}×${map.size}` : "template size",
+                map.rivers.mode === "none" ? "no rivers" : map.rivers.mode === "template" ? "" : "custom rivers",
+                map.templateBuildings ? "" : "own buildings only",
+                changes ? `${changes} object change${changes === 1 ? "" : "s"}` : "",
+            ].filter(Boolean).join(" · ");
+            info.append($("<div/>", { class: "private-lobby-loadout-card-name", text: map.name || "Custom map" }));
+            info.append($("<div/>", { class: "private-lobby-loadout-card-meta", text: meta }));
+        } else {
+            info.append($("<div/>", {
+                class: "private-lobby-loadout-card-name",
+                text: this.isLeader ? "Choose or create a map" : "No map chosen yet",
+            }));
+        }
+        card.append(info);
+        card.on("click", () => this.customMapModal.use((m) => m.open()));
+        wrap.append(card);
+        return wrap;
+    }
+
+    /** Compact summary of loadout `index` (icons + counts) that opens the editor modal. */
+    renderLoadoutCard(index: number, update: () => void) {
+        const loadout = this.getLoadouts()[index];
+        const card = $("<div/>", { class: "private-lobby-loadout-card" });
+        if (!loadout) return card;
+
+        const icons = $("<div/>", { class: "private-lobby-loadout-card-icons" });
+        const gear = [
+            ...loadout.weapons.slice(0, 3),
+            loadout.helmet,
+            loadout.chest,
+            loadout.backpack,
+        ].filter((t) => t && t !== "backpack00");
+        for (const type of gear) {
+            const src = helpers.getSvgFromGameType(type);
+            if (!src) continue;
+            icons.append(
+                $("<div/>", {
+                    class: "private-lobby-loadout-card-icon",
+                    css: { "background-image": `url('${src}')` },
+                }),
+            );
+        }
+        if (!gear.length) {
+            icons.append($("<span/>", { class: "private-lobby-loadout-card-empty", text: "Empty loadout" }));
+        }
+
+        const inv = loadout.inventory as Record<string, number | undefined>;
+        const throwables = CUSTOM_LOADOUT_GRENADES.reduce((n, g) => n + (inv[g] ?? 0), 0);
+        const heals = CUSTOM_LOADOUT_HEALS.reduce((n, h) => n + (inv[h] ?? 0), 0);
+        const meta = [
+            loadout.perks.length ? `${loadout.perks.length} perk${loadout.perks.length === 1 ? "" : "s"}` : "",
+            throwables ? `${throwables} throwables` : "",
+            heals ? `${heals} heals` : "",
+        ].filter(Boolean).join(" · ");
+
+        const info = $("<div/>", { class: "private-lobby-loadout-card-info" });
+        info.append($("<div/>", {
+            class: "private-lobby-loadout-card-name",
+            text: this.getLoadoutLabel(index),
+        }));
+        info.append(icons);
+        if (meta) info.append($("<div/>", { class: "private-lobby-loadout-card-meta", text: meta }));
+        card.append(info);
+
+        if (this.isLeader && index > 0) {
+            const actions = $("<div/>", { class: "private-lobby-loadout-card-actions" });
+            const remove = $("<a/>", { class: "private-lobby-setting-remove", title: "Remove loadout" });
+            remove.on("click", (e) => {
+                // the card itself opens the editor
+                e.stopPropagation();
+                this.roomData.extraCustomLoadouts.splice(index - 1, 1);
+                update();
+            });
+            actions.append(remove);
+            card.append(actions);
+        }
+        card.attr("title", this.isLeader ? "Click to edit" : "Click to view");
+        card.on("click", () => this.loadoutEditor.use((m) => m.open(index)));
+        return card;
     }
 
     /** All configured loadouts: index 0 = `customLoadout`, 1+ = `extraCustomLoadouts`. */
@@ -1468,443 +2085,6 @@ export class PrivateLobbyMenu {
             "index-private-lobby-custom-loadout-toggle",
         );
         return index === 0 ? base : `${base} ${String(index).padStart(2, "0")}`;
-    }
-
-    /** Renders loadout `index`'s name label. The leader can click it to rename the loadout inline. */
-    renderLoadoutLabel(index: number, update: () => void) {
-        if (this.isLeader && this.editingLoadoutName === index) {
-            const loadout = this.getLoadouts()[index];
-            const input: JQuery<HTMLInputElement> = $("<input/>", {
-                type: "text",
-                class: "private-lobby-setting-label-input",
-                maxLength: CUSTOM_LOADOUT_NAME_MAX_LEN,
-                placeholder: this.getDefaultLoadoutLabel(index),
-            });
-            // Use the uncommitted in-progress value if present, so a refreshUi()
-            // mid-edit (e.g. a member joining a team broadcasts new state) doesn't
-            // wipe what the leader is typing.
-            input.val(this.editingLoadoutValue ?? loadout.name ?? "");
-            const submit = () => {
-                loadout.name =
-                    (input.val() as string)
-                        .trim()
-                        .slice(0, CUSTOM_LOADOUT_NAME_MAX_LEN) || undefined;
-                this.editingLoadoutName = null;
-                this.editingLoadoutValue = null;
-                update();
-            };
-            input.on("click", (e) => e.stopPropagation());
-            input.on("input", () => {
-                this.editingLoadoutValue = input.val() as string;
-            });
-            input.on("keydown", (e) => {
-                if (e.which === 13) {
-                    submit();
-                    return false;
-                }
-            });
-            input.on("blur", submit);
-            input.trigger("focus");
-            // keep the caret at the end after a re-render instead of selecting all
-            const el = input[0];
-            const len = el.value.length;
-            el.setSelectionRange?.(len, len);
-            return input;
-        }
-
-        const label = $("<span/>", {
-            class: `private-lobby-setting-label${this.isLeader ? " private-lobby-setting-label-editable" : ""}`,
-            html: helpers.htmlEscape(this.getLoadoutLabel(index)),
-        });
-        if (this.isLeader) {
-            label.on("click", (e) => {
-                e.stopPropagation();
-                this.editingLoadoutName = index;
-                this.editingLoadoutValue = null;
-                this.refreshUi();
-            });
-        }
-        return label;
-    }
-
-    /** Translates an item type id to its display name, falling back to the def's `name` field. */
-    itemLabel(type: string): string {
-        if (!type)
-            return this.localization.translate("index-private-lobby-custom-loadout-none");
-        const def = GameObjectDefs.typeToDefSafe(type) as { name?: string } | undefined;
-        return this.localization.translate(`game-${type}`) || def?.name || type;
-    }
-
-    /** Loadout builder shown when "Custom Loadout" is enabled: lets the leader configure the spawn loadout for every player. */
-    renderCustomLoadoutBuilder(
-        loadout: CustomLoadoutConfig | undefined,
-        update: () => void,
-    ) {
-        const wrapper = $("<div/>", { class: "private-lobby-custom-loadout" });
-
-        // Defensive: never deref an undefined loadout (e.g. a stale index after a
-        // loadout was removed) — that would throw and break the whole lobby render.
-        if (!loadout) return wrapper;
-
-        const noneOption = {
-            value: "",
-            label: this.localization.translate("index-private-lobby-custom-loadout-none"),
-        };
-
-        const weaponOptions = (types: string[]) => [
-            noneOption,
-            ...types.map((type) => ({ value: type, label: this.itemLabel(type) })),
-        ];
-        const itemOptions = (types: readonly string[]) =>
-            types.map((type) => ({ value: type, label: this.itemLabel(type) }));
-
-        const backpackLevel =
-            parseInt((loadout.backpack || "backpack00").slice(-1), 10) || 0;
-
-        // Selecting a gun immediately tops up its ammo type to the gun's `ammoSpawnCount`.
-        const setWeapon = (slot: 0 | 1, value: string) => {
-            loadout.weapons[slot] = value;
-            const gunDef = value ? (GunDefs[value] as GunDef | undefined) : undefined;
-            if (gunDef) {
-                const ammo = gunDef.ammo as InventoryItem;
-                const max = GameConfig.bagSizes[ammo][backpackLevel];
-                loadout.inventory[ammo] = Math.min(gunDef.ammoSpawnCount, max);
-            }
-            update();
-        };
-
-        // Weapons
-        wrapper.append(
-            this.renderGroup("index-private-lobby-custom-loadout-group-weapons", [
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-primary",
-                    ),
-                    weaponOptions(CUSTOM_LOADOUT_GUNS),
-                    loadout.weapons[0],
-                    this.isLeader,
-                    (value) => setWeapon(0, value),
-                ),
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-secondary",
-                    ),
-                    weaponOptions(CUSTOM_LOADOUT_GUNS),
-                    loadout.weapons[1],
-                    this.isLeader,
-                    (value) => setWeapon(1, value),
-                ),
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-melee",
-                    ),
-                    weaponOptions(CUSTOM_LOADOUT_MELEES),
-                    loadout.weapons[2],
-                    this.isLeader,
-                    (value) => {
-                        loadout.weapons[2] = value;
-                        update();
-                    },
-                ),
-            ]),
-        );
-
-        // Armor
-        wrapper.append(
-            this.renderGroup("index-private-lobby-custom-loadout-group-armor", [
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-helmet",
-                    ),
-                    itemOptions(CUSTOM_LOADOUT_HELMETS),
-                    loadout.helmet,
-                    this.isLeader,
-                    (value) => {
-                        loadout.helmet = value;
-                        update();
-                    },
-                ),
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-chest",
-                    ),
-                    itemOptions(CUSTOM_LOADOUT_CHESTS),
-                    loadout.chest,
-                    this.isLeader,
-                    (value) => {
-                        loadout.chest = value;
-                        update();
-                    },
-                ),
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-backpack",
-                    ),
-                    itemOptions(CUSTOM_LOADOUT_BACKPACKS),
-                    loadout.backpack || "backpack00",
-                    this.isLeader,
-                    (value) => {
-                        loadout.backpack = value;
-                        update();
-                    },
-                ),
-            ]),
-        );
-
-        // Scopes
-        const scopeRows: JQuery[] = [];
-
-        // Extra scopes carried in the inventory besides 1x (which is always carried).
-        const inventoryScopes = CUSTOM_LOADOUT_SCOPES.filter(
-            (s) => s !== "1xscope" && loadout.inventory[s],
-        );
-
-        // Active scope can only be 1x or one of the extra scopes added below.
-        const activeScopeOptions: string[] = ["1xscope", ...inventoryScopes];
-        const activeScope = activeScopeOptions.includes(loadout.scope)
-            ? loadout.scope
-            : "1xscope";
-        scopeRows.push(
-            this.renderSelectRow(
-                this.localization.translate("index-private-lobby-custom-loadout-scope"),
-                itemOptions(activeScopeOptions),
-                activeScope,
-                this.isLeader,
-                (value) => {
-                    loadout.scope = value;
-                    update();
-                },
-            ),
-        );
-
-        for (const scope of inventoryScopes) {
-            scopeRows.push(
-                this.renderRemovableRow(this.itemLabel(scope), this.isLeader, () => {
-                    delete loadout.inventory[scope];
-                    if (loadout.scope === scope) loadout.scope = "1xscope";
-                    update();
-                }),
-            );
-        }
-
-        const addableScopes = CUSTOM_LOADOUT_SCOPES.filter(
-            (s) => s !== "1xscope" && !loadout.inventory[s],
-        );
-        if (this.isLeader && addableScopes.length > 0) {
-            scopeRows.push(
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-add-scope",
-                    ),
-                    [
-                        {
-                            value: "",
-                            label: this.localization.translate(
-                                "index-private-lobby-custom-loadout-add-scope-placeholder",
-                            ),
-                        },
-                        ...itemOptions(addableScopes),
-                    ],
-                    "",
-                    true,
-                    (value) => {
-                        if (!value) return;
-                        loadout.inventory[value as InventoryItem] = 1;
-                        update();
-                    },
-                ),
-            );
-        }
-        wrapper.append(
-            this.renderGroup(
-                "index-private-lobby-custom-loadout-group-scopes",
-                scopeRows,
-            ),
-        );
-
-        // Ammo
-        const ammoRows: JQuery[] = [];
-        const inventoryAmmos = CUSTOM_LOADOUT_AMMOS.filter(
-            (a) => loadout.inventory[a] !== undefined,
-        );
-        for (const ammo of inventoryAmmos) {
-            const max = GameConfig.bagSizes[ammo][backpackLevel];
-            ammoRows.push(
-                this.renderRemovableNumberRow(
-                    this.itemLabel(ammo),
-                    loadout.inventory[ammo] ?? 0,
-                    0,
-                    max,
-                    this.isLeader,
-                    (value) => {
-                        loadout.inventory[ammo] = value;
-                        update();
-                    },
-                    () => {
-                        delete loadout.inventory[ammo];
-                        update();
-                    },
-                ),
-            );
-        }
-
-        const addableAmmos = CUSTOM_LOADOUT_AMMOS.filter(
-            (a) => loadout.inventory[a] === undefined,
-        );
-        if (this.isLeader && addableAmmos.length > 0) {
-            ammoRows.push(
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-add-ammo",
-                    ),
-                    [
-                        {
-                            value: "",
-                            label: this.localization.translate(
-                                "index-private-lobby-custom-loadout-add-ammo-placeholder",
-                            ),
-                        },
-                        ...itemOptions(addableAmmos),
-                    ],
-                    "",
-                    true,
-                    (value) => {
-                        if (!value) return;
-                        const ammo = value as InventoryItem;
-                        loadout.inventory[ammo] =
-                            GameConfig.bagSizes[ammo][backpackLevel];
-                        update();
-                    },
-                ),
-            );
-        }
-        wrapper.append(
-            this.renderGroup("index-private-lobby-custom-loadout-group-ammo", ammoRows),
-        );
-
-        // Grenades
-        const grenadeRows: JQuery[] = [];
-        const inventoryGrenades = CUSTOM_LOADOUT_GRENADES.filter(
-            (g) => loadout.inventory[g] !== undefined,
-        );
-        for (const grenade of inventoryGrenades) {
-            const max = GameConfig.bagSizes[grenade][backpackLevel];
-            grenadeRows.push(
-                this.renderRemovableNumberRow(
-                    this.itemLabel(grenade),
-                    loadout.inventory[grenade] ?? 0,
-                    0,
-                    max,
-                    this.isLeader,
-                    (value) => {
-                        loadout.inventory[grenade] = value;
-                        update();
-                    },
-                    () => {
-                        delete loadout.inventory[grenade];
-                        update();
-                    },
-                ),
-            );
-        }
-
-        const addableGrenades = CUSTOM_LOADOUT_GRENADES.filter(
-            (g) => loadout.inventory[g] === undefined,
-        );
-        if (this.isLeader && addableGrenades.length > 0) {
-            grenadeRows.push(
-                this.renderSelectRow(
-                    this.localization.translate(
-                        "index-private-lobby-custom-loadout-add-grenade",
-                    ),
-                    [
-                        {
-                            value: "",
-                            label: this.localization.translate(
-                                "index-private-lobby-custom-loadout-add-grenade-placeholder",
-                            ),
-                        },
-                        ...itemOptions(addableGrenades),
-                    ],
-                    "",
-                    true,
-                    (value) => {
-                        if (!value) return;
-                        loadout.inventory[value as InventoryItem] = 1;
-                        update();
-                    },
-                ),
-            );
-        }
-        wrapper.append(
-            this.renderGroup(
-                "index-private-lobby-custom-loadout-group-grenades",
-                grenadeRows,
-            ),
-        );
-
-        // Heals
-        const healLabels: Record<(typeof CUSTOM_LOADOUT_HEALS)[number], string> = {
-            bandage: "index-private-lobby-custom-loadout-bandages",
-            healthkit: "index-private-lobby-custom-loadout-healthkits",
-            soda: "index-private-lobby-custom-loadout-soda",
-            painkiller: "index-private-lobby-custom-loadout-painkillers",
-        };
-        wrapper.append(
-            this.renderGroup(
-                "index-private-lobby-custom-loadout-group-heals",
-                CUSTOM_LOADOUT_HEALS.map((heal) => {
-                    const max = GameConfig.bagSizes[heal][backpackLevel];
-                    return this.renderNumberRow(
-                        this.localization.translate(healLabels[heal]),
-                        loadout.inventory[heal] ?? 0,
-                        0,
-                        max,
-                        this.isLeader,
-                        (value) => {
-                            loadout.inventory[heal] = value;
-                            update();
-                        },
-                    );
-                }),
-            ),
-        );
-
-        // Perks
-        const perkLabels = [
-            "index-private-lobby-custom-loadout-perk1",
-            "index-private-lobby-custom-loadout-perk2",
-            "index-private-lobby-custom-loadout-perk3",
-        ];
-        wrapper.append(
-            this.renderGroup(
-                "index-private-lobby-custom-loadout-group-perks",
-                perkLabels.map((labelKey, i) =>
-                    this.renderSelectRow(
-                        this.localization.translate(labelKey),
-                        weaponOptions(CUSTOM_LOADOUT_PERKS),
-                        loadout.perks[i] ?? "",
-                        this.isLeader,
-                        (value) => {
-                            if (value) {
-                                loadout.perks[i] = value;
-                            } else {
-                                loadout.perks.splice(i, 1);
-                            }
-                            // Keep perks a dense string[]: assigning to a non-contiguous
-                            // slot (e.g. picking the 3rd perk while the 2nd is still
-                            // empty) leaves a hole that JSON-serializes to null, fails the
-                            // server's schema, disconnects the leader and corrupts their
-                            // saved settings (permanently breaking lobby creation).
-                            loadout.perks = loadout.perks.filter((p): p is string => !!p);
-                            update();
-                        },
-                    ),
-                ),
-            ),
-        );
-
-        return wrapper;
     }
 
     /** Arena Mode + (when off) Unlimited Adrenaline/Ammo settings, shown below the Custom Loadout section while it's enabled. */
@@ -1968,6 +2148,20 @@ export class PrivateLobbyMenu {
                     },
                 ),
             );
+            // Arena Mode always shows enemies on the map, so this only exists without it
+            wrapper.append(
+                this.renderSettingRow(
+                    this.localization.translate(
+                        "index-private-lobby-custom-loadout-show-players-on-map",
+                    ) || "Show players on map",
+                    !!loadout.showPlayersOnMap,
+                    this.isLeader,
+                    () => {
+                        loadout.showPlayersOnMap = !loadout.showPlayersOnMap;
+                        update();
+                    },
+                ),
+            );
         }
 
         wrapper.append(
@@ -1987,131 +2181,6 @@ export class PrivateLobbyMenu {
         return wrapper;
     }
 
-    /** Renders a label + `<select>` dropdown row, used by the Custom Loadout builder. */
-    renderSelectRow(
-        label: string,
-        options: { value: string; label: string }[],
-        selected: string,
-        canEdit: boolean,
-        onChange: (value: string) => void,
-    ) {
-        const row = $("<div/>", { class: "private-lobby-setting-row" });
-        row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
-        const select = $("<select/>", { class: "private-lobby-setting-select" });
-        if (!canEdit) select.prop("disabled", true);
-        for (const opt of options) {
-            select.append(
-                $("<option/>", {
-                    value: opt.value,
-                    html: opt.label,
-                    selected: opt.value === selected,
-                }),
-            );
-        }
-        if (canEdit) {
-            select.on("change", () => onChange(select.val() as string));
-        }
-        row.append(select);
-        return row;
-    }
-
-    /** Renders a label + "x" remove button row, used to list extra scopes in the Custom Loadout builder. */
-    renderRemovableRow(label: string, canEdit: boolean, onRemove: () => void) {
-        const row = $("<div/>", { class: "private-lobby-setting-row" });
-        row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
-        const remove = $("<a/>", { class: "private-lobby-setting-remove" });
-        if (canEdit) remove.on("click", onRemove);
-        else remove.addClass("private-lobby-setting-toggle-disabled");
-        row.append(remove);
-        return row;
-    }
-
-    /** Renders a label + number input row, used by the Custom Loadout builder. */
-    renderNumberRow(
-        label: string,
-        value: number,
-        min: number,
-        max: number,
-        canEdit: boolean,
-        onChange: (value: number) => void,
-    ) {
-        const row = $("<div/>", { class: "private-lobby-setting-row" });
-        row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
-        const input = $("<input/>", {
-            type: "number",
-            class: "private-lobby-setting-number",
-            value,
-            min,
-            max,
-        });
-        if (!canEdit) input.prop("disabled", true);
-        if (canEdit) {
-            input.on("change", () => {
-                const parsed = Math.max(
-                    min,
-                    Math.min(max, Math.floor(Number(input.val())) || 0),
-                );
-                input.val(parsed);
-                onChange(parsed);
-            });
-        }
-        row.append(input);
-        return row;
-    }
-
-    /** Renders a label + number input + "x" remove button row, used to list added grenades/inventory items in the Custom Loadout builder. */
-    renderRemovableNumberRow(
-        label: string,
-        value: number,
-        min: number,
-        max: number,
-        canEdit: boolean,
-        onChange: (value: number) => void,
-        onRemove: () => void,
-    ) {
-        const row = $("<div/>", { class: "private-lobby-setting-row" });
-        row.append($("<span/>", { class: "private-lobby-setting-label", html: label }));
-        const controls = $("<div/>", { class: "private-lobby-setting-row-controls" });
-        const input = $("<input/>", {
-            type: "number",
-            class: "private-lobby-setting-number",
-            value,
-            min,
-            max,
-        });
-        if (!canEdit) input.prop("disabled", true);
-        if (canEdit) {
-            input.on("change", () => {
-                const parsed = Math.max(
-                    min,
-                    Math.min(max, Math.floor(Number(input.val())) || 0),
-                );
-                input.val(parsed);
-                onChange(parsed);
-            });
-        }
-        controls.append(input);
-        const remove = $("<a/>", { class: "private-lobby-setting-remove" });
-        if (canEdit) remove.on("click", onRemove);
-        else remove.addClass("private-lobby-setting-toggle-disabled");
-        controls.append(remove);
-        row.append(controls);
-        return row;
-    }
-
-    /** Wraps a set of Custom Loadout rows in a titled group for visual separation. */
-    renderGroup(titleKey: string, rows: JQuery[]) {
-        const group = $("<div/>", { class: "private-lobby-loadout-group" });
-        group.append(
-            $("<div/>", {
-                class: "private-lobby-loadout-group-title",
-                html: this.localization.translate(titleKey),
-            }),
-        );
-        for (const row of rows) group.append(row);
-        return group;
-    }
-
     /** Leader-only: toggles whether `role` is part of the match's arena role pool. At least one role must stay enabled. */
     toggleArenaRole(role: string) {
         if (!this.isLeader) return;
@@ -2129,6 +2198,21 @@ export class PrivateLobbyMenu {
     }
 
     refreshUi() {
+        const loadoutEditor = this.loadoutEditor.current;
+        if (loadoutEditor?.isOpen) {
+            if (this.active && this.roomData.customLoadoutEnabled) loadoutEditor.refresh();
+            else loadoutEditor.close();
+        }
+        const weaponStatsModal = this.weaponStatsModal.current;
+        if (weaponStatsModal?.isOpen) {
+            if (this.active) weaponStatsModal.refresh();
+            else weaponStatsModal.close();
+        }
+        const customMapModal = this.customMapModal.current;
+        if (customMapModal?.isOpen) {
+            if (this.active) customMapModal.refresh();
+            else customMapModal.close();
+        }
         const setButtonState = function (
             el: JQuery<HTMLElement>,
             selected: boolean,
@@ -2223,6 +2307,11 @@ export class PrivateLobbyMenu {
                 this.modesContainer.append(btn);
             }
 
+            // public spectators get no join code; keep the row's space so the layout doesn't jump
+            $("#private-lobby-desc").css(
+                "visibility",
+                this.roomData.roomUrl ? "" : "hidden",
+            );
             // Invite link
             if (this.roomData.roomUrl) {
                 const roomCode = this.roomData.roomUrl.substring(1);
@@ -2269,7 +2358,10 @@ export class PrivateLobbyMenu {
             }
             let playersInGame = false;
             for (let i = 0; i < this.players.length; i++) {
-                playersInGame = playersInGame || this.players[i].inGame;
+                // spectators still watching the last match get moved along on start
+                playersInGame =
+                    playersInGame ||
+                    (this.players[i].inGame && !this.players[i].spectatingGame);
             }
 
             const waitReason = $("#msg-private-lobby-wait-reason");

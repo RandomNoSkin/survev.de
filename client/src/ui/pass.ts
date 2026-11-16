@@ -171,31 +171,37 @@ export class Pass {
         const passType = GameConfig.serverSettings.currentPass;
         const events = GameConfig.serverSettings.xpBoostEvents?.[passType];
         const now = Date.now();
-        let activeEvent: { name: string; boost: number; maps: string[] } | null = null;
+        const activeEvents: { name: string; boost: number; maps: string[] }[] = [];
         if (events) {
             for (const [name, ev] of Object.entries(events)) {
                 if (now >= new Date(ev.start).getTime() && now <= new Date(ev.end).getTime()) {
-                    activeEvent = { name, boost: ev.boost, maps: ev.maps };
-                    break;
+                    activeEvents.push({ name, boost: ev.boost, maps: ev.maps });
                 }
             }
         }
-        if (activeEvent) {
+        if (activeEvents.length > 0) {
             const mapToL10nKey: Record<string, string> = {
                 local:      "index-play-1v1-solo",
                 comp:       "index-play-comp-squad",
                 two_vs_two: "index-play-2v2-duo",
                 scrims:     "index-play-scrims-solo",
+                gungame:    "index-play-gungame-solo",
+                domination: "index-play-domination-solo",
             };
-            const mapNames = activeEvent.maps
-                .map((m) => {
-                    const l10nKey = mapToL10nKey[m];
-                    if (l10nKey) return this.localization.translate(l10nKey) || m;
-                    return (MapDefs[m as keyof typeof MapDefs] as any)?.desc?.buttonText ?? m;
-                })
-                .join(", ");
             const onWord = this.localization.translate("pass-xp-boost-on") || "on";
-            $("#pass-xp-boost-text").text(`${activeEvent.name}: ${activeEvent.boost}× XP ${onWord} ${mapNames}`);
+            const text = activeEvents
+                .map((ev) => {
+                    const mapNames = ev.maps
+                        .map((m) => {
+                            const l10nKey = mapToL10nKey[m];
+                            if (l10nKey) return this.localization.translate(l10nKey) || m;
+                            return (MapDefs[m as keyof typeof MapDefs] as any)?.desc?.buttonText ?? m;
+                        })
+                        .join(", ");
+                    return `${ev.name}: ${ev.boost}× XP ${onWord} ${mapNames}`;
+                })
+                .join(" | ");
+            $("#pass-xp-boost-text").text(text);
             $("#pass-xp-boost").css("display", "block");
         } else {
             $("#pass-xp-boost").css("display", "none");
@@ -307,14 +313,23 @@ export class Pass {
             })(p);
         }
         this.quests = newQuests;
+        // Animate only progress on what's shown (e.g. the cached pass from the last visit
+        // -> the fresh one). Another pass (new season) or less than shown (XP revoked)
+        // is set straight away instead of animating backwards.
+        const shownType = this.pass.data?.type;
+        const animate =
+            this.loaded &&
+            shownType === pass.type &&
+            (pass.level > this.pass.currentLevel ||
+                (pass.level === this.pass.currentLevel && pass.xp >= Math.round(this.pass.currentXp)));
         this.pass.data = pass;
         this.pass.animSteps = [];
-        console.log("pass", pass);
         this.pass.currentXp = Math.round(this.pass.currentXp);
         this.pass.levelXp = passUtil.getPassLevelXp(pass.type, this.pass.currentLevel);
-        if (!this.loaded) {
+        if (!animate) {
             const u = passUtil.getPassLevelXp(pass.type, pass.level);
-            this.pass.currentXp = 0;
+            // shown as it is right away - only gains after that are animated
+            this.pass.currentXp = Math.round(pass.xp);
             this.pass.currentLevel = pass.level;
             this.pass.levelXp = u;
             this.pass.ticker = 0;
@@ -324,7 +339,7 @@ export class Pass {
         let xp = this.pass.currentXp;
         // Animate level-ups
 
-        if (this.loaded) {
+        if (animate) {
             while (level < pass.level) {
                 const levelXp = passUtil.getPassLevelXp(pass.type, level);
                 this.pass.animSteps.push({
@@ -367,7 +382,9 @@ export class Pass {
     }
 
     onRequest(account: Account) {
-        $("#pass-loading").css("display", account.loggingIn ? "block" : "none");
+        // only until the pass is shown - this used to follow the (much bigger) profile
+        // request, so the spinner came back over an already loaded pass until it was done
+        $("#pass-loading").css("display", account.loggingIn && !this.loaded ? "block" : "none");
     }
 
     scheduleUpdatePass(delay: number) {
