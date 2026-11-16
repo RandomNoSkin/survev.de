@@ -1,7 +1,7 @@
 import { ARENA_MAP_IDS } from "../../../../../shared/types/stats.ts";
 import { and, count, eq, gte, inArray, ne, type SQL, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { TeamMode } from "../../../../../shared/gameConfig.ts";
+import { MapId, TeamMode } from "../../../../../shared/gameConfig.ts";
 import {
     type LeaderboardRequest,
     type LeaderboardResponse,
@@ -31,7 +31,7 @@ leaderboardRouter.post(
     validateParams(zLeaderboardsRequest),
     async (c) => {
         const params = c.req.valid("json");
-        const { type, teamMode } = params;
+        const { type, teamMode, mapId } = params;
         const cachedResult = await leaderboardCache.get(params);
 
         if (cachedResult) {
@@ -44,7 +44,9 @@ leaderboardRouter.post(
         const startTime = performance.now();
         // (an arena mode: every player on their own - its teams are no duo / squad)
         const arena = ARENA_MAP_IDS.includes(params.mapId);
-        const data = type === "most_kills" && teamMode != TeamMode.Solo && !arena
+        // 50v50 / PvT use the solo kills leaderboard
+        const isFaction = mapId === MapId.Faction || mapId === MapId.FactionPotato;
+        const data = type === "most_kills" && teamMode !== TeamMode.Solo && !arena && !isFaction
             ? await multiplePlayersQuery(params)
             : await soloLeaderboardQuery(params);
         logQueryPerformance(startTime, params);
@@ -109,6 +111,7 @@ async function soloLeaderboardQuery(params: LeaderboardRequest) {
             matchDataTable.teamMode,
             usernameQuery,
             sql`${type === "most_kills" ? matchDataTable.kills : ""}`,
+            sql`${type === "most_kills" ? matchDataTable.gameId : ""}`,
         )
         .having(gte(count(sql`DISTINCT(match_data.game_id)`), minGames))
         .orderBy(sql`val DESC`)

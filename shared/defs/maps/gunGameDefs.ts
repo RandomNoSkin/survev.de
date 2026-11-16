@@ -18,7 +18,7 @@ const mapDef: PartialMapDef = {
         buttonCss: "",
         // l10n key: index-play-gungame-solo
         buttonText: "gungame",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     gameMode: {
         // the map is sized for about this many (lobbies with more scale it up, see

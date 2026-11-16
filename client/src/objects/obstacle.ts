@@ -9,13 +9,14 @@ import { assert, util } from "../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import type { AudioManager } from "../audioManager.ts";
 import type { Camera } from "../camera.ts";
-import type { DebugRenderOpts } from "../config.ts";
+import type { DebugRendererOpts } from "../config.ts";
 import { debugLines } from "../debug/debugLines.ts";
 import type { Ctx } from "../game.ts";
 import type { Map } from "../map.ts";
 import type { Renderer } from "../renderer.ts";
+import type { AbstractObject } from "./objectPool.ts";
 import type { Emitter, ParticleBarn } from "./particles.ts";
-import type { AbstractObject, Player, PlayerBarn } from "./player.ts";
+import type { Player, PlayerBarn } from "./player.ts";
 
 interface ObstacleSprite extends PIXI.Sprite {
     zIdx: number;
@@ -63,7 +64,7 @@ export class Obstacle implements AbstractObject {
     isPuzzlePiece!: boolean;
     parentBuildingId!: number;
 
-    button!: {
+    button?: {
         interactionRad: number;
         interactionText: string;
         seq: number;
@@ -76,7 +77,7 @@ export class Obstacle implements AbstractObject {
         roleToPromote?: string;
     };
 
-    door!: {
+    door?: {
         openOneWay: boolean | number;
         closedPos: Vec2;
         autoOpen: boolean;
@@ -91,7 +92,7 @@ export class Obstacle implements AbstractObject {
         locked: boolean;
         casingSprite: ObstacleSprite | null;
         canUse: boolean;
-        couldUse: boolean;
+        wasLocked: boolean;
     };
 
     imgScale!: number;
@@ -192,11 +193,11 @@ export class Obstacle implements AbstractObject {
                     open: data.door.open,
                     wasOpen: data.door.open,
                     locked: data.door.locked,
+                    wasLocked: data.door.locked,
                     canUse: data.door.canUse,
-                    couldUse: data.door.canUse,
                     casingSprite: null,
                 };
-                const casingImgDef = def.door?.casingImg;
+                const casingImgDef = def.door.casingImg;
                 if (casingImgDef !== undefined) {
                     let posOffset = casingImgDef.pos || v2.create(0, 0);
                     posOffset = v2.rotate(posOffset, this.rot + Math.PI * 0.5);
@@ -237,20 +238,21 @@ export class Obstacle implements AbstractObject {
             }
         }
         if (this.isDoor && fullUpdate) {
-            assert(data.door && def.door);
+            assert(this.door && data.door && def.door);
             this.door.canUse = data.door.canUse;
             this.door.open = data.door.open;
             this.door.seq = data.door.seq;
-            const u = v2.rotate(
+            this.door.locked = data.door.locked;
+            const offset = v2.rotate(
                 v2.create(def.door?.slideOffset, 0),
                 this.rot + Math.PI * 0.5,
             );
             this.door.closedPos = data.door.open
-                ? v2.add(data.pos, u)
+                ? v2.add(data.pos, offset)
                 : v2.copy(data.pos);
         }
         if (this.isButton && fullUpdate) {
-            assert(data.button);
+            assert(this.button && data.button);
             this.button.onOff = data.button.onOff;
             this.button.canUse = data.button.canUse;
             this.button.seq = data.button.seq;
@@ -261,50 +263,53 @@ export class Obstacle implements AbstractObject {
             && data.healthT < 0.5
             && !data.dead
         ) {
-            const g = v2.normalize(v2.create(1, 1));
+            const dir = v2.normalize(v2.create(1, 1));
             this.smokeEmitter = ctx.particleBarn.addEmitter("smoke_barrel", {
                 pos: this.pos,
-                dir: g,
+                dir,
                 layer: this.layer,
             });
         }
-        let y = false;
-        let w = this.dead ? def.img.residue! : def.img.sprite!;
-        if (this.isButton && this.button.onOff && !this.dead && def.button?.useImg) {
-            w = def.button.useImg;
-        } else if (this.isButton && !this.button.canUse && def.button?.offImg) {
-            w = def.button.offImg;
+        let doTint = false;
+        let currentImg = this.dead ? def.img.residue : def.img.sprite;
+        if (this.isButton && this.button && def.button) {
+            if (this.button.onOff && !this.dead && def.button.useImg) {
+                currentImg = def.button.useImg;
+            } else if (!this.button.canUse && def.button.offImg) {
+                currentImg = def.button.offImg;
+            }
         }
-        if (w != this.img) {
-            let f = v2.create(0.5, 0.5);
+        if (currentImg != this.img) {
+            let anchor = v2.create(0.5, 0.5);
             if (this.isDoor) {
-                f = def.door!.spriteAnchor;
+                anchor = def.door!.spriteAnchor;
             }
-            const _ = w !== undefined;
-            if (!_) {
-                this.sprite.parent?.removeChild(this.sprite);
-            }
-            if (_) {
-                this.sprite.texture = w == "none" || !w ? PIXI.Texture.EMPTY : PIXI.Texture.from(w);
-                this.sprite.anchor.set(f.x, f.y);
+            const hasImage = currentImg !== undefined;
+            if (hasImage) {
+                this.sprite.texture = currentImg == "none" || !currentImg
+                    ? PIXI.Texture.EMPTY
+                    : PIXI.Texture.from(currentImg);
+                this.sprite.anchor.set(anchor.x, anchor.y);
                 this.sprite.tint = def.img.tint!;
                 this.sprite.imgAlpha = this.dead ? 0.75 : def.img.alpha!;
                 this.sprite.zOrd = def.img.zIdx!;
                 this.sprite.zIdx = Math.floor(this.scale * 1000) * 65535 + this.__id;
                 this.sprite.alpha = this.sprite.imgAlpha;
-                y = true;
+                doTint = true;
+            } else {
+                this.sprite.parent?.removeChild(this.sprite);
             }
-            this.sprite.visible = _;
-            this.img = w;
+            this.sprite.visible = hasImage;
+            this.img = currentImg || "";
         }
-        const b = ctx.map.getMapDef().biome.valueAdjust;
-        if (y && b < 1) {
-            this.sprite.tint = util.adjustValue(this.sprite.tint as number, b);
+        const biomeValueAdjust = ctx.map.getMapDef().biome.valueAdjust;
+        if (doTint && biomeValueAdjust < 1) {
+            this.sprite.tint = util.adjustValue(this.sprite.tint as number, biomeValueAdjust);
         }
     }
 
     getInteraction(player: Player) {
-        if (this.isButton && this.button.canUse) {
+        if (this.isButton && this.button?.canUse) {
             if (
                 this.button.roleToPromote
                 && this.button.roleToPromote === player.m_netData.m_role
@@ -318,7 +323,7 @@ export class Obstacle implements AbstractObject {
                 object: `game-${this.type}`,
             };
         }
-        if (this.isDoor && this.door.canUse && !this.door.autoOpen) {
+        if (this.isDoor && this.door?.canUse && !this.door.autoOpen) {
             return {
                 rad: this.door.interactionRad,
                 action: this.door.open ? "game-close-door" : "game-open-door",
@@ -337,7 +342,7 @@ export class Obstacle implements AbstractObject {
         activePlayer: Player,
         renderer: Renderer,
     ) {
-        if (this.isButton) {
+        if (this.isButton && this.button) {
             const button = this.button;
             if (button.seq != button.seqOld) {
                 const def = MapObjectDefs.typeToDef(this.type, "obstacle");
@@ -369,7 +374,7 @@ export class Obstacle implements AbstractObject {
         }
 
         // Door
-        if (this.isDoor) {
+        if (this.isDoor && this.door) {
             const door = this.door;
 
             // Interpolate position
@@ -409,7 +414,7 @@ export class Obstacle implements AbstractObject {
 
             // Open/close sounds
             if (door.open != door.wasOpen) {
-                const sound = door.open ? def.door?.sound.open! : def.door?.sound.close!;
+                const sound = door.open ? def.door!.sound.open : def.door!.sound.close;
                 audioManager.playSound(sound, {
                     channel: "sfx",
                     soundPos: this.pos,
@@ -419,8 +424,8 @@ export class Obstacle implements AbstractObject {
                 door.wasOpen = door.open;
             }
 
-            if (door.couldUse !== door.canUse) {
-                if (door.canUse && def.door?.sound.unlock) {
+            if (door.wasLocked !== door.locked) {
+                if (!door.locked && def.door?.sound.unlock) {
                     audioManager.playSound(def.door?.sound.unlock, {
                         channel: "sfx",
                         soundPos: this.pos,
@@ -428,7 +433,7 @@ export class Obstacle implements AbstractObject {
                         filter: "muffled",
                     });
                 }
-                door.couldUse = door.canUse;
+                door.wasLocked = door.locked;
             }
         }
         if (this.dead && !this.exploded) {
@@ -496,15 +501,15 @@ export class Obstacle implements AbstractObject {
 
             renderer.addPIXIObj(this.sprite, layer, zOrd, zIdx);
 
-            if (this.isDoor && this.door.casingSprite) {
+            if (this.isDoor && this.door?.casingSprite) {
                 renderer.addPIXIObj(this.door.casingSprite, layer, zOrd + 1, zIdx);
             }
         }
         this.isNew = false;
     }
 
-    render(dt: number, camera: Camera, debug: DebugRenderOpts, layer: number) {
-        let pos = this.isDoor ? this.door.interpPos : this.pos;
+    render(dt: number, camera: Camera, debug: DebugRendererOpts, layer: number) {
+        let pos = this.isDoor ? this.door!.interpPos : this.pos;
 
         if (this.isSkin && camera.m_interpEnabled) {
             this.posInterpTicker += dt;
@@ -512,7 +517,7 @@ export class Obstacle implements AbstractObject {
             pos = v2.lerp(posT, this.visualPosOld, this.pos);
         }
 
-        const rot = this.isDoor ? this.door.interpRot : this.rot;
+        const rot = this.isDoor ? this.door!.interpRot : this.rot;
         const scale = this.scale;
 
         const screenPos = camera.m_pointToScreen(pos);

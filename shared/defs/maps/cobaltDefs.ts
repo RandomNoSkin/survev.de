@@ -9,7 +9,7 @@ const mapDef: PartialMapDef = {
         name: "Cobalt",
         icon: "img/gui/cobalt.svg",
         buttonCss: "btn-mode-cobalt",
-        backgroundImg: "img/main_splash_cobalt.png",
+        backgroundImg: "img/splashes/desert.webp",
     },
     assets: {
         audio: [
@@ -19,7 +19,7 @@ const mapDef: PartialMapDef = {
             { name: "log_13", channel: "sfx" },
             { name: "log_14", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "cobalt"],
+        atlases: ["loadout", "shared", "cobalt"],
     },
     biome: {
         colors: {

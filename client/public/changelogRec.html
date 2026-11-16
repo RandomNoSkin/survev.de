@@ -1,30 +1,144 @@
 <html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>html, body { background: white; color: black; }</style>
-  </head>
-  <body>
-    <script>
-     try {
-       var config = JSON.parse(localStorage.getItem("surviv_config"));
-       if (config.webview) {
-         var a = document.createElement("a");
-         var text = document.createTextNode("Go back");
-         a.appendChild(text);
-         a.title = "Go back";
-         a.href = "javascript:history.back()";
-         document.body.appendChild(a);
-       }
-     } catch { }
-    </script>
-    <pre style="word-wrap: break-word; white-space: pre-wrap;"># Changelog
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            html, body {
+                background: white;
+                color: black;
+            }
+        </style>
+    </head>
+    <body>
+        <script>
+            try {
+                var config = JSON.parse(localStorage.getItem("surviv_config"));
+                if (config.webview) {
+                    var a = document.createElement("a");
+                    var text = document.createTextNode("Go back");
+                    a.appendChild(text);
+                    a.title = "Go back";
+                    a.href = "javascript:history.back()";
+                    document.body.appendChild(a);
+                }
+            } catch {}
+        </script>
+        <pre style="word-wrap: break-word; white-space: pre-wrap"># Changelog
 
 ## [Unreleased]
-- Better loot physics.
-- Better river generation.
 - New content, improved balancing, updated gamemodes.
-- Beach mode content
-- More translations
+- Beach mode update.
+- Improved river generation.
+- General UI rewrite (main menu, stats page, etc.), followed by UI improvements (e.g. improved settings page)
+- Improved & compelted translations.
+- More & improved animations.
+- Adrenaline ping & expanded emote wheel.
+
+## [0.4.3] - September 29th, 2026
+- Updated the loot image for the Experimental Pack.
+- Fixed an issue where bunker doors on the Savannah map would display on the incorrect layer.
+- Fixed an issue where players were still visible aboveground while in the Cloud bunker in certain cases.
+- Fixed an issue with the target requirements of the LTM-specific 5.56mm & 7.62mm quests 
+- Fixed an issue with the LTM-specific 5.56mm quest using the 7.62mm icon & tracking 7.62mm damage.
+- Fixed an issue where certain quest exclusions could be given together (e.g. the 40xp & 50xp "kill enemies" quest).
+
+### Balance
+- Added the Oasis to the Savannah map.
+- Added the S&W 500 & Hyperfragmentation to the Savannah map.
+- Increased the spawn amounts of certain loot drops (crates, ground items) on the Savannah map.
+- The Savannah map can now generate with either 1 or 2 rivers.
+- Reduced the door lockout time in the Cloud bunker from 15s -> 10s (cooldown unchanged).
+- Decreased the headshot multiplier of most DMRs (Mk 20 SSR unchanged, as it was nerfed in v0.2.0).
+- Decreased the damage of the L86A2.
+- Decreased the burst time of the UMP-9 & FAMAS.
+- Increased the firerate & decreased the damage of the UMP-9
+- Slightly increased the bullet speed of the AN-94.
+
+## [0.4.2] - September 25th, 2026
+- Added new structure: Cloud Bunker
+- Added new equipment: Tactical Pack & Experimental Pack
+- Updated the loot image of the M39 EMR.
+- Players no longer drop the default 2x scope for the Savannah map on-death.
+- Adjusted .308 Subsonic & .50 Cal capacity, & decreased .50 Cal drops from ammo crates to 20.
+- Fixed an issue where the Karambit Borealis did not swap from breaking Potatoes/Tomatoes.
+- Fixed an issue with the rarities of the Saluting Face & Traumatized Face emotes.
+- Fixed an issue where Pass 2 skins could drop on-death.
+- Fixed an issue where one-way doors would sometimes play the error sound when going the correct way.
+- Fixed a typo with the lore of the Chrysanthemum Garb outfit.
+- Fixed a typo in the ".50 Cal/.308 damage" quest.
+
+### Balance
+- Added the Barrett M107 to the Savannah map.
+- Increased the rarities of the AWM-S & MK 20 SSR on the Savannah map.
+- .45 in the Chamber now has a 1/6 chance to empower a bullet with 1.25x damage, 1.2x speed, and perfect accuracy.
+- Decreased the bullet speed & range multipliers of 9mm Overpressure from 1.25x -> 1.2x.
+- Slightly increased the damage multipliers of all specific ammo perks (9mm Overpressure, .45 in the Chamber, Halloween treat perks) from 1.08x -> 1.12x.
+- Slightly increased the damage multiplier of Combat Stimulants from 1.12x -> 1.15x.
+
+## [0.4.1] - September 10th, 2026
+- Improved the PMG-134 world model.
+- Downed players from the same squad/duo now have a downed map icon.
+- Fixed an issue where airstrikes spawned on the 50v50 river town wouldn't drop bombs.
+- Fixed an issue where melee deploy animations were playing for downed players.
+
+### Balance
+- Soviet & Initiative crates on faction mode are now more spread across the map.
+
+## [0.4.0] - September 8th, 2026
+- Added Pass 2 content.
+- Added new default emotes: Sad Boffy & Antisocial.
+- Added deploy animation(s) for the Knuckles, Bayonet, Huntsman, & Karambit (and skins).
+- Added idle animation(s) for the melees mentioned in the above change. They can be used by pressing the melee key while already equipped. 
+- Added LTM quests, which can only be rolled while their corresponding LTM(s) are active. A free reroll will be given if the corresponding LTM(s) become unavailable.
+- Added "difficult" quests, which can only occur as the first quest, are highlighted in red, and give bonus XP.
+- Certain existing quests now have LTM-specific versions.
+- Revive particles now use the player's equipped heal particle.
+- Added 15 new crosshairs.
+- Added icons to various existing quests.
+- Slightly adjusted quest XP font (and color for 40 XP quests).
+- Fixed an issue where the Karambit would snap back to its idle position after one of its attack animations.
+- Fixed an issue where the bushes on the Cobalt map used incorrect particles.
+- Fixed an issue where bullets could sometimes damage players through thin walls.
+- Fixed an issue where teammate health bars would not update immediately when spectating a different team.
+- Adjusted the Augmenting Vat image to be more indicative of a role promotion.
+
+### Balance
+- The Barrett M107 & ASh-12 are now obtainable in Factions modes.
+- Heavily decreased the chance to get a special airdrop on the Potato vs. Tomato map.
+- Increased the requirement for the "Ammo damage" quests from 250 -> 350.
+- Increased the requirement for the "Grenade damage" quest from 100 -> 200.
+- Increased the requirement for the "Melee damage" quest from 150 -> 250.
+- The "Kill enemies at: Club" quest will no longer be offered while an LTM without the Club is active (this applies to quests in the same category).
+
+## [0.3.13] - August 24th, 2026
+- Certain gradient skins now have a matching gradient loot image.
+- Fixed a discrepancy between the colors of the unopened & partially opened states for regular class pods.
+- Fixed an issue where the twins bunker puzzle could be blocked by obstacles (leading to incompletable puzzles).
+- Fixed multiple inconsistencies with object counts between Woods seasonal variations.
+- Fixed an issue where strobes wouldn't spawn on the Winter Woods map.
+- Fixed an issue where axe stumps wouldn't spawn on the Halloween and Summer Woods maps.
+- Fixed an issue where tables, as well as the club & reserve vault ceilings, had transparent pixels.
+- Fixed an issue where some in-game sprites could be miscolored.
+- Fixed an issue where lights from Halloween obstacles wouldn't disappear when they were broken.
+- Fixed an issue where obstacle outfits were scaled inaccurately.
+- Fixed an issue where the second red house variant wouldn't spawn on the Halloween map.
+- Fixed an issue where spectators would get kicked from the game when it ended, instead of seeing the game over screen.
+- Fixed an issue where the game over screen wouldn't show when spectating teammates and they all died.
+- Fixed an issue with spectating where it would switch to a random player when the current player died.
+- Fixed an issue where the spectate button would show in the game over screen despite the game being over.
+- Fixed an issue where player airstrike kills wouldn't show the killer in the kill feed.
+- Fixed an issue where players could obtain tomato throwables on regular Potato mode.
+
+### Balance
+- Increased the attack speed & obstacle multiplier of the Trench Spade.
+- Hollow-Points now gives a 1.1x speed increase to bullets.
+- Medic class pods now have a chance to drop bandages instead of a medkit.
+- The stone cache on the Woods map drops an AK-47 again.
+
+## [0.3.12] - August 9th, 2026
+- Fixed an issue with Capital Gains' foot model not displaying properly.
+
+### Balance
+- Increased the number of pellets that the SPAS-16 fires.
 
 ## [0.3.1] - July 15th, 2026
 - Added new structures: The Reserve, Oasis.
@@ -456,5 +570,5 @@
 ## [0.0.1] - August 17, 2024
 - First early access release.
     </pre>
-  </body>
+    </body>
 </html>

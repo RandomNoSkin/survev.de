@@ -19,7 +19,7 @@ export const mapDef: PartialMapDef = {
         icon: "",
         buttonCss: "",
         buttonText: "comp-duo",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     biome: {
         colors: {

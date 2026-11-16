@@ -358,7 +358,7 @@ export class ResourceManager {
         this.loadedMapSounds.add(sound.name);
 
         const options = {
-            canCoalesce: soundDef.canCoalesce!,
+            canCoalesce: soundDef.canCoalesce,
             channels: soundDef.maxInstances,
             volume: soundDef.volume,
         };

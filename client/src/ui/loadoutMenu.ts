@@ -1973,7 +1973,7 @@ export class LoadoutMenu {
         }
 
         // Disable crosshair elements on Edge
-        if (device.browser == "edge") {
+        if (false) {
             if (category.loadoutType == "crosshair") {
                 const disableElem = function (
                     parentElem: JQuery<HTMLElement>,
@@ -2019,7 +2019,7 @@ export class LoadoutMenu {
         selector.on("dragstart", function (e) {
             if (
                 !$(this).hasClass("customize-list-item-locked") &&
-                (that.selectItem($(this), false), device.browser != "edge")
+                (that.selectItem($(this), false), true)
             ) {
                 const imgDiv = document.createElement("img");
                 imgDiv.src = that.selectedItem.img

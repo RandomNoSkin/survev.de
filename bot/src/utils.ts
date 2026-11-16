@@ -36,6 +36,7 @@ export const enum Command {
     GiveXp = "give_xp",
     LogoutFromGame = "logout_from_game",
     ResetStats = "reset_stats",
+    ClearCache = "clear_cache",
 }
 
 export const honoClient = hc<PrivateRouteApp>(API_URL, {

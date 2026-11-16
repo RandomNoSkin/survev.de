@@ -25,10 +25,15 @@ export function assert(value: unknown, message?: string | Error): asserts value 
     }
 }
 
-export type DeepPartial<T> = T extends object ? {
-        [P in keyof T]?: DeepPartial<T[P]>;
-    }
-    : T;
+export type DeepPartial<T> = {
+    // special array handling because we use this with util.mergeDeep
+    // which doesn't merge arrays, so items inside arrays shouldn't be optional
+    [K in keyof T]?: Required<T>[K] extends any[] ? T[K]
+        : DeepPartial<T[K]>;
+};
+
+export type UnionToIntersection<U> = (U extends unknown ? (x: U) => void : never) extends ((x: infer I) => void) ? I
+    : never;
 
 export const util = {
     //
@@ -251,6 +256,23 @@ export const util = {
         };
     },
 
+    bytesToBase64(bytes: Uint8Array) {
+        let binary = "";
+        for (const byte of bytes) {
+            binary += String.fromCharCode(byte);
+        }
+        return btoa(binary);
+    },
+
+    base64ToBytes(str: string) {
+        const binary = atob(str);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    },
+
     // https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
     rgbToHex(c: { r: number; g: number; b: number }) {
         const rgb = util.rgbToInt(c);
@@ -300,15 +322,15 @@ export const util = {
         );
     },
 
-    mergeDeep(target: any, ...sources: any[]): any {
-        if (!sources.length) return target;
+    mergeDeep<T extends object>(target: DeepPartial<T>, ...sources: DeepPartial<T>[]): T {
+        if (!sources.length) return target as T;
         const source = sources.shift();
 
         if (this.isObject(target) && this.isObject(source)) {
             for (const key in source) {
                 if (this.isObject(source[key])) {
                     if (!target[key]) Object.assign(target, { [key]: {} });
-                    this.mergeDeep(target[key], source[key]);
+                    this.mergeDeep(target[key] as any, source[key] as any);
                 } else {
                     Object.assign(target, { [key]: source[key] });
                 }
@@ -318,9 +340,9 @@ export const util = {
         return this.mergeDeep(target, ...sources);
     },
 
-    cloneDeep(source: unknown) {
+    cloneDeep<T extends object>(source: T): T {
         // @TODO: This does not properly handle arrays
-        return util.mergeDeep({}, source);
+        return util.mergeDeep<T>({}, source);
     },
 
     shuffleArray(arr: unknown[]) {

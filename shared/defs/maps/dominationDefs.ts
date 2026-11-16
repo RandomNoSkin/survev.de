@@ -18,7 +18,7 @@ const mapDef: PartialMapDef = {
         buttonCss: "",
         // l10n key: index-play-domination-squad (the button text + its team mode)
         buttonText: "domination",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     gameMode: {
         maxPlayers: 12,

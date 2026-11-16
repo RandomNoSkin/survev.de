@@ -8,7 +8,7 @@ import { assert } from "../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import type { Ambiance } from "../ambiance.ts";
 import type Camera from "../camera.ts";
-import type { DebugRenderOpts } from "../config.ts";
+import type { DebugRendererOpts } from "../config.ts";
 import {
     renderBridge,
     renderMapBuildingBounds,
@@ -18,7 +18,8 @@ import {
 import { debugLines } from "../debug/debugLines.ts";
 import type { Ctx } from "../game.ts";
 import type { Map } from "../map.ts";
-import type { AbstractObject, Player } from "./player.ts";
+import type { AbstractObject } from "./objectPool.ts";
+import type { Player } from "./player.ts";
 
 interface Stair {
     collision: AABB;
@@ -233,7 +234,7 @@ export class Structure implements AbstractObject {
         track1.weight = sound ? weight1 * transitionWeight * this.soundEnabledT : 0;
     }
 
-    render(_camera: Camera, debug: DebugRenderOpts, _layer: number) {
+    render(_camera: Camera, debug: DebugRendererOpts, _layer: number) {
         if (!IS_DEV) return; // only debug rendering code here
 
         if (debug.structures.buildingBounds) {

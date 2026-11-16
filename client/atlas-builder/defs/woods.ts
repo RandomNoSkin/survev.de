@@ -2,13 +2,14 @@ import type { AtlasDef } from "../atlasDefs.ts";
 import { BuildingSprites } from "./buildings.ts";
 
 export const WoodsAtlas: AtlasDef = {
-    compress: true,
     images: [
         ...BuildingSprites.pavilion,
         ...BuildingSprites.buckhouse,
         ...BuildingSprites.bunker_eye,
         ...BuildingSprites.bunker_hatchet,
         ...BuildingSprites.workshop,
+
+        "map/map-light-01.svg",
 
         "map/map-bush-01x.svg",
         "map/map-bush-06.svg",

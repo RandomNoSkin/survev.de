@@ -63,7 +63,6 @@ export class Obstacle extends BaseGameObject {
         open: boolean;
         canUse: boolean;
         locked: boolean;
-        hinge: Vec2;
         closedOri: number;
         closedPos: Vec2;
         openOneWay: number;
@@ -178,7 +177,6 @@ export class Obstacle extends BaseGameObject {
             this.door = {
                 open: false,
                 canUse: def.door.canUse,
-                hinge: def.hinge!,
                 closedPos: v2.copy(this.pos),
                 closedOri: this.ori,
                 openDelay: def.door.openDelay ?? 0,
@@ -573,6 +571,14 @@ export class Obstacle extends BaseGameObject {
 
                 if (coldet.test(this.collider, collision)) {
                     obj.kill(params);
+                }
+            }
+        }
+
+        if (def.isDecalAnchor && this.parentBuilding) {
+            for (const obj of this.parentBuilding.childObjects) {
+                if (obj.__type === ObjectType.Decal && v2.eq(obj.pos, this.pos, 0.01)) {
+                    obj.lifeTime = 0;
                 }
             }
         }
