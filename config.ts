@@ -44,7 +44,7 @@ export function getConfig(isProduction: boolean, dir: string) {
             { mapName: "domination", teamMode: TeamMode.Squad, gameMode: GameMode.Domination, arena: true, enabled: false },
         ],
         clientTheme: "main",
-        passType: "pass_survivr2",
+        passType: "pass_survivr4",
         gameTps: 100,
         netSyncTps: 33,
         logging: {
