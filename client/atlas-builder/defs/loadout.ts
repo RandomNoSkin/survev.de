@@ -561,6 +561,7 @@ export const LoadoutAtlas: AtlasDef = {
         "loot/loot-shirt-outfitChrys.svg",
         "loot/loot-shirt-outfitChameleon.svg",
         "loot/loot-shirt-outfitDC.svg",
+        "loot/loot-shirt-outfitDarkGloves.svg", // fork: still used by outfitOldMan
         "loot/loot-shirt-outfitEvent.svg",
         "loot/loot-shirt-outfitFahrenheit.svg",
         "loot/loot-shirt-outfitGold.svg",

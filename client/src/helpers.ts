@@ -237,21 +237,20 @@ export const helpers = {
                 const outfitDef = def as OutfitDef;
                 const lootImg = outfitDef.lootImg;
 
-                // Skins with their own dedicated loadout art (resurviv skins +
-                // classic surviv shirts) already look right — use it directly.
+                // Always render the full in-game character preview (body + backpack +
+                // fists + accessory) so every skin looks like it does in game.
+                const iconUrl = getOutfitIconUrl(gameType);
+                if (iconUrl) {
+                    return iconUrl;
+                }
+
+                // Not composable (atlas not ready yet, or a costume/ghillie skin):
+                // skins with their own dedicated loot art use that.
                 const usesGenericShirt =
                     lootImg.sprite === "loot-shirt-01.img" ||
                     lootImg.sprite === "loot-shirt-outfitBase.img";
                 if (!usesGenericShirt) {
                     return `img/loot/${lootImg.sprite.slice(0, -4)}.svg`;
-                }
-
-                // Otherwise render a full in-game character preview (body + backpack +
-                // fists + accessory) so the skin looks like it does in game, the same
-                // way the hand-drawn resurviv icons do.
-                const iconUrl = getOutfitIconUrl(gameType);
-                if (iconUrl) {
-                    return iconUrl;
                 }
 
                 // Atlas not ready yet (or a costume/ghillie skin): fall back to a shirt

@@ -119,14 +119,9 @@ export class Loot implements AbstractObject {
                 || 0.8;
             this.sprite.scale.set(innerScale, innerScale);
 
-            // In-game outfit loot shows the full composed character (like the
-            // loadout menu) instead of a plain shirt, for skins without their own
-            // dedicated loot art.
-            const usesGenericShirt =
-                itemDef.type === "outfit" &&
-                (itemDef.lootImg.sprite === "loot-shirt-01.img" ||
-                    itemDef.lootImg.sprite === "loot-shirt-outfitBase.img");
-            const outfitTex = usesGenericShirt
+            // In-game outfit loot always shows the full composed character (like the
+            // loadout menu). Costumes/ghillie (or atlas not ready) fall back to the loot art.
+            const outfitTex = itemDef.type === "outfit"
                 ? getOutfitLootTexture(this.type, ctx.renderer.game.m_pixi.renderer)
                 : null;
             if (outfitTex) {
