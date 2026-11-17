@@ -18,7 +18,7 @@ export const Comp: MapDef = {
         icon: "",
         buttonCss: "",
         buttonText: "comp",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     assets: {
         audio: [
@@ -38,7 +38,7 @@ export const Comp: MapDef = {
             { name: "potato_pickup_01", channel: "ui" },
             { name: "piano_music_01", channel: "gameMusic" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
+        atlases: ["loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
     },
     biome: {
         colors: {
@@ -54,6 +54,12 @@ export const Comp: MapDef = {
         },
         valueAdjust: 1,
         sound: { riverShore: "sand" },
+        ambience: {
+            music: "menu_music_01",
+            wind: "ambient_wind_01",
+            river: "ambient_stream_01",
+            waves: "ambient_waves_01",
+        },
         particles: { camera: "" },
         tracerColors: {},
         airdrop: {

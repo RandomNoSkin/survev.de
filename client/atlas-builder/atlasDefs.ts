@@ -3,7 +3,6 @@ import { BeachAtlas } from "./defs/beach.ts";
 import { CobaltAtlas } from "./defs/cobalt.ts";
 import { DesertAtlas } from "./defs/desert.ts";
 import { FactionAtlas } from "./defs/faction.ts";
-import { GradientAtlas } from "./defs/gradient.ts";
 import { HalloweenAtlas } from "./defs/halloween.ts";
 import { LoadoutAtlas } from "./defs/loadout.ts";
 import { MainAtlas } from "./defs/main.ts";
@@ -16,22 +15,10 @@ import { TurkeyAtlas } from "./defs/turkey.ts";
 import { WoodsAtlas } from "./defs/woods.ts";
 
 export interface AtlasDef {
-    /**
-     * Some atlases have extra quality compression disabled (like loadout).
-     *
-     * The quality compression works by limiting the image to 256 colors
-     *
-     * Which doesn't work for some atlases like loadout, gradient, etc...
-     * since they have way more colors than the spritesheets with only map objects.
-     *
-     * This is what the original game did BTW, with this we get really similar (and small) file sizes.
-     */
-    compress: boolean;
     images: string[];
 }
 
 export const Atlases: Record<Atlas, AtlasDef> = {
-    gradient: GradientAtlas,
     loadout: LoadoutAtlas,
     skins: SkinsAtlas,
     shared: SharedAtlas,

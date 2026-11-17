@@ -1,7 +1,10 @@
 import { type FolderApi, Pane, type TabPageApi } from "tweakpane";
 import { MapDefs } from "../../../shared/defs/mapDefs.ts";
 
+import * as PIXI from "pixi.js-legacy";
 import { MapObjectDefs } from "../../../shared/defs/register.ts";
+import { collider } from "../../../shared/utils/collider.ts";
+import { mapHelpers } from "../../../shared/utils/mapHelpers.ts";
 import { math } from "../../../shared/utils/math.ts";
 import { v2 } from "../../../shared/utils/v2.ts";
 import {
@@ -9,7 +12,7 @@ import {
     type ConfigKey,
     type ConfigManager,
     type ConfigType,
-    debugRenderConfig,
+    debugRendererConfig,
 } from "../../src/config.ts";
 import { type InputHandler, Key, MouseWheel } from "../../src/input.ts";
 import type { EditorDisplay } from "./editorDisplay.ts";
@@ -30,16 +33,19 @@ const ZOOM_STEP = 0.2;
 
 export class EditorUi {
     params: typeof BuildingEditorConfig;
-    renderParams: typeof debugRenderConfig;
+    rendererParams: typeof debugRendererConfig;
 
     pane: Pane;
     zoomBind: ReturnType<Pane["addBinding"]>;
+
+    screenshotPane: Pane;
+
     constructor(
         public config: ConfigManager,
         public display: EditorDisplay,
     ) {
         this.params = this.config.get("buildingEditor")!;
-        this.renderParams = this.config.get("debugRenderer")!;
+        this.rendererParams = this.config.get("debugRenderer")!;
 
         const container = document.getElementById("editor-ui") as HTMLDivElement;
 
@@ -167,6 +173,19 @@ export class EditorUi {
         }
 
         {
+            const toggleLayer = pane.addButton({
+                title: "Switch Layers",
+            });
+
+            toggleLayer.on("click", () => {
+                this.params.layer = this.params.layer === 0 ? 1 : 0;
+                this.display.activePlayer.layer = this.params.layer;
+                this.config.set("buildingEditor", this.params);
+                this.display.updatePlayer();
+            });
+        }
+
+        {
             const avaliableObjects = MapObjectDefs.getAllTypes()
                 .filter((type) => {
                     const def = MapObjectDefs.typeToDef(type);
@@ -195,6 +214,17 @@ export class EditorUi {
                     this.display.resetObj();
                 }
             });
+
+            this.pane.addBinding(this.params, "ori", {
+                label: "Orientation",
+                min: 0,
+                max: 3,
+                step: 1,
+            }).on("change", () => {
+                this.config.set("buildingEditor", this.params);
+                this.display.resetObj();
+            });
+
             const button = pane.addButton({
                 title: "Spawn",
             });
@@ -220,6 +250,20 @@ export class EditorUi {
         //
         // Renderer
         //
+
+        const hideCeilings = this.pane.addBinding(this.params, "hideCeilings", {
+            label: "Hide Ceilings",
+        });
+        hideCeilings.on("change", () => {
+            this.config.set("buildingEditor", this.params);
+        });
+
+        const showGrid = this.pane.addBinding(this.params, "showGrid", {
+            label: "Show Grid",
+        });
+        showGrid.on("change", () => {
+            this.config.set("buildingEditor", this.params);
+        });
 
         const addObject = (
             // we pass both the default config object
@@ -249,7 +293,7 @@ export class EditorUi {
                         configKey,
                     );
                 } else if (typeof entry === "boolean") {
-                    const label = camelCaseToText(key);
+                    const label = key === "enabled" ? "All debug lines" : camelCaseToText(key);
 
                     const bind = folder.addBinding(outObj, key, {
                         label,
@@ -261,12 +305,124 @@ export class EditorUi {
             }
         };
         addObject(
-            debugRenderConfig,
-            this.renderParams,
-            this.renderParams,
+            debugRendererConfig,
+            this.rendererParams,
+            this.rendererParams,
             this.pane,
             "debugRenderer",
         );
+
+        // screenshot UI
+        {
+            this.screenshotPane = new Pane({
+                container: document.getElementById("screenshot-ui") as HTMLDivElement,
+                title: "Screenshot",
+                expanded: true,
+            });
+
+            const screenshotParams = {
+                transparent: false,
+                ceilings: false,
+                resolution: 1,
+                margins: 8,
+            };
+
+            this.screenshotPane.addBinding(screenshotParams, "transparent", {
+                label: "Transparent",
+            });
+            this.screenshotPane.addBinding(screenshotParams, "ceilings", {
+                label: "Show ceilings",
+            });
+            this.screenshotPane.addBinding(screenshotParams, "resolution", {
+                label: "Resolution",
+                min: 0.1,
+                max: 5,
+                step: 0.1,
+            });
+            this.screenshotPane.addBinding(screenshotParams, "margins", {
+                label: "Margins",
+                min: 0,
+                max: 32,
+                step: 1,
+            });
+
+            this.screenshotPane.addButton({
+                title: "Take screenshot",
+            }).on("click", () => {
+                // reset the zoom to the target resolution, then set it back at the end...
+                const zoom = this.params.zoom;
+                this.params.zoom = screenshotParams.resolution;
+                this.config.set("buildingEditor", this.params);
+                this.display.camera.m_targetZoom = screenshotParams.resolution;
+                this.display.camera.m_zoom = screenshotParams.resolution;
+
+                // hide ceilings
+                const buildings = this.display.map.m_buildingPool.m_getPool();
+                for (let i = 0; i < buildings.length; i++) {
+                    buildings[i].ceiling.visionTicker = screenshotParams.ceilings ? 0 : 1;
+                    buildings[i].ceiling.fadeAlpha = screenshotParams.ceilings ? 99 : 0;
+                }
+                // since we change the camera zoom and ceilings, we need to run an update
+                // so everything is positioned correctly and building ceilings get hidden
+                this.display.update(0.01);
+
+                // get the building bounds to use for the screenshot width and height
+                const bounds = collider.toAabb(
+                    collider.transform(
+                        mapHelpers.getBoundingCollider(this.params.object),
+                        v2.create(0, 0),
+                        math.oriToRad(this.params.ori),
+                        1,
+                    ),
+                );
+
+                // expand the bounds by the margins, for some buildings some sprites can go outside the bounding collider
+                // so just let the user deal with it by expanding the screenshot themselves :)
+                v2.set(bounds.min, v2.sub(bounds.min, v2.create(screenshotParams.margins, screenshotParams.margins)));
+                v2.set(bounds.max, v2.add(bounds.max, v2.create(screenshotParams.margins, screenshotParams.margins)));
+
+                const width = this.display.camera.m_scaleToScreen(bounds.max.x - bounds.min.x);
+                const height = this.display.camera.m_scaleToScreen(bounds.max.y - bounds.min.y);
+
+                const { x, y } = this.display.camera.m_pointToScreen(this.display.toWorldPos(bounds.min));
+
+                const rect = new PIXI.Rectangle(x, y - height, width, height);
+
+                const pixi = this.display.pixi;
+                const background = new PIXI.Graphics();
+                pixi.stage.addChildAt(background, 0);
+
+                if (screenshotParams.transparent) {
+                    display.renderer.ground.alpha = 0;
+                    display.map.display.ground.alpha = 0;
+                } else {
+                    background.alpha = 1;
+                    display.map.display.ground.alpha = display.renderer.layer === 0 ? 1 : 0;
+
+                    // ... manually draw a background, this can be removed in pixi v8 because v8 renderer.extract has a clearColor param
+                    const colors = display.map.getMapDef().biome.colors;
+                    const undergroundColor = display.renderer.layer === 1 ? colors.underground : colors.grass;
+                    background.clear();
+                    background.beginFill(undergroundColor);
+                    background.drawRect(rect.x, rect.y, rect.width, rect.height);
+                    background.endFill();
+                }
+
+                const canvas = pixi.renderer.extract.canvas(pixi.stage, rect);
+                canvas.toBlob?.(blob => {
+                    if (blob) window.open(URL.createObjectURL(blob));
+                });
+
+                background.destroy();
+
+                // reset stuff
+                this.params.zoom = zoom;
+                this.config.set("buildingEditor", this.params);
+                this.display.camera.m_targetZoom = zoom;
+                this.display.camera.m_zoom = zoom;
+                display.map.display.ground.alpha = 1;
+            });
+        }
     }
 
     m_update(input: InputHandler) {
@@ -287,6 +443,6 @@ export class EditorUi {
             this.config.set("buildingEditor", this.params);
         }
 
-        this.config.config.debugRenderer = this.renderParams;
+        this.config.config.debugRenderer = this.rendererParams;
     }
 }

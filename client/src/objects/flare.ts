@@ -28,8 +28,8 @@ interface FlareBullet extends BulletDef {
     dir: Vec2;
     layer: number;
     speed: number;
-    tracerAlphaRate: number;
-    tracerAlphaMin: number;
+    tracerAlphaRate?: number;
+    tracerAlphaMin?: number;
     smokeThrottle: number;
     playerId?: number;
 }
@@ -89,20 +89,16 @@ export class FlareBarn {
         if (player && player.layer & 2) {
             b.layer |= 2;
         }
-        // ~~ readonly L
-        const tracerColorDefs = GameConfig.tracerColors[
-            bulletDef.tracerColor as keyof typeof GameConfig.tracerColors
-        ] as Record<string, number>;
+        const tracerColorDefs = GameConfig.tracerColors[bulletDef.tracerColor];
         let tracerColor = tracerColorDefs.regular;
-        // @ts-expect-error isOnBrightSurface has no reference elsewhere
-        if (player?.isOnBrightSurface) {
+        if (player?.surface?.data.isBright) {
             tracerColor = tracerColorDefs.saturated;
         }
         b.bulletTrail.scale.set(0.8, bulletDef.tracerWidth);
         b.tracerLength = bulletDef.tracerLength;
         b.bulletTrail.tint = tracerColor;
-        b.tracerAlphaRate = tracerColorDefs.alphaRate;
-        b.tracerAlphaMin = tracerColorDefs.alphaMin;
+        b.tracerAlphaRate = (tracerColorDefs as { alphaRate?: number }).alphaRate;
+        b.tracerAlphaMin = (tracerColorDefs as { alphaMin?: number }).alphaMin;
         b.bulletTrail.alpha = 1;
         b.flare.scale.set(1, 1);
         b.flare.tint = bulletDef.flareColor!;
@@ -135,7 +131,7 @@ export class FlareBarn {
                         ? d.tracerAlphaRate
                         : d.tracerAlphaRate * 0.9;
                     d.bulletTrail.alpha = math.max(
-                        d.tracerAlphaMin,
+                        d.tracerAlphaMin!,
                         d.bulletTrail.alpha * rate,
                     );
                 }

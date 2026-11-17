@@ -35,7 +35,7 @@ import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import { Animations, Bones, IdlePoses, Pose } from "../animData.ts";
 import type { AudioManager } from "../audioManager.ts";
 import type { Camera } from "../camera.ts";
-import type { DebugRenderOpts } from "../config.ts";
+import type { DebugRendererOpts } from "../config.ts";
 import { debugLines } from "../debug/debugLines.ts";
 import { device } from "../device.ts";
 import { errorLogManager } from "../errorLogs.ts";
@@ -989,8 +989,8 @@ export class Player implements AbstractObject {
                     );
                     if (
                         res
-                        && (obstacle.door.locked
-                            || (obstacle.door.openOneWay && v2.dot(toDoor, doorDir) < 0))
+                        && (obstacle.door!.locked
+                            || (obstacle.door!.openOneWay && v2.dot(toDoor, doorDir) < 0))
                     ) {
                         doorErrorObstacle = obstacle;
                     }
@@ -1295,9 +1295,12 @@ export class Player implements AbstractObject {
         }
 
         // (a player whose info isn't known (yet) has no loadout - no crash over it)
-        const adrenalineEmitterType = (
-            GameObjectDefs.typeToDefSafe(playerInfo.loadout?.boost ?? "") as { emitter?: string } | undefined
+        const adrenalineEmitter = (
+            GameObjectDefs.typeToDefSafe(playerInfo.loadout?.boost ?? "") as { emitter?: string | string[] } | undefined
         )?.emitter;
+        const adrenalineEmitterType = Array.isArray(adrenalineEmitter)
+            ? adrenalineEmitter[0]
+            : adrenalineEmitter;
         if (
             adrenalineEmitterType
             && this.m_netData.m_adrenalineEffect
@@ -1440,7 +1443,7 @@ export class Player implements AbstractObject {
         this.isNew = false;
     }
 
-    render(camera: Camera, debug: DebugRenderOpts) {
+    render(camera: Camera, debug: DebugRendererOpts) {
         const screenPos = camera.m_pointToScreen(this.m_visualPos);
         const screenScale = camera.m_pixels(1);
         this.container.position.set(screenPos.x, screenPos.y);
@@ -1652,8 +1655,11 @@ export class Player implements AbstractObject {
         const handTint = outfitDef.ghillie
             ? map.getMapDef().biome.colors.playerGhillie
             : outfitImg.handTint;
-        setHandSprite(this.handLSprite, outfitImg.handSprite, handTint);
-        setHandSprite(this.handRSprite, outfitImg.handSprite, handTint);
+        // upstream: outfits can define separate left / right hand sprites
+        const handSpriteL = typeof outfitImg.handSprite === "string" ? outfitImg.handSprite : outfitImg.handSprite.left;
+        const handSpriteR = typeof outfitImg.handSprite === "string" ? outfitImg.handSprite : outfitImg.handSprite.right;
+        setHandSprite(this.handLSprite, handSpriteL, handTint);
+        setHandSprite(this.handRSprite, handSpriteR, handTint);
 
         // Feet
         const setFootSprite = function(
@@ -1939,7 +1945,7 @@ export class Player implements AbstractObject {
                     e.visible = false;
                 }
             };
-            const Z = R.handImg?.[this.throwableState];
+            const Z = R.handImg?.[this.throwableState as keyof NonNullable<typeof R.handImg>];
             K(this.objectLSprite, Z!.left);
             K(this.objectRSprite, Z!.right);
         } else if (R.type !== "melee") {
@@ -2262,9 +2268,11 @@ export class Player implements AbstractObject {
                 const actionItemDef = GameObjectDefs.typeToDef(this.m_action.item);
                 const loadout = playerInfo.loadout;
                 if (actionItemDef.type == "heal") {
-                    emitterType = GameObjectDefs.typeToDef(loadout.heal, "heal_effect").emitter;
+                    const healEmitter = GameObjectDefs.typeToDef(loadout.heal, "heal_effect").emitter;
+                    emitterType = Array.isArray(healEmitter) ? healEmitter[0] : healEmitter;
                 } else if (actionItemDef.type == "boost") {
-                    emitterType = GameObjectDefs.typeToDef(loadout.boost, "boost_effect").emitter;
+                    const boostEmitter = GameObjectDefs.typeToDef(loadout.boost, "boost_effect").emitter;
+                    emitterType = Array.isArray(boostEmitter) ? boostEmitter[0] : boostEmitter;
                 }
                 if (this.m_hasPerk("aoe_heal")) {
                     emitterProps.scale = 1.5;
@@ -2513,7 +2521,7 @@ export class Player implements AbstractObject {
         const itemDef = GameObjectDefs.typeToDefSafe(
             this.m_netData.m_activeWeapon,
         ) as MeleeDef | undefined;
-        const sound = itemDef?.sound?.[args.sound];
+        const sound = (itemDef?.sound as Record<string, string> | undefined)?.[args.sound];
         if (sound) {
             animCtx.audioManager.playSound(sound, {
                 channel: "sfx",
@@ -2699,7 +2707,7 @@ export class Player implements AbstractObject {
                 meleeDir,
                 ((Math.random() - 0.5) * Math.PI) / 3,
             );
-            const hitSound = meleeDef.sound[args.playerHit!] || meleeDef.sound.playerHit;
+            const hitSound = (meleeDef.sound as Record<string, string | undefined>)[args.playerHit!] || meleeDef.sound.playerHit;
             hits.push({
                 pen: res.pen,
                 prio: teamId == ourTeamId ? 2 : 0,
@@ -3002,7 +3010,7 @@ export class PlayerBarn {
         }
     }
 
-    m_render(camera: Camera, debug: DebugRenderOpts) {
+    m_render(camera: Camera, debug: DebugRendererOpts) {
         const players = this.playerPool.m_getPool();
         for (let i = 0; i < players.length; i++) {
             const p = players[i];

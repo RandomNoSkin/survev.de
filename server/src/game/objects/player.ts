@@ -181,7 +181,7 @@ export class PlayerBarn {
     playerStatusTicker = 0;
     playerStatusRate = 0;
 
-    defaultItems = util.mergeDeep(
+    defaultItems = util.mergeDeep<typeof GameConfig["player"]["defaultItems"]>(
         {},
         GameConfig.player.defaultItems,
         Config.defaultItems,
@@ -193,8 +193,13 @@ export class PlayerBarn {
 
     nextKilledNumber = 0;
 
+    /**
+     * Assigned once at game end
+     */
+    factionsMvp?: Player = undefined;
+
     constructor(readonly game: Game) {
-        this.bagSizes = util.mergeDeep(
+        this.bagSizes = util.mergeDeep<typeof GameConfig["bagSizes"]>(
             {},
             GameConfig.bagSizes,
             this.game.map.mapDef.gameConfig.bagSizes,
@@ -620,6 +625,10 @@ export class PlayerBarn {
 
             if (!player.dead && sendWinEmotes) {
                 player.emoteFromSlot(EmoteSlot.Win);
+            }
+
+            if (this.game.over && !player.dead && !player.sentGameOverMsg) {
+                player.addGameOverMsg();
             }
         }
 
@@ -1268,7 +1277,7 @@ export class Player extends BaseGameObject {
         this.obstacleOutfit = undefined;
 
         if (def.obstacleType) {
-            this.obstacleOutfit = this.game.map.genOutfitObstacle(def.obstacleType, this);
+            this.obstacleOutfit = this.game.map.genOutfitObstacle(def.obstacleType, this, def.baseScale);
         }
         this.setDirty();
     }
@@ -1286,6 +1295,29 @@ export class Player extends BaseGameObject {
             return 0;
         }
         return (GameObjectDefs.typeToDefSafe(type) as BackpackDef | HelmetDef | ChestDef).level;
+    }
+
+    /**
+     * Handles knowing if a gear item is better or worse, to show the "better item equipped" toast
+     */
+    getGearQuality(type: string) {
+        if (!type) {
+            return 0;
+        }
+
+        const def = GameObjectDefs.typeToDef(type) as BackpackDef | HelmetDef | ChestDef;
+        let level = def.level * 10;
+        if (def.type === "helmet") {
+            if (def.perk) {
+                level += 1;
+            }
+            if (def.role) {
+                level += 1;
+            }
+        } else if (def.type === "backpack") {
+            level += def.maxPerks ?? 1;
+        }
+        return level;
     }
 
     layer: number;
@@ -1478,7 +1510,8 @@ export class Player extends BaseGameObject {
                 newOutfit = newOutfit(clampedTeamId);
             }
             if (newOutfit) {
-                if (!oldOutfit.noDropOnDeath) {
+                // never drop the loadout outfit on promotion
+                if (!oldOutfit.noDropOnDeath && this.outfit !== this.outfitFromLoadout) {
                     this.dropLoot(this.outfit);
                 }
                 this.setOutfit(newOutfit);
@@ -1497,6 +1530,9 @@ export class Player extends BaseGameObject {
 
                 this.helmet = roleHelmet;
                 this.hasRoleHelmet = true;
+            } else if (this.hasRoleHelmet) {
+                this.helmet = "";
+                this.hasRoleHelmet = false;
             }
 
             if (roleDef.defaultItems.chest) {
@@ -1680,6 +1716,10 @@ export class Player extends BaseGameObject {
         this.role = "";
         // allow the next role's chest to be applied/dropped correctly again
         this.hasRoleChest = false;
+        if (this.hasRoleHelmet) {
+            this.hasRoleHelmet = false;
+            this.helmet = "";
+        }
 
         this.mapIndicator?.kill();
         for (let i = 0; i < this.perks.length; i++) {
@@ -1884,7 +1924,7 @@ export class Player extends BaseGameObject {
         if (def.isTree || def.isBush) return true;
 
         // Tables and similar furniture can act as cover.
-        if (def.obstacleType === "furniture") return true;
+        if (def.category === "furniture") return true;
 
         // Containers (e.g. crates) are also considered cover (for camping checks).
         if (type.startsWith("container")) return true;
@@ -2310,7 +2350,7 @@ export class Player extends BaseGameObject {
             this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems;
 
         if (!this.bot) {
-            defaultItems = util.mergeDeep(
+            defaultItems = util.mergeDeep<typeof defaultItems>(
                 {},
                 this.game.map.mapDef.defaultItems || GameConfig.player.defaultItems,
                 Config.defaultItems,
@@ -2722,9 +2762,11 @@ export class Player extends BaseGameObject {
             this.bleedTicker < 0
         ) {
             const hasDrain = this.hasPerk("trick_drain");
-            this.bleedTicker = hasDrain
-                ? GameConfig.player.bleedTickRate * 3
-                : GameConfig.player.bleedTickRate;
+            this.bleedTicker = GameConfig.player.bleedTickRate;
+
+            if (hasDrain) {
+                this.bleedTicker *= PerkProperties.trick_drain.bleedTickRateMult;
+            }
 
             const mapConfig = this.game.map.mapDef.gameConfig;
 
@@ -2748,7 +2790,10 @@ export class Player extends BaseGameObject {
         this.chattyTicker -= dt;
 
         if (this.hasPerk("trick_chatty") && this.chattyTicker < 0) {
-            this.chattyTicker = util.random(5, 15);
+            this.chattyTicker = util.random(
+                PerkProperties.trick_chatty.minInterval,
+                PerkProperties.trick_chatty.maxInterval,
+            );
 
             const emotes = Object.keys(EmotesDefs);
 
@@ -3220,9 +3265,9 @@ export class Player extends BaseGameObject {
                     case "helmet":
                     case "chest":
                     case "backpack": {
-                        const thisLevel = this.getGearLevel(this[itemDef.type]);
-                        const thatLevel = this.getGearLevel(closestLoot.type);
-                        if (thisLevel < thatLevel) {
+                        const thisQuality = this.getGearQuality(this[itemDef.type]);
+                        const thatQuality = this.getGearQuality(closestLoot.type);
+                        if (thisQuality < thatQuality) {
                             this.pickupLoot(closestLoot);
                         }
                         break;
@@ -4339,6 +4384,7 @@ export class Player extends BaseGameObject {
         }
     }
 
+    sentGameOverMsg = false;
     /**
      * adds gameover message to "this.msgsToSend" for the player and all their spectators
      */
@@ -4646,9 +4692,9 @@ export class Player extends BaseGameObject {
                 }
 
                 if (killCreditSource.hasPerk("takedown")) {
-                    killCreditSource.health += 25;
-                    killCreditSource.boost += 25;
-                    killCreditSource.giveHaste(GameConfig.HasteType.Takedown, 3);
+                    killCreditSource.health += PerkProperties.takedown.hpReward;
+                    killCreditSource.boost += PerkProperties.takedown.boostReward;
+                    killCreditSource.giveHaste(GameConfig.HasteType.Takedown, PerkProperties.takedown.hasteDuration);
                 }
 
                 const groupKill = this.group?.allDeadOrDisconnected ?? true;
@@ -4681,9 +4727,9 @@ export class Player extends BaseGameObject {
                 // Pirate's Bounty (Cutlass-specific)
                 const weaponDef = GameObjectDefs.typeToDefSafe(params.gameSourceType || "");
                 if (killCreditSource.hasPerk("pirate") && weaponDef?.type == "melee") {
-                    const count = util.randomInt(3, 4);
+                    const count = util.randomInt(PerkProperties.pirate.minCount, PerkProperties.pirate.maxCount);
                     for (let i = 0; i < count; i++) {
-                        const item = this.game.lootBarn.getLootTable("tier_pirate");
+                        const item = this.game.lootBarn.getLootTable(PerkProperties.pirate.tier);
                         if (!item) continue;
 
                         this.game.lootBarn.addLoot(
@@ -4915,6 +4961,8 @@ export class Player extends BaseGameObject {
         // drop loot
         //
         if (!this.spectator) {
+            // swap to melee first, so the active gun is not still equipped while it gets dropped
+            this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
             for (let i = 0; i < GameConfig.WeaponSlot.Count; i++) {
                 const weap = this.weapons[i];
                 if (!weap.type) continue;
@@ -4935,11 +4983,9 @@ export class Player extends BaseGameObject {
                 }
             }
 
-            this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
-
             for (const item of Object.keys(this.invManager.items) as InventoryItem[]) {
                 // const def = GameObjectDefs.typeToDefSafe(item) as AmmoDef | HealDef;
-                if (item == "1xscope") {
+                if (item == "1xscope" || (this.game.map.sniperMode && item == "2xscope")) {
                     continue;
                 }
 
@@ -5029,7 +5075,7 @@ export class Player extends BaseGameObject {
 
             for (const item of Object.keys(this.invManager.items) as InventoryItem[]) {
                 // const def = GameObjectDefs.typeToDefSafe(item) as AmmoDef | HealDef;
-                if (item == "1xscope") {
+                if (item == "1xscope" || (this.game.map.sniperMode && item == "2xscope")) {
                     continue;
                 }
 
@@ -5048,6 +5094,73 @@ export class Player extends BaseGameObject {
 
         // send data to parent process
         this.game.updateData();
+    }
+
+    getIntersectingBuildings(): Set<string> {
+        const objs = this.game.grid.intersectGameObject(this);
+        const buildings = new Set<Building>();
+
+        objLoop:
+        for (let i = 0; i < objs.length; i++) {
+            const obj = objs[i];
+            if (obj.__type !== ObjectType.Building) continue;
+            if (
+                this.layer < 2
+                && !util.sameLayer(obj.layer, this.layer)
+            ) continue;
+
+            for (let j = 0; j < obj.zoomRegions.length; j++) {
+                const zoomIn = obj.zoomRegions[j].zoomIn;
+                if (!zoomIn) continue;
+                if (coldet.test(zoomIn, this.collider)) {
+                    buildings.add(obj);
+                    continue objLoop;
+                }
+            }
+
+            for (let j = 0; j < obj.surfaces.length; j++) {
+                const colliders = obj.surfaces[j].colliders;
+                for (let k = 0; k < colliders.length; k++) {
+                    if (coldet.test(colliders[k], this.collider)) {
+                        buildings.add(obj);
+                        continue objLoop;
+                    }
+                }
+            }
+
+            if (obj.groundPatches !== undefined) {
+                for (let j = 0; j < obj.groundPatches.length; j++) {
+                    const groundPatch = obj.groundPatches[j];
+                    if (coldet.test(groundPatch.bound, this.collider)) {
+                        buildings.add(obj);
+                        continue objLoop;
+                    }
+                }
+            }
+            if (obj.goreRegion) {
+                if (coldet.test(obj.goreRegion, this.collider)) {
+                    buildings.add(obj);
+                    continue objLoop;
+                }
+            }
+        }
+
+        function withAllParents(building: Building): string[] {
+            const hierarchy: string[] = [];
+            let current: Building | undefined = building;
+            do {
+                hierarchy.push(current.type);
+                current = current.parentBuilding;
+            } while (current !== undefined);
+
+            if (building.parentStructure?.parentBuilding !== undefined) {
+                hierarchy.push(...withAllParents(building.parentStructure.parentBuilding));
+            }
+
+            return hierarchy;
+        }
+
+        return new Set([...buildings].flatMap(withAllParents));
     }
 
     getAliveKiller(): Player | undefined {
@@ -5477,6 +5590,7 @@ export class Player extends BaseGameObject {
             switch (input) {
                 case GameConfig.Input.StowWeapons:
                 case GameConfig.Input.EquipMelee:
+                    this.weaponManager.playMeleeIdleAnim();
                     this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
                     break;
                 case GameConfig.Input.EquipPrimary:
@@ -6022,10 +6136,10 @@ export class Player extends BaseGameObject {
             case "chest":
             case "backpack":
                 {
-                    const objLevel = this.getGearLevel(obj.type);
+                    const objQuality = this.getGearQuality(obj.type);
                     const thisType = this[def.type];
                     const thisDef = GameObjectDefs.typeToDefSafe(thisType);
-                    const thisLevel = this.getGearLevel(thisType);
+                    const thisQuality = this.getGearQuality(thisType);
                     amountLeft = 1;
 
                     // role helmets and perk helmets can't be dropped in favor of another helmet, they're the "highest" tier
@@ -6044,7 +6158,7 @@ export class Player extends BaseGameObject {
                     if (thisType === obj.type) {
                         lootToAdd = obj.type;
                         pickupMsg.type = net.PickupMsgType.AlreadyEquipped;
-                    } else if (thisLevel <= objLevel) {
+                    } else {
                         lootToAdd = thisType;
                         this[def.type] = obj.type;
                         pickupMsg.type = net.PickupMsgType.Success;
@@ -6068,9 +6182,6 @@ export class Player extends BaseGameObject {
                         }
 
                         this.setDirty();
-                    } else {
-                        lootToAdd = obj.type;
-                        pickupMsg.type = net.PickupMsgType.BetterItemEquipped;
                     }
                     if (this.getGearLevel(lootToAdd) === 0) lootToAdd = "";
                 }
@@ -6238,23 +6349,17 @@ export class Player extends BaseGameObject {
 
         if (oldWeaponDef.noPotatoSwap) return;
         const weaponDefs = WeaponTypeToDefs[oldWeaponDef.type];
+
         // necessary for type safety since Object.entries() is not type safe and just returns "any"
-        const enumerableDefs = Object.entries(weaponDefs) as [
-            string,
-            GunDef | ThrowableDef | MeleeDef,
-        ][];
-
-        const filterCb: ([_type, def]: [
-            string,
-            GunDef | ThrowableDef | MeleeDef,
-        ]) => boolean = this.hasPerk("rare_potato")
-            ? ([_type, def]) =>
-                  !def.noPotatoSwap && def.quality == PerkProperties.rare_potato.quality
-            : ([_type, def]) => !def.noPotatoSwap;
-
-        const weaponChoices = enumerableDefs.filter(filterCb);
-        const [chosenWeaponType, chosenWeaponDef] =
-            weaponChoices[util.randomInt(0, weaponChoices.length - 1)];
+        const enumerableDefs = Object.entries(weaponDefs) as [string, GunDef | ThrowableDef | MeleeDef][];
+        const hasRarePotato = this.hasPerk("rare_potato");
+        const weaponChoices = enumerableDefs.filter(([type, def]) => {
+            if (def.noPotatoSwap) return false;
+            if (!this.game.map.factionMode && type === "tomato") return false;
+            if (hasRarePotato && def.quality !== PerkProperties.rare_potato.quality) return false;
+            return true;
+        });
+        const [chosenWeaponType, chosenWeaponDef] = util.randomItem(weaponChoices);
 
         let index;
         if (this.activeWeapon === oldWeapon) {
@@ -6352,7 +6457,6 @@ export class Player extends BaseGameObject {
 
         if (armorDef.type == "helmet" && armorDef.role && this.role == armorDef.role) {
             this.removeRole();
-            this.hasRoleHelmet = false;
         }
 
         if (armorDef.type == "helmet" && armorDef.perk && this.hasPerk(armorDef.perk)) {
@@ -6782,7 +6886,7 @@ export class Player extends BaseGameObject {
 
         const affectedPlayers = this.game.modeManager.getNearbyAlivePlayersContext(
             this,
-            60,
+            PerkProperties.final_bugle.effectRange,
         );
 
         for (const player of affectedPlayers) {
@@ -6941,7 +7045,7 @@ export class Player extends BaseGameObject {
         if (this.weaponManager.meleeAttacks.length == 0) {
             let equipSpeed = weaponDef.speed.equip;
             if (this.hasPerk("small_arms") && weaponDef.type == "gun") {
-                equipSpeed = 1;
+                equipSpeed = PerkProperties.small_arms.gunEquipSpeed;
             }
             // (a mode may take a weapon's speed away - the arena's kill streak flares)
             equipSpeed = this.game.rules?.equipSpeed?.(this, this.activeWeapon, equipSpeed) ?? equipSpeed;

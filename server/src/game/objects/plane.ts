@@ -483,7 +483,7 @@ export class PlaneBarn {
                 }
             }
 
-            let rad: number;
+            let rad = 0;
             switch (coll.type) {
                 case collider.Type.Aabb:
                     const width = coll.max.x - coll.min.x;
@@ -637,7 +637,7 @@ export class PlaneBarn {
                 coll = collider.transform(coll, v2.mul(v2.randomUnit(), 3), 0, 1);
             }
 
-            let rad: number;
+            let rad = 0;
             switch (coll.type) {
                 case collider.Type.Aabb:
                     const width = coll.max.x - coll.min.x;

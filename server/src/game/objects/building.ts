@@ -59,6 +59,15 @@ export class Building extends BaseGameObject {
         healRate: number;
     }> = [];
 
+    groundPatches?: Array<{
+        bound: Collider;
+        color: number;
+        roughness: number;
+        offsetDist: number;
+        order?: number;
+        useAsMapShape?: boolean;
+    }> = [];
+
     goreRegion?: AABB;
 
     hasOccupiedEmitters: boolean;
@@ -122,6 +131,21 @@ export class Building extends BaseGameObject {
                 healRate: hr.healRate,
             };
         });
+
+        this.groundPatches = def.mapGroundPatches
+            ?.map(gp => ({
+                bound: collider.transform(
+                    gp.bound,
+                    this.pos,
+                    this.rot,
+                    this.scale,
+                ),
+                color: gp.color,
+                roughness: gp.roughness ?? 0,
+                offsetDist: gp.offsetDist ?? 0,
+                order: gp.order ?? 0,
+                useAsMapShape: gp.useAsMapShape ?? true,
+            }));
 
         if (def.goreRegion) {
             this.goreRegion = collider.transform(
@@ -356,7 +380,7 @@ export class Building extends BaseGameObject {
 
     onGoreRegionKill() {
         for (const obj of this.childObjects) {
-            if (obj.__type === ObjectType.Decal) {
+            if (obj.__type === ObjectType.Decal && obj.hasGore) {
                 obj.goreKills++;
                 obj.setDirty();
             }
