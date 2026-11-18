@@ -1867,25 +1867,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0x5e0c0c,
         },
     }),
-    outfitDemon: defineOutfitSkin("outfitBase", {
-        noDropOnDeath: true,
-        name: "Extrem demon ",
-        rarity: Rarity.Uncommon,
-        skinImg: {
-            baseTint: 0xffffff,
-            baseSprite: "player-base-outfitDemon.img",
-            handTint: 0x5e0c0c,
-            handSprite: "player-hands-01.img",
-            footTint: 0x3f0808,
-            footSprite: "player-feet-01.img",
-            backpackTint: 0x3f0808,
-            backpackSprite: "player-circle-base-01.img",
-        },
-        lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
-            tint: 0x5e0c0c,
-        },
-    }),
+
 
     outfitPinkwarrior: defineOutfitSkin("outfitBase", {
         noDrop: true,
@@ -2005,6 +1987,110 @@ const SkinDefs: Record<string, OutfitDef> = {
             tint: 0x380921,
         },
     }),
+
+    outfitGraphit: defineOutfitSkin("outfitBase", {
+        name: "Graphit",
+        noDropOnDeath: true,
+        rarity: Rarity.Common,
+        lore: "A simple and clean outfit.",
+        skinImg: {
+            baseTint: 0xe3e3e3,
+            baseSprite: "player-base-outfitGraphit.img",
+            handTint: 0xeeeeee,
+            handSprite: "player-hands-02.img",
+            footTint: 0xeeeeee,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0xdcdcdc,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0xe3e3e3,
+        },
+    }),
+
+    outfitGlutnacht: defineOutfitSkin("outfitBase", {
+        name: "Glutnacht",
+        noDropOnDeath: true,
+        rarity: Rarity.Common,
+        lore: "",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitGlutnacht.img",
+            handTint: 0xd7263d,
+            handSprite: "player-hands-02.img",
+            footTint: 0xd7263d,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0x2e0f3d,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0x8b2500,
+        },
+    }),
+    outfitKintsugi: defineOutfitSkin("outfitBase", {
+        name: "Kintsugi",
+        noDropOnDeath: true,
+        rarity: Rarity.Common,
+        lore: "",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitKintsugi.img",
+            handTint: 0x000000,
+            handSprite: "player-hands-02.img",
+            footTint: 0x000000,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0x000000,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0x000000,
+        },
+    }),
+    outfitMidnight: defineOutfitSkin("outfitBase", {
+        name: "Midnight",
+        noDropOnDeath: true,
+        rarity: Rarity.Common,
+        lore: "",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitMidnight.img",
+            handTint: 0x4a69bd,
+            handSprite: "player-hands-02.img",
+            footTint: 0x050816,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0x050816,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0x050816,
+        },
+    }),
+    
+        outfitCamopurple: defineOutfitSkin("outfitBase", {
+        name: "Camouflage Purple",
+        noDropOnDeath: true,
+        rarity: Rarity.Common,
+        lore: "",
+        skinImg: {
+            baseTint: 0xffffff,
+            baseSprite: "player-base-outfitCamopurple.img",
+            handTint: 0xa878f0,
+            handSprite: "player-hands-02.img",
+            footTint: 0x0b0612,
+            footSprite: "player-feet-02.img",
+            backpackTint: 0x0b0612,
+            backpackSprite: "player-circle-base-01.img",
+        },
+        lootImg: {
+            sprite: "loot-shirt-01.img",
+            tint: 0x050816,
+        },
+    }),
+    
     // Obstacle costumes
     outfitEvent: defineOutfitSkin("outfitBase", {
         name: "Event Winnr",
