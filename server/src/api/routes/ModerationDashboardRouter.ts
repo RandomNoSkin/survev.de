@@ -1,3 +1,4 @@
+import { arenaLevelFromXp } from "../../../../shared/utils/arena";
 /**
  * Moderation Dashboard Router
  *
@@ -44,6 +45,30 @@ import {
     UnlockDefs,
 } from "../../../../shared/defs/gameObjects/unlockDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
+import { CrateKeyDefs } from "../../../../shared/defs/gameObjects/crateKeyDefs";
+import {
+    CRATE_TYPES,
+    CrateDefs,
+    crateOverrides,
+    getAutoPool,
+    getCrateChances,
+    getCratePoolTypes,
+    getCrateWeights,
+    getFriesChance,
+    getKeyDef,
+    getKeyTypes,
+    isCrateEligible,
+    isCrateType,
+} from "../../../../shared/defs/shop/crateConfig";
+import { GameObjectDefs } from "../../../../shared/defs/register.ts";
+import { getItemCategory, getItemRarity } from "../../../../shared/defs/shop/shopConfig";
+import {
+    cleanFries,
+    cleanPool,
+    cleanWeights,
+    resetCrateSettings,
+    saveCrateSettings,
+} from "../crateSettings";
 import { GameConfig, type TeamMode } from "../../../../shared/gameConfig";
 import { Config } from "../../config";
 import { MapId, TeamModeToString } from "../../../../shared/gameConfig.ts";
@@ -55,6 +80,20 @@ import { REPLAY_LIST_DEFAULT_LIMIT, server } from "../apiServer";
 import { validateSessionToken } from "../auth";
 import { validateParams } from "../auth/middleware";
 import { db } from "../db";
+import {
+    adminClanOf,
+    adminDisbandClan,
+    adminEditClan,
+    adminGetClan,
+    adminKickMember,
+    adminListClans,
+    adminResetLink,
+    adminResetWeekStats,
+    adminSetPool,
+    adminSetRole,
+    adminSetXp,
+} from "../db/clans";
+import { CLAN_BANNERS, CLAN_TAG_COLORS } from "../../../../shared/utils/clan";
 import { RevertError, revertLedgerEntry } from "../db/friesRevert";
 import {
     deleteGame,
@@ -76,6 +115,10 @@ import {
 import { computeMatchXp, reconcileAllPasses } from "../db/passReconcile";
 import { setPassXp } from "../db/passXp";
 import {
+    arenaLoadoutsTable,
+    arenaProgressTable,
+    arenaStreaksTable,
+    arenaWeaponKillsTable,
     auctionsTable,
     banCommentsTable,
     banHistoryTable,
@@ -83,6 +126,7 @@ import {
     chatBannedIpsTable,
     chatLogsTable,
     gameModerationTable,
+    antiCheatScoresTable,
     goldenFriesLedgerTable,
     ipLogsTable,
     itemsTable,
@@ -95,6 +139,7 @@ import {
 } from "../db/schema";
 import { signReplayToken } from "../replayToken";
 import { dashboardHtml } from "./moderationDashboard.html";
+import { CHEAT_THRESHOLDS } from "../../game/antiCheat";
 
 /** map_id → MapDefs key (name), for labelling match rows in the XP-gain drill-down. */
 const MAP_ID_TO_NAME: Record<number, string> = Object.fromEntries(
@@ -177,6 +222,8 @@ const COSMETIC_CATALOG = {
     crosshair: _allowedCrosshairs,
 };
 const ALLOWED_COSMETICS = [...new Set(Object.values(COSMETIC_CATALOG).flat())];
+/** Single grants may also hand out crate keys (not part of "give all"). */
+const GRANTABLE_ITEMS = [...ALLOWED_COSMETICS, ...Object.keys(CrateKeyDefs)];
 
 /** Default-unlock item types that must never be removed (would break accounts). */
 const PROTECTED_ITEM_TYPES = [
@@ -229,6 +276,11 @@ const MODERATOR_ALLOWED_PATHS = new Set([
     // The Games tab, so a report can be written from the game roster. Read-only: the
     // only write it reaches is /moderate, which is sus-only for them (see below).
     "/api/games/search",
+    // Live games, to watch them (invisibly) - the stream leaves bans out for them
+    "/api/events",
+    "/api/servers",
+    // Anti-Cheat tab: read-only scores (flags themselves land in their Sus view)
+    "/api/anticheat",
 ]);
 
 /** Dynamic (parameterised) sub-paths a moderator may hit — see MODERATOR_ALLOWED_PATHS. */
@@ -236,6 +288,7 @@ const MODERATOR_ALLOWED_PATTERNS: RegExp[] = [
     /^\/api\/xp-gain\/user\/[^/]+$/,
     /^\/api\/game\/[^/]+\/players$/,
     /^\/api\/game\/[^/]+\/moderate$/,
+    /^\/api\/game\/[^/]+\/[^/]+\/spectate-token$/,
 ];
 
 function moderatorMayAccess(subPath: string): boolean {
@@ -1342,8 +1395,11 @@ export const ModerationDashboardRouter = new Hono<Context>()
         const regionId = c.req.query("region") ?? "";
         const gameId = c.req.query("gameId") ?? "";
 
+        // bans are admin-only; moderators get the live games and players
+        const isAdmin = !!(c.get("user") as { admin?: boolean } | undefined)?.admin;
+
         return streamSSE(c, async (stream) => {
-            activeSseStreams.add(stream);
+            if (isAdmin) activeSseStreams.add(stream);
 
             // Helper that wraps writeSSE and swallows errors for gone clients
             const push = async (event: string, data: unknown) => {
@@ -1355,7 +1411,7 @@ export const ModerationDashboardRouter = new Hono<Context>()
             };
 
             // Send initial snapshots immediately
-            await push("bans", await fetchAllBans());
+            if (isAdmin) await push("bans", await fetchAllBans());
             await push("servers", await fetchServers());
             if (gameId) {
                 const players = await withStaffFlags(
@@ -1464,9 +1520,262 @@ export const ModerationDashboardRouter = new Hono<Context>()
     .get("/api/game/:region/:id/spectate-token", async (c) => {
         const regionId = c.req.param("region");
         const gameId = c.req.param("id");
-        const data = await server.findGameById(regionId, gameId, true /* admin */);
+        // staff watch invisibly by default (no join message, no spectator count, no
+        // end-of-game entry); admins may also join as a normal, visible spectator.
+        // In-game admin powers only for actual admins, not moderators.
+        const user = c.get("user") as { admin?: boolean } | undefined;
+        const visible = c.req.query("visible") === "1" && !!user?.admin;
+        const data = await server.findGameById(regionId, gameId, !!user?.admin, !visible);
         return c.json(data);
     })
+    /**
+     * Anti-cheat scores of the last `days`, worst first (admins and moderators): every player
+     * that scored at all, flagged or not - for tuning the thresholds on real games.
+     */
+    .get("/api/anticheat", async (c) => {
+        const days = Math.min(90, Math.max(1, Number(c.req.query("days")) || 7));
+        const minRatio = Math.max(0, Number(c.req.query("minRatio")) || 0);
+        const since = new Date(Date.now() - days * 86400_000);
+        const rows = await db
+            .select({
+                createdAt: antiCheatScoresTable.createdAt,
+                gameId: antiCheatScoresTable.gameId,
+                mapId: antiCheatScoresTable.mapId,
+                userId: antiCheatScoresTable.userId,
+                name: antiCheatScoresTable.name,
+                maxRatio: antiCheatScoresTable.maxRatio,
+                scores: antiCheatScoresTable.scores,
+                details: antiCheatScoresTable.details,
+                slug: usersTable.slug,
+                username: usersTable.username,
+            })
+            .from(antiCheatScoresTable)
+            .leftJoin(usersTable, eq(usersTable.id, antiCheatScoresTable.userId))
+            .where(and(gte(antiCheatScoresTable.createdAt, since), gte(antiCheatScoresTable.maxRatio, minRatio)))
+            .orderBy(desc(antiCheatScoresTable.maxRatio), desc(antiCheatScoresTable.createdAt))
+            .limit(300);
+        // the IP each player had in that game (accounts by user id, guests by name)
+        const gameIds = [...new Set(rows.map((r) => r.gameId))];
+        const ips = gameIds.length
+            ? await db
+                  .select({ gameId: ipLogsTable.gameId, userId: ipLogsTable.userId, username: ipLogsTable.username, encodedIp: ipLogsTable.encodedIp })
+                  .from(ipLogsTable)
+                  .where(inArray(ipLogsTable.gameId, gameIds))
+            : [];
+        const ipOf = (r: (typeof rows)[number]) =>
+            ips.find((i) => i.gameId === r.gameId && (r.slug ? i.userId === r.userId : i.username === r.name))?.encodedIp ?? null;
+        return c.json({ thresholds: CHEAT_THRESHOLDS, rows: rows.map((r) => ({ ...r, encodedIp: ipOf(r) })) });
+    })
+    /** Every open private lobby (admins only - not in the moderator allow-list). */
+    .get("/api/lobbies", (c) => {
+        return c.json({ lobbies: server.privateLobbyMenu.listAllLobbies() });
+    })
+    // ─────────────────────────────────────────────────────────────────────────
+    // CRATES (admin-only): loot pools + rarity weights, and handing out keys
+    // ─────────────────────────────────────────────────────────────────────────
+    .get("/api/crates", (c) => {
+        const name = (t: string) => (GameObjectDefs.typeToDefSafe(t) as { name?: string })?.name || t;
+        const catalog = GameObjectDefs.getAllTypes()
+            .filter(isCrateEligible)
+            .map((type) => ({ type, name: name(type), category: getItemCategory(type), rarity: getItemRarity(type) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+        const overrides = crateOverrides.get();
+        const crates = CRATE_TYPES.map((type) => {
+            const def = CrateDefs[type];
+            const weights = getCrateWeights(type);
+            const pool = getCratePoolTypes(type);
+            const chances = getCrateChances(type);
+            const dropping = new Set(chances.flatMap((ch) => ch.items));
+            return {
+                type,
+                name: def.name,
+                tier: def.tier,
+                img: def.img,
+                weights,
+                defaultWeights: def.rarityWeights,
+                customPool: !!overrides[type]?.pool,
+                customWeights: !!overrides[type]?.rarityWeights || !!overrides[type]?.fries,
+                // the raw setting (weight 0 = off) and the default, for the editor
+                fries: overrides[type]?.fries ?? def.fries ?? { weight: 0, min: 0, max: 0 },
+                defaultFries: def.fries ?? { weight: 0, min: 0, max: 0 },
+                friesChance: getFriesChance(type),
+                pool,
+                chances,
+                // in the list but never drops: its rarity has weight 0 (or it isn't droppable)
+                excluded: pool.filter((t) => !dropping.has(t)),
+            };
+        });
+        const keys = getKeyTypes().map((type) => ({ type, name: name(type) }));
+        return c.json({ crates, catalog, autoPool: getAutoPool(), keys });
+    })
+    .post(
+        "/api/crates/save",
+        validateParams(
+            z.object({
+                crate: z.string(),
+                pool: z.array(z.string().max(64)).max(2000).nullable(),
+                weights: z.record(z.string(), z.number()).nullable(),
+                fries: z.object({ weight: z.number(), min: z.number(), max: z.number() }).nullable().optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { crate, pool, weights, fries } = c.req.valid("json");
+            if (!isCrateType(crate)) return c.json({ error: "unknown_crate" }, 400);
+            const cleanP = cleanPool(pool);
+            if (cleanP && !cleanP.length) return c.json({ error: "empty_pool" }, 400);
+            await saveCrateSettings(crate, cleanP, cleanWeights(weights), cleanFries(fries), admin.id);
+            void logModerationAction(
+                "📦 Crate loot changed",
+                [
+                    { name: "Crate", value: CrateDefs[crate].name },
+                    { name: "Pool", value: cleanP ? `${cleanP.length} items (custom)` : "automatic" },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0xb5793c,
+            );
+            return c.json({ ok: true });
+        },
+    )
+    .post("/api/crates/reset", validateParams(z.object({ crate: z.string() })), async (c) => {
+        const { crate } = c.req.valid("json");
+        if (!isCrateType(crate)) return c.json({ error: "unknown_crate" }, 400);
+        await resetCrateSettings(crate);
+        return c.json({ ok: true });
+    })
+    .post(
+        "/api/crates/give-keys",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                key: z.string(),
+                amount: z.number().int().min(1).max(100),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, key, amount } = c.req.valid("json");
+            if (!getKeyDef(key)) return c.json({ error: "unknown_key" }, 400);
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug.trim().toLowerCase()),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+            const now = Date.now();
+            await db.insert(itemsTable).values(
+                Array.from({ length: amount }, () => ({
+                    userId: user.id,
+                    type: key,
+                    source: "admin_grant",
+                    timeAcquired: now,
+                })),
+            );
+            void logModerationAction(
+                "🔑 Crate keys given",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Keys", value: `${amount}× ${getKeyDef(key)!.name}` },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x1a7a1a,
+            );
+            return c.json({ ok: true, given: amount });
+        },
+    )
+    // ─────────────────────────────────────────────────────────────────────────
+    // CLANS (admin-only): look into any clan, fix names, members, keys and stats
+    // ─────────────────────────────────────────────────────────────────────────
+    .get("/api/clans", async (c) => {
+        const keyName = (t: string) => (GameObjectDefs.typeToDefSafe(t) as { name?: string })?.name || t;
+        return c.json({
+            clans: await adminListClans(c.req.query("q")),
+            colors: CLAN_TAG_COLORS,
+            banners: CLAN_BANNERS,
+            keys: getKeyTypes().map((type) => ({ type, name: keyName(type) })),
+        });
+    })
+    .get("/api/clans/:id", async (c) => {
+        const data = await adminGetClan(Number(c.req.param("id")) || 0);
+        return data ? c.json(data) : c.json({ error: "not_found" }, 404);
+    })
+    .post(
+        "/api/clans/:id/action",
+        validateParams(
+            z.discriminatedUnion("action", [
+                z.object({
+                    action: z.literal("edit"),
+                    name: z.string().max(64),
+                    tag: z.string().max(16),
+                    clearIcon: z.boolean().optional(),
+                    tagColor: z.number().int().min(0).max(63).optional(),
+                    banner: z.number().int().min(0).max(63).optional(),
+                }),
+                z.object({ action: z.literal("kick"), slug: z.string().min(1).max(64) }),
+                z.object({ action: z.literal("role"), slug: z.string().min(1).max(64), role: z.enum(["owner", "coowner", "lieutenant", "member"]) }),
+                z.object({ action: z.literal("reset_link") }),
+                z.object({ action: z.literal("pool"), key: z.string(), amount: z.number().int().min(0).max(1000) }),
+                z.object({ action: z.literal("reset_week"), slug: z.string().min(1).max(64).optional() }),
+                z.object({ action: z.literal("xp"), xp: z.number().min(0).max(10_000_000) }),
+                z.object({ action: z.literal("disband") }),
+            ]),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const clanId = Number(c.req.param("id")) || 0;
+            const body = c.req.valid("json");
+            const before = await adminGetClan(clanId);
+            if (!before) return c.json({ error: "not_found" }, 404);
+            const clanLabel = `[${before.clan.tag}] ${before.clan.name}`;
+            let res;
+            let what: string;
+            switch (body.action) {
+                case "edit":
+                    res = await adminEditClan(clanId, body);
+                    what = `Edited → [${body.tag.trim().toUpperCase()}] ${body.name.trim()}${body.clearIcon ? " (icon removed)" : ""}`;
+                    break;
+                case "kick":
+                    res = await adminKickMember(clanId, body.slug);
+                    what = `Kicked @${body.slug}`;
+                    break;
+                case "role":
+                    res = await adminSetRole(clanId, body.slug, body.role);
+                    what = body.role === "owner" ? `Ownership → @${body.slug}` : `@${body.slug} → ${body.role}`;
+                    break;
+                case "reset_link":
+                    res = await adminResetLink(clanId);
+                    what = "Invite link reset";
+                    break;
+                case "pool":
+                    if (!getKeyDef(body.key)) return c.json({ error: "unknown_key" }, 400);
+                    res = await adminSetPool(clanId, body.key, body.amount);
+                    what = `Key pool: ${getKeyDef(body.key)!.name} = ${body.amount} (was ${before.pool[body.key] ?? 0})`;
+                    break;
+                case "reset_week":
+                    res = await adminResetWeekStats(clanId, body.slug);
+                    what = body.slug ? `This week's stats of @${body.slug} wiped` : "This week's stats wiped";
+                    break;
+                case "xp":
+                    res = await adminSetXp(clanId, body.xp);
+                    what = `XP ${Math.round(before.clan.xp)} → ${Math.round(body.xp)}`;
+                    break;
+                case "disband":
+                    res = await adminDisbandClan(clanId);
+                    what = `Disbanded (${before.members.length} members)`;
+                    break;
+            }
+            if (!res.success) return c.json({ error: res.error ?? "error" }, 400);
+            void logModerationAction(
+                "🛡️ Clan moderated",
+                [
+                    { name: "Clan", value: clanLabel },
+                    { name: "Action", value: what },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                body.action === "disband" ? 0xc0392b : 0x3b7dd8,
+            );
+            return c.json({ ok: true });
+        },
+    )
     // ─────────────────────────────────────────────────────────────────────────
     // REPLAYS
     // ─────────────────────────────────────────────────────────────────────────
@@ -1489,9 +1798,27 @@ export const ModerationDashboardRouter = new Hono<Context>()
             ? Math.min(limitParam, 5000)
             : REPLAY_LIST_DEFAULT_LIMIT;
 
+        // Optional time window (the tab's date filter): the host then reads only those
+        // days, so an older day isn't pushed out of the limit by newer games.
+        const fromParam = Number(c.req.query("from"));
+        const toParam = Number(c.req.query("to"));
+        const from = Number.isFinite(fromParam) && c.req.query("from") ? fromParam : undefined;
+        const to = Number.isFinite(toParam) && c.req.query("to") ? toParam : undefined;
+
+        // A full game id: look that one game up directly in every region (no recent-games
+        // cap - an older game on a busy region is never among the newest N).
+        const gameIdParam = c.req.query("gameId")?.trim().toLowerCase();
+        const byGameId = gameIdParam && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(gameIdParam)
+            ? gameIdParam
+            : undefined;
+
         const regions = await Promise.all(
             Object.entries(server.regions).map(async ([regionId, region]) => {
-                const recordings = await region.listReplays(limit).catch(() => []);
+                if (byGameId) {
+                    const meta = await region.getReplayMeta(byGameId).catch(() => null);
+                    return { regionId, recordings: meta ? [meta] : [] };
+                }
+                const recordings = await region.listReplays(limit, from, to).catch(() => []);
                 return { regionId, recordings };
             }),
         );
@@ -1578,6 +1905,13 @@ export const ModerationDashboardRouter = new Hono<Context>()
                     archived: typeof rec.protocolVersion === "number"
                         ? (archivedByVersion.get(rec.protocolVersion) ?? false)
                         : true,
+                    // Computed live against the running server's GameConfig, unlike the
+                    // dashboard page's PROTOCOL_VERSION constant (baked in at HTML render
+                    // time — stale if the tab has been open since before a deploy bumped
+                    // the protocol). watchReplay() must key off this, not that constant,
+                    // or a just-recorded (current-protocol) replay gets routed through a
+                    // /archive/<version>/ path that was never published.
+                    isCurrentProtocol: rec.protocolVersion === GameConfig.protocolVersion,
                     // A flag on the game as a whole (mod key "").
                     gameStatus: modByKey.get(`${rec.gameId}|`) ?? null,
                     players: (rec.players ?? []).map((p: any) => {
@@ -3372,8 +3706,27 @@ export const ModerationDashboardRouter = new Hono<Context>()
             mapId: MapId[m.mapId],
         }));
 
+        // the arena progress (Domination & co): level / XP, challenge kills, loadouts
+        const [arenaXpRow, arenaKills, arenaLoadouts] = await Promise.all([
+            db.select({ xp: arenaProgressTable.xp }).from(arenaProgressTable).where(eq(arenaProgressTable.userId, user.id)),
+            db.select({ kills: sql<string>`coalesce(sum(${arenaWeaponKillsTable.kills}), 0)`, weapons: sql<string>`count(*)` })
+                .from(arenaWeaponKillsTable)
+                .where(eq(arenaWeaponKillsTable.userId, user.id)),
+            db.select({ n: sql<string>`count(*)` }).from(arenaLoadoutsTable).where(eq(arenaLoadoutsTable.userId, user.id)),
+        ]);
+        const arenaXp = arenaXpRow[0]?.xp ?? 0;
+        const arena = {
+            xp: arenaXp,
+            level: arenaLevelFromXp(arenaXp).level,
+            challengeKills: Number(arenaKills[0]?.kills ?? 0),
+            challengeWeapons: Number(arenaKills[0]?.weapons ?? 0),
+            loadouts: Number(arenaLoadouts[0]?.n ?? 0),
+        };
+
         return c.json({
             user: { ...user, discordId: user.linkedDiscord ? user.authId : null },
+            clan: await adminClanOf(user.id),
+            arena,
             passTypes,
             xp,
             itemsBySource,
@@ -3755,6 +4108,58 @@ export const ModerationDashboardRouter = new Hono<Context>()
         }
     })
     /** Sets a pass's level + xp absolutely, then grants the corresponding unlocks. */
+    /**
+     * The arena progress of an account: set the XP (the level follows), or reset the
+     * challenge kills (the weapon challenges start over), or everything (XP, kills,
+     * saved loadouts and kill streak picks - a fresh start).
+     */
+    .post(
+        "/api/account/arena",
+        validateParams(
+            z.object({
+                slug: z.string().min(1),
+                action: z.enum(["set_xp", "reset_kills", "reset_all"]),
+                xp: z.number().int().gte(0).lte(100_000_000).optional(),
+            }),
+        ),
+        async (c) => {
+            const admin = c.get("user")!;
+            const { slug, action, xp } = c.req.valid("json");
+            const user = await db.query.usersTable.findFirst({
+                where: eq(usersTable.slug, slug),
+                columns: { id: true },
+            });
+            if (!user) return c.json({ error: "account_not_found" }, 404);
+
+            if (action === "set_xp") {
+                const value = xp ?? 0;
+                await db
+                    .insert(arenaProgressTable)
+                    .values({ userId: user.id, xp: value })
+                    .onConflictDoUpdate({ target: arenaProgressTable.userId, set: { xp: value } });
+            } else {
+                await db.delete(arenaWeaponKillsTable).where(eq(arenaWeaponKillsTable.userId, user.id));
+                if (action === "reset_all") {
+                    await db.delete(arenaProgressTable).where(eq(arenaProgressTable.userId, user.id));
+                    await db.delete(arenaLoadoutsTable).where(eq(arenaLoadoutsTable.userId, user.id));
+                    await db.delete(arenaStreaksTable).where(eq(arenaStreaksTable.userId, user.id));
+                }
+            }
+            const label = action === "set_xp" ? `XP set to ${xp ?? 0} (level ${arenaLevelFromXp(xp ?? 0).level})`
+                : action === "reset_kills" ? "challenge kills reset"
+                : "everything reset (XP, kills, loadouts, kill streaks)";
+            void logModerationAction(
+                "🎯 Arena progress changed",
+                [
+                    { name: "Account", value: slug },
+                    { name: "Change", value: label },
+                    { name: "By admin", value: adminTag(admin) },
+                ],
+                0x3355ee,
+            );
+            return c.json({ ok: true });
+        },
+    )
     .post(
         "/api/account/set-xp",
         validateParams(
@@ -3853,16 +4258,14 @@ export const ModerationDashboardRouter = new Hono<Context>()
                 return c.json({ ok: true, given: missing.length });
             }
 
-            if (!ALLOWED_COSMETICS.includes(item)) {
+            if (!GRANTABLE_ITEMS.includes(item)) {
                 return c.json({ error: "item_not_allowed" }, 400);
             }
 
-            const existing = await db.query.itemsTable.findFirst({
-                where: and(eq(itemsTable.userId, user.id), eq(itemsTable.type, item)),
-                columns: { id: true },
-            });
-            if (existing) return c.json({ ok: true, given: 0, message: "already owned" });
-
+            // Unlike item:"all" (which only fills in what's missing), a single explicit
+            // grant always adds a new instance - owning duplicates of a cosmetic is normal
+            // (shop/market/trades already allow it), so a prior grant (e.g. the account's
+            // own creator-credit copy) must not block an admin from also gifting one.
             await db.insert(itemsTable).values({
                 userId: user.id,
                 type: item,

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { ConfigType, PartialConfig } from "./configType.ts";
-import { TeamMode } from "./shared/gameConfig.ts";
+import { TeamMode, GameMode } from "./shared/gameConfig.ts";
 import { util } from "./shared/utils/util.ts";
 
 export const configFileName = "survev-config.hjson";
@@ -24,6 +24,11 @@ export function getConfig(isProduction: boolean, dir: string) {
             thisRegion: "local",
             maxGames: 12,
         },
+        superAdmin: {
+            adress: "10.10.0.1",
+            enabled: true,
+            port: 8099,
+        },
         vite: {
             host: "127.0.0.1",
             port: 3000,
@@ -35,9 +40,11 @@ export function getConfig(isProduction: boolean, dir: string) {
             { mapName: "local", teamMode: TeamMode.Solo, enabled: true },
             { mapName: "two_vs_two", teamMode: TeamMode.Duo, enabled: true },
             { mapName: "comp", teamMode: TeamMode.Squad, enabled: true },
+            { mapName: "gungame", teamMode: TeamMode.Solo, gameMode: GameMode.GunGame, arena: true, enabled: true },
+            { mapName: "domination", teamMode: TeamMode.Squad, gameMode: GameMode.Domination, arena: true, enabled: false },
         ],
         clientTheme: "main",
-        passType: "pass_survivr1",
+        passType: "pass_survivr4",
         gameTps: 100,
         netSyncTps: 33,
         logging: {
@@ -71,9 +78,21 @@ export function getConfig(isProduction: boolean, dir: string) {
             allowEditMsg: isDev,
             allowMockAccount: isDev,
         },
+        bots: {
+            enabled: isDev,
+            defaultDifficulty: "normal",
+            maxBotsPerGame: 8,
+            // Keep in sync with DEFAULT_BOT_NAMES in server/src/game/bot/botDefs.ts.
+            // Inlined so this root config file stays free of server-side imports.
+            names: [
+                "MW g0dak"
+            ],
+        },
         recording: {
             enabled: true,
-            recordBots: false,
+            // also record bots; games with bots are additionally copied to
+            // <dir>-bot-test/ (the originals stay in the normal recordings)
+            recordBots: true,
             dir: "recordings",
             maxGameMb: 80,
             maxConcurrentTracks: 40,
@@ -158,6 +177,12 @@ export function getConfig(isProduction: boolean, dir: string) {
     }
 
     return config;
+}
+
+/** Where the config file of a process lives (`dir`: see getConfig). */
+export function configFilePath(dir: string): string {
+    const dirname = import.meta?.dirname || __dirname;
+    return path.join(dirname, dir, configFileName);
 }
 
 export function saveConfig(dir: string, config: PartialConfig) {

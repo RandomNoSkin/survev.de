@@ -2,7 +2,6 @@ import type { AtlasDef } from "../atlasDefs.ts";
 import { BuildingSprites } from "./buildings.ts";
 
 export const DesertAtlas: AtlasDef = {
-    compress: true,
     images: [
         ...BuildingSprites.reserve,
         ...BuildingSprites.saloon,
@@ -18,11 +17,8 @@ export const DesertAtlas: AtlasDef = {
 
         "map/map-decal-camera-01.svg",
 
-        "map/map-case-ring-02.svg",
         "map/map-chest-03d.svg",
-        "map/map-crate-17.svg",
         "map/map-crate-18.svg",
-        "map/map-crate-res-04.svg",
         "map/map-deposit-box-03.svg",
 
         "map/map-bunker-statue-chamber-floor-01.svg",
@@ -49,7 +45,5 @@ export const DesertAtlas: AtlasDef = {
 
         "map/map-toilet-05.svg",
         "map/map-toilet-res-03.svg",
-        "map/map-sink-01.svg",
-        "map/map-sink-res-01.svg",
     ],
 };

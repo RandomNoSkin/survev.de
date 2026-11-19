@@ -2,11 +2,12 @@ import { Cron } from "croner";
 import { randomUUID } from "crypto";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { App, SSLApp, type WebSocket } from "uWebSockets.js";
 import { version } from "../../package.json";
 import { MapDefs } from "../../shared/defs/mapDefs";
-import { GameConfig, TeamMode } from "../../shared/gameConfig";
+import { GameConfig, GameMode, TeamMode } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { Config } from "./config";
 import { SingleThreadGameManager } from "./game/gameManager";
@@ -14,13 +15,16 @@ import { GameProcessManager } from "./game/gameProcessManager";
 import {
     getRecordingMeta,
     listRecordings,
+    setKeptReplays,
     readDamageFile,
     readMapFile,
     readRecordingFile,
     readTracksFile,
     recordingFileExists,
+    recordingsRoot,
 } from "./game/recording/gameRecorder";
 import { errorLogger, gameLogger } from "./utils/betterLogger";
+import { applyModes, cleanModes, readConfigFile, writeConfigText } from "./utils/configFile";
 import { GIT_VERSION } from "./utils/gitRevision";
 import { ServerLogger } from "./utils/logger";
 import {
@@ -81,6 +85,11 @@ function isValidTeamMode(teamMode: number): teamMode is TeamMode {
         .includes(teamMode);
 }
 
+/** Absent = Standard; anything else must be a known GameMode. */
+function isValidGameMode(gameMode: number | undefined): boolean {
+    return gameMode === undefined || Object.values(GameMode).includes(gameMode);
+}
+
 class GameServer {
     readonly logger = new ServerLogger("GameServer");
 
@@ -128,12 +137,18 @@ class GameServer {
             } as any;
         }
 
+        if (!isValidGameMode(data.gameMode)) {
+            this.logger.warn(`/api/find_game: Invalid gameMode: ${data.gameMode}`);
+            return { error: "invalid_team_mode" } as any;
+        }
+
         const gameId = await this.manager.findGame({
             region: data.region,
             version: data.version,
             autoFill: data.autoFill,
             mapName: data.mapName,
             teamMode: data.teamMode,
+            gameMode: data.gameMode,
             playerData: data.playerData,
         });
 
@@ -197,8 +212,17 @@ class GameServer {
         const gameId = await this.manager.createPrivateGame({
             region: data.region,
             version: data.version,
-            mapName: data.mapName,
+            // a custom map is its template's map (biome, assets, generation), edited;
+            // its rules are the lobby mode's unless it asks for the template's own
+            mapName: data.customMap?.template ?? data.mapName,
+            maxPlayers: data.maxPlayers,
+            weaponStats: data.weaponStats,
+            rulesMapName:
+                data.customMap?.rules === "lobby" && data.customMap.template !== data.mapName
+                    ? data.mapName
+                    : undefined,
             teamMode: data.teamMode,
+            gameMode: isValidGameMode(data.gameMode) ? data.gameMode : undefined,
             teams: data.teams,
             spectators: data.spectators,
             arenaRoles: data.arenaRoles,
@@ -206,6 +230,9 @@ class GameServer {
             customLoadout: data.customLoadout,
             customLoadoutEnabled: data.customLoadoutEnabled,
             publicSpectating: data.publicSpectating,
+            customMap: data.customMap,
+            xpEnabled: data.xpEnabled,
+            mapScale: data.mapScale,
         });
 
         return {
@@ -216,6 +243,20 @@ class GameServer {
         };
     }
 
+    /** The public arena mode games (not Battle Royale, not private lobbies), per map. */
+    private async modeGames() {
+        const byMap = new Map<string, { mapName: string; games: number; players: number; warmupPlayers: number }>();
+        for (const g of await this.manager.getGames()) {
+            if (g.stopped || g.isPrivate || !g.gameMode) continue;
+            const e = byMap.get(g.mapName) ?? { mapName: g.mapName, games: 0, players: 0, warmupPlayers: 0 };
+            e.games++;
+            e.players += g.humanAliveCount;
+            if (!g.startedAt) e.warmupPlayers += g.humanAliveCount;
+            byMap.set(g.mapName, e);
+        }
+        return [...byMap.values()];
+    }
+
     async sendData() {
         try {
             await apiPrivateRouter.update_region.$post({
@@ -223,6 +264,7 @@ class GameServer {
                     data: {
                         playerCount: this.manager.getPlayerCount(),
                         gameCount: this.manager.getGameCount(),
+                        modeGames: await this.modeGames(),
                     },
                     regionId: Config.gameServer.thisRegion,
                 },
@@ -509,13 +551,24 @@ app.post("/api/find_game_by_id", async (res, req) => {
 
                 const token = randomUUID();
                 const ip = getIp(res, req, Config.gameServer.proxyIPHeader) ?? "";
-                const admin = body.admin;
+                const admin = body.admin === true;
+                // staff watching from the dashboard (API-key protected: only the API
+                // server's dashboard route sets it)
+                const stealth = body.stealth === true;
+
+                // a private match with public spectating off is not watchable by id
+                // (lobby members join it through their lobby instead) - staff still can
+                if (g.isPrivate && g.publicSpectating === false && !admin && !stealth) {
+                    returnJson(res, { err: "Invalid gameId" });
+                    return;
+                }
 
                 const playerData = [
                     {
                         token,
                         ip,
                         admin,
+                        stealth,
                         // No account identity flows through this legacy "watch by
                         // gameId" spectate path (no userId either), so Premium status
                         // can't be resolved here - spectators joining this way just
@@ -604,16 +657,19 @@ app.post("/api/game_infos", async (res, req) => {
                     .map((g: any) => ({
                         id: g.id,
                         teamMode: g.teamMode,
+                        mapName: g.mapName,
+                        isPrivate: g.isPrivate ?? false,
                         playerCount: g.aliveCount,
                         playerNames: "",
                         runtime: g.startedTime,
+                        startedAt: g.startedAt ?? 0,
                         stopped: g.stopped ?? false,
                         verifiedOnly: g.verifiedOnly ?? false,
                     }))
                     .filter((g: any) => g.id);
 
                 if (res.aborted) return;
-                returnJson(res, { data });
+                returnJson(res, { data, now: Date.now() });
             } catch (error) {
                 server.logger.warn("API game_infos error: ", error);
             }
@@ -847,6 +903,192 @@ app.post("/api/dashboard/set_server_verified", (res, req) => {
     );
 });
 
+/** Public roster + recent kills of one game for the spectator menu. Only games that
+ *  `/api/game_infos` would list publicly are answered, and nothing identifying
+ *  (userId, IP) leaves this endpoint. */
+app.post("/api/spectate_game_details", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async (body: any) => {
+            if (res.aborted) return;
+            const gameId = body?.gameId;
+            if (typeof gameId !== "string") {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            const games = await server.manager.getGames();
+            const game = games.find((g) => g.id === gameId);
+            if (!game || game.stopped || (game.isPrivate && game.publicSpectating === false)) {
+                if (!res.aborted) returnJson(res, { error: "not_found" });
+                return;
+            }
+            const [players, feed] = await Promise.all([
+                server.manager.getGamePlayers(gameId),
+                server.manager.getGameFeed(gameId),
+            ]);
+            if (res.aborted) return;
+            returnJson(res, {
+                now: Date.now(),
+                game: {
+                    id: game.id,
+                    teamMode: game.teamMode,
+                    mapName: game.mapName,
+                    isPrivate: game.isPrivate,
+                    playerCount: game.aliveCount,
+                    runtime: game.startedTime,
+                    startedAt: game.startedAt ?? 0,
+                },
+                players: players
+                    .filter((p) => !p.joinedAsSpectator && !p.disconnected)
+                    .map((p) => ({
+                        name: p.username,
+                        roleTag: p.roleTag ?? null,
+                        teamId: p.teamId ?? 0,
+                        kills: p.kills,
+                        alive: p.alive,
+                    })),
+                feed: feed.slice(-8).map((k) => ({
+                    killer: k.killerName,
+                    victim: k.victimName,
+                    weapon: k.weapon,
+                })),
+            });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Host + process health for the local super-admin page. */
+app.post("/api/dashboard/system_status", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        async () => {
+            if (res.aborted) return;
+            let disk: { total: number; free: number } | null = null;
+            try {
+                const st = await fs.statfs(recordingsRoot()).catch(() => fs.statfs("."));
+                disk = { total: st.blocks * st.bsize, free: st.bavail * st.bsize };
+            } catch {}
+            if (res.aborted) return;
+            const mem = process.memoryUsage();
+            returnJson(res, {
+                region: server.regionId,
+                processMode: Config.processMode,
+                uptimeSec: Math.round(process.uptime()),
+                rss: mem.rss,
+                heapUsed: mem.heapUsed,
+                playerCount: server.manager.getPlayerCount(),
+                gameCount: server.manager.getGameCount(),
+                maxGames: Config.gameServer.maxGames,
+                loadavg: os.loadavg(),
+                cpus: os.cpus().length,
+                totalmem: os.totalmem(),
+                freemem: os.freemem(),
+                disk,
+            });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** Changes the maxGames cap at runtime (until the next restart). */
+app.post("/api/dashboard/set_max_games", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON(
+        res,
+        (body: any) => {
+            if (res.aborted) return;
+            const value = Number(body?.maxGames);
+            if (!Number.isInteger(value) || value < 1 || value > 200) {
+                returnJson(res, { error: "invalid maxGames" });
+                return;
+            }
+            Config.gameServer.maxGames = value;
+            server.logger.warn(`maxGames changed at runtime to ${value}`);
+            returnJson(res, { ok: true, maxGames: value });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
+/** The super admin dashboard's config editor: this host's config file and what runs. */
+function dashboardRoute(name: string, handle: (body: any) => Promise<Record<string, unknown>> | Record<string, unknown>) {
+    app.post(`/api/dashboard/${name}`, (res, req) => {
+        res.onAborted(() => {
+            res.aborted = true;
+        });
+        if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+            forbidden(res);
+            return;
+        }
+        readPostedJSON(
+            res,
+            async (body: any) => {
+                try {
+                    const out = await handle(body);
+                    if (!res.aborted) returnJson(res, out);
+                } catch (err) {
+                    server.logger.error(`dashboard ${name} failed`, err);
+                    if (!res.aborted) returnJson(res, { error: "failed" });
+                }
+            },
+            () => {
+                if (!res.aborted) returnJson(res, { error: "body error" });
+            },
+        );
+    });
+}
+
+dashboardRoute("get_config", () => readConfigFile());
+
+/** The mode list: live (new games, the API's site info after its refresh) and saved. */
+dashboardRoute("set_modes", (body) => {
+    const { modes, error } = cleanModes(body?.modes);
+    if (!modes) return { error };
+    applyModes(modes);
+    server.logger.warn(`modes changed from the dashboard: ${modes.map((m) => `${m.mapName}${m.enabled ? "" : " (off)"}`).join(", ")}`);
+    return { ok: true, modes };
+});
+
+/** The whole file as text - checked, the old one kept as .bak; applies on the next restart. */
+dashboardRoute("set_config_text", async (body) => {
+    const res = await writeConfigText(body?.text);
+    if (res.ok) server.logger.warn("config file replaced from the dashboard (applies on restart)");
+    return res;
+});
+
 /** Lists all on-disk replay recordings on this game host (read from each game's meta.json). */
 app.post("/api/dashboard/replays", (res, req) => {
     res.onAborted(() => {
@@ -858,14 +1100,17 @@ app.post("/api/dashboard/replays", (res, req) => {
         return;
     }
 
-    readPostedJSON<{ limit?: number }>(
+    readPostedJSON<{ limit?: number; from?: number; to?: number }>(
         res,
         async (body) => {
             if (res.aborted) return;
             const limit = typeof body?.limit === "number" && body.limit > 0
                 ? body.limit
                 : undefined;
-            const recordings = await listRecordings(limit);
+            const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+            const from = num(body?.from);
+            const to = num(body?.to);
+            const recordings = await listRecordings(limit, from !== undefined || to !== undefined ? { from, to } : undefined);
             if (res.aborted) return;
             returnJson(res, { recordings });
         },
@@ -875,9 +1120,42 @@ app.post("/api/dashboard/replays", (res, req) => {
     );
 });
 
+/** The API's full list of tagged game ids, whose recordings retention must keep
+ *  (see setKeptReplays). */
+app.post("/api/dashboard/replay_keep", (res, req) => {
+    res.onAborted(() => {
+        res.aborted = true;
+    });
+
+    if (req.getHeader("survev-api-key") !== Config.secrets.SURVEV_API_KEY) {
+        forbidden(res);
+        return;
+    }
+
+    readPostedJSON<{ gameIds?: unknown }>(
+        res,
+        async (body) => {
+            if (res.aborted) return;
+            if (!Array.isArray(body?.gameIds) || !body.gameIds.every((id) => typeof id === "string")) {
+                returnJson(res, { error: "invalid body" });
+                return;
+            }
+            await setKeptReplays(body.gameIds as string[]);
+            if (res.aborted) return;
+            returnJson(res, { kept: body.gameIds.length });
+        },
+        () => {
+            if (!res.aborted) returnJson(res, { error: "body error" });
+        },
+    );
+});
+
 /** Reads one specific game's recording meta directly, without listRecordings()'s
- *  recent-games cap - for callers that already know the exact gameId they want. */
-app.post("/api/dashboard/replay_meta", (res, req) => {
+ *  recent-games cap - for callers that already know the exact gameId they want.
+ *  Named distinctly from `/api/dashboard/replay_meta` below (combined game-view
+ *  meta: damage + map) - they used to collide on the same path, which made uWS
+ *  keep only the later registration and silently 404 every replay lookup. */
+app.post("/api/dashboard/replay_recording_meta", (res, req) => {
     res.onAborted(() => {
         res.aborted = true;
     });
@@ -1032,7 +1310,9 @@ app.post("/api/dashboard/replay_tracks", (res, req) => {
     );
 });
 
-/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON. */
+/** Returns a game's combined game-view meta (roster + end-stats + damage + structural map) as JSON.
+ *  Distinct from `/api/dashboard/replay_recording_meta` above (one recording's own meta.json) -
+ *  keep these two paths apart, they collided here once already. */
 app.post("/api/dashboard/replay_meta", (res, req) => {
     res.onAborted(() => {
         res.aborted = true;
@@ -1133,6 +1413,13 @@ app.ws<GameSocketData>("/play", {
         }
 
         gameWsRateLimit.ipConnected(ip);
+        // From here on, every return path must either reach a completed res.upgrade()
+        // (whose close() handler balances this with ipDisconnected) or explicitly call
+        // ipDisconnected itself - otherwise an aborted handshake (e.g. the client
+        // cancelling while the checkIp() await below is slow/stalled) leaks a permanent
+        // phantom connection against this IP's maxConnections cap, eventually 429-ing
+        // every future join attempt even with zero real connections open.
+        let upgraded = false;
 
         const socketId = randomUUID();
         let disconnectReason = "";
@@ -1146,12 +1433,16 @@ app.ws<GameSocketData>("/play", {
             disconnectReason = "behind_proxy";
         }
 
-        if (res.aborted) return;
+        if (res.aborted) {
+            gameWsRateLimit.ipDisconnected(ip);
+            return;
+        }
         // res.cork can throw "HttpResponse must not be accessed after onAborted" if the
         // client aborts during the await above; that would crash the whole server.
         try {
             res.cork(() => {
                 if (res.aborted) return;
+                upgraded = true;
                 res.upgrade(
                     {
                         gameId,
@@ -1170,6 +1461,7 @@ app.ws<GameSocketData>("/play", {
         } catch (err) {
             server.logger.warn("WS /play upgrade failed:", err);
         }
+        if (!upgraded) gameWsRateLimit.ipDisconnected(ip);
     },
 
     open(socket: WebSocket<GameSocketData>) {
@@ -1252,6 +1544,10 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
         }
 
         gameWsRateLimit.ipConnected(ip);
+        // See the matching comment in the /play upgrade handler above - every return
+        // path from here must either complete res.upgrade() or call ipDisconnected
+        // itself, or an aborted handshake leaks a permanent phantom connection.
+        let upgraded = false;
 
         const socketId = randomUUID();
         let disconnectReason = "";
@@ -1263,7 +1559,10 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
             disconnectReason = "behind_proxy";
         }
 
-        if (res.aborted) return;
+        if (res.aborted) {
+            gameWsRateLimit.ipDisconnected(ip);
+            return;
+        }
 
         // res.cork can throw "HttpResponse must not be accessed after onAborted" if the
         // client aborts during the await above; that would crash the whole server.
@@ -1271,6 +1570,7 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
             res.cork(() => {
                 if (res.aborted) return;
 
+                upgraded = true;
                 res.upgrade(
                     {
                         gameId,
@@ -1290,6 +1590,7 @@ app.ws<GameSocketData & { spectator?: boolean }>("/spectate", {
         } catch (err) {
             server.logger.warn("WS /spectate upgrade failed:", err);
         }
+        if (!upgraded) gameWsRateLimit.ipDisconnected(ip);
     },
 
     open(socket) {
@@ -1384,9 +1685,10 @@ app.ws<pingSocketData>("/ptc", {
 });
 
 server.sendData();
+// (often enough for the menu's live arena counts - see SiteInfo.pollLive)
 setInterval(() => {
     server.sendData();
-}, 20 * 1000);
+}, 10 * 1000);
 
 app.listen(Config.gameServer.host, Config.gameServer.port, () => {
     server.logger.info(`Survev Game Server v${version} - GIT ${GIT_VERSION}`);

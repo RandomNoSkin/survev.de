@@ -6,7 +6,7 @@ const mapDef: PartialMapDef = {
         name: "Turkey",
         icon: "",
         buttonCss: "",
-        backgroundImg: "img/main_splash_turkey_01.png",
+        backgroundImg: "img/splashes/turkey.webp",
     },
     assets: {
         audio: [
@@ -28,7 +28,7 @@ const mapDef: PartialMapDef = {
             { name: "vault_change_03", channel: "sfx" },
             { name: "watering_01", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "turkey"],
+        atlases: ["loadout", "shared", "turkey"],
     },
     biome: {
         colors: {

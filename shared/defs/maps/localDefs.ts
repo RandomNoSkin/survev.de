@@ -19,7 +19,7 @@ export const mapDef: PartialMapDef = {
         icon: "img/gui/player-the-hunted.svg",
         buttonCss: "",
         buttonText: "1v1",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     biome: {
         colors: {

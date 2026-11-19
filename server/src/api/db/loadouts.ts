@@ -1,4 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
+import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
 import loadout, { type Loadout } from "../../../../shared/utils/loadout";
 import { server } from "../apiServer";
 import { db } from "./index";
@@ -23,6 +24,8 @@ import { itemsTable, usersTable } from "./schema";
  */
 export async function getOwnedLoadouts(
     userIds: string[],
+    /** for a match: apply each player's "random every game" categories (not saved) */
+    opts: { forGame?: boolean } = {},
 ): Promise<Array<{ userId: string; loadout: Loadout }>> {
     if (userIds.length === 0) return [];
 
@@ -55,7 +58,11 @@ export async function getOwnedLoadouts(
         if (loadout.modified(u.loadout, validated)) {
             heals.push({ userId: u.userId, loadout: validated });
         }
-        result.push({ userId: u.userId, loadout: validated });
+        const forMatch =
+            opts.forGame && validated.random.length
+                ? loadout.randomize(validated, [...owned.map((i) => i.type), ...UnlockDefs.unlock_default.unlocks])
+                : validated;
+        result.push({ userId: u.userId, loadout: forMatch });
     }
 
     if (heals.length > 0) {

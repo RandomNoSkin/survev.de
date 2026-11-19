@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { withClanTags } from "./db/clanTags";
 import type { UpgradeWebSocket } from "hono/ws";
 import type { GameViewMeta } from "../../../shared/net/replay.ts";
 import type { SiteInfoRes } from "../../../shared/types/api.ts";
@@ -34,6 +35,7 @@ class Region {
     data: (typeof Config)["regions"][string];
     playerCount = 0;
     gameCount = 0;
+    modeGames: RegionData["modeGames"] = [];
     verifiedOnly = false;
 
     lastUpdateTime = Date.now();
@@ -135,20 +137,31 @@ class Region {
      * Lists replay recordings stored on this region's game server (from each game's
      * meta.json). `limit` keeps the game host from reading its whole archive off disk.
      */
-    async listReplays(limit?: number): Promise<any[]> {
+    /** `from` / `to` (ms) limit it to games started in that window (see listRecordings). */
+    async listReplays(limit?: number, from?: number, to?: number): Promise<any[]> {
         const data = await this.fetch<{ recordings: any[] }>("api/dashboard/replays", {
             limit,
+            from,
+            to,
         });
         return data?.recordings ?? [];
+    }
+
+    /** Tells this region's game server which games' recordings to keep forever
+     *  (the full list of tagged games - see syncReplayKeeps). */
+    async setReplayKeeps(gameIds: string[]): Promise<boolean> {
+        const data = await this.fetch<{ kept?: number }>("api/dashboard/replay_keep", { gameIds });
+        return typeof data?.kept === "number";
     }
 
     /** Fetches one specific game's recording meta from this region's game server,
      *  without listReplays()'s recent-games cap - for a caller that already knows the
      *  exact gameId it wants (see gameRecorder.ts's getRecordingMeta doc comment). */
     async getReplayMeta(gameId: string): Promise<any | null> {
-        const data = await this.fetch<{ recording: any | null }>("api/dashboard/replay_meta", {
-            gameId,
-        });
+        const data = await this.fetch<{ recording: any | null }>(
+            "api/dashboard/replay_recording_meta",
+            { gameId },
+        );
         return data?.recording ?? null;
     }
 
@@ -249,13 +262,43 @@ class Region {
         await this.fetch("api/dashboard/set_server_verified", { state });
     }
 
-    async findGameById(gameId: string, admin: boolean): Promise<any> {
+    async getSpectateGameDetails(gameId: string): Promise<any> {
+        const data = await this.fetch<any>("api/spectate_game_details", { gameId });
+        return data ?? { error: "spectate_game_details_failed" };
+    }
+
+    async getSystemStatus(): Promise<any | null> {
+        return (await this.fetch<any>("api/dashboard/system_status", {})) ?? null;
+    }
+
+    async setMaxGames(maxGames: number): Promise<boolean> {
+        const data = await this.fetch<{ ok?: boolean }>("api/dashboard/set_max_games", {
+            maxGames,
+        });
+        return data?.ok ?? false;
+    }
+
+    async findGameById(gameId: string, admin: boolean, stealth = false): Promise<any> {
         const data = await this.fetch<any>("api/find_game_by_id", {
             region: this.id,
             gameId,
             admin,
+            stealth,
         });
         return data ?? { error: "find_game_by_id_failed" };
+    }
+
+    /** The game server's config file (text) and running mode list - the super admin editor. */
+    async getConfigFile(): Promise<any | null> {
+        return (await this.fetch<any>("api/dashboard/get_config", {})) ?? null;
+    }
+
+    async setModes(modes: unknown): Promise<any> {
+        return (await this.fetch<any>("api/dashboard/set_modes", { modes })) ?? { error: "region offline" };
+    }
+
+    async setConfigText(text: string): Promise<any> {
+        return (await this.fetch<any>("api/dashboard/set_config_text", { text })) ?? { error: "region offline" };
     }
 
     async getModes(): Promise<any[]> {
@@ -269,6 +312,7 @@ class Region {
 interface RegionData {
     playerCount: number;
     gameCount: number;
+    modeGames: Array<{ mapName: string; games: number; players: number; warmupPlayers: number }>;
 }
 
 export class ApiServer {
@@ -317,6 +361,8 @@ export class ApiServer {
             data.pops[region] = {
                 playerCount: this.regions[region].playerCount,
                 gameCount: this.regions[region].gameCount,
+                // (an old report: nothing - better than counts that are long gone)
+                modeGames: Date.now() - this.regions[region].lastUpdateTime < 60_000 ? this.regions[region].modeGames : [],
                 l10n: Config.regions[region].l10n,
             };
         }
@@ -331,11 +377,13 @@ export class ApiServer {
         }
         region.playerCount = regionData.playerCount;
         region.gameCount = regionData.gameCount;
+        region.modeGames = regionData.modeGames ?? [];
         region.lastUpdateTime = Date.now();
     }
 
     async findGame(body: FindGamePrivateBody): Promise<FindGamePrivateRes> {
         if (body.region in this.regions) {
+            await withClanTags(body.playerData);
             return await this.regions[body.region].findGame(body);
         }
         return { error: "find_game_failed" };
@@ -343,6 +391,7 @@ export class ApiServer {
 
     async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<FindGamePrivateRes> {
         if (body.region in this.regions) {
+            await withClanTags([...body.teams.flat(), ...(body.spectators ?? [])]);
             return await this.regions[body.region].createPrivateGame(body);
         }
         return { error: "find_game_failed" };
@@ -377,42 +426,50 @@ export class ApiServer {
             return this.livePlayersCache.map;
         }
         const map = new Map<string, { region: string; gameId: string }>();
-        for (const regionId in this.regions) {
-            const region = this.regions[regionId];
-            try {
-                const infos = await region.collectGameInfos();
-                const games: any[] = (Array.isArray(infos?.data) ? infos.data : []).filter(
-                    (g: any) => g?.id && !g.stopped,
-                );
-                const lists = await Promise.all(
-                    games.map((g) =>
-                        region
-                            .getDashboardGamePlayers(g.id)
-                            .then((players) => ({ gameId: g.id, players }))
-                            .catch(() => ({ gameId: g.id, players: [] as any[] }))
-                    ),
-                );
-                for (const { gameId, players } of lists) {
-                    for (const p of players) {
-                        // Only actual participants — not spectators (a friend watching
-                        // someone else) or players who've already disconnected.
-                        if (p?.userId && !p.isSpectator && !p.disconnected) {
-                            map.set(p.userId, { region: regionId, gameId });
+        // Regions are fetched concurrently, not one at a time: a down/slow region can
+        // take up to REGION_FETCH_TIMEOUT_MS to time out, and this feeds the friends
+        // list so it's called often - serializing it across regions means one bad
+        // region delays every other region behind it in iteration order, and several
+        // down at once (seen in prod: scrims/asia/asia_arena/asia_scrims all timing
+        // out in the same burst) would otherwise stack their timeouts.
+        await Promise.all(
+            Object.entries(this.regions).map(async ([regionId, region]) => {
+                try {
+                    const infos = await region.collectGameInfos();
+                    const games: any[] = (Array.isArray(infos?.data) ? infos.data : []).filter(
+                        (g: any) => g?.id && !g.stopped,
+                    );
+                    const lists = await Promise.all(
+                        games.map((g) =>
+                            region
+                                .getDashboardGamePlayers(g.id)
+                                .then((players) => ({ gameId: g.id, players }))
+                                .catch(() => ({ gameId: g.id, players: [] as any[] }))
+                        ),
+                    );
+                    for (const { gameId, players } of lists) {
+                        for (const p of players) {
+                            // Only actual participants — not spectators (a friend watching
+                            // someone else) or players who've already disconnected.
+                            if (p?.userId && !p.isSpectator && !p.disconnected) {
+                                map.set(p.userId, { region: regionId, gameId });
+                            }
                         }
                     }
+                } catch {
+                    // region offline — skip
                 }
-            } catch {
-                // region offline — skip
-            }
-        }
+            }),
+        );
         this.livePlayersCache = { at: now, map };
         return map;
     }
 
-    async findGameById(region: string, gameId: string, admin: boolean) {
+    /** `stealth`: staff watching from the dashboard - an invisible spectator (see Player.stealth). */
+    async findGameById(region: string, gameId: string, admin: boolean, stealth = false) {
         const r = this.regions[region];
         if (!r) return { error: "Invalid Region" };
-        return await r.findGameById(gameId, admin);
+        return await r.findGameById(gameId, admin, stealth);
     }
 
     /** Returns live players for a game from the game server of the given region. */
@@ -479,6 +536,17 @@ export class ApiServer {
         gameId: string,
     ): Promise<GameViewMeta | null> {
         return (await this.regions[region]?.streamReplayGameMeta(gameId)) ?? null;
+    }
+
+    /** One region's modes again (after the dashboard changed them). */
+    async refreshRegionModesOf(regionId: string) {
+        const region = this.regions[regionId];
+        if (!region) return;
+        try {
+            this.modesByRegion[regionId] = await region.getModes();
+        } catch (err) {
+            this.logger.warn("refreshRegionModesOf failed for region", regionId, err);
+        }
     }
 
     async refreshRegionModes() {

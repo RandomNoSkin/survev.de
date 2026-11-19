@@ -134,6 +134,12 @@ export function recordingsRoot(): string {
     return path.resolve(Config.recording.dir);
 }
 
+/** Where bot games are copied to with `recordBots` (a sibling, not inside the tree the
+ *  dashboard lists - that one expects only date folders). */
+export function botTestRoot(): string {
+    return `${recordingsRoot()}-bot-test`;
+}
+
 /** Strips a player name down to something safe to embed in a filename. */
 function safeFileName(name: string): string {
     return (name || "player").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 24);
@@ -180,6 +186,10 @@ export class GameRecorder {
     private dir = "";
     private dirReady = false;
     private stoppedAll = false;
+    /** Every file this game writes, done when it's fully on disk (for the bot-test copy). */
+    private readonly pendingWrites: Promise<void>[] = [];
+    /** A bot's POV was recorded (only with `recordBots`) -> copy the game to bot-test. */
+    private hadBots = false;
 
     // God-view track side-file (all players' pos/health, server-authoritative).
     private tracksGzip?: zlib.Gzip;
@@ -245,8 +255,40 @@ export class GameRecorder {
         this.writeDamage();
         if (this.recorded.length) {
             this.writeMeta();
-            void cleanupRetention();
+            void cleanupRetention(recordingsRoot());
+            if (this.hadBots && Config.recording.recordBots) {
+                // once every stream has flushed, so the copy is complete
+                void Promise.all(this.pendingWrites).then(() => this.copyToBotTest());
+            }
         }
+    }
+
+    /** Waits for a file stream to be fully written (or to fail). */
+    private trackWrite(stream: fs.WriteStream): void {
+        this.pendingWrites.push(
+            new Promise((resolve) => {
+                stream.once("close", () => resolve());
+                stream.once("error", () => resolve());
+            }),
+        );
+    }
+
+    /**
+     * Bot games (`recordBots`) are additionally copied to a `<dir>-bot-test/` sibling,
+     * easy to find for bot analysis. The original stays in the normal recordings, so
+     * the dashboard/replays see the game like any other. The copy follows the same
+     * retention caps.
+     */
+    private async copyToBotTest(): Promise<void> {
+        const root = botTestRoot();
+        const day = new Date(this.startTs).toISOString().slice(0, 10);
+        try {
+            await fs.promises.cp(this.dir, path.join(root, day, this.game.id), { recursive: true });
+        } catch (err) {
+            this.game.logger.warn("Failed to copy bot recording:", err);
+            return;
+        }
+        void cleanupRetention(root);
     }
 
     /**
@@ -343,10 +385,14 @@ export class GameRecorder {
             };
             // Async gzip so a large obstacle list doesn't stall the game tick.
             const filePath = path.join(this.dir, MAP_FILE);
-            zlib.gzip(Buffer.from(JSON.stringify(payload)), (err, gz) => {
-                if (err) return;
-                fs.writeFile(filePath, gz, () => {});
-            });
+            this.pendingWrites.push(
+                new Promise((resolve) => {
+                    zlib.gzip(Buffer.from(JSON.stringify(payload)), (err, gz) => {
+                        if (err) return resolve();
+                        fs.writeFile(filePath, gz, () => resolve());
+                    });
+                }),
+            );
         } catch (err) {
             this.game.logger.warn("Failed to write map file:", err);
         }
@@ -406,6 +452,7 @@ export class GameRecorder {
             const filePath = path.join(this.dir, TRACKS_FILE);
             const gzip = zlib.createGzip();
             const fileStream = fs.createWriteStream(filePath);
+            this.trackWrite(fileStream);
             gzip.pipe(fileStream);
 
             const onErr = (err: unknown) => {
@@ -464,7 +511,9 @@ export class GameRecorder {
         }
     }
 
-    /** Lazily creates the per-game recording directory (shared by tracks + POV files). */
+    /** Lazily creates the per-game recording directory (shared by tracks + POV files).
+     *  Always the normal recordings tree; bot games get copied to bot-test at the end
+     *  (see `copyToBotTest`). */
     private ensureDir(): void {
         if (this.dirReady) return;
         const day = new Date(this.startTs).toISOString().slice(0, 10);
@@ -481,6 +530,8 @@ export class GameRecorder {
             const filePath = path.join(this.dir, fileName);
             const gzip = zlib.createGzip();
             const fileStream = fs.createWriteStream(filePath);
+            this.trackWrite(fileStream);
+            if (player.bot) this.hadBots = true;
             gzip.pipe(fileStream);
 
             const onErr = (err: unknown) => {
@@ -656,7 +707,15 @@ export async function getRecordingMeta(gameId: string): Promise<GameRecordingInf
  *
  * @param limit Maximum recordings to return. Omit for the full archive.
  */
-export async function listRecordings(limit = Infinity): Promise<GameRecordingInfo[]> {
+/**
+ * Recordings newest first, at most `limit`. With `range` (ms timestamps) only games that
+ * started inside it - and only the day dirs (UTC dates) it touches are read, so an older
+ * window isn't cut off by `limit` filling up with newer days first.
+ */
+export async function listRecordings(
+    limit = Infinity,
+    range?: { from?: number; to?: number },
+): Promise<GameRecordingInfo[]> {
     const root = recordingsRoot();
     const out: GameRecordingInfo[] = [];
     let days: string[];
@@ -666,9 +725,15 @@ export async function listRecordings(limit = Infinity): Promise<GameRecordingInf
         return out; // dir doesn't exist yet
     }
     days.sort().reverse();
+    const from = range?.from ?? -Infinity;
+    const to = range?.to ?? Infinity;
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
     for (const day of days) {
         if (out.length >= limit) break;
+        // day dirs are the UTC date the game started on (see the writer)
+        const dayStart = Date.parse(`${day}T00:00:00Z`);
+        if (!Number.isNaN(dayStart) && (dayStart > to || dayStart + DAY_MS <= from)) continue;
         const dayDir = path.join(root, day);
         let games: string[];
         try {
@@ -676,7 +741,8 @@ export async function listRecordings(limit = Infinity): Promise<GameRecordingInf
         } catch {
             continue;
         }
-        out.push(...(await readDayMetas(dayDir, games)));
+        const metas = await readDayMetas(dayDir, games);
+        out.push(...(range ? metas.filter((m) => m.startTs >= from && m.startTs <= to) : metas));
     }
 
     out.sort((a, b) => b.startTs - a.startTs);
@@ -813,20 +879,54 @@ export async function readMapFile(gameId: string): Promise<GameMapFile | null> {
 
 // ─── Retention cleanup ──────────────────────────────────────────────────────────
 
-let lastCleanup = 0;
+const lastCleanup = new Map<string, number>();
 
-/** Enforces age + total-size caps by deleting the oldest game dirs. Throttled. */
-async function cleanupRetention(): Promise<void> {
+/**
+ * Games the retention cleanup never deletes: the ones staff tagged (sus reports and
+ * other moderation flags). The API pushes the full list regularly (see setKeptReplays);
+ * it's also saved next to the recordings tree so a restart keeps it before the next push.
+ */
+let keptGames: Set<string> | undefined;
+
+function keptGamesFile(): string {
+    return `${recordingsRoot()}-keep.json`;
+}
+
+function getKeptGames(): Set<string> {
+    if (!keptGames) {
+        try {
+            keptGames = new Set(JSON.parse(fs.readFileSync(keptGamesFile(), "utf8")) as string[]);
+        } catch {
+            keptGames = new Set();
+        }
+    }
+    return keptGames;
+}
+
+/** Replaces the kept-games list (the API's full, current set of tagged game ids). */
+export async function setKeptReplays(gameIds: string[]): Promise<void> {
+    keptGames = new Set(gameIds);
+    try {
+        await fs.promises.writeFile(keptGamesFile(), JSON.stringify([...keptGames]));
+    } catch {
+        /* still applies in memory until the next restart */
+    }
+}
+
+/** Enforces age + total-size caps on one recordings tree by deleting the oldest game
+ *  dirs - except kept (tagged) games, which also don't count towards the size budget.
+ *  Throttled per tree. */
+export async function cleanupRetention(root: string): Promise<void> {
     const now = Date.now();
-    if (now - lastCleanup < 60_000) return; // at most once a minute
-    lastCleanup = now;
+    if (now - (lastCleanup.get(root) ?? 0) < 60_000) return; // at most once a minute
+    lastCleanup.set(root, now);
 
-    const root = recordingsRoot();
     const maxAgeMs = Config.recording.maxAgeDays * 24 * 60 * 60 * 1000;
     const maxTotalBytes = Config.recording.maxTotalGb * 1024 * MB;
 
     try {
         const entries: { dir: string; mtime: number; size: number }[] = [];
+        const kept = getKeptGames();
         const days = await fs.promises.readdir(root);
         for (const day of days) {
             const dayDir = path.join(root, day);
@@ -837,6 +937,7 @@ async function cleanupRetention(): Promise<void> {
                 continue;
             }
             for (const gameId of games) {
+                if (kept.has(gameId)) continue;
                 const gameDir = path.join(dayDir, gameId);
                 const size = await dirSize(gameDir);
                 let mtime = 0;

@@ -5,22 +5,27 @@ import { EmoteCategory, type EmoteDef } from "../../../shared/defs/gameObjects/e
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import { type UnlockDef, UnlockDefs } from "../../../shared/defs/gameObjects/unlockDefs";
 import {
+    DUMP_VALUE,
+    getItemCategory,
     getItemPrice,
     getItemRarity,
     getMarketPriceBounds,
     MARKET_LISTING_TTL_MS,
-} from "../../../shared/defs/shopConfig";
+} from "../../../shared/defs/shop/shopConfig";
 import { EmoteSlot, Rarity } from "../../../shared/gameConfig";
 import type { OAuthGrantEntry } from "../../../shared/types/oauth";
+import type { TagDisplay } from "../../../shared/types/user";
 import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { ItemStatus } from "../../../shared/utils/loadout";
-import { type Crosshair, type Loadout, loadout } from "../../../shared/utils/loadout";
+import { type Crosshair, type Loadout, loadout, RANDOM_SLOTS } from "../../../shared/utils/loadout";
 import { util } from "../../../shared/utils/util";
 import type { Account } from "../account";
 import { crosshair } from "../crosshair";
 import { device } from "../device";
 import { helpers } from "../helpers";
 import type { AuctionUi } from "./auctionUi";
+import { CrateUi } from "./crateUi";
+import { CrateDefs, type CrateType } from "../../../shared/defs/shop/crateConfig";
 import type { Localization } from "./localization";
 import type { MarketUi } from "./marketUi";
 import { MenuModal } from "./menuModal";
@@ -157,6 +162,8 @@ interface ItemInfo {
     rarity: number;
     displayName: string;
     displaySource: string;
+    /** Raw item source (e.g. "unlock_new_account"), for rules like "can it be dumped". */
+    source?: string;
     displayLore: string;
     timeAcquired: number;
     idx: number;
@@ -180,6 +187,7 @@ interface EquippedItem {
     displayLore?: string;
     subcat: EmoteCategory;
     displaySource?: string;
+    source?: string;
 }
 export class LoadoutMenu {
     initialized = false;
@@ -197,6 +205,9 @@ export class LoadoutMenu {
     auctionUi: AuctionUi | null = null;
     /** True while the Settings tab is showing (its panel replaces the item list). */
     private settingsOpen = false;
+    /** True while the Crates tab is showing (keys + lootboxes instead of the item list). */
+    private cratesOpen = false;
+    crateUi: CrateUi;
     /** When true, the right side shows the item detail panel instead of the equip UI. */
     detailMode = false;
     loadout = loadout.defaultLoadout();
@@ -252,6 +263,7 @@ export class LoadoutMenu {
         rarity?: number;
         displayName?: string;
         displaySource?: string;
+        source?: string;
         loadoutType?: string;
         displayLore?: string;
         subcat?: number;
@@ -311,6 +323,7 @@ export class LoadoutMenu {
         this.modalCustomizeItemName = $("#modal-customize-item-name");
         this.modalCustomizeItemLore = $("#modal-customize-item-lore");
         this.modalCustomizeItemSource = $("#modal-customize-item-source");
+        this.crateUi = new CrateUi(account, localization);
         this.modal = new MenuModal(this.modalCustomize);
         this.modal.onShow(() => {
             this.onShow();
@@ -374,7 +387,7 @@ export class LoadoutMenu {
                 const newCategoryIdx = selector.data("idx");
                 // Also switch when leaving the Settings tab, even if this category was the
                 // last-selected one (its index still equals selectedCatIdx).
-                if (this.settingsOpen || this.selectedCatIdx != newCategoryIdx) {
+                if (this.settingsOpen || this.cratesOpen || this.selectedCatIdx != newCategoryIdx) {
                     this.selectCat(newCategoryIdx);
                 }
             });
@@ -399,6 +412,18 @@ export class LoadoutMenu {
             // Insert before the last cosmetic tab (the player-icon), right after the "|".
             $("#modal-customize-header .modal-customize-cat").last().before(settingsTab);
             settingsTab.on("mouseup", () => this.openSettingsTab());
+
+            // Crates tab (keys + lootboxes), next to Settings.
+            const cratesTab = $("<div/>", {
+                class: "modal-customize-cat modal-customize-crates-tab",
+                title: "Crates",
+            });
+            cratesTab.append(
+                $("<div/>", { class: "modal-customize-cat-image modal-customize-crates-icon" }),
+                $("<div/>", { class: "modal-customize-cat-connect" }),
+            );
+            settingsTab.after(cratesTab);
+            cratesTab.on("mouseup", () => this.openCratesTab());
             this.itemSort = $("#modal-customize-sort");
             this.itemSort.val("alpha");
             this.itemSort.on("change", (e) => {
@@ -416,6 +441,12 @@ export class LoadoutMenu {
             $("#setting-loadout-private").on("click", () =>
                 this.toggleSetting("loadoutPrivate", "#setting-loadout-private"),
             );
+            $("#setting-track-duels").on("click", () =>
+                this.toggleSetting("trackDuels", "#setting-track-duels"),
+            );
+            $("#setting-show-owner-prefix").on("click", () =>
+                this.toggleSetting("showOwnerPrefix", "#setting-show-owner-prefix"),
+            );
             $("#setting-show-admin-prefix").on("click", () =>
                 this.toggleSetting("showAdminPrefix", "#setting-show-admin-prefix"),
             );
@@ -424,6 +455,9 @@ export class LoadoutMenu {
             );
             $("#setting-show-premium-prefix").on("click", () =>
                 this.toggleSetting("showPremiumPrefix", "#setting-show-premium-prefix"),
+            );
+            $("#setting-tag-display .loadout-seg-btn").on("click", (e) =>
+                this.setTagDisplay($(e.currentTarget).data("value") as TagDisplay),
             );
             // Clicking an item's rarity jumps to the shop's "Owners" view for that item.
             const openOwners = () => {
@@ -550,14 +584,14 @@ export class LoadoutMenu {
     onRequest() {
         $("#modal-customize-loading").css(
             "opacity",
-            this.account.requestsInFlight > 0 ? 1 : 0,
+            this.account.joinRequestsInFlight > 0 ? 1 : 0,
         );
     }
 
     onLoadout(_loadout: Loadout) {
         this.loadout = loadout.validate(_loadout);
         crosshair.setGameCrosshair(_loadout.crosshair);
-        if (this.active) {
+        if (this.active && !this.settingsOpen && !this.cratesOpen) {
             this.selectCat(this.selectedCatIdx);
         }
     }
@@ -590,7 +624,8 @@ export class LoadoutMenu {
         }
         if (this.active) {
             this.tryBeginConfirmingItems();
-            this.selectCat(this.selectedCatIdx);
+            // the Settings / Crates tab stays open (Crates re-renders itself)
+            if (!this.settingsOpen && !this.cratesOpen) this.selectCat(this.selectedCatIdx);
         }
     }
 
@@ -816,6 +851,73 @@ export class LoadoutMenu {
         }
     }
 
+    /**
+     * "Random" (equip a random owned cosmetic of this category now) and "Every game"
+     * (the server picks one at random before each match - stored in loadout.random).
+     */
+    renderRandomControls() {
+        const box = $("#loadout-random-controls").empty();
+        const slot = this.categories[this.selectedCatIdx]?.loadoutType;
+        if (!slot || !(slot in RANDOM_SLOTS)) return;
+        const what = slot === "emote" ? "emote wheel" : "one";
+        const now = $(`<div class="loadout-random-btn" title="Equip a random ${what} you own">Random</div>`);
+        now.on("click", () => this.randomizeNow(slot));
+        const on = this.loadout.random.includes(slot);
+        const every = $(
+            `<div class="loadout-random-btn loadout-random-toggle${on ? " loadout-random-on" : ""}" title="Pick a random ${what} you own before every match">` +
+                `<span class="loadout-random-switch"></span>Every game</div>`,
+        );
+        every.on("click", () => this.toggleRandom(slot));
+        box.append(now, every);
+        // the selected item can be kept out of the draw
+        const type = this.selectedItem.type;
+        if (this.itemSelected && type) {
+            const skipped = this.loadout.randomExclude.includes(type);
+            const skip = $(
+                `<div class="loadout-random-btn loadout-random-toggle${skipped ? " loadout-random-skipped" : ""}" title="${skipped ? "This one is never picked at random - click to allow it again" : "Never pick this one at random"}">` +
+                    `<span class="loadout-random-switch"></span>Skip in random</div>`,
+            );
+            skip.on("click", () => this.toggleExclude(type));
+            box.append(skip);
+        }
+    }
+
+    private toggleExclude(type: string) {
+        const ex = new Set(this.loadout.randomExclude);
+        if (ex.has(type)) ex.delete(type);
+        else ex.add(type);
+        // saved with the rest of the loadout when the menu closes
+        this.loadout = { ...this.loadout, randomExclude: [...ex] };
+        this.renderRandomControls();
+        // the "No random" marks on the list
+        for (const info of this.selectedCatItems) {
+            if (info.type !== type) continue;
+            info.outerDiv?.find(".customize-norandom-badge").remove();
+            if (ex.has(type)) info.outerDiv?.append('<div class="customize-norandom-badge">No random</div>');
+        }
+    }
+
+    private randomizeNow(slot: string) {
+        this.loadout = loadout.randomize(
+            this.loadout,
+            this.items.map((i) => i.type),
+            [slot],
+        );
+        if (this.loadoutDisplay?.initialized) this.loadoutDisplay.setLoadout(this.loadout);
+        // re-render the list so the new pick is the selected / equipped one
+        this.selectCat(this.selectedCatIdx);
+        this.updateLoadoutValue();
+    }
+
+    private toggleRandom(slot: string) {
+        const random = new Set(this.loadout.random);
+        if (random.has(slot)) random.delete(slot);
+        else random.add(slot);
+        // saved with the rest of the loadout when the menu closes
+        this.loadout = { ...this.loadout, random: [...random] };
+        this.renderRandomControls();
+    }
+
     updateLoadoutFromDOM() {
         const loadoutType = this.categories[this.selectedCatIdx].loadoutType;
         if (loadoutType == "emote") {
@@ -886,35 +988,10 @@ export class LoadoutMenu {
 
     /** Selects the Settings tab: highlights it, titles the panel, and shows the settings. */
     private openSettingsTab() {
+        this.closeCratesTab();
         this.settingsOpen = true;
-        // Deselect the cosmetic category tabs, select the settings tab.
-        this.selectableCats.removeClass("modal-customize-cat-selected");
-        this.selectableCatConnects.removeClass("modal-customize-cat-connect-selected");
-        this.selectableCatImages.removeClass("modal-customize-cat-image-selected");
-        const tab = $(".modal-customize-settings-tab");
-        tab.addClass("modal-customize-cat-selected");
-        tab.find(".modal-customize-cat-connect").addClass(
-            "modal-customize-cat-connect-selected",
-        );
-        tab.find(".modal-customize-cat-image").addClass(
-            "modal-customize-cat-image-selected",
-        );
-        $("#modal-customize-cat-title").html("SETTINGS");
-
-        // Swap the item list out for the settings content (search/sort don't apply here).
-        $("#modal-customize-list").css("display", "none");
-        $("#modal-customize-item-header").css("display", "none");
-        $("#modal-customize-search").css("display", "none");
-        $("#modal-customize-sort-wrap").css("display", "none");
-        $("#modal-content-right-emote, #customize-emote-parent").css("display", "none");
-        $("#modal-content-right-crosshair, #customize-crosshair-parent").css(
-            "display",
-            "none",
-        );
-        $("#modal-content-right-detail").css("display", "none");
-        // Clear the per-item footer text (the account value bar stays relevant).
-        this.modalCustomizeItemSource.html("");
-        this.modalCustomizeItemLore.html("");
+        this.enterMetaTab(".modal-customize-settings-tab", "SETTINGS");
+        $("#loadout-settings-panel").css("display", "block");
 
         // Sync toggles to current values, then show the settings content.
         $("#setting-offers-disabled").toggleClass(
@@ -924,6 +1001,14 @@ export class LoadoutMenu {
         $("#setting-loadout-private").toggleClass(
             "loadout-toggle-on",
             this.account.settings.loadoutPrivate,
+        );
+        $("#setting-track-duels").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.trackDuels,
+        );
+        $("#setting-show-owner-prefix").toggleClass(
+            "loadout-toggle-on",
+            this.account.settings.showOwnerPrefix,
         );
         $("#setting-show-admin-prefix").toggleClass(
             "loadout-toggle-on",
@@ -937,13 +1022,79 @@ export class LoadoutMenu {
             "loadout-toggle-on",
             this.account.settings.showPremiumPrefix,
         );
+        this.showTagDisplay(this.account.settings.tagDisplay);
+        // Only offer toggles for roles the account actually has; admins also get MOD
+        // since that's what an admin falls back to with the ADMIN tag hidden.
+        const p = this.account.profile;
+        const premiumActive = !!p.premiumUntil && p.premiumUntil > Date.now();
+        $("#setting-show-owner-prefix").closest(".loadout-setting-row").toggle(!!p.owner);
+        $("#setting-show-admin-prefix").closest(".loadout-setting-row").toggle(!!p.admin);
+        $("#setting-show-mod-prefix")
+            .closest(".loadout-setting-row")
+            .toggle(!!p.moderator || !!p.admin);
+        $("#setting-show-premium-prefix").closest(".loadout-setting-row").toggle(premiumActive);
         $("#loadout-settings-status").text("");
-        $("#loadout-settings-panel").css("display", "block");
 
         $("#loadout-discord-status").text(
             this.account.profile.linkedDiscord ? "Linked ✓" : "Not linked",
         );
         this.loadConnectedApps();
+    }
+
+    /** Selects a meta tab (Settings / Crates): highlights it, titles the panel and hides
+     *  the item list, search/sort and the equip panels (they don't apply there). */
+    private enterMetaTab(selector: string, title: string) {
+        this.selectableCats.removeClass("modal-customize-cat-selected");
+        this.selectableCatConnects.removeClass("modal-customize-cat-connect-selected");
+        this.selectableCatImages.removeClass("modal-customize-cat-image-selected");
+        const tab = $(selector);
+        tab.addClass("modal-customize-cat-selected");
+        tab.find(".modal-customize-cat-connect").addClass(
+            "modal-customize-cat-connect-selected",
+        );
+        tab.find(".modal-customize-cat-image").addClass(
+            "modal-customize-cat-image-selected",
+        );
+        $("#modal-customize-cat-title").html(title);
+
+        $("#modal-customize-list").css("display", "none");
+        $("#modal-customize-item-header").css("display", "none");
+        $("#modal-customize-search").css("display", "none");
+        $("#modal-customize-sort-wrap").css("display", "none");
+        $("#modal-content-right-emote, #customize-emote-parent").css("display", "none");
+        $("#modal-content-right-crosshair, #customize-crosshair-parent").css(
+            "display",
+            "none",
+        );
+        $("#modal-content-right-detail").css("display", "none");
+        // Clear the per-item footer text (the account value bar stays relevant).
+        this.modalCustomizeItemSource.html("");
+        this.modalCustomizeItemLore.html("");
+    }
+
+    private openCratesTab() {
+        this.closeSettingsTab();
+        this.cratesOpen = true;
+        this.enterMetaTab(".modal-customize-crates-tab", "CRATES");
+        this.crateUi.show();
+    }
+
+    private closeCratesTab() {
+        if (!this.cratesOpen) return;
+        this.cratesOpen = false;
+        const tab = $(".modal-customize-crates-tab");
+        tab.removeClass("modal-customize-cat-selected");
+        tab.find(".modal-customize-cat-connect").removeClass(
+            "modal-customize-cat-connect-selected",
+        );
+        tab.find(".modal-customize-cat-image").removeClass(
+            "modal-customize-cat-image-selected",
+        );
+        this.crateUi.hide();
+        $("#modal-customize-list").css("display", "");
+        $("#modal-customize-item-header").css("display", "");
+        $("#modal-customize-search").css("display", "");
+        $("#modal-customize-sort-wrap").css("display", "");
     }
 
     /** Fetches + renders the "Connected apps" list (with per-app revoke buttons). */
@@ -1020,11 +1171,35 @@ export class LoadoutMenu {
         $("#modal-customize-sort-wrap").css("display", "");
     }
 
+    private showTagDisplay(value: TagDisplay) {
+        $("#setting-tag-display .loadout-seg-btn").each((_, el) => {
+            $(el).toggleClass("loadout-seg-active", $(el).data("value") === value);
+        });
+    }
+
+    /** "In-game name tag": role tag, clan tag or both. */
+    private setTagDisplay(value: TagDisplay) {
+        const prev = this.account.settings.tagDisplay;
+        if (value === prev) return;
+        this.showTagDisplay(value);
+        $("#loadout-settings-status").text("Saving…");
+        this.account.saveSettings({ tagDisplay: value }, (err, res) => {
+            if (err || !res?.success) {
+                this.showTagDisplay(prev);
+                $("#loadout-settings-status").text("Failed to save");
+                return;
+            }
+            $("#loadout-settings-status").text("Saved ✓");
+        });
+    }
+
     /** Flips one setting, updates its toggle optimistically, and persists it. */
     private toggleSetting(
         key:
             | "offersDisabled"
             | "loadoutPrivate"
+            | "trackDuels"
+            | "showOwnerPrefix"
             | "showAdminPrefix"
             | "showModPrefix"
             | "showPremiumPrefix",
@@ -1089,6 +1264,7 @@ export class LoadoutMenu {
             rarity: selectedItem.rarity,
             displayName: selectedItem.displayName || "",
             displaySource: selectedItem.displaySource || "Unknown",
+            source: selectedItem.source,
             displayLore: selectedItem.displayLore || "",
             loadoutType: selectedItem.loadoutType,
             subcat: selectedItem.subcat,
@@ -1126,6 +1302,8 @@ export class LoadoutMenu {
                   }`
                 : this.selectedItem.displayLore;
         this.modalCustomizeItemLore.html(localizedLore!);
+        // "Skip in random" follows the selected item
+        this.renderRandomControls();
         const rarityNames = ["stock", "common", "uncommon", "rare", "epic", "mythic"];
         const Rarities = [
             "#c5c5c5",
@@ -1386,6 +1564,52 @@ export class LoadoutMenu {
             else giftBtn.on("click", () => this.socialUi?.openWithItem(item));
             el.append(giftBtn);
         }
+        if (!listing) this.renderDumpButton(el);
+    }
+
+    /** "Dump" destroys the selected instance for DUMP_VALUE fries. Two clicks: the first
+     *  arms the button (it turns red and asks), the second within a few seconds dumps. */
+    private renderDumpButton(el: JQuery<HTMLElement>) {
+        const item = this.selectedItem;
+        if (item.id == null || !getItemCategory(item.type)) return;
+        if (item.source === "unlock_new_account" || item.source === "unlock_default") return;
+        const auctionedNow = item.id === this.account.activeAuctionItemId;
+        const label = `🗑 Dump for ${DUMP_VALUE} 🍟`;
+        const btn = $("<div/>", {
+            class: "shop-buy-btn detail-dump-btn menu-option btn-darken",
+            text: label,
+            title: "Destroy this copy for Golden Fries - this can't be undone.",
+        });
+        if (auctionedNow) {
+            btn.addClass("shop-buy-disabled").attr("title", "This item is in an auction.");
+            el.append(btn);
+            return;
+        }
+        let armTimer: ReturnType<typeof setTimeout> | null = null;
+        btn.on("click", () => {
+            if (btn.hasClass("shop-buy-disabled")) return;
+            if (!btn.hasClass("detail-dump-armed")) {
+                btn.addClass("detail-dump-armed").text("Really dump it? Click again");
+                armTimer = setTimeout(() => btn.removeClass("detail-dump-armed").text(label), 4000);
+                return;
+            }
+            if (armTimer) clearTimeout(armTimer);
+            btn.removeClass("detail-dump-armed").addClass("shop-buy-disabled").text("…");
+            this.account.dumpItem(item.id!, (err, res) => {
+                if (err || !res?.success) {
+                    const why: Record<string, string> = {
+                        listed: "It's listed on the market.",
+                        auctioned: "It's in an auction.",
+                        starter_item: "Starter items can't be dumped.",
+                    };
+                    btn.text(why[res?.error ?? ""] ?? "Couldn't dump it.");
+                    setTimeout(() => btn.removeClass("shop-buy-disabled").text(label), 2500);
+                    return;
+                }
+                btn.text(`Dumped · +${res.fries} 🍟`);
+            });
+        });
+        el.append(btn);
     }
 
     updateSlot(parent: JQuery<HTMLElement>, img: string, type: string) {
@@ -1502,8 +1726,9 @@ export class LoadoutMenu {
 
         this.loadoutDisplay?.setView(category.loadoutType);
 
-        // Leaving the Settings tab for a cosmetic category.
+        // Leaving the Settings / Crates tab for a cosmetic category.
         this.closeSettingsTab();
+        this.closeCratesTab();
 
         const _ = $(`.modal-customize-cat[data-idx='${this.selectedCatIdx}']`);
         this.selectableCats.removeClass("modal-customize-cat-selected");
@@ -1520,6 +1745,7 @@ export class LoadoutMenu {
             .translate(`loadout-title-${category.loadoutType}`)
             .toUpperCase();
         $("#modal-customize-cat-title").html(localizedTitle);
+        this.renderRandomControls();
         // Equip panels only when NOT in detail mode (detail mode shows the info panel).
         $("#modal-content-right-crosshair").css(
             "display",
@@ -1548,6 +1774,12 @@ export class LoadoutMenu {
             if (source.startsWith("shop:")) {
                 return `Bought on ${source.slice(5)}`;
             }
+            // Crate drops store "crate:<crate type>".
+            if (source.startsWith("crate:")) {
+                const crate = CrateDefs[source.slice(6) as CrateType];
+                if (!crate) return "Opened from a crate";
+                return `Opened from ${/^[AEIOU]/.test(crate.name) ? "an" : "a"} ${crate.name}`;
+            }
             // A source can be a non-def string (e.g. "admin_grant", "unlock_default"),
             // and this fork's typeToDef throws on unknown types — so use the safe lookup.
             const sourceDef = GameObjectDefs.typeToDefSafe(source) as EmoteDef | undefined;
@@ -1565,6 +1797,12 @@ export class LoadoutMenu {
         const rememberedId = (this.account.config.get("selectedItemIds") ?? {})[
             category.loadoutType
         ];
+        // the remembered copy only counts while it's still the equipped type (a random
+        // pick - or a change elsewhere - equips something else)
+        const equippedType =
+            category.loadoutType === "crosshair"
+                ? this.loadout.crosshair.type
+                : (this.loadout[category.loadoutType as keyof Loadout] as unknown);
         const listItems = $("<div/>");
         for (let i = 0; i < loadoutItems.length; i++) {
             const item = loadoutItems[i];
@@ -1586,6 +1824,7 @@ export class LoadoutMenu {
                 displayLore:
                     this.localization.translate(`game-${item.type}-lore`) || objDef.lore!,
                 displaySource: getItemSourceName(item.source),
+                source: item.source,
                 timeAcquired: item.timeAcquired,
                 idx: i,
                 subcat: (objDef as unknown as EmoteDef).category,
@@ -1627,6 +1866,10 @@ export class LoadoutMenu {
                 outerDiv.append(alertDiv);
             }
 
+            // Never picked by "Random" / "Every game".
+            if (this.loadout.randomExclude.includes(item.type)) {
+                outerDiv.append('<div class="customize-norandom-badge">No random</div>');
+            }
             // Marker for an instance that's currently listed on the marketplace.
             if (
                 item.id != null &&
@@ -1658,7 +1901,7 @@ export class LoadoutMenu {
             // Add the itemInfo to the currently selected items array
             itemInfo.outerDiv = outerDiv;
             this.selectedCatItems.push(itemInfo);
-            if (rememberedId != null && item.id === rememberedId) {
+            if (rememberedId != null && item.id === rememberedId && item.type === equippedType) {
                 instanceMatchDiv = itemInfo.outerDiv;
             }
             if (!loadoutItemDiv) {
@@ -1730,7 +1973,7 @@ export class LoadoutMenu {
         }
 
         // Disable crosshair elements on Edge
-        if (device.browser == "edge") {
+        if (false) {
             if (category.loadoutType == "crosshair") {
                 const disableElem = function (
                     parentElem: JQuery<HTMLElement>,
@@ -1776,7 +2019,7 @@ export class LoadoutMenu {
         selector.on("dragstart", function (e) {
             if (
                 !$(this).hasClass("customize-list-item-locked") &&
-                (that.selectItem($(this), false), device.browser != "edge")
+                (that.selectItem($(this), false), true)
             ) {
                 const imgDiv = document.createElement("img");
                 imgDiv.src = that.selectedItem.img

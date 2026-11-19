@@ -90,6 +90,8 @@ export class Airdrop extends BaseGameObject {
         this.obstacleType = obstacleType;
         this.type = obstacleType;
         this.crateCollision = collider.transform(def.collision, this.pos, 0, 1);
+        // a mode's faster crates (the arena): the fall starts part way down
+        this.fallTime = GameConfig.airdrop.fallTime * (game.rules?.calledAirdropTimeFactor ?? 1);
     }
 
     update(dt: number) {

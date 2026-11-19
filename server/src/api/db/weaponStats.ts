@@ -1,8 +1,9 @@
-import { and, eq, gte, lte, max, sql, sum } from "drizzle-orm";
+import { and, eq, gte, lte, max, notInArray, sql, sum } from "drizzle-orm";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import type { TeamMode } from "../../../../shared/gameConfig.ts";
 import {
     ALL_MAPS,
+    ARENA_MAP_IDS,
     ALL_TEAM_MODES,
     WEAPON_STATS_MAX_RESULTS,
     WEAPON_STATS_MIN_GAMES_FOR_PER_GAME,
@@ -40,9 +41,9 @@ export async function weaponStatsSqlQuery(
             and(
                 gte(weaponStatsDailyTable.day, from),
                 lte(weaponStatsDailyTable.day, to),
-                eq(weaponStatsDailyTable.mapId, parseInt(mapIdFilter)).if(
-                    mapIdFilter !== ALL_MAPS,
-                ),
+                mapIdFilter !== ALL_MAPS
+                    ? eq(weaponStatsDailyTable.mapId, parseInt(mapIdFilter))
+                    : notInArray(weaponStatsDailyTable.mapId, ARENA_MAP_IDS),
                 eq(weaponStatsDailyTable.teamMode, teamModeFilter as TeamMode).if(
                     teamModeFilter !== ALL_TEAM_MODES,
                 ),

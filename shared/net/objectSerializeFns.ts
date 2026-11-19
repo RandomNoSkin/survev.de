@@ -79,6 +79,9 @@ export interface ObjectsFullData {
         activeWeapon: string;
         layer: number;
         dead: boolean;
+        /** waiting to respawn (a GameMode hides them): sent as dead - only their own
+         *  client gets the object then, and must not show the body */
+        respawnHidden?: boolean;
         downed: boolean;
 
         animType: Anim;
@@ -199,7 +202,13 @@ export const ObjectSerializeFns: {
 } = {
     [ObjectType.Player]: {
         serializedPartialSize: 6,
-        serializedFullSize: 32, // calculating this one is... yeah...
+        // 32 bytes for everything but the perk list, plus room for every perk a
+        // player can carry (game type + droppable flag each); overflowing this
+        // throws inside the game tick and takes the whole game server down
+        // getter: net.ts imports this module, so Constants isn't initialized yet at load time
+        get serializedFullSize() {
+            return 32 + Math.ceil((Constants.MaxPerks * (10 + 1)) / 8);
+        },
         /* STRIP_FROM_PROD_CLIENT:START */
         serializePart: (s, data) => {
             s.writeMapPos(data.pos);
@@ -213,7 +222,7 @@ export const ObjectSerializeFns: {
             s.writeGameType(data.activeWeapon);
 
             s.writeBits(data.layer, 2);
-            s.writeBoolean(data.dead);
+            s.writeBoolean(data.dead || !!data.respawnHidden);
             s.writeBoolean(data.downed);
 
             s.writeBits(data.animType, BitSizes.Anim);

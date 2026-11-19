@@ -8,8 +8,8 @@ import { device } from "../device.ts";
 import type { Ctx } from "../game.ts";
 import type { Map } from "../map.ts";
 import type { Renderer } from "../renderer.ts";
-import { Pool } from "./objectPool.ts";
-import type { AbstractObject, Player, PlayerBarn } from "./player.ts";
+import { AbstractObject, Pool } from "./objectPool.ts";
+import type { Player, PlayerBarn } from "./player.ts";
 
 function createDeadBodyText() {
     const nameStyle: Partial<PIXI.TextStyle> = {
@@ -54,8 +54,6 @@ class DeadBody implements AbstractObject {
         this.nameText.anchor.set(0.5, -1);
         this.nameText.tint = util.rgbToInt(util.hsvToRgb(0, 0, 0.5));
         this.container.addChild(this.nameText);
-        // @ts-expect-error sigh
-        this.container.visible = this.sprite;
     }
 
     m_init() {}

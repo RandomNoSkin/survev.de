@@ -3,7 +3,7 @@
 export const DEFAULT_PASS_GOLDEN_FRIES = 10;
 
 export interface PassDef {
-    readonly type: "pass";
+    type: "pass";
     xp: number[];
     items: Array<{
         level: number;

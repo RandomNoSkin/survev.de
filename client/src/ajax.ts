@@ -1,5 +1,6 @@
 import $ from "jquery";
 import { api } from "./api";
+import { prefetchKey, takePrefetch } from "./prefetch";
 import { proxy } from "./proxy";
 
 export type AjaxCallback = (err: null | JQuery.jqXHR<any>, res?: any) => void;
@@ -16,6 +17,19 @@ export function ajaxRequest(url: string, data: DataOrCallback, cb: AjaxCallback)
         cb = data;
         data = null;
     }
+    // sent ahead by index.html (same-origin API only) - fall back to a real request if it failed
+    const prefetched = api.resolveUrl(url) === url ? takePrefetch(prefetchKey("POST", url, data)) : undefined;
+    if (prefetched) {
+        prefetched.then(
+            (res) => cb(null, res),
+            () => sendRequest(url, data as Record<string, unknown> | null, cb),
+        );
+        return;
+    }
+    sendRequest(url, data, cb);
+}
+
+function sendRequest(url: string, data: Record<string, unknown> | null, cb: AjaxCallback) {
     const opts: JQueryAjaxSettings = {
         url: api.resolveUrl(url),
         type: "POST",

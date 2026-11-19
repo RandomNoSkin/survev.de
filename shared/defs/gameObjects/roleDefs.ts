@@ -1,5 +1,6 @@
 import { FactionTeam, type InventoryItem } from "../../gameConfig.ts";
 import { type DeepPartial, util } from "../../utils/util.ts";
+import type { MapIndicatorDef } from "./itemTypes.ts";
 
 type BasicRoleWeapon = {
     type: string;
@@ -38,7 +39,7 @@ type DefaultItems = {
 };
 
 export interface RoleDef {
-    readonly type: "role";
+    type: "role";
     announce: boolean;
     killFeed?: {
         assign?: boolean;
@@ -56,12 +57,7 @@ export interface RoleDef {
     };
     defaultItems?: DefaultItems;
     perks?: (string | (() => string))[];
-    mapIndicator?: {
-        sprite: string;
-        tint: number;
-        pulse: boolean;
-        pulseTint: number;
-    };
+    mapIndicator?: MapIndicatorDef;
     visorImg?: {
         baseSprite: string;
         spriteScale: number;
@@ -366,6 +362,9 @@ export const RoleDefs: Record<string, RoleDef> = {
         announce: true,
         killFeed: { assign: true },
         sound: { assign: "last_man_assigned_01" },
+        mapIcon: {
+            alive: "player-last-man.img",
+        },
         perks: [
             "steelskin",
             () =>
@@ -469,6 +468,7 @@ export const RoleDefs: Record<string, RoleDef> = {
                 { type: "spas12", ammo: 9 },
                 { type: "mosin", ammo: 5 },
                 { type: "", ammo: 0 },
+                { type: "", ammo: 0 },
             ],
             outfit: "",
             backpack: "backpack03",
@@ -521,6 +521,7 @@ export const RoleDefs: Record<string, RoleDef> = {
                 { type: "m870", ammo: 5 },
                 { type: "mosin", ammo: 5 },
                 { type: "", ammo: 0 },
+                { type: "", ammo: 0 },
             ],
             outfit: "",
             backpack: "backpack03",
@@ -572,6 +573,7 @@ export const RoleDefs: Record<string, RoleDef> = {
         defaultItems: createDefaultItems({weapons: [
                 { type: "spas12", ammo: 9 },
                 { type: "saiga", ammo: 5 },
+                { type: "", ammo: 0 },
                 { type: "", ammo: 0 },
             ],
             outfit: "",

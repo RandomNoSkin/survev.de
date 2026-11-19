@@ -483,7 +483,7 @@ export class PlaneBarn {
                 }
             }
 
-            let rad: number;
+            let rad = 0;
             switch (coll.type) {
                 case collider.Type.Aabb:
                     const width = coll.max.x - coll.min.x;
@@ -515,7 +515,9 @@ export class PlaneBarn {
             collider: collider.transform(def.collision, airdropPos, 0, 1),
         };
 
-        const planePos = v2.add(pos, v2.mul(v2.randomUnit(), AIRDROP_PLANE_SPAWN_DIST));
+        // (a mode may bring called in crates faster - the arena's flares)
+        const spawnDist = AIRDROP_PLANE_SPAWN_DIST * (playerCalled ? (this.game.rules?.calledAirdropTimeFactor ?? 1) : 1);
+        const planePos = v2.add(pos, v2.mul(v2.randomUnit(), spawnDist));
 
         const toPlanePos = v2.sub(airdropPos, planePos);
         let len = v2.length(toPlanePos);
@@ -635,7 +637,7 @@ export class PlaneBarn {
                 coll = collider.transform(coll, v2.mul(v2.randomUnit(), 3), 0, 1);
             }
 
-            let rad: number;
+            let rad = 0;
             switch (coll.type) {
                 case collider.Type.Aabb:
                     const width = coll.max.x - coll.min.x;
@@ -669,7 +671,9 @@ export class PlaneBarn {
             collider: collider.transform(def.collision, airdropPos, 0, 1),
         };
 
-        const planePos = v2.add(pos, v2.mul(v2.randomUnit(), AIRDROP_PLANE_SPAWN_DIST));
+        // (a mode may bring called in crates faster - the arena's flares)
+        const spawnDist = AIRDROP_PLANE_SPAWN_DIST * (playerCalled ? (this.game.rules?.calledAirdropTimeFactor ?? 1) : 1);
+        const planePos = v2.add(pos, v2.mul(v2.randomUnit(), spawnDist));
 
         const toPlanePos = v2.sub(airdropPos, planePos);
         let len = v2.length(toPlanePos);

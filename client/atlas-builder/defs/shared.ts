@@ -2,7 +2,6 @@ import type { AtlasDef } from "../atlasDefs.ts";
 import { BuildingSprites } from "./buildings.ts";
 
 export const SharedAtlas: AtlasDef = {
-    compress: true,
     images: [
         ...BuildingSprites.bank,
         ...BuildingSprites.barn,
@@ -36,6 +35,10 @@ export const SharedAtlas: AtlasDef = {
         "map/map-bunker-chrys-compartment-floor-02a.svg",
         "map/map-bunker-chrys-compartment-floor-03a.svg",
 
+        // planes
+        "map/map-plane-01.svg",
+        "map/map-plane-02.svg",
+
         // generic bunker sprites
         "map/map-bunker-generic-ceiling-01.svg",
         "map/map-bunker-generic-ceiling-02.svg",
@@ -64,8 +67,13 @@ export const SharedAtlas: AtlasDef = {
         "map/map-barrel-03.svg",
         "map/map-barrel-04.svg",
         "map/map-barrel-05.svg",
+        "map/map-barrel-res-01.svg",
         "map/map-barrel-res-02.svg",
         "map/map-barrel-res-03.svg",
+
+        "map/map-bush-01.svg",
+        "map/map-bush-03.svg",
+        "map/map-bush-04.svg",
 
         "map/map-bathrocks-01.svg",
         "map/map-bed-01.svg",
@@ -129,6 +137,14 @@ export const SharedAtlas: AtlasDef = {
         "map/map-couch-res-01.svg",
 
         "map/map-crate-01.svg",
+        // crimson airdrop crate: dropped (and inside buildings) on many maps, not just desert
+        "map/map-crate-17.svg",
+        "map/map-crate-res-04.svg",
+        // desert ring case: also on potato and cobalt
+        "map/map-case-ring-02.svg",
+        // sinks are in woods and desert buildings; comp/scrims load both atlases
+        "map/map-sink-01.svg",
+        "map/map-sink-res-01.svg",
         "map/map-crate-02.svg",
         "map/map-crate-02sv.svg",
         "map/map-crate-03.svg",
@@ -187,6 +203,17 @@ export const SharedAtlas: AtlasDef = {
         "map/map-fire-ext-res.svg",
 
         "map/map-grill-01.svg",
+
+        "map/map-gun-mount-01.svg",
+        "map/map-gun-mount-02.svg",
+        "map/map-gun-mount-03.svg",
+        "map/map-gun-mount-04.svg",
+        "map/map-gun-mount-05.svg",
+        "map/map-gun-mount-06.svg",
+        "map/map-gun-mount-08.svg",
+        "map/map-gun-mount-09.svg",
+        "map/map-gun-mount-10.svg",
+        "map/map-gun-mount-11.svg",
 
         "map/map-hedgehog-01.svg",
         "map/map-hut-res-01.svg",
@@ -283,7 +310,7 @@ export const SharedAtlas: AtlasDef = {
 
         "map/map-vat-01.svg",
         "map/map-vat-02.svg",
-        "map/map-vat-res.svg",
+        "map/map-vat-res-01.svg",
 
         "map/map-vending-res.svg",
         "map/map-vending-soda-01.svg",
@@ -328,6 +355,8 @@ export const SharedAtlas: AtlasDef = {
         "map/map-wall-glass-12-2.svg",
         "map/map-wall-glass-12.svg",
         "map/map-wall-glass-13.svg",
+        "map/map-wall-glass-1x19.svg",
+        "map/map-wall-glass-1x23.svg",
         "map/map-wall-outhouse-bot.svg",
         "map/map-wall-outhouse-side.svg",
         "map/map-wall-outhouse-top.svg",

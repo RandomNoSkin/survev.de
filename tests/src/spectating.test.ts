@@ -244,3 +244,21 @@ test("Spectate faction teammtes", () => {
     playerA.spectate(specNext);
     expect([playerE.__id, playerF.__id]).toContain(spectatingId());
 });
+
+test("A spectator in before any player gets someone to watch once one joins", () => {
+    const game = createGame(TeamMode.Solo, "test_normal");
+    game.preventStart = true;
+
+    const spec = game.playerBarn.addTestPlayer({});
+    // (joined as a spectator: never among the living)
+    game.playerBarn.livingPlayers.splice(game.playerBarn.livingPlayers.indexOf(spec), 1);
+    spec.spectator = true;
+    game.step(0.1);
+    // nobody there yet: the client's one request comes back empty
+    spec.spectate(specBegin);
+    expect(spec.spectating).toBeUndefined();
+
+    const player = game.playerBarn.addTestPlayer({});
+    game.step(0.1);
+    expect(spec.spectating).toBeSamePlayer(player);
+});

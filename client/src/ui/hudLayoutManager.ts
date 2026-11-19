@@ -1,4 +1,6 @@
 import { type ConfigManager, HUD_ELEMENT_DEFAULTS, type HudElementConfig } from "../config";
+import { SPEC_BUTTONS, SPEC_BUTTONS_DEFAULT, applySpecButtons, specButtonOrder } from "./specButtons";
+import { hideTeamOverviewPreview, showTeamOverviewPreview } from "./teamOverview";
 
 /** One customizable HUD element: a stable id, the CSS id of its `.hud-drag-wrapper`
  *  (see client/css/game.css), a settings-panel label, and whether it has a click
@@ -67,6 +69,9 @@ export const HUD_ELEMENTS: HudElementDef[] = [
     { id: "minimap", wrapperId: "ui-map-wrapper", label: "Minimap", hasClickAction: false },
     { id: "killfeed", wrapperId: "ui-killfeed", label: "Killfeed", hasClickAction: false },
     { id: "killLeader", wrapperId: "hud-wrap-killLeader", label: "Kill Leader Banner", hasClickAction: false },
+    { id: "gunGameLevel", wrapperId: "hud-wrap-gunGameLevel", label: "Gun Game Standings", hasClickAction: false },
+    { id: "domination", wrapperId: "hud-wrap-domination", label: "Domination Status", hasClickAction: false },
+    { id: "killstreak", wrapperId: "hud-wrap-killstreak", label: "Killstreak", hasClickAction: false },
     {
         id: "spectatorBar",
         wrapperId: "ui-spectate-options",
@@ -74,13 +79,53 @@ export const HUD_ELEMENTS: HudElementDef[] = [
         hasClickAction: false,
         usesExternalDisplayGate: true,
     },
+    {
+        // advanced spectator's options panel - placed apart from the bar's buttons
+        id: "spectatorOptions",
+        wrapperId: "ui-spectate-adv-wrap",
+        label: "Spectator Options",
+        hasClickAction: false,
+        usesExternalDisplayGate: true,
+    },
     { id: "teamHealthBars", wrapperId: "ui-team", label: "Team Health Bars", hasClickAction: false },
     { id: "aliveCount", wrapperId: "ui-leaderboard", label: "Alive Count", hasClickAction: false },
+    {
+        id: "teamOverview",
+        wrapperId: "hud-wrap-teamOverview",
+        label: "Team Overview",
+        hasClickAction: false,
+        // shown/hidden by the big map (TeamOverview), the editor only adds its own on/off
+        usesExternalDisplayGate: true,
+    },
     { id: "fpsCounter", wrapperId: "hud-wrap-fpsCounter", label: "FPS Counter", hasClickAction: false, defaultVisible: false },
     { id: "pingCounter", wrapperId: "hud-wrap-pingCounter", label: "Ping Counter", hasClickAction: false, defaultVisible: false },
     { id: "hpNumeric", wrapperId: "hud-wrap-hpNumeric", label: "HP Number", hasClickAction: false, defaultVisible: false },
     { id: "adrenalineNumeric", wrapperId: "hud-wrap-adrenalineNumeric", label: "Adrenaline Number", hasClickAction: false, defaultVisible: false },
 ];
+
+/** The editor's views: which situation's HUD is on screen (and in the settings list)
+ * while editing, so elements that never show at the same time don't pile up. */
+export type HudView = "game" | "team" | "spectator" | "map" | "modes";
+export const HUD_VIEWS: Array<{ id: HudView; label: string }> = [
+    { id: "game", label: "Game" },
+    { id: "team", label: "Team" },
+    { id: "spectator", label: "Spectator" },
+    { id: "map", label: "Map" },
+    { id: "modes", label: "Modes" },
+];
+const GAME_ELEMENTS = [
+    "healthBar", "boostBar", "weaponSlots", "scopeRow", "lootRow", "ammoCounter", "gearRow", "perkRow",
+    "minimap", "killfeed", "killLeader", "aliveCount", "fpsCounter", "pingCounter", "hpNumeric",
+    "adrenalineNumeric",
+];
+const VIEW_ELEMENTS: Record<HudView, string[]> = {
+    game: GAME_ELEMENTS,
+    team: [...GAME_ELEMENTS, "teamHealthBars"],
+    spectator: ["spectatorBar", "spectatorOptions", "teamHealthBars", "minimap", "killfeed", "killLeader", "gunGameLevel", "domination", "aliveCount", "fpsCounter", "pingCounter"],
+    map: ["teamOverview", "aliveCount", "killfeed"],
+    // Gun Game / Domination: their own boxes, with the minimap and the scope row to place them by
+    modes: ["gunGameLevel", "domination", "killstreak", "minimap", "scopeRow", "ammoCounter", "perkRow"],
+};
 
 /**
  * Owns the player-configurable HUD layout: per-element drag offset, opacity,
@@ -97,6 +142,9 @@ export class HudLayoutManager {
      *  outline (see the `body.hud-edit-mode` CSS in game.css). Off by default so
      *  normal gameplay clicking/click-through is never affected. */
     editModeActive = false;
+
+    /** Which situation the editor shows (see HudView) - only while editing. */
+    editView: HudView = "game";
 
     /** Whether the player is currently "thrown into a game preview" from the pre-game
      *  Settings modal - i.e. #game-area-wrapper (normally display:none outside a match,
@@ -137,6 +185,7 @@ export class HudLayoutManager {
                 // what happens naturally when a live drag ends.
                 this.onMinimapDrag?.(null);
             }
+            if (!key || key === "hudSpecButtons") applySpecButtons(this.config.get("hudSpecButtons"));
         });
         this.setupDragging();
         this.setupResizing();
@@ -149,6 +198,35 @@ export class HudLayoutManager {
 
     private getGlobalOpacity(): number {
         return this.config.get("hudGlobalOpacity") ?? 1;
+    }
+
+    private getGridSize(): number {
+        return this.config.get("hudGridSize") ?? 0;
+    }
+
+    /** The grid drawn over the screen while editing (see `hudGridSize`); pointer-events
+     *  none, lines from the viewport's top-left so they match where things snap. */
+    private applyGrid() {
+        let overlay = document.getElementById("hud-grid-overlay");
+        const size = this.getGridSize();
+        if (!this.editModeActive || size <= 0) {
+            overlay?.remove();
+            return;
+        }
+        if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "hud-grid-overlay";
+            document.body.appendChild(overlay);
+        }
+        overlay.style.setProperty("--hud-grid", `${size}px`);
+    }
+
+    /** Snaps a drag delta so the element's top-left corner (at `start` when the drag
+     *  began) lands on the grid. Alt held, or no grid: unchanged. */
+    private snapDelta(delta: number, start: number, e: PointerEvent): number {
+        const size = this.getGridSize();
+        if (size <= 0 || e.altKey) return delta;
+        return Math.round((start + delta) / size) * size - start;
     }
 
     private elementTransform(dx: number, dy: number, scale: number, baseTransform?: string): string {
@@ -177,6 +255,8 @@ export class HudLayoutManager {
             let startDx = 0;
             let startDy = 0;
             let dragScale = 1;
+            let startLeft = 0;
+            let startTop = 0;
 
             el.addEventListener("pointerdown", (e) => {
                 if (!this.editModeActive) return;
@@ -189,6 +269,9 @@ export class HudLayoutManager {
                 startDx = cfg.dx;
                 startDy = cfg.dy;
                 dragScale = cfg.scale * this.getGlobalScale();
+                const rect = el.getBoundingClientRect();
+                startLeft = rect.left;
+                startTop = rect.top;
                 el.setPointerCapture(e.pointerId);
             });
             el.addEventListener("pointermove", (e) => {
@@ -197,16 +280,16 @@ export class HudLayoutManager {
                 // would write to localStorage on every pixel of movement) - the final
                 // position is persisted once, on release. Scale is carried through
                 // unchanged (frozen at drag start) so dragging never visually resets it.
-                const dx = startDx + (e.clientX - startX);
-                const dy = startDy + (e.clientY - startY);
+                const dx = startDx + this.snapDelta(e.clientX - startX, startLeft, e);
+                const dy = startDy + this.snapDelta(e.clientY - startY, startTop, e);
                 el.style.transform = this.elementTransform(dx, dy, dragScale, def.baseTransform);
                 if (def.id === "minimap") this.onMinimapDrag?.({ dx, dy });
             });
             const endDrag = (e: PointerEvent) => {
                 if (!dragging) return;
                 dragging = false;
-                const dx = startDx + (e.clientX - startX);
-                const dy = startDy + (e.clientY - startY);
+                const dx = startDx + this.snapDelta(e.clientX - startX, startLeft, e);
+                const dy = startDy + this.snapDelta(e.clientY - startY, startTop, e);
                 this.updateElementConfig(def.id, { dx, dy });
                 if (def.id === "minimap") this.onMinimapDrag?.(null);
             };
@@ -320,6 +403,10 @@ export class HudLayoutManager {
     setEditMode(active: boolean) {
         this.editModeActive = active;
         document.body.classList.toggle("hud-edit-mode", active);
+        this.applyGrid();
+        // the team overview only exists while the big map is open - show example
+        // teammates while editing so it can be placed at all
+        this.applyEditView();
         const btn = document.getElementById("btn-hud-edit-toggle");
         if (btn) btn.textContent = active ? "Done Editing" : "Edit HUD Layout";
     }
@@ -408,6 +495,11 @@ export class HudLayoutManager {
         // without a live game that JS never runs, so it'd otherwise never appear here.
         const spectatorBar = document.getElementById("ui-spectate-options");
         if (spectatorBar) spectatorBar.style.display = "block";
+        // the options panel too (opened), to place it
+        const specOptions = document.getElementById("ui-spectate-adv-wrap");
+        if (specOptions) specOptions.style.display = "block";
+        const specPanel = document.getElementById("ui-spectate-advanced-options");
+        if (specPanel) specPanel.style.display = "block";
 
         // #ui-leaderboard-alive is display:none by default (ui2.ts picks solo-count vs.
         // faction-split display depending on team mode) - force it on with a placeholder
@@ -429,6 +521,12 @@ export class HudLayoutManager {
             if (nameEl) nameEl.textContent = name;
             const healthEl = member.querySelector<HTMLElement>(".ui-health-actual");
             if (healthEl) healthEl.style.width = "100%";
+            const boostEl = member.querySelector<HTMLElement>(".ui-team-member-boost");
+            if (boostEl) {
+                boostEl.style.display = "block";
+                const fill = boostEl.firstElementChild as HTMLElement | null;
+                if (fill) fill.style.width = `${[70, 35, 0][i] ?? 0}%`;
+            }
         });
 
         // Fake killfeed lines - real ones are built by ui2.ts's UiManager constructor
@@ -471,6 +569,10 @@ export class HudLayoutManager {
         }
         const spectatorBar = document.getElementById("ui-spectate-options");
         if (spectatorBar) spectatorBar.style.display = "";
+        const specOptions = document.getElementById("ui-spectate-adv-wrap");
+        if (specOptions) specOptions.style.display = "";
+        const specPanel = document.getElementById("ui-spectate-advanced-options");
+        if (specPanel) specPanel.style.display = "none";
 
         const leaderboardAlive = document.getElementById("ui-leaderboard-alive");
         if (leaderboardAlive) leaderboardAlive.style.display = "";
@@ -483,6 +585,8 @@ export class HudLayoutManager {
             if (nameEl) nameEl.textContent = "";
             const healthEl = member.querySelector<HTMLElement>(".ui-health-actual");
             if (healthEl) healthEl.style.width = "";
+            const boostEl = member.querySelector<HTMLElement>(".ui-team-member-boost");
+            if (boostEl) boostEl.style.display = "";
         });
 
         document.querySelectorAll(".hud-preview-fake-killfeed-line").forEach((el) => el.remove());
@@ -530,6 +634,7 @@ export class HudLayoutManager {
         this.config.set("hudLayout", {});
         this.config.set("hudGlobalScale", 1);
         this.config.set("hudGlobalOpacity", 1);
+        this.config.set("hudSpecButtons", SPEC_BUTTONS_DEFAULT);
     }
 
     /** Pushes every registered element's current config onto its wrapper's inline
@@ -640,6 +745,33 @@ export class HudLayoutManager {
      *  inside #ui-hud-settings-list itself (see renderSettingsPanel) rather than as
      *  static rows above it, so it scrolls along with the list instead of needing the
      *  panel's fixed height re-tuned by hand every time one of these is added. */
+    /** Grid: off / 10 / 20 / 40 px (see `hudGridSize`). */
+    private buildGridRow(): HTMLElement {
+        const row = document.createElement("div");
+        row.id = "hud-grid-row";
+        row.className = "hud-settings-row hud-global-slider-row";
+        const labelEl = document.createElement("span");
+        labelEl.className = "hud-settings-label";
+        labelEl.textContent = "Snap to Grid";
+        labelEl.title = "Hold Alt while dragging to place freely";
+        row.appendChild(labelEl);
+        const select = document.createElement("select");
+        select.className = "hud-grid-select";
+        for (const [value, text] of [[0, "Off"], [10, "10 px"], [20, "20 px"], [40, "40 px"]] as const) {
+            const opt = document.createElement("option");
+            opt.value = String(value);
+            opt.textContent = text;
+            select.appendChild(opt);
+        }
+        select.value = String(this.getGridSize());
+        select.addEventListener("change", () => {
+            this.config.set("hudGridSize", Number(select.value));
+            this.applyGrid();
+        });
+        row.appendChild(select);
+        return row;
+    }
+
     private buildGlobalSliderRow(
         id: string,
         label: string,
@@ -678,9 +810,53 @@ export class HudLayoutManager {
      *  per-element reset button. Call whenever the panel becomes visible (real game or
      *  preview, see showInGameHudTab) so displayed values stay in sync with whatever
      *  was last dragged/resized/toggled/reset. */
+    setEditView(view: HudView) {
+        this.editView = view;
+        this.applyEditView();
+        this.renderSettingsPanel();
+    }
+
+    /** While editing, only the current view's elements are on screen: the others get
+     *  `.hud-view-hidden` (display:none from CSS, so the elements' own inline display -
+     *  owned by HudLayoutManager or game code - is never touched). */
+    private applyEditView() {
+        const visibleIds = new Set(VIEW_ELEMENTS[this.editView]);
+        for (const def of HUD_ELEMENTS) {
+            document.getElementById(def.wrapperId)?.classList.toggle(
+                "hud-view-hidden",
+                this.editModeActive && !visibleIds.has(def.id),
+            );
+        }
+        // the team overview only exists while the big map is open - example teammates
+        // in the map view so it can be placed at all
+        if (this.editModeActive && this.editView === "map") showTeamOverviewPreview();
+        else hideTeamOverviewPreview();
+        document.querySelectorAll<HTMLElement>(".hud-view-btn").forEach((btn) => {
+            btn.classList.toggle("active", btn.dataset.view === this.editView);
+        });
+    }
+
+    /** The Game / Team / Spectator / Map switch above the settings list. */
+    private buildViewSwitch(): HTMLElement {
+        const row = document.createElement("div");
+        row.className = "hud-view-switch";
+        for (const view of HUD_VIEWS) {
+            const btn = document.createElement("a");
+            btn.className = `hud-view-btn${view.id === this.editView ? " active" : ""}`;
+            btn.dataset.view = view.id;
+            btn.textContent = view.label;
+            btn.addEventListener("click", () => this.setEditView(view.id));
+            row.appendChild(btn);
+        }
+        return row;
+    }
+
     renderSettingsPanel() {
         const lists = document.querySelectorAll<HTMLElement>(".js-hud-settings-list");
         for (const list of lists) {
+            // the view switch sits right above the list (rebuilt with it)
+            list.parentElement?.querySelector(":scope > .hud-view-switch")?.remove();
+            list.parentElement?.insertBefore(this.buildViewSwitch(), list);
             list.innerHTML = "";
             list.appendChild(this.buildGlobalSliderRow(
                 "hud-global-scale-row",
@@ -700,9 +876,90 @@ export class HudLayoutManager {
                 () => this.getGlobalOpacity(),
                 (v) => this.config.set("hudGlobalOpacity", v),
             ));
+            list.appendChild(this.buildGridRow());
+            const inView = new Set(VIEW_ELEMENTS[this.editView]);
             for (const def of HUD_ELEMENTS) {
-                list.appendChild(this.buildSettingsRow(def));
+                if (inView.has(def.id)) list.appendChild(this.buildSettingsRow(def));
             }
+            if (this.editView === "spectator") list.append(...this.buildSpecButtonRows());
         }
+    }
+
+    /** "Spectator Buttons": each of the bar's buttons on/off, dragged into order
+     *  (Leave isn't in it: always on top). */
+    private buildSpecButtonRows(): HTMLElement[] {
+        const cfg = this.config.get("hudSpecButtons") ?? SPEC_BUTTONS_DEFAULT;
+        const order = specButtonOrder(cfg);
+        const save = (patch: Partial<typeof cfg>) => {
+            this.config.set("hudSpecButtons", { order, hidden: cfg.hidden ?? [], ...patch });
+            this.renderSettingsPanel();
+        };
+
+        const head = document.createElement("div");
+        head.className = "hud-settings-row hud-spec-buttons-head";
+        const title = document.createElement("span");
+        title.className = "hud-settings-label";
+        title.textContent = "Spectator Buttons";
+        title.title = "Drag to reorder - Leave always stays on top";
+        const reset = document.createElement("a");
+        reset.className = "hud-settings-reset-btn btn-darken";
+        reset.textContent = "↺";
+        reset.title = "Default buttons and order";
+        reset.addEventListener("click", () => save(SPEC_BUTTONS_DEFAULT));
+        head.append(title, reset);
+
+        const box = document.createElement("div");
+        box.className = "hud-spec-button-list";
+        let dragged: HTMLElement | null = null;
+        const rows = order.map((id) => {
+            const def = SPEC_BUTTONS.find((b) => b.id === id)!;
+            const row = document.createElement("div");
+            row.className = "hud-settings-row hud-spec-button-row";
+            row.draggable = true;
+            row.dataset.id = id;
+
+            const grip = document.createElement("span");
+            grip.className = "hud-spec-grip";
+            grip.textContent = "⠿";
+            const label = document.createElement("span");
+            label.className = "hud-settings-label";
+            label.textContent = def.label;
+
+            const visLabel = document.createElement("label");
+            visLabel.className = "hud-settings-checkbox-label";
+            visLabel.title = "Visible";
+            const vis = document.createElement("input");
+            vis.type = "checkbox";
+            vis.checked = !(cfg.hidden ?? []).includes(id);
+            vis.addEventListener("change", () => {
+                const hidden = (cfg.hidden ?? []).filter((h) => h !== id);
+                save({ hidden: vis.checked ? hidden : [...hidden, id] });
+            });
+            visLabel.append(vis, this.makeIconGlyph("👁"));
+            row.append(grip, label, visLabel);
+
+            row.addEventListener("dragstart", (e) => {
+                dragged = row;
+                row.classList.add("dragging");
+                e.dataTransfer?.setData("text/plain", id);
+                if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+            });
+            // the row moves along while dragging, the order is saved on the drop
+            row.addEventListener("dragover", (e) => {
+                if (!dragged || dragged === row) return;
+                e.preventDefault();
+                const rect = row.getBoundingClientRect();
+                box.insertBefore(dragged, e.clientY < rect.top + rect.height / 2 ? row : row.nextSibling);
+            });
+            row.addEventListener("dragend", () => {
+                row.classList.remove("dragging");
+                dragged = null;
+                const next = [...box.querySelectorAll<HTMLElement>(".hud-spec-button-row")].map((el) => el.dataset.id!);
+                if (next.join() !== order.join()) save({ order: next });
+            });
+            return row;
+        });
+        box.append(...rows);
+        return [head, box];
     }
 }

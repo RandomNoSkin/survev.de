@@ -10,7 +10,7 @@ const mapDef: PartialMapDef = {
         name: "Desert",
         icon: "img/loot/loot-weapon-flare-gun.svg",
         buttonCss: "btn-mode-desert",
-        backgroundImg: "img/main_splash_desert_01.png",
+        backgroundImg: "img/splashes/desert.webp",
     },
     assets: {
         audio: [
@@ -23,7 +23,7 @@ const mapDef: PartialMapDef = {
             { name: "potato_pickup_01", channel: "ui" },
             { name: "piano_music_01", channel: "gameMusic" },
         ],
-        atlases: ["gradient", "loadout", "shared", "desert"],
+        atlases: ["loadout", "shared", "desert"],
     },
     biome: {
         colors: {
@@ -240,6 +240,7 @@ const mapDef: PartialMapDef = {
                         innerRad: 10,
                         outerRad: 20,
                         centerObj: "oasis_01",
+                        noRiverObjs: true,
                         riverMaskRad: 48,
                         spawnBound: {
                             pos: v2.create(0.5, 0.5),

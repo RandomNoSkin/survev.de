@@ -1,3 +1,4 @@
+import { clanTagColor } from "../../shared/utils/clan";
 import $ from "jquery";
 import type { MeleeDef } from "../../shared/defs/gameObjects/meleeDefs.ts";
 import type { OutfitDef } from "../../shared/defs/gameObjects/outfitDefs.ts";
@@ -6,12 +7,32 @@ import { GameObjectDefs } from "../../shared/defs/register.ts";
 import * as net from "../../shared/net/net.ts";
 import { device } from "./device.ts";
 import { getOutfitIconUrl } from "./ui/loadoutIcon.ts";
+import { util } from "../../shared/utils/util.ts";
 
 const truncateCanvas = document.createElement("canvas");
 
 export function getParameterByName<T extends string>(name: string, url?: string): T {
     const searchParams = new URLSearchParams(url || window.location.search);
     return (searchParams.get(name) || "") as T;
+}
+
+const ammoBoxCache = new Map<number, string>();
+/**
+ * The ammo box icon in an ammo's color. In game it's one grey sprite tinted per type
+ * (multiplied), so the colors here are the sprite's own greys times the tint.
+ */
+function ammoBoxSvg(tint: number): string {
+    let hit = ammoBoxCache.get(tint);
+    if (hit) return hit;
+    const mul = (grey: number) => {
+        const c = [(tint >> 16) & 0xff, (tint >> 8) & 0xff, tint & 0xff].map((v) => Math.round((v * grey) / 255));
+        return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    };
+    // same shapes as img/loot/loot-ammo-box.svg
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="3.034" fill="${mul(0x33)}"/><rect width="90.517" height="90.517" x="18.741" y="18.742" rx="2.488" fill="${mul(0xb3)}"/><rect width="47.414" height="43.103" x="46.586" y="32" rx="2.962" fill="${mul(0xf2)}"/></svg>`;
+    hit = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    ammoBoxCache.set(tint, hit);
+    return hit;
 }
 
 export const helpers = {
@@ -93,11 +114,33 @@ export const helpers = {
      * use this instead of `htmlEscape(name)` wherever the caller also knows the
      * account's role tag.
      */
-    formatUsername: function(name = "", roleTag: "admin" | "mod" | "premium" | null = null) {
-        const escaped = helpers.htmlEscape(name);
+    formatUsername: function(
+        name = "",
+        roleTag: "owner" | "admin" | "mod" | "premium" | "bot" | null = null,
+        /** the player's clan [TAG] (in-game player info), shown right before the name */
+        clan: { clanTag?: string; clanColor?: number } | null = null,
+    ) {
+        let escaped = helpers.htmlEscape(name);
+        if (clan?.clanTag) {
+            escaped = `<span class="username-clan-tag" style="color:${clanTagColor(clan.clanColor ?? 0)}">[${helpers.htmlEscape(clan.clanTag)}]</span> ${escaped}`;
+        }
         if (!roleTag) return escaped;
-        const label = roleTag === "admin" ? "ADMIN" : roleTag === "mod" ? "MOD" : "PREM";
+        const label =
+            roleTag === "owner"
+                ? "OWNER"
+                : roleTag === "admin"
+                ? "ADMIN"
+                : roleTag === "mod"
+                  ? "MOD"
+                  : roleTag === "bot"
+                    ? "BOT"
+                    : "PREM";
         return `<span class="username-${roleTag}-tag">[${label}]</span> ${escaped}`;
+    },
+    measureText(str: string, font: string) {
+        const context = truncateCanvas.getContext("2d")!;
+        context.font = font;
+        return context.measureText(str).width;
     },
     truncateString: function(str: string, font: string, maxWidthPixels: number) {
         const context = truncateCanvas.getContext("2d")!;
@@ -142,32 +185,10 @@ export const helpers = {
             elem.webkitRequestFullscreen?.();
         }
     },
-    copyTextToClipboard: function(text: string) {
-        try {
-            const $temp = $<HTMLInputElement>("<input>");
-            $("body").append($temp);
-            $temp.val(text);
-
-            if (device.os == "ios") {
-                const el = $temp.get(0)!;
-                const editable = el.contentEditable;
-                const readOnly = el.readOnly;
-                el.contentEditable = "true";
-                el.readOnly = true;
-                const range = document.createRange();
-                range.selectNodeContents(el);
-                const sel = window.getSelection()!;
-                sel.removeAllRanges();
-                sel.addRange(range);
-                el.setSelectionRange(0, 999999);
-                el.contentEditable = editable;
-                el.readOnly = readOnly;
-            } else {
-                $temp.trigger("select");
-            }
-            document.execCommand("copy");
-            $temp.remove();
-        } catch (_e) {}
+    copyTextToClipboard: async function(text: string) {
+        navigator.clipboard.writeText(text).catch(err => {
+            console.error("Failed to copy text to clipboard", err);
+        });
     },
     formatTime(time: number) {
         const minutes = Math.floor(time / 60) % 60;
@@ -200,10 +221,13 @@ export const helpers = {
             case "perk":
             case "xp":
                 return `img/loot/${def.lootImg?.sprite.slice(0, -4)}.svg`;
+            case "ammo":
+                return ammoBoxSvg(def.lootImg?.tint ?? 0xffffff);
             case "heal_effect":
             case "boost_effect":
                 return `img/particles/${def.texture?.slice(0, -4)}.svg`;
             case "death_effect":
+            case "crate_key":
                 return `img/loot/${def.texture?.slice(0, -4)}.svg`;
             case "emote":
                 return `img/emotes/${def.texture.slice(0, -4)}.svg`;
@@ -213,21 +237,20 @@ export const helpers = {
                 const outfitDef = def as OutfitDef;
                 const lootImg = outfitDef.lootImg;
 
-                // Skins with their own dedicated loadout art (resurviv skins +
-                // classic surviv shirts) already look right — use it directly.
+                // Always render the full in-game character preview (body + backpack +
+                // fists + accessory) so every skin looks like it does in game.
+                const iconUrl = getOutfitIconUrl(gameType);
+                if (iconUrl) {
+                    return iconUrl;
+                }
+
+                // Not composable (atlas not ready yet, or a costume/ghillie skin):
+                // skins with their own dedicated loot art use that.
                 const usesGenericShirt =
                     lootImg.sprite === "loot-shirt-01.img" ||
                     lootImg.sprite === "loot-shirt-outfitBase.img";
                 if (!usesGenericShirt) {
                     return `img/loot/${lootImg.sprite.slice(0, -4)}.svg`;
-                }
-
-                // Otherwise render a full in-game character preview (body + backpack +
-                // fists + accessory) so the skin looks like it does in game, the same
-                // way the hand-drawn resurviv icons do.
-                const iconUrl = getOutfitIconUrl(gameType);
-                if (iconUrl) {
-                    return iconUrl;
                 }
 
                 // Atlas not ready yet (or a costume/ghillie skin): fall back to a shirt

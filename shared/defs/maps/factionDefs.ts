@@ -18,7 +18,7 @@ const mapDef: PartialMapDef = {
         icon: "img/gui/star.svg",
         buttonCss: "btn-mode-faction",
         buttonText: "50v50",
-        backgroundImg: "img/main_splash_0_7_0.png",
+        backgroundImg: "img/splashes/faction.webp",
     },
     assets: {
         audio: [
@@ -83,7 +83,7 @@ const mapDef: PartialMapDef = {
                 channel: "otherPlayers",
             },
         ],
-        atlases: ["gradient", "loadout", "shared", "faction"],
+        atlases: ["loadout", "shared", "faction"],
     },
     biome: {
         colors: {

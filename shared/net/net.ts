@@ -20,8 +20,10 @@ export const Constants = {
     PlayerMaxScale: 2,
     MapObjectMinScale: 0.125,
     MapObjectMaxScale: 2.5,
-    MaxPerks: 8,
-    MaxMapIndicators: 16,
+    // every perk can be stacked on one player (custom lobby loadouts); same bit-width rule as below
+    MaxPerks: 127,
+    // ids and the per-update list length share getBits(this) bits, so stay below a power of two
+    MaxMapIndicators: 127,
 };
 
 const getBits = (n: number) => Math.ceil(Math.log2(n));
@@ -302,6 +304,12 @@ export enum MsgType {
     Assist,
     SpectatorAdvanced,
     PickupExtra,
+    AdvancedSpectatorAllowed,
+    TeamInfo,
+    ModeStandings,
+    ArenaLoadoutSelect,
+    Killstreak,
+    ArenaResist,
 }
 
 export enum PickupMsgType {
@@ -343,9 +351,15 @@ export { JoinMsg } from "./joinMsg.ts";
 export { KillMsg } from "./killMsg.ts";
 export { AssistMsg } from "./assistMsg.ts";
 export { PickupExtraMsg } from "./pickupExtraMsg.ts";
+export { AdvancedSpectatorAllowedMsg } from "./advancedSpectatorAllowedMsg.ts";
+export { TEAM_INFO_HEALS, TEAM_INFO_SCOPES, type TeamInfoPlayer, TeamInfoMsg } from "./teamInfoMsg.ts";
 export { MapMsg } from "./mapMsg.ts";
+export { ModeStandingsMsg } from "./modeStandingsMsg.ts";
 export { PerkModeRoleSelectMsg } from "./perkModeRoleSelectMsg.ts";
 export { RoleSelectMsg } from "./roleSelectMsg.ts";
+export { ArenaLoadoutAction, ArenaLoadoutSelectMsg } from "./arenaLoadoutSelectMsg.ts";
+export { KillstreakMsg } from "./killstreakMsg.ts";
+export { ArenaResistMsg } from "./arenaResistMsg.ts";
 export { ArenaRolesMsg } from "./arenaRolesMsg.ts";
 export { JoinFeedMsg } from "./joinFeedMsg.ts";
 export { PickupMsg } from "./pickupMsg.ts";

@@ -1,7 +1,10 @@
 import "./testHelpers.ts";
 import { describe, expect, test } from "vitest";
 
-import type { BuildingDef, LootSpawnerDef, ObstacleDef, StructureDef } from "../../shared/defs/mapObjectsTyping.ts";
+import type { BuildingDef } from "../../shared/defs/mapObjects/buildings/buildingDefs.ts";
+import type { ObstacleDef } from "../../shared/defs/mapObjects/obstacles/obstacleDefs.ts";
+import type { StructureDef } from "../../shared/defs/mapObjects/structureDefs.ts";
+import type { LootSpawnerDef } from "../../shared/defs/mapObjectsTyping.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";
 import { Constants } from "../../shared/net/net.ts";
@@ -90,7 +93,7 @@ const structures = mapObjects.filter((type) => {
 
 describe.for(structures)("Structure %s", ([, def]) => {
     test.for(def.layers)("Layer %$", (layer) => {
-        expect(layer.type).toBeValidMapObj("building");
+        expect(layer.type).toBeValidMapObj(["building"]);
     });
 });
 

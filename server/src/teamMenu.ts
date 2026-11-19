@@ -1,3 +1,8 @@
+import type { ArenaStreakSettings } from "../../shared/defs/modes/arenaStreakDefs";
+import { DOMINATION_TEAM_SIZE } from "../../shared/defs/modes/dominationDefs";
+import type { ArenaLoadout } from "../../shared/defs/modes/arenaDefs";
+import { GameMode } from "../../shared/gameConfig";
+import { getJoinArenaLoadouts, getJoinArenaStreaks } from "./api/db/arena";
 import { randomUUID } from "crypto";
 import type { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -238,7 +243,10 @@ class Room {
 
         this.data.gameModeIdx = gameModeIdx;
 
-        this.data.maxPlayers = modes[gameModeIdx].teamMode;
+        // the arena's teams are bigger than squads (Domination: 6)
+        this.data.maxPlayers = modes[gameModeIdx].gameMode === GameMode.Domination
+            ? DOMINATION_TEAM_SIZE
+            : modes[gameModeIdx].teamMode;
         this.data.autoFill = props.autoFill;
 
         // kick players that don't fit on the new max players
@@ -296,7 +304,23 @@ class Room {
 
         // Strips cosmetics the account no longer owns (traded/rented away) from the
         // stored loadout before the game server trusts it — see getOwnedLoadouts.
-        const loadouts = await getOwnedLoadouts(userIds);
+        const loadouts = await getOwnedLoadouts(userIds, { forGame: true });
+
+        const regionModes = this.teamMenu.server.modesByRegion[region] ?? [];
+        const mode = regionModes[this.data.gameModeIdx];
+        if (!mode || !mode.enabled) {
+            return;
+        }
+
+        // arena modes: everyone's saved arena loadouts (checked against their unlocks)
+        const arenaLoadouts = new Map<string | null, ArenaLoadout[]>();
+        const arenaStreaks = new Map<string | null, ArenaStreakSettings>();
+        if (mode.gameMode === GameMode.Domination) {
+            for (const p of this.players) {
+                arenaLoadouts.set(p.userId, await getJoinArenaLoadouts(p.userId));
+                arenaStreaks.set(p.userId, await getJoinArenaStreaks(p.userId));
+            }
+        }
 
         const playerData = this.players.map((p) => {
             const token = randomUUID();
@@ -308,14 +332,10 @@ class Room {
                 admin: p.admin,
                 roleTag: p.roleTag,
                 loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
+                arenaLoadouts: arenaLoadouts.get(p.userId),
+                arenaStreaks: arenaStreaks.get(p.userId),
             } satisfies FindGamePrivateBody["playerData"][0];
         });
-
-        const regionModes = this.teamMenu.server.modesByRegion[region] ?? [];
-        const mode = regionModes[this.data.gameModeIdx];
-        if (!mode || !mode.enabled) {
-            return;
-        }
 
         if (this.data.captchaEnabled) {
             if (!data.turnstileToken) {
@@ -341,6 +361,7 @@ class Room {
         const res = await this.teamMenu.server.findGame({
             mapName: mode.mapName,
             teamMode: mode.teamMode,
+            gameMode: mode.gameMode,
             autoFill: this.data.autoFill,
             region: region,
             version: data.version,

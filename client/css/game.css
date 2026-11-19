@@ -586,10 +586,60 @@ img {
    * gap above it) - #ui-game-tab-settings already uses `height: initial` the same way,
    * so this isn't a new pattern for this panel. */
   height: initial;
+  /* fixed: the views (Game/Team/Spectator/Map) list different rows, and a content-
+   * sized menu jumped in width when switching between them */
+  width: 270px;
+}
+
+@media (max-width: 850px), (max-width: 900px) and (min-resolution: 3dppx) {
+  #ui-game-tab-hud {
+    width: auto;
+  }
+}
+
+/* In a match the desktop ESC menu (.ui-game-menu-desktop) is a fixed 350x495 box
+ * (touch.ts): there the HUD tab fills the box's width instead of its own 270px, and the
+ * box grows while the HUD tab is open - its list doesn't fit the fixed height and pushed
+ * "Return to Game" out of the box. The pre-game preview menu has no such class. */
+.ui-game-menu-desktop #ui-game-tab-hud {
+  width: auto;
+}
+.ui-game-menu-desktop:has(> #ui-game-tab-hud[style*="block"]) {
+  height: auto;
 }
 
 #ui-game-tab-hud > #btn-hud-edit-toggle {
   margin-bottom: 10px;
+}
+
+/* HUD editor view switch (Game / Team / Spectator / Map, see HudLayoutManager#setEditView) */
+.hud-view-switch {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  pointer-events: all;
+}
+.hud-view-btn {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ddd;
+  font-size: 13px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+.hud-view-btn:hover {
+  background: rgba(0, 0, 0, 0.45);
+}
+.hud-view-btn.active {
+  border-color: #6fcf6f;
+  color: #fff;
+}
+/* elements of the other views while editing */
+body.hud-edit-mode .hud-drag-wrapper.hud-view-hidden {
+  display: none !important;
 }
 
 #ui-game-tab-hud > #btn-hud-reset-all {
@@ -621,8 +671,31 @@ img {
   flex: 1;
 }
 
+/* HUD editor grid (HudLayoutManager#applyGrid) - only exists while editing with a grid */
+#hud-grid-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: var(--hud-grid, 20px) var(--hud-grid, 20px);
+}
+
+.hud-grid-select {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 13px;
+}
+
 .hud-settings-label {
   flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: #fff;
   white-space: nowrap;
@@ -667,6 +740,36 @@ img {
   padding: 0;
   border-radius: 4px;
   cursor: pointer;
+}
+
+/* "Spectator Buttons" (HUD editor, spectator view) */
+.hud-spec-buttons-head {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 8px;
+}
+
+.hud-spec-buttons-head .hud-settings-label {
+  font-weight: bold;
+}
+
+.hud-spec-button-row .hud-settings-label {
+  padding-left: 4px;
+}
+
+.hud-spec-button-row {
+  cursor: grab;
+}
+
+.hud-spec-button-row.dragging {
+  opacity: 0.4;
+}
+
+.hud-spec-grip {
+  flex-shrink: 0;
+  width: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  user-select: none;
 }
 
 /* While editing, HUD wrappers accept pointer events (normally `none` via
@@ -1212,6 +1315,37 @@ body.hud-preview-mode #hud-preview-backdrop {
   font-size: 16px;
   outline: none;
   vertical-align: middle;
+}
+
+#ui-chat-highlight {
+  vertical-align: middle;
+}
+
+#ui-chat-highlight-color {
+  width: 36px;
+  height: 36px;
+  padding: 2px;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+#ui-chat-highlight-toggle {
+  height: 36px;
+  padding: 0 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: #888;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+#ui-chat-highlight-toggle.active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.25);
 }
 
 #ui-chat-send {
@@ -1765,7 +1899,7 @@ body.hud-preview-mode #hud-preview-backdrop {
   display: none;
   position: relative;
   width: 200px;
-  height: 32px;
+  height: 36px;
   padding: 4px;
   margin-bottom: 8px;
 }
@@ -1813,6 +1947,14 @@ body.hud-preview-mode #hud-preview-backdrop {
   background-color: #ff5400;
 }
 
+.ui-background-green {
+  background-color: #4cff4c;
+}
+
+.ui-background-lightblue {
+  background-color: #4a7dff;
+}
+
 .ui-team-member-status {
   display: none;
   position: absolute;
@@ -1843,7 +1985,29 @@ body.hud-preview-mode #hud-preview-backdrop {
 }
 
 .ui-team-member-health {
-  margin-top: 4px;
+  /* room for the boost bar between the name and the health bar */
+  margin-top: 8px;
+  /* anchors the boost bar above the health bar */
+  position: relative;
+}
+
+/* teammate adrenaline between name and health bar (from TeamInfoMsg; hidden until known) */
+.ui-team-member-boost {
+  display: none;
+  position: absolute;
+  top: -5px;
+  left: 0;
+  width: 200px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ui-team-member-boost-fill {
+  height: 100%;
+  width: 0;
+  background: #ff9800;
 }
 
 .ui-team-member-health .ui-bar-inner {
@@ -1904,29 +2068,151 @@ body.hud-preview-mode #hud-preview-backdrop {
   width: 100%;
 }
 
+/* advanced spectator's options: their own HUD element, by default under the buttons */
+#ui-spectate-adv-wrap {
+  position: relative;
+  pointer-events: all;
+  width: max-content;
+}
+
 #ui-spectate-buttons {
-  display: inline-block;
-  padding: 8px 8px 0px 8px;
-  text-align: center;
-  width: 192px;
-}
-
-#ui-spectate-advanced-options {
-  display: inline-block;
-  padding: 8px 8px 0px 8px;
-  text-align: center;
-  width: 192px;
-  margin-top: 4px;
+  display: inline-flex;
+  flex-direction: column;
   vertical-align: top;
+  padding: 8px 8px 0px 8px;
+  text-align: center;
+  width: 192px;
 }
 
-#ui-spectate-options a.active {
+/* under the buttons, not next to them (no panel sticking out into the screen) */
+#ui-spectate-advanced-options {
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  padding: 8px;
+  text-align: center;
+  width: 208px;
+  margin-top: 4px;
+}
+
+#btn-adv-collapse {
+  margin-bottom: 0;
+}
+
+/* order / hidden ones: HUD editor (see specButtons.ts); Leave stays on top */
+#ui-spectate-buttons a.spec-user-hidden {
+  display: none !important;
+}
+
+/* Leave: red, on top, a gap to the rest */
+#ui-spectate-options a#btn-spectate-quit {
+  overflow: hidden;
+  margin-bottom: 24px;
+  background: #c74848;
+  border-bottom: 2px solid #8f3030;
+  box-shadow: inset 0 -2px #8f3030;
+}
+
+/* Leave is held: a fill runs through it */
+.spec-leave-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+#btn-spectate-quit.holding .spec-leave-fill {
+  width: 100%;
+  transition: width 0.8s linear;
+}
+
+.spec-leave-text {
+  position: relative;
+}
+
+/* Advanced spectator options: Camera / View / Overlays groups of compact two-column chips */
+/* opens to the right of the Options button, in a box of its own */
+#ui-spectate-advanced-list {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 4px);
+  box-sizing: border-box;
+  width: 232px;
+  padding: 2px 8px 8px 8px;
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 5px;
+}
+
+.spectate-adv-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 6px 2px 4px;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: left;
+}
+
+.spectate-adv-section-links {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: normal;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.spectate-adv-link {
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.spectate-adv-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.spectate-adv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.spectate-adv-subgrid {
+  margin-top: 4px;
+}
+
+#ui-spectate-advanced-list a.spectate-adv-toggle {
+  height: 28px;
+  line-height: 26px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#ui-spectate-advanced-list .spectate-adv-subgrid a.spectate-adv-toggle {
+  height: 24px;
+  line-height: 22px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+#ui-spectate-options a.active,
+#ui-spectate-adv-wrap a.active {
   background: #6fcf6f;
   border-bottom: 2px solid #4a9a4a;
   box-shadow: inset 0 -2px #4a9a4a;
 }
 
-#ui-spectate-options a {
+#ui-spectate-options a,
+#ui-spectate-adv-wrap a {
   position: relative;
   color: white;
   font-size: 16px;
@@ -1935,10 +2221,6 @@ body.hud-preview-mode #hud-preview-backdrop {
   border-bottom: 2px solid #387c79;
   box-shadow: inset 0 -2px #387c79;
   cursor: pointer;
-}
-
-#btn-spectate-prev-player {
-  margin-bottom: 24px;
 }
 
 #ui-spectate-stats {
@@ -2134,6 +2416,65 @@ body.hud-preview-mode #hud-preview-backdrop {
 #ui-kill-leader-name {
   display: inline-block;
   font-size: 24px;
+}
+
+/* Gun Game: top 3 + the watched player's step, top left where teammates would be
+   (UiManager#updateGunGameLevel) */
+#ui-gungame-level-box {
+  color: white;
+  width: 220px;
+  padding: 6px 10px;
+  border-radius: 5px;
+}
+
+.ui-gungame-title {
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 4px;
+}
+
+.ui-gungame-row {
+  display: flex;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.ui-gungame-row-self {
+  color: #ffe11a;
+}
+
+.ui-gungame-place {
+  width: 18px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.ui-gungame-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-gungame-score {
+  font-weight: bold;
+}
+
+#ui-gungame-level {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 18px;
+  font-weight: bold;
+}
+
+#ui-gungame-next {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 #ui-kill-leader-icon {
@@ -4397,7 +4738,7 @@ span.ui-stats-header-value {
     display: none;
     position: relative;
     width: 110px;
-    height: 20px;
+    height: 22px;
     padding: 4px;
     margin-bottom: 4px;
   }
@@ -4471,7 +4812,13 @@ span.ui-stats-header-value {
   }
 
   .ui-team-member-health {
-    margin-top: 2px;
+    margin-top: 4px;
+  }
+
+  .ui-team-member-boost {
+    top: -3px;
+    width: 110px;
+    height: 2px;
   }
 
   .ui-team-member-health .ui-bar-inner {
@@ -4526,13 +4873,25 @@ span.ui-stats-header-value {
   }
 
   #ui-spectate-buttons {
-    display: inline-block;
     width: 124px;
     padding: 8px 8px 4px 8px;
     text-align: center;
   }
 
-  #ui-spectate-options a {
+  #ui-spectate-advanced-options {
+    width: 140px;
+  }
+
+  /* (phones: next to the buttons, the column grows upwards from the bottom) */
+  #ui-spectate-adv-wrap {
+    position: absolute;
+    bottom: 0px;
+    left: 146px;
+    z-index: 1;
+  }
+
+  #ui-spectate-options a,
+  #ui-spectate-adv-wrap a {
     position: relative;
     color: white;
     height: 28px;
@@ -4544,10 +4903,6 @@ span.ui-stats-header-value {
     border-bottom: 2px solid #387c79;
     box-shadow: none;
     cursor: pointer;
-  }
-
-  #btn-spectate-prev-player {
-    margin-bottom: 12px !important;
   }
 
   #btn-spectate-view-stats {
@@ -6364,6 +6719,16 @@ span.ui-stats-header-value {
   background: rgb(112, 112, 110);
 }
 
+/* your team on the battle result (team modes) */
+.ui-stats-row.teammate-player {
+  box-shadow: inset 6px 0 0 #3fa7ff;
+  background: rgba(63, 167, 255, 0.18);
+}
+
+.ui-stats-row.teammate-player.active-player {
+  background: rgba(63, 167, 255, 0.32);
+}
+
 .ui-stats-row.header {
   background: transparent;
   font-weight: bold;
@@ -6463,6 +6828,703 @@ span.ui-stats-header-value {
   }
 
   #ui-stats-options {
-    bottom: 40px; 
+    bottom: 40px;
   }
+}
+
+/* Battle result: title, header, scrolling rows and the buttons stacked in a column,
+   so the buttons sit below the list instead of floating over the players */
+.ui-stats-table-container {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  max-height: 85vh;
+  padding: 16px 8px;
+  box-sizing: border-box;
+  width: 70%;
+  max-width: 1300px;
+}
+
+.ui-stats-table-container .ui-stats-title {
+  flex: none;
+  margin-bottom: 8px;
+}
+
+.ui-stats-table-container .ui-stats-row {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+/* rows keep their height (it used to come from the wrapped name) */
+.ui-stats-table-container .ui-stats-table-rows .ui-stats-row {
+  min-height: 88px;
+  box-sizing: border-box;
+}
+
+.ui-stats-table-container .ui-stats-row.header {
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.ui-stats-table-container .ui-stats-row.header .ui-stats-col {
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.ui-stats-table-container .ui-stats-col:first-child {
+  margin-left: 0;
+}
+
+/* name gets the room: one line, cut off with … instead of wrapping */
+.ui-stats-table-container .ui-stats-col.name,
+.ui-stats-table-container .ui-stats-col.player-tittle {
+  flex: 3;
+  min-width: 0;
+}
+
+.ui-stats-table-container .ui-stats-col.player-tittle {
+  text-align: left;
+  padding-left: 10px;
+}
+
+.ui-stats-table-container .ui-stats-col.name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 8px 10px;
+}
+
+.ui-stats-table-container .ui-stats-table-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* 4 players visible (88px row + 8px gap), the rest scrolls */
+  max-height: 384px;
+  padding-right: 4px;
+}
+
+.ui-stats-table-container .ui-stats-table-rows::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ui-stats-table-container .ui-stats-table-rows::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.ui-stats-table-container #ui-stats-options {
+  flex: none;
+  position: static;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  min-height: 0;
+  margin: 16px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  transform: none;
+}
+
+.ui-stats-table-container #ui-stats-options .menu-option {
+  position: static;
+  transform: none;
+  left: auto;
+  margin: 0;
+  width: 180px;
+}
+
+/* appended last in ui.ts, but it's the main button: keep it on the left as before */
+.ui-stats-table-container #ui-stats-options .ui-stats-restart {
+  order: -1;
+}
+
+@media screen and (max-width: 850px) {
+  .ui-stats-table-container {
+    width: 80%;
+    max-height: 92vh;
+    padding: 10px 4px;
+  }
+
+  .ui-stats-table-container .ui-stats-row {
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+
+  .ui-stats-table-container .ui-stats-table-rows .ui-stats-row {
+    min-height: 64px;
+  }
+
+  .ui-stats-table-container .ui-stats-table-rows {
+    max-height: 288px;
+  }
+
+  .ui-stats-table-container .ui-stats-row.header .ui-stats-col {
+    font-size: 13px;
+  }
+
+  .ui-stats-table-container #ui-stats-options {
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .ui-stats-table-container #ui-stats-options .menu-option {
+    width: 100px;
+  }
+}
+
+/* ── Teammate overview next to the big map (see ui/teamOverview.ts) ── */
+#hud-wrap-teamOverview {
+  display: none;
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 3;
+  pointer-events: none;
+}
+#ui-team-overview {
+  transform-origin: left top;
+  width: 300px;
+  font-family: "Roboto Condensed", Arial, sans-serif;
+  color: #fff;
+}
+.ui-to-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  margin: 0 0 6px 2px;
+}
+.ui-to-player {
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+  padding: 8px 9px;
+  margin-bottom: 8px;
+}
+.ui-to-player.inactive {
+  opacity: 0.55;
+}
+.ui-to-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  margin-bottom: 5px;
+  min-width: 0;
+}
+.ui-to-head i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ui-to-head b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-to-state {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.ui-to-state.ui-to-down {
+  background: #c62828;
+}
+.ui-to-bar {
+  position: relative;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+.ui-to-bar span {
+  position: absolute;
+  right: 4px;
+  top: -1px;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 0 2px #000;
+}
+.ui-to-hp {
+  height: 100%;
+  background: #dcdcdc;
+}
+.ui-to-hp.ui-to-danger {
+  animation: pulse 0.5s ease-out 0s infinite alternate none;
+}
+.ui-to-boostbar {
+  height: 5px;
+  margin-bottom: 6px;
+}
+.ui-to-boost {
+  height: 100%;
+  background: #ff9800;
+}
+.ui-to-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ui-to-slot {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ui-to-slot img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+.ui-to-slot.ui-to-none img {
+  opacity: 0.35;
+}
+.ui-to-slot.ui-to-empty {
+  background: rgba(255, 255, 255, 0.04);
+}
+.ui-to-slot span {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+}
+
+/* the overview replaces these while it's open (they'd sit under it) */
+#ui-game.team-overview-open #ui-team,
+#ui-game.team-overview-open #hud-wrap-fpsCounter,
+#ui-game.team-overview-open #hud-wrap-pingCounter {
+  visibility: hidden !important;
+}
+
+/* a spectator writing in the ALL chat */
+.chat-spec-tag { color: #c3a6ff; }
+
+/* Domination: score bar with A / B / C (ui/modes/dominationHud.ts) */
+/* below the scope row (#ui-top-center-scopes, ~100px tall) */
+#ui-domination-wrapper {
+  position: absolute;
+  top: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 10;
+}
+#ui-domination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  z-index: 10;
+}
+#ui-domination .dom-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+}
+#ui-domination .dom-score {
+  min-width: 44px;
+  text-align: center;
+  font-size: 26px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+#ui-domination .dom-zones {
+  display: flex;
+  gap: 8px;
+}
+#ui-domination .dom-zone {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 17px;
+  color: #fff;
+  box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#ui-domination .dom-zone-contested {
+  animation: dom-zone-pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes dom-zone-pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.12); }
+}
+/* the zone status: right above the ammo counter (bottom center) */
+#ui-equipped-ammo-wrapper > .dom-status {
+  /* out of the flow: the wrapper is bottom-anchored, so in-flow it'd push the ammo up */
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0 0 4px;
+  white-space: nowrap;
+}
+.dom-status {
+  margin-top: 4px;
+  padding: 3px 12px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  display: none;
+}
+/* dead in Domination: the respawn countdown (whom you watch: the usual top line) */
+#ui-dom-spectate {
+  margin-top: 10px;
+  padding: 6px 22px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#ui-dom-spectate .dom-spectate-title {
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: rgba(255, 255, 255, 0.7);
+}
+#ui-dom-spectate .dom-spectate-name {
+  font-size: 24px;
+  font-weight: bold;
+}
+#ui-dom-spectate .dom-spectate-timer {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #ffe11a;
+  font-variant-numeric: tabular-nums;
+}
+#ui-domination .dom-limit {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Domination: the loadout menu (like the arena class select) and its button while dead */
+#ui-dom-loadout-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  pointer-events: all;
+}
+#ui-dom-loadout-menu {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(900px, 94vw);
+  background-color: rgba(61, 92, 150, 0.75);
+  border: 8px solid #191919;
+  border-radius: 5px;
+  box-sizing: border-box;
+  cursor: default;
+}
+#ui-dom-loadout-menu .dom-menu-header {
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px;
+}
+#ui-dom-loadout-menu .dom-menu-option {
+  width: 150px;
+  padding: 10px 6px;
+  border-radius: 6px;
+  border: 3px solid transparent;
+  cursor: pointer;
+  opacity: 0.5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#ui-dom-loadout-menu .dom-menu-option:hover {
+  opacity: 0.8;
+}
+#ui-dom-loadout-menu .dom-menu-option-picked {
+  opacity: 1;
+  border-color: #ffe11a;
+}
+#ui-dom-loadout-menu .dom-menu-option-icon {
+  width: 110px;
+  height: 64px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#ui-dom-loadout-menu .dom-menu-option-name {
+  font-size: 20px;
+  font-weight: bold;
+}
+#ui-dom-loadout-menu .dom-menu-body {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 24px 20px;
+}
+#ui-dom-loadout-menu .dom-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  min-width: 0;
+}
+#ui-dom-loadout-menu .dom-menu-item-label {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.65);
+}
+#ui-dom-loadout-menu .dom-menu-item-icon {
+  width: 100%;
+  height: 70px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+#ui-dom-loadout-menu .dom-menu-item-name {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+#ui-dom-loadout-menu .dom-menu-footer {
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+}
+#ui-dom-loadout-menu .dom-menu-footer-desc {
+  font-size: 30px;
+  font-weight: bold;
+  text-shadow: 3px 3px black;
+}
+#ui-dom-loadout-menu .dom-menu-footer-enter {
+  background: rgba(0, 0, 0, 0.75);
+  color: #00ff00;
+  cursor: pointer;
+  font-size: 30px;
+  font-weight: bold;
+  padding: 10px 28px;
+  text-shadow: 3px 3px black;
+}
+#ui-dom-change-loadout {
+  position: fixed;
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  pointer-events: auto;
+  padding: 10px 26px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+#ui-dom-change-loadout:hover {
+  border-color: #ffe11a;
+}
+@media (max-width: 700px) {
+  #ui-dom-loadout-menu .dom-menu-body {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  #ui-dom-loadout-menu .dom-menu-footer-desc {
+    font-size: 20px;
+  }
+}
+
+/* Domination: the team scores in the "Alive" counter's place (top right) */
+#ui-leaderboard.dom-active #ui-leaderboard-alive,
+#ui-leaderboard.dom-active #ui-leaderboard-alive-faction {
+  display: none !important;
+}
+#ui-leaderboard-domination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.05;
+  /* the same box as the "Alive" counter it replaces */
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 5px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  min-width: 72px;
+  box-sizing: border-box;
+}
+#ui-leaderboard-domination .dom-score {
+  font-size: 34px;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Arena modes: the kill streak box - right next to the minimap, level with its bottom
+   edge (left/bottom set from the minimap's size in UiManager.redraw, these are the
+   fallback), growing upwards; players move it in the HUD editor ("Modes" tab) */
+#hud-wrap-killstreak {
+  position: absolute;
+  left: 214px;
+  bottom: 12px;
+  z-index: 1;
+  pointer-events: none;
+}
+body.hud-edit-mode #hud-wrap-killstreak:empty::before,
+body.hud-edit-mode #hud-wrap-domination:empty::before {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-weight: bold;
+  white-space: nowrap;
+}
+body.hud-edit-mode #hud-wrap-killstreak:empty::before {
+  content: "Streak 0/3  b7 Airdrop";
+}
+body.hud-edit-mode #hud-wrap-domination:empty::before {
+  content: "Domination: A  B  C";
+}
+.dom-streak {
+  min-width: 150px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-weight: bold;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+.dom-streak.dom-streak-ready {
+  box-shadow: 0 0 0 2px #ffd800;
+}
+.dom-streak .dom-streak-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dom-streak .dom-streak-icon-small {
+  width: 26px !important;
+  height: 26px !important;
+}
+.dom-streak .dom-streak-active {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.dom-streak .dom-streak-icon {
+  width: 40px;
+  height: 40px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.dom-streak .dom-streak-text {
+  font-size: 15px;
+}
+.dom-streak .dom-streak-key {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #ffd800;
+  color: #1c1c1c;
+  text-align: center;
+}
+.dom-streak .dom-streak-next {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* arena modes: damage resistance (soda / pill / Takedown / revive) - in place of the
+   adrenaline bar while it runs (that one is always full in the arena) */
+#hud-wrap-boostBar {
+  position: relative;
+}
+#hud-wrap-boostBar.arena-resist-on #ui-boost-counter {
+  visibility: hidden;
+}
+#ui-arena-resist {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* in the gap between the ammo counter and the health bar */
+  top: 3px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+#ui-arena-resist .arena-resist-icon {
+  flex: none;
+  width: 12px;
+  height: 14px;
+  background: #6fc4ff;
+  clip-path: polygon(50% 0, 100% 18%, 100% 55%, 50% 100%, 0 55%, 0 18%);
+}
+#ui-arena-resist .arena-resist-pct {
+  flex: none;
+}
+#ui-arena-resist .arena-resist-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+#ui-arena-resist .arena-resist-bar i {
+  display: block;
+  height: 100%;
+  background: #6fc4ff;
+}
+#ui-arena-resist .arena-resist-time {
+  flex: none;
+  min-width: 26px;
+  text-align: right;
+  color: #6fc4ff;
 }

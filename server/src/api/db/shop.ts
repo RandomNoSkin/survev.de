@@ -10,7 +10,7 @@ import {
     RARITY_SHOP_WEIGHT_PREMIUM,
     SHARED_SHOP,
     type ShopCategory,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import { GameConfig } from "../../../../shared/gameConfig";
 import type {
     BuyShopResponse,

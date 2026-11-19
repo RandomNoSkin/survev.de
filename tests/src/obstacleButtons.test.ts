@@ -30,7 +30,7 @@ describe("Obstacle button interactions", () => {
                 setDirty: vi.fn(),
                 kill: vi.fn(),
                 interactedBy: undefined,
-                type: "control_panel_07",
+                type: "control_panel_07de",
             };
 
             Obstacle.prototype.useButton.call(buttonObstacle as any);
@@ -107,7 +107,7 @@ describe("Obstacle button interactions", () => {
                 setDirty: vi.fn(),
                 kill: vi.fn(),
                 interactedBy: undefined,
-                type: "control_panel_07",
+                type: "control_panel_07de",
             };
 
             Obstacle.prototype.useButton.call(buttonObstacle as any);

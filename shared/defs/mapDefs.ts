@@ -1,8 +1,10 @@
-import type { MapId } from "../gameConfig.ts";
+import { type GameConfig, type MapId } from "../gameConfig.ts";
+import type { DeepPartial } from "../utils/util.ts";
 import type { Vec2 } from "../utils/v2.ts";
 import type { RoleDef } from "./gameObjects/roleDefs.ts";
 import { TwoVsTwo } from "./maps/2v2Defs.ts";
 import { FourVsFour } from "./maps/4v4Defs.ts";
+import type { SurfaceType } from "./mapObjectsTyping.ts";
 import { Main } from "./maps/baseDefs.ts";
 import { Beach } from "./maps/beachDefs.ts";
 import { Birthday } from "./maps/birthdayDefs.ts";
@@ -13,8 +15,10 @@ import { CompDuo } from "./maps/compDuoDefs.ts";
 import { CompSolo } from "./maps/compSoloDefs.ts";
 import { Desert } from "./maps/desertDefs.ts";
 import { Faction } from "./maps/factionDefs.ts";
-import { factionPotato } from "./maps/factionPotatoDefs.ts";
+import { FactionPotato } from "./maps/factionPotatoDefs.ts";
 import { Halloween } from "./maps/halloweenDefs.ts";
+import { GunGame } from "./maps/gunGameDefs.ts";
+import { Domination } from "./maps/dominationDefs.ts";
 import { Local } from "./maps/localDefs.ts";
 import { MainSpring } from "./maps/mainSpringDefs.ts";
 import { MainSummer } from "./maps/mainSummerDefs.ts";
@@ -30,7 +34,6 @@ import { WoodsSpring } from "./maps/woodsSpringDefs.ts";
 import { WoodsSummer } from "./maps/woodsSummerDefs.ts";
 
 export type Atlas =
-    | "gradient"
     | "loadout"
     /** Player sprites for composing outfit previews off the map (stats page). Never listed in a map's assets. */
     | "skins"
@@ -53,7 +56,7 @@ const _MapDefs = {
     main_summer: MainSummer,
     desert: Desert,
     faction: Faction,
-    faction_potato: factionPotato,
+    faction_potato: FactionPotato,
     halloween: Halloween,
     potato: Potato,
     potato_spring: PotatoSpring,
@@ -69,6 +72,8 @@ const _MapDefs = {
     beach: Beach,
     comp: Comp,
     local: Local,
+    gungame: GunGame,
+    domination: Domination,
     scrims: Scrims,
     two_vs_two: TwoVsTwo,
     four_vs_four: FourVsFour,
@@ -118,12 +123,18 @@ export interface MapDef {
         };
         valueAdjust: number;
         sound: {
-            riverShore: string;
+            riverShore: SurfaceType;
         };
         particles: {
             camera: string;
         };
-        tracerColors: Record<string, Record<string, number>>;
+        ambience: {
+            music: string;
+            wind: string;
+            river: string;
+            waves: string;
+        };
+        tracerColors: DeepPartial<typeof GameConfig["tracerColors"]>;
         airdrop: {
             planeImg: string;
             planeSound: string;
@@ -237,7 +248,7 @@ export interface MapDef {
                 wait: number;
             }>;
         };
-        bagSizes: Record<string, number[]>;
+        bagSizes: Partial<typeof GameConfig["bagSizes"]>;
         bleedDamage: number;
         bleedDamageMult: number;
         damageMult?: number;
@@ -310,6 +321,10 @@ export interface MapDef {
                     innerRad: number;
                     outerRad: number;
                     centerObj?: string;
+                    /**
+                     * Disables bushes and rocks from spawning
+                     */
+                    noRiverObjs?: boolean;
                     riverMaskRad?: number;
                     riverConnection?: boolean;
                     riverConnectionWidth?: number;

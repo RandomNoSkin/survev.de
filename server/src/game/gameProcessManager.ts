@@ -2,7 +2,7 @@ import type { WebSocket } from "uWebSockets.js";
 import { type ChildProcess, fork } from "child_process";
 import { randomUUID } from "crypto";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
-import type { TeamMode } from "../../../shared/gameConfig";
+import { GameMode, type TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import { util } from "../../../shared/utils/util";
 import { Config } from "../config";
@@ -38,14 +38,20 @@ class GameProcess implements GameData {
     process: ChildProcess;
 
     canJoin = true;
+    /** the biggest party that still fits together (Domination: a side's free room) */
+    partyRoom: number | undefined = undefined;
     isPrivate = false;
     publicSpectating = true;
     creating = false;
     teamMode: TeamMode = 1;
+    gameMode: GameMode = GameMode.Standard;
     mapName = "";
     id = "";
     aliveCount = 0;
+    /** Bots excluded - see GameData.humanAliveCount. */
+    humanAliveCount = 0;
     startedTime = 0;
+    startedAt = 0;
     stopped = true;
     created = false;
 
@@ -121,9 +127,11 @@ class GameProcess implements GameData {
                 }
                 case ProcessMsgType.UpdateData:
                     this.canJoin = msg.canJoin;
+                    this.partyRoom = msg.partyRoom;
                     this.isPrivate = msg.isPrivate;
                     this.publicSpectating = msg.publicSpectating;
                     this.teamMode = msg.teamMode;
+                    this.gameMode = msg.gameMode;
                     this.mapName = msg.mapName;
                     if (this.id !== msg.id) {
                         this.manager.processById.delete(this.id);
@@ -131,7 +139,9 @@ class GameProcess implements GameData {
                         this.manager.processById.set(this.id, this);
                     }
                     this.aliveCount = msg.aliveCount;
+                    this.humanAliveCount = msg.humanAliveCount;
                     this.startedTime = msg.startedTime;
+                    this.startedAt = msg.startedAt;
                     this.stopped = msg.stopped;
                     if (this.stopped) {
                         this.stoppedTime = Date.now();
@@ -216,6 +226,7 @@ class GameProcess implements GameData {
         });
         this.id = id;
         this.teamMode = config.teamMode;
+        this.gameMode = config.gameMode ?? GameMode.Standard;
         this.mapName = config.mapName;
         this.stopped = false;
         this.creating = true;
@@ -228,7 +239,7 @@ class GameProcess implements GameData {
         this.publicSpectating = config.publicSpectating ?? true;
 
         const mapDef = MapDefs[this.mapName as keyof typeof MapDefs] as MapDef;
-        this.avaliableSlots = mapDef.gameMode.maxPlayers;
+        this.avaliableSlots = config.maxPlayers ?? mapDef.gameMode.maxPlayers;
     }
 
     addJoinTokens(tokens: FindGamePrivateBody["playerData"], autoFill: boolean) {
@@ -292,6 +303,9 @@ class GameProcess implements GameData {
     }
 }
 
+/** A game process still not "Created" after this long is considered dead (see the keep-alive loop). */
+const CREATE_TIMEOUT_MS = 60_000;
+
 export class GameProcessManager implements GameManager {
     readonly sockets = new Map<string, WebSocket<GameSocketData>>();
 
@@ -350,6 +364,18 @@ export class GameProcessManager implements GameManager {
                         process.env.NODE_ENV === "production" ? "SIGKILL" : "SIGQUIT",
                     );
                 } else if (
+                    gameProc.creating &&
+                    gameProc.createStartTime &&
+                    Date.now() - gameProc.createStartTime > CREATE_TIMEOUT_MS
+                ) {
+                    // Safety net for any game that never finishes creating (normal init
+                    // takes well under a second): left alone it would hold its maxGames
+                    // slot forever - 11 of 12 slots ended up stuck like this in prod.
+                    this.logger.warn(
+                        `Process ${gameProc.process.pid} - #${gameProc.id.substring(0, 4)} still creating after ${CREATE_TIMEOUT_MS / 1000}s, killing`,
+                    );
+                    this.killProcess(gameProc);
+                } else if (
                     gameProc.stopped &&
                     Date.now() - gameProc.stoppedTime > 60000
                 ) {
@@ -385,9 +411,12 @@ export class GameProcessManager implements GameManager {
         }, 5000);
     }
 
+    /** Region population reported to clients - humans only, so bots never make a region
+     *  look busy. The heartbeat/timeout diagnostics above deliberately keep using
+     *  `aliveCount`, since there they measure actual load. */
     getPlayerCount(): number {
         return this.processes.reduce((a, b) => {
-            return a + b.aliveCount;
+            return a + b.humanAliveCount;
         }, 0);
     }
 
@@ -509,7 +538,10 @@ export class GameProcessManager implements GameManager {
                     !proc.isPrivate &&
                     (proc.canJoin || proc.creating) &&
                     proc.avaliableSlots > 0 &&
+                    // a party only where it fits together (Domination: on one side)
+                    (proc.partyRoom === undefined || proc.partyRoom >= body.playerData.length) &&
                     proc.teamMode === body.teamMode &&
+                    proc.gameMode === (body.gameMode ?? GameMode.Standard) &&
                     proc.mapName === body.mapName
                 );
             })
@@ -520,6 +552,7 @@ export class GameProcessManager implements GameManager {
         if (!game) {
             game = this.newGame({
                 teamMode: body.teamMode,
+                gameMode: body.gameMode,
                 mapName: body.mapName as keyof typeof MapDefs,
             });
         }
@@ -593,13 +626,20 @@ export class GameProcessManager implements GameManager {
     async createPrivateGame(body: FindPrivateLobbyGameBody): Promise<string> {
         const game = this.newGame({
             teamMode: body.teamMode,
+            gameMode: body.gameMode,
             mapName: body.mapName as keyof typeof MapDefs,
+            maxPlayers: body.maxPlayers,
+            rulesMapName: body.rulesMapName,
+            weaponStats: body.weaponStats,
+            xpEnabled: body.xpEnabled,
+            mapScale: body.mapScale,
             isPrivate: true,
             arenaRoles: body.arenaRoles,
             advancedSettings: body.advancedSettings,
             customLoadout: body.customLoadout,
             customLoadoutEnabled: body.customLoadoutEnabled,
             publicSpectating: body.publicSpectating,
+            customMap: body.customMap,
         });
 
         // Cap reached — no process available to host the private lobby right now.

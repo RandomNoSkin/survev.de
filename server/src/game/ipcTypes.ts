@@ -1,9 +1,10 @@
-import type { TeamMode } from "../../../shared/gameConfig";
+import type { GameMode, TeamMode } from "../../../shared/gameConfig";
 import type { FindGamePrivateBody, ServerGameConfig } from "../utils/types";
 
 export interface GameData {
     id: string;
     teamMode: TeamMode;
+    gameMode: GameMode;
     mapName: string;
     canJoin: boolean;
     aliveCount: number;

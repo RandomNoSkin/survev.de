@@ -1,11 +1,10 @@
 import { styleText } from "util";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
+import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
 import { MapObjectDefs } from "../../../shared/defs/register.ts";
-import type {
-    BuildingDef,
-    ObstacleDef,
-    StructureDef,
-} from "../../../shared/defs/mapObjectsTyping";
+import type { BuildingDef } from "../../../shared/defs/mapObjects/buildings/buildingDefs.ts";
+import type { ObstacleDef } from "../../../shared/defs/mapObjects/obstacles/obstacleDefs.ts";
+import type { StructureDef } from "../../../shared/defs/mapObjects/structureDefs.ts";
 import type { MapId } from "../../../shared/gameConfig.ts";
 import { GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
@@ -26,7 +25,34 @@ import { Building } from "./objects/building";
 import { Obstacle } from "./objects/obstacle";
 import type { Player } from "./objects/player";
 import { Structure } from "./objects/structure";
+import { applyLobbyRules, CUSTOM_MAP_COLORS, CUSTOM_MAP_LIMITS, type CustomMapConfig, type CustomMapObjectLoot } from "../../../shared/defs/lobby/customMap";
+import { applyCustomMap, customSpawnOnGrass } from "./customMap";
 import { RiverCreator } from "./riverCreator";
+
+/** Custom lobby maps stop placing objects after this long (see GameMap.genDeadline). */
+const CUSTOM_MAP_GEN_BUDGET_MS = 3000;
+/** Placement attempts per object on custom maps (vanilla allows 15000 for important spawns). */
+const CUSTOM_MAP_MAX_ATTEMPTS = 1500;
+
+/** A loot spot rolls each of its pools once; custom map pools roll min..max times. */
+function lootSpawnerRolls<T extends { tier?: string }>(own: T[], custom?: CustomMapObjectLoot[]): Array<{ tier?: string }> {
+    if (!custom) return own;
+    return custom.flatMap((l) => Array.from({ length: util.randomInt(l.min, l.max) }, () => ({ tier: l.tier })));
+}
+
+let boundingCollidersWarm = false;
+/** Computes (and so caches) every map object's bounding collider once per process. */
+function warmBoundingColliders() {
+    if (boundingCollidersWarm) return;
+    boundingCollidersWarm = true;
+    for (const type of Object.keys(RawMapObjectDefs)) {
+        try {
+            mapHelpers.getBoundingCollider(type);
+        } catch {
+            // types without any collision (never placed on their own)
+        }
+    }
+}
 
 // Baked surface-grid cell classification for the static terrain (shore + rivers).
 // `Mixed` = a boundary edge passes through this cell, so the exact polygon test must
@@ -198,14 +224,17 @@ export class MapGrid<T extends GridCollider = GridCollider> {
 export class GameMap {
     game: Game;
 
-    width: number;
-    height: number;
+    /** Map size factor from the game config (see ServerGameConfig.mapScale); size
+     *  fields below are set by applySize. */
+    sizeScale = 1;
+    width!: number;
+    height!: number;
     scale: "large" | "small";
-    center: Vec2;
-    bounds: AABB;
+    center!: Vec2;
+    bounds!: AABB;
 
-    grassInset: number;
-    shoreInset: number;
+    grassInset!: number;
+    shoreInset!: number;
 
     mapDef: MapDef;
     mapId: MapId;
@@ -221,13 +250,27 @@ export class GameMap {
 
     mapStream = new MsgStream(new ArrayBuffer(1 << 16));
 
-    grassBounds: AABB;
-    beachBounds: AABB;
+    grassBounds!: AABB;
+    beachBounds!: AABB;
 
     seed!: number;
     msg!: net.MapMsg;
     terrain!: ReturnType<typeof generateTerrain>;
-    riverDescs!: MapRiverData[];
+
+    /** Built from a private lobby's custom map config (see applyCustomMap). */
+    isCustomMap = false;
+    /** The custom map settings in effect (validated, advanced ones dropped when off). */
+    customMap?: CustomMapConfig;
+    /** loot items placed by loot spots during generation (custom maps cap it) */
+    genLootCount = 0;
+    /** performance.now() after which custom map generation stops placing objects; 0 = no limit. */
+    genDeadline = 0;
+    riverDescs!: Array<
+        MapRiverData & {
+            noRiverObjs?: boolean;
+            aabb?: AABB;
+        }
+    >;
     riverMasks!: Array<{ pos: Vec2; rad: number }>;
     normalRivers!: Array<River & { looped: false }>;
     lakes!: Array<River & { looped: true }>;
@@ -299,6 +342,23 @@ export class GameMap {
         const mapDef = (this.mapDef = util.cloneDeep(
             MapDefs[game.config.mapName],
         ) as MapDef);
+        const rulesDef = game.config.rulesMapName
+            ? (MapDefs as Record<string, MapDef>)[game.config.rulesMapName]
+            : undefined;
+        if (rulesDef) {
+            applyLobbyRules(mapDef, rulesDef);
+            // pools the rules rely on (airdrop crates, role drops) must exist; the
+            // map's own pools win where both have one
+            mapDef.lootTable = { ...rulesDef.lootTable, ...mapDef.lootTable };
+        }
+        if (game.config.customMap) {
+            this.customMap = applyCustomMap(mapDef, game.config.customMap);
+            this.isCustomMap = true;
+        }
+        // private lobbies size the match themselves (leader's player limit)
+        if (game.config.maxPlayers) {
+            mapDef.gameMode.maxPlayers = game.config.maxPlayers;
+        }
 
         assert(mapDef, `Invalid map name: ${game.config.mapName}`);
 
@@ -306,14 +366,8 @@ export class GameMap {
 
         const scale = (this.scale = game.teamMode > TeamMode.Duo ? "large" : "small");
 
-        const mapConfig = mapDef.mapGen.map;
-        this.width = mapConfig.baseWidth * mapConfig.scale[scale] + mapConfig.extension;
-        this.height = mapConfig.baseHeight * mapConfig.scale[scale] + mapConfig.extension;
-
-        this.bounds = collider.createAabb(
-            v2.create(0, 0),
-            v2.create(this.width, this.height),
-        );
+        // a lobby can size the map (Gun Game: to its player limit); objects follow the area
+        this.applySize(game.config.mapScale ?? 1);
         this.factionMode = !!this.mapDef.gameMode.factionMode;
         this.perkMode = !!this.mapDef.gameMode.perkMode;
         // Custom Loadout replaces every player's spawn items; arena roles (which assign
@@ -325,6 +379,26 @@ export class GameMap {
         this.desertMode = !!this.mapDef.gameMode.desertMode;
         this.potatoMode = !!this.mapDef.gameMode.potatoMode;
         this.sniperMode = !!this.mapDef.gameMode.sniperMode;
+    }
+
+    /** Width, height and the bounds for a size factor (see sizeScale). A change only
+     *  takes effect with the next generation - see regenerate(). */
+    applySize(sizeScale: number) {
+        const mapConfig = this.mapDef.mapGen.map;
+        this.sizeScale = sizeScale;
+        this.width = mapConfig.baseWidth * mapConfig.scale[this.scale] * sizeScale + mapConfig.extension;
+        this.height = mapConfig.baseHeight * mapConfig.scale[this.scale] * sizeScale + mapConfig.extension;
+        // the game's object grid is made once - never bigger than it covers
+        const grid = this.game.grid;
+        if (grid) {
+            this.width = Math.min(this.width, (grid.width + 1) * grid.cellSize);
+            this.height = Math.min(this.height, (grid.height + 1) * grid.cellSize);
+        }
+
+        this.bounds = collider.createAabb(
+            v2.create(0, 0),
+            v2.create(this.width, this.height),
+        );
 
         this.center = v2.create(this.width / 2, this.height / 2);
         this.grassInset = mapConfig.grassInset;
@@ -342,7 +416,30 @@ export class GameMap {
     }
 
     init(seed?: number) {
-        this.seed = seed ?? util.randomInt(0, 2 ** 32 - 1);
+        const fixedSeed = seed ?? (this.customMap?.seed || undefined);
+        if (fixedSeed === undefined) {
+            this.initMap(util.randomInt(0, 2 ** 32 - 1));
+            return;
+        }
+        // a fixed seed means the same map every match: terrain already follows the
+        // seed, object placement uses Math.random throughout - swap it for the
+        // generation (synchronous, nothing else runs in between)
+        // bounding colliders are computed (with a random pick for random children)
+        // and cached on first use per process - fill the cache first, or only the
+        // first game of a process would draw those extra numbers and differ
+        warmBoundingColliders();
+        const random = Math.random;
+        Math.random = util.seededRand(fixedSeed);
+        try {
+            this.initMap(fixedSeed);
+        } finally {
+            Math.random = random;
+        }
+    }
+
+    private initMap(seed: number) {
+        this.seed = seed;
+        this.genLootCount = 0;
 
         this.obstacles = [];
         this.dynamicObstacles = [];
@@ -356,6 +453,12 @@ export class GameMap {
 
         this.msg = new net.MapMsg();
         this.msg.mapName = this.game.config.mapName;
+        const rulesMapName = this.game.config.rulesMapName;
+        this.msg.rulesMapName = rulesMapName && rulesMapName in MapDefs ? rulesMapName : "";
+        const colors = this.customMap?.colors ?? {};
+        this.msg.colors = CUSTOM_MAP_COLORS.flatMap((key, idx) =>
+            colors[key] !== undefined ? [{ idx, color: colors[key]! }] : [],
+        );
         this.msg.seed = this.seed;
         this.msg.width = this.width;
         this.msg.height = this.height;
@@ -437,6 +540,8 @@ export class GameMap {
         this.buildSurfaceGrid();
         this.timerEnd("Building surface grid");
 
+        // custom maps can ask for a lot: cap generation time instead of stalling the game process
+        if (this.isCustomMap) this.genDeadline = performance.now() + CUSTOM_MAP_GEN_BUDGET_MS;
         this.timerStart();
         this.generateObjects();
         this.timerEnd("Generating all objects");
@@ -445,7 +550,8 @@ export class GameMap {
         this.mapStream.serializeMsg(MsgType.Map, this.msg);
     }
 
-    regenerate(seed?: number) {
+    /** A fresh map (optionally another size, see applySize) - sent to everyone. */
+    regenerate(seed?: number, sizeScale?: number) {
         for (const obj of this.game.objectRegister.objects) {
             if (!obj) continue;
             // destroy everything :3
@@ -462,6 +568,7 @@ export class GameMap {
             }
         }
 
+        if (sizeScale !== undefined) this.applySize(sizeScale);
         this.init(seed);
 
         for (const player of this.game.playerBarn.players) {
@@ -761,6 +868,7 @@ export class GameMap {
                     width: widths[i],
                     points: riverPoints,
                     looped: false,
+                    noRiverObjs: false,
                 });
                 return true;
             });
@@ -895,10 +1003,13 @@ export class GameMap {
             });
         }
 
+        // objects scale with the area of a resized map (see sizeScale)
+        const areaScale = this.sizeScale * this.sizeScale;
         for (const randomSpawns of mapGen.randomSpawns) {
             const spawns = [...randomSpawns.spawns];
             let spawnAmount = randomSpawns.choose;
             spawnAmount +=  util.randomInt(0, randomSpawns.chooseMore ?? 0);
+            if (areaScale !== 1) spawnAmount = Math.min(spawns.length, Math.max(1, Math.round(spawnAmount * areaScale)));
             for (let i = 0; i < spawnAmount; i++) {
                 const idx = util.randomInt(0, spawns.length - 1);
                 const type = spawns.splice(idx, 1)[0];
@@ -919,6 +1030,7 @@ export class GameMap {
                     count = Math.random() < count.odds ? 1 : 0;
                 }
             }
+            if (areaScale !== 1 && count > 1) count = Math.round(count * areaScale);
             const def = MapObjectDefs.typeToDef(type);
 
             if (def.terrain?.bridge || mapGen.importantSpawns.includes(type)) {
@@ -1035,6 +1147,13 @@ export class GameMap {
             this.timerEnd("Generating faction bridges");
         }
 
+        // custom map placements go where the player put them, before anything else
+        // can take the spot; blocked (river, lake) -> the nearest free ground around it
+        for (const p of this.customMap?.placements ?? []) {
+            const pos = v2.create(p.x, 1 - p.y);
+            if (!this.genLocationSpawn(p.type, pos, 8)) this.genLocationSpawn(p.type, pos, 40);
+        }
+
         this.timerStart();
         for (const spawn of objsToSpawn.stage1) {
             genSpawn(spawn, true);
@@ -1085,7 +1204,10 @@ export class GameMap {
                 stone_03: 0.9,
                 bush_04: 0.4,
             };
-            for (const river of this.terrain.rivers) {
+            for (let i = 0; i < this.terrain.rivers.length; i++) {
+                const river = this.terrain.rivers[i];
+                const desc = this.riverDescs[i];
+                if (desc.noRiverObjs) continue;
                 const riverArea = this.riverAreas.get(river)!.water / 1000;
 
                 for (const type in riverObjs) {
@@ -1140,9 +1262,12 @@ export class GameMap {
 
     genFromMapDef(type: string, count: number): void {
         for (let i = 0; i < count; i++) {
+            if (this.genDeadline && performance.now() > this.genDeadline) return;
             const def = MapObjectDefs.typeToDef(type);
 
-            if (def.terrain?.waterEdge) {
+            if (this.customMap && customSpawnOnGrass(type)) {
+                this.genOnGrass(type);
+            } else if (def.terrain?.waterEdge) {
                 this.genOnWaterEdge(type);
             } else if (def.terrain?.river) {
                 this.genOnRiver(type);
@@ -1204,7 +1329,9 @@ export class GameMap {
                 return decal;
             }
             case "loot_spawner":
-                for (const tier of def.loot) {
+                for (const tier of lootSpawnerRolls(def.loot, this.customMap?.objectLoot[type])) {
+                    // custom maps can stack thousands of loot spots; cap what they put down
+                    if (this.isCustomMap && ++this.genLootCount > CUSTOM_MAP_LIMITS.maxGenLoot) break;
                     const item = this.game.lootBarn.getLootTable(tier.tier!);
                     if (!item) break;
 
@@ -1255,8 +1382,10 @@ export class GameMap {
         logOnFailure = true,
     ): boolean {
         maxAttempts ??= this.mapDef.mapGen.importantSpawns.includes(type) ? 15000 : 500;
+        if (this.isCustomMap) maxAttempts = Math.min(maxAttempts, CUSTOM_MAP_MAX_ATTEMPTS);
         let attempts = 0;
         while (attempts < maxAttempts) {
+            if (this.genDeadline && performance.now() > this.genDeadline) return false;
             if (cb()) {
                 // if (attempts > 50) console.log(type, attempts);
                 return true;
@@ -1274,6 +1403,41 @@ export class GameMap {
     ];
 
     /**
+     * A building's ground patch, in world space, kept inside the map. canSpawn() rejects
+     * patches over the edge, but buildings placed as part of a bigger structure (or by
+     * fixed positions) never pass through it - a patch with a negative / too large
+     * coordinate then made MapMsg serialization throw (writeFloat out of [0, 1024])
+     * while the map was being built, crashing the whole game process. Clamped to the
+     * map instead (it's only the drawn ground under the building); null when nothing
+     * of it is left on the map.
+     */
+    private clampGroundPatch(bound: Collider, type: string): Collider | null {
+        const w = this.width;
+        const h = this.height;
+        if (bound.type === collider.Type.Circle) {
+            const pos = v2.create(math.clamp(bound.pos.x, 0, w), math.clamp(bound.pos.y, 0, h));
+            if (pos.x !== bound.pos.x || pos.y !== bound.pos.y) {
+                this.game.logger.warn(`Ground patch of ${type} was off the map - clamped`);
+            }
+            return collider.createCircle(pos, bound.rad);
+        }
+        // a rotated building's corners come out swapped (addAdjust rotates both), so
+        // sort them before clamping - otherwise min > max reads as "off the map"
+        const lo = v2.create(Math.min(bound.min.x, bound.max.x), Math.min(bound.min.y, bound.max.y));
+        const hi = v2.create(Math.max(bound.min.x, bound.max.x), Math.max(bound.min.y, bound.max.y));
+        const min = v2.create(math.clamp(lo.x, 0, w), math.clamp(lo.y, 0, h));
+        const max = v2.create(math.clamp(hi.x, 0, w), math.clamp(hi.y, 0, h));
+        if (min.x >= max.x || min.y >= max.y) {
+            this.game.logger.warn(`Ground patch of ${type} was completely off the map - skipped`);
+            return null;
+        }
+        if (min.x !== lo.x || min.y !== lo.y || max.x !== hi.x || max.y !== hi.y) {
+            this.game.logger.warn(`Ground patch of ${type} was off the map - clamped`);
+        }
+        return collider.createAabb(min, max);
+    }
+
+    /**
      * Checks if a map object can spawn at a given position, orientation and scale
      */
     canSpawn(type: string, pos: Vec2, ori: number, scale = 1): boolean {
@@ -1281,16 +1445,20 @@ export class GameMap {
 
         if (def.type === "building" && def.mapGroundPatches) {
             for (const patch of def.mapGroundPatches) {
-                const min = math.addAdjust(pos, (patch.bound as { min: Vec2; max: Vec2 }).min, ori);
-                const max = math.addAdjust(pos, (patch.bound as { min: Vec2; max: Vec2 }).max, ori);
-
-                if (
-                    min.x < 0 || min.y < 0 ||
-                    max.x < 0 || max.y < 0 ||
-                    min.x > this.width || min.y > this.height ||
-                    max.x > this.width || max.y > this.height
-                ) {
-                    return false;
+                const bound = patch.bound;
+                // circles have pos/rad, not min/max - the old cast read undefined there
+                // and so never rejected a circular patch over the edge
+                const pts =
+                    bound.type === collider.Type.Circle
+                        ? (() => {
+                              const c = math.addAdjust(pos, bound.pos, ori);
+                              return [v2.create(c.x - bound.rad, c.y - bound.rad), v2.create(c.x + bound.rad, c.y + bound.rad)];
+                          })()
+                        : [math.addAdjust(pos, bound.min, ori), math.addAdjust(pos, bound.max, ori)];
+                for (const pt of pts) {
+                    if (pt.x < 0 || pt.y < 0 || pt.x > this.width || pt.y > this.height) {
+                        return false;
+                    }
                 }
             }
         }
@@ -1825,7 +1993,7 @@ export class GameMap {
                     () => {
                         attempts++;
 
-                        const placeIdx = Math.floor(Math.random() * this.placeSpawns.length);
+                        const placeIdx = Math.floor(Math.random() * this.placesToSpawn.length);
                         const place = this.placesToSpawn[placeIdx];
 
                         const { ori, scale } = this.getOriAndScale(resolvedType);
@@ -2192,8 +2360,8 @@ export class GameMap {
         return obstacle;
     }
 
-    genOutfitObstacle(type: string, player: Player) {
-        const def = MapObjectDefs.typeToDef(type) as ObstacleDef;
+    genOutfitObstacle(type: string, player: Player, scale?: number) {
+        const def = MapObjectDefs.typeToDef(type, "obstacle");
 
         const obstacle = new Obstacle(
             this.game,
@@ -2201,7 +2369,7 @@ export class GameMap {
             type,
             player.layer,
             0,
-            def.scale.createMax,
+            scale ?? def.scale.createMax,
             undefined,
             undefined,
             true,
@@ -2285,7 +2453,7 @@ export class GameMap {
         }
 
         for (const patch of def.mapGroundPatches ?? []) {
-            const worldBound =
+            const worldBound = this.clampGroundPatch(
                 patch.bound.type === collider.Type.Circle
                     ? collider.createCircle(
                           math.addAdjust(pos, patch.bound.pos, ori),
@@ -2294,7 +2462,10 @@ export class GameMap {
                     : collider.createAabb(
                           math.addAdjust(pos, patch.bound.min, ori),
                           math.addAdjust(pos, patch.bound.max, ori),
-                      );
+                      ),
+                type,
+            );
+            if (!worldBound) continue;
             this.msg.groundPatches.push({
                 bound: worldBound,
                 color: patch.color,
@@ -2321,7 +2492,7 @@ export class GameMap {
 
         ori = ori ?? def.ori ?? util.randomInt(0, 3);
 
-        const structure = new Structure(this.game, type, pos, layer, ori);
+        const structure = new Structure(this.game, type, pos, layer, ori, parentId);
         this.game.objectRegister.register(structure);
         this.structures.push(structure);
 
@@ -2874,46 +3045,45 @@ export class GameMap {
     isOnWater(pos: Vec2, layer: number) {
         const objs = this.game.grid.intersectPos(pos);
 
-        // Check decals
-        for (let i = 0; i < objs.length; i++) {
-            const decal = objs[i];
-            if (decal.__type !== ObjectType.Decal) continue;
-            if (!decal.surface) {
-                continue;
-            }
-
-            if (
-                util.sameLayer(decal.layer, layer) &&
-                collider.intersectCircle(decal.collider!, pos, 0.0001)
-            ) {
-                return decal.surface === "water";
-            }
-        }
-
-        // Check buildings
         let surface = null;
         let zIdx = 0;
         const onStairs = layer & 0x2;
 
         for (let i = 0; i < objs.length; i++) {
-            const building = objs[i];
-            if (building.__type !== ObjectType.Building) continue;
-            if (building.zIdx < zIdx) {
+            const obj = objs[i];
+
+            // Check decals
+            if (obj.__type === ObjectType.Decal) {
+                if (!obj.surface) {
+                    continue;
+                }
+                if (
+                    util.sameLayer(obj.layer, layer)
+                    && collider.intersectCircle(obj.collider!, pos, 0.0001)
+                ) {
+                    return obj.surface === "water";
+                }
+                continue;
+            }
+
+            // Check buildings
+            if (obj.__type !== ObjectType.Building) continue;
+            if (obj.zIdx < zIdx) {
                 continue;
             }
             // Prioritize layer0 building surfaces when on stairs
             if (
-                (building.layer !== layer && !onStairs) ||
-                (building.layer === 1 && onStairs)
+                (obj.layer !== layer && !onStairs)
+                || (obj.layer === 1 && onStairs)
             ) {
                 continue;
             }
-            for (let j = 0; j < building.surfaces.length; j++) {
-                const s = building.surfaces[j];
+            for (let j = 0; j < obj.surfaces.length; j++) {
+                const s = obj.surfaces[j];
                 for (let k = 0; k < s.colliders.length; k++) {
                     const res = collider.intersectCircle(s.colliders[k], pos, 0.0001);
                     if (res) {
-                        zIdx = building.zIdx;
+                        zIdx = obj.zIdx;
                         surface = s;
                         break;
                     }
@@ -2925,23 +3095,14 @@ export class GameMap {
             return surface.type === "water";
         }
 
-        // Static terrain (shore + river water). For the common ground layer this is an
-        // O(1) baked-grid lookup instead of a ~256-vertex point-in-polygon every tick per
-        // player; only boundary ("Mixed") cells fall through to the exact test below. The
-        // grid bakes rivers as water, which matches the `layer !== 1` rule, so it is only
-        // consulted for that case (layer === 1 ignores rivers entirely).
+        // Check rivers
         if (layer !== 1) {
-            const cell = this._surfaceAt(pos);
-            if (cell === SURFACE_WATER) return true;
-            if (cell === SURFACE_LAND) return false;
-            // SURFACE_MIXED → exact test below
-
             const { rivers } = this.terrain;
             for (let i = 0; i < rivers.length; i++) {
                 const river = rivers[i];
                 if (
-                    coldet.testPointAabb(pos, river.aabb.min, river.aabb.max) &&
-                    math.pointInsidePolygon(pos, river.waterPoly)
+                    coldet.testPointAabb(pos, river.aabb.min, river.aabb.max)
+                    && math.pointInsidePolygon(pos, river.waterPoly)
                 ) {
                     return true;
                 }

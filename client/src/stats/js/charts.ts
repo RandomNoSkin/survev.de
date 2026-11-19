@@ -69,6 +69,8 @@ export interface LineSeries {
     label: string;
     color: string;
     points: number[];
+    /** drawn dashed and lighter (e.g. the previous period to compare with) */
+    dashed?: boolean;
 }
 
 /** Multi-series line chart sharing one set of x labels (e.g. games + players over time). */
@@ -101,7 +103,10 @@ export function lineChart(series: LineSeries[], xLabels: string[]): string {
     });
     for (const s of series) {
         const pts = s.points.map((v, i) => `${xAt(i)},${yAt(v)}`).join(" ");
-        svg += `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+        svg += s.dashed
+            ? `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-dasharray="6 5" opacity="0.55" stroke-linejoin="round"/>`
+            : `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+        if (s.dashed) continue;
         s.points.forEach((v, i) => {
             svg += `<circle cx="${xAt(i)}" cy="${yAt(v)}" r="2.6" fill="${s.color}"><title>${esc(xLabels[i] ?? "")} — ${esc(s.label)}: ${fmt(v)}</title></circle>`;
         });
