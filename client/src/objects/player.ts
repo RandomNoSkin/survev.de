@@ -458,7 +458,8 @@ export class Player implements AbstractObject {
 
         this.initSubmergeSprites();
 
-        const boneCount = Object.keys(Bones).length;
+        // numeric enum: Object.keys has both names and values
+        const boneCount = Object.keys(Bones).length / 2;
         for (let i = 0; i < boneCount; i++) {
             this.bones.push(new Pose());
             this.anim.bones.push({
@@ -1875,9 +1876,8 @@ export class Player implements AbstractObject {
         if (R.type == "melee" && this.m_netData.m_activeWeapon != "fists") {
             const V = R.worldImg!;
             // Default melee sprite on the right hand.
+            // pivot, scale and rotation follow the MeleeR bone, set in updateRotation
             this.meleeSprite.texture = PIXI.Texture.from(V.rightSprite || V.sprite);
-            this.meleeSprite.pivot.set(-V.pos.x, -V.pos.y);
-            this.meleeSprite.scale.set(V.scale.x / bodyScale, V.scale.y / bodyScale);
             this.meleeSprite.rotation = V.rot;
             this.meleeSprite.tint = V.tint;
             this.meleeSprite.visible = true;
@@ -2140,7 +2140,23 @@ export class Player implements AbstractObject {
         e(this.handRContainer, this.bones[Bones.HandR]);
         e(this.footLContainer, this.bones[Bones.FootL]);
         e(this.footRContainer, this.bones[Bones.FootR]);
-        const t = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as GunDef;
+
+        // Melee deploy/idle anims move the melee independently of the hand via the MeleeR bone.
+        const activeWeapDef = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon);
+        if (activeWeapDef?.type === "melee" && activeWeapDef.worldImg) {
+            const meleeBone = this.bones[Bones.MeleeR];
+            const imgDef = activeWeapDef.worldImg;
+            const pos = v2.add(meleeBone.pos, imgDef.pos);
+            this.meleeSprite.pivot.set(-pos.x, -pos.y);
+
+            const bodyScale = this.m_bodyRad / GameConfig.player.radius;
+            this.meleeSprite.rotation = imgDef.rot + meleeBone.rot;
+            this.meleeSprite.position.set(-meleeBone.pivot.x, -meleeBone.pivot.y);
+
+            this.meleeSprite.scale.set(imgDef.scale.x / bodyScale, imgDef.scale.y / bodyScale);
+        }
+
+        const t = activeWeapDef as GunDef;
         if (!this.downed && this.currentAnim() != Anim.Revive && t.type == "gun") {
             if (t.worldImg.leftHandOffset) {
                 this.handLContainer.position.x += t.worldImg.leftHandOffset.x;
@@ -2421,6 +2437,20 @@ export class Player implements AbstractObject {
                 const selected = util.randomItem(anims);
                 return anim(selected, selected == "fists" && anims.length == 1);
             }
+            case Anim.DeployMelee: {
+                const def = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as MeleeDef;
+                if (!def.anim?.deployAnims) {
+                    return anim("fists", true);
+                }
+                return anim(util.randomItem(def.anim.deployAnims), false);
+            }
+            case Anim.IdleMelee: {
+                const def = GameObjectDefs.typeToDefSafe(this.m_netData.m_activeWeapon) as MeleeDef;
+                if (!def.anim?.idleAnims) {
+                    return anim("fists", true);
+                }
+                return anim(util.randomItem(def.anim.idleAnims), false);
+            }
             default:
                 return anim("none", false);
         }
@@ -2471,6 +2501,8 @@ export class Player implements AbstractObject {
             );
             const frameABones = frames[frameAIdx].bones;
             const frameBBones = frames[frameBIdx].bones;
+            const easingFn = frames[frameBIdx].easing;
+            const lerpT = easingFn ? easingFn(t) : t;
             const mirror = this.anim.data.mirror;
             for (let i = 0; i < this.anim.bones.length; i++) {
                 const bones = this.anim.bones[i];
@@ -2480,7 +2512,7 @@ export class Player implements AbstractObject {
                 }
                 if (frameABones[bone] !== undefined && frameBBones[bone] !== undefined) {
                     bones.weight = frameAIdx == frameBIdx ? t : 1;
-                    bones.pose.copy(Pose.lerp(t, frameABones[bone]!, frameBBones[bone]!));
+                    bones.pose.copy(Pose.lerp(lerpT, frameABones[bone]!, frameBBones[bone]!));
                     if (mirror) {
                         bones.pose.pos.y *= -1;
                         bones.pose.pivot.y *= -1;
