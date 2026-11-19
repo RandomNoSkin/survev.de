@@ -6142,12 +6142,14 @@ export class Player extends BaseGameObject {
                     const thisQuality = this.getGearQuality(thisType);
                     amountLeft = 1;
 
-                    // role helmets and perk helmets can't be dropped in favor of another helmet, they're the "highest" tier
+                    // role helmets and perk helmets can't be dropped in favor of another helmet, they're the "highest" tier;
+                    // otherwise never swap down to worse gear (e.g. lvl3 vest for a lvl2 vest)
                     if (
-                        def.type == "helmet" &&
-                        (this.hasRoleHelmet ||
-                            (thisDef && (thisDef as HelmetDef).perk) ||
-                            (thisDef && (thisDef as HelmetDef).role))
+                        (def.type == "helmet" &&
+                            (this.hasRoleHelmet ||
+                                (thisDef && (thisDef as HelmetDef).perk) ||
+                                (thisDef && (thisDef as HelmetDef).role))) ||
+                        thisQuality > objQuality
                     ) {
                         amountLeft = 1;
                         lootToAdd = obj.type;
