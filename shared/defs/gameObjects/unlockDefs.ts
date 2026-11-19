@@ -176,6 +176,8 @@ export const _allowedOutfits = [
     "outfitBee",
     "outfitVitaminD",
     "outfitReTag",
+    "outfitLuminize",
+    "outfitVoidFlare",
 ];
 export const _allowedEmotes = [
     "emote_thumbsup",
