@@ -4027,7 +4027,7 @@ export const BaseDefs: Record<string, GunDef> = {
         shotSpread: 1,
         bulletCount: 1,
         bulletType: "bullet_potato",
-        projType: "hv_grenade",
+        //projType: "hv_grenade",
         projectileUsesAimDistance: true,
         noSplinter: true,
         headshotMult: 1,
