@@ -3200,6 +3200,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDropOnDeath: true,
         rarity: Rarity.Mythic,
         lore: "Wings of pearl and light.",
+        creatorDiscordId: "873147471910547458",
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-luminize.img",
@@ -3223,6 +3224,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         noDropOnDeath: true,
         rarity: Rarity.Mythic,
         lore: "Wings of crimson night.",
+        creatorDiscordId: "873147471910547458",
         skinImg: {
             baseTint: 0xffffff,
             baseSprite: "player-base-void-flare.img",
