@@ -1129,6 +1129,7 @@ export class Player extends BaseGameObject {
     moveVel = v2.create(0, 0);
 
     shotSlowdownTimer: number = 0;
+    meleeSlowdownTimer: number = 0;
 
     freeSwitchTimer: number = 0;
 
@@ -3535,6 +3536,10 @@ export class Player extends BaseGameObject {
         this.shotSlowdownTimer -= dt;
         if (this.shotSlowdownTimer <= 0) {
             this.shotSlowdownTimer = 0;
+        }
+        this.meleeSlowdownTimer -= dt;
+        if (this.meleeSlowdownTimer <= 0) {
+            this.meleeSlowdownTimer = 0;
         }
     }
 
@@ -6418,6 +6423,7 @@ export class Player extends BaseGameObject {
 
             if (index === this.curWeapIdx) {
                 this.shotSlowdownTimer = 0;
+                this.meleeSlowdownTimer = 0;
             }
         } else if (
             chosenWeaponDef.type == "throwable" &&
@@ -7055,7 +7061,7 @@ export class Player extends BaseGameObject {
             this.speed += equipSpeed;
         }
 
-        if (this.shotSlowdownTimer > 0 && weaponDef.speed.attack !== undefined) {
+        if ((this.shotSlowdownTimer > 0 || this.meleeSlowdownTimer > 0) && weaponDef.speed.attack !== undefined) {
             this.speed += weaponDef.speed.attack;
         }
 

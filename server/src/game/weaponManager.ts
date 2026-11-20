@@ -154,6 +154,7 @@ export class WeaponManager {
         }
         this.bursts.length = 0;
         this.meleeAttacks.length = 0;
+        this.player.meleeSlowdownTimer = 0;
         this.scheduledReload = false;
 
         this.player.recoilTicker = 0;
@@ -499,6 +500,7 @@ export class WeaponManager {
         ) {
             this.player.cancelAction();
 
+            this.player.meleeSlowdownTimer = attack.cooldownTime + attack.cooldownTime * 0.3; // attack.cooldownTime * 0.2 is to make it more smooth.
             this.player.playAnim(GameConfig.Anim.Melee, attack.cooldownTime);
             weapon.cooldown = attack.cooldownTime;
             this.meleeAttacks = [...attack.damageTimes];

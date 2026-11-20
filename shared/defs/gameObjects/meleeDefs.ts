@@ -104,6 +104,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -142,7 +143,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
-            attack: 0,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -203,6 +204,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "cutlass",
@@ -258,6 +260,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "slash",
@@ -317,6 +320,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -375,6 +379,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "thrust",
@@ -429,6 +434,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -487,6 +493,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -541,6 +548,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -595,6 +603,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -649,6 +658,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "machete",
@@ -703,6 +713,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 0.8,
+            attack: -1
         },
         anim: {
             idlePose: "machete",
@@ -758,6 +769,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "meleeTwoHanded",
@@ -813,6 +825,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "meleeTwoHanded",
@@ -869,6 +882,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "meleeKatana",
@@ -925,6 +939,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "meleeNaginata",
@@ -981,6 +996,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "meleeTwoHanded",
@@ -1037,6 +1053,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         lootImg: {
             sprite: "loot-melee-ice_pick.img",
@@ -1091,6 +1108,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -1144,6 +1162,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -1234,6 +1253,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1.3,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -1289,6 +1309,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1.3,
+            attack: -1
         },
         anim: {
             idlePose: "fists",
@@ -1342,6 +1363,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         speed: {
             equip: 1,
+            attack: -1
         },
         anim: {
             idlePose: "cutlass",

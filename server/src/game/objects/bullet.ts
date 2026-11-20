@@ -71,6 +71,7 @@ export interface BulletParams {
     // (used for reflections to continue acceleration state)
     initialSpeed?: number;
     initialDistanceTraveled?: number;
+    falloffDistance?: number;
     /** The fired shot this bullet belongs to - kept by pierce/reflect/splinter bullets
      *  spawned from it, so accuracy counts a hit at most once per shot (see damage()). */
     shotId?: number;
@@ -149,6 +150,7 @@ export class Bullet {
     shotId = 0;
 
     distanceTraveled!: number;
+    falloffDistance!: number;
     sentToClient!: boolean;
     collided!: boolean;
     playerId!: number;
@@ -294,6 +296,7 @@ export class Bullet {
             0,
             Constants.MaxPosition,
         );
+        this.falloffDistance = params.falloffDistance ?? this.distance;
         this.clipDistance = !!params.clipDistance;
         this.endPos = v2.add(params.pos, v2.mul(this.dir, this.distance));
         this.clientEndPos = v2.copy(this.endPos);
@@ -719,7 +722,7 @@ export class Bullet {
 
         if (GameConfig.bullet.falloff) {
             const def = BulletDefs[this.bulletType];
-            const distT = math.clamp(this.distanceTraveled / this.distance, 0, 1);
+            const distT = math.clamp(this.distanceTraveled / this.falloffDistance, 0, 1);
             const falloff = math.remap(distT, 0, 1, 1, def.falloff);
             finalDamage *= falloff;
             finalDamage *= falloff; // Apply falloff twice for exponential damage dropoff to stop excessive damage from short range guns like vector
@@ -772,7 +775,7 @@ export class Bullet {
                     const def = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;
                     const pierceDamageMult = def.pierceDamageMult ?? 0.5;
                     const pierceDistanceMult = def.pierceDistanceMult ?? 0.5;
-                    const remainingDistance = this.distance - this.distanceTraveled;
+                    const remainingDistance = this.distance - v2.length(v2.sub(col.point, this.startPos));
                     const maxPierce = def.maxPierce ?? GameConfig.bullet.maxPierce;
 
                     if (
@@ -810,6 +813,9 @@ export class Bullet {
                             varianceT: this.varianceT,
                             clipDistance: true,
                             distance: remainingDistance * pierceDistanceMult,
+                            falloffDistance: this.falloffDistance,
+                            initialDistanceTraveled: this.distanceTraveled,
+                            initialSpeed: this.speed
                         });
                     }
                 } else if (mapDef.reflectBullets || bulletDef.alwaysReflect) {
@@ -894,7 +900,7 @@ export class Bullet {
         let distance = this.distance;
         if (this.clipDistance) {
             distance =
-                math.max(1, this.distance - this.distanceTraveled) /
+                math.max(1, this.distance - v2.length(v2.sub(pos, this.startPos))) /
                 Math.pow(GameConfig.bullet.reflectDistDecay, this.reflectCount);
         }
         
@@ -929,6 +935,7 @@ export class Bullet {
             // preserve current velocity/acceleration state on reflection
             initialSpeed: this.speed,
             initialDistanceTraveled: this.distanceTraveled,
+            falloffDistance: this.falloffDistance,
         });
     }
 }
