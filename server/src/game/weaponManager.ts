@@ -1189,7 +1189,13 @@ export class WeaponManager {
         }
         this.player.recoilTicker = 0.0;
 
-        const bulletCount = itemDef.bulletCount;
+        let bulletCount = itemDef.bulletCount;
+        if (itemDef.extraBulletCount && itemDef.extraBulletTrigger) {
+            weapon.shotCount = (weapon.shotCount + 1) % itemDef.extraBulletTrigger;
+            if (weapon.shotCount === 0) {
+                bulletCount = itemDef.extraBulletCount;
+            }
+        }
 
         let bulletType = itemDef.bulletType;
         if (

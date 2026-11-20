@@ -543,7 +543,7 @@ export const GameConfig = {
                 { type: "", ammo: 0 },
             ],
             outfit: "outfitBase",
-            backpack: "backpack00",
+            backpack: "backpack03",
             helmet: "helmet02",
             chest: "chest02",
             scope: "1xscope",
