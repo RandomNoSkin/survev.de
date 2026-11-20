@@ -1,6 +1,2 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" style="isolation:isolate">
-  <rect x="43.3" y="12" width="41.4" height="36" fill="#8a3b12" stroke="#202020" stroke-width="11.8"/>
-  <circle cx="64" cy="81.4" r="38.9" fill="#e2671c" stroke="#202020" stroke-width="12"/>
-  <circle cx="64" cy="81.4" r="14" fill="#ffd34d"/>
-  <circle cx="96" cy="22" r="11" fill="none" stroke="#cfcfcf" stroke-width="5"/>
-</svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" style="isolation:isolate" version="1.1" xml:space="preserve" xmlns="http://www.w3.org/2000/svg"><rect x="43.3" y="12" width="41.4" height="36" fill="#8a3b12" stroke="#202020" stroke-width="11.8"/><circle cx="64" cy="81.4" r="38.9" fill="#e2671c" stroke="#202020" stroke-width="12"/><circle cx="64" cy="81.4" r="14" fill="#ffd34d"/><path d="m44 24h-20l-20 12v16l20-12h20z" fill="#8a3b12" stroke="#202020" stroke-width="8" style="isolation:isolate"/><path d="m40.094 18.443a26.451 26.451 0 0 1 12.603 3.534 26.451 26.451 0 0 1 9.682 36.135 26.451 26.451 0 0 1-36.132 9.683 26.451 26.451 0 0 1-9.682-36.136 26.451 26.451 0 0 1 23.53-13.216zm-0.094 9.557a17.077 17.077 0 0 0-15.193 8.536 17.077 17.077 0 0 0 6.25 23.327 17.077 17.077 0 0 0 23.326-6.25 17.077 17.077 0 0 0-6.249-23.33 17.077 17.077 0 0 0-8.134-2.283z" fill="#cfcfcf" stroke="#202020" stroke-width="4" style="isolation:isolate"/></svg>

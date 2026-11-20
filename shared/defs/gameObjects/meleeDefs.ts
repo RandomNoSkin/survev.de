@@ -354,7 +354,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             tint: 0xffffff,
         },
     },
-        wakizashi: {
+    wakizashi: {
         name: "Wakizashi",
         type: "melee",
         quality: 0,
@@ -1534,7 +1534,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-karambit-rust.img",
         },
     }),
-    karambit_ice: defineMeleeSkin("karambit", { // above kniefs 
+    karambit_ice: defineMeleeSkin("karambit", { // above knives 
         name: "Karambit Ice",
         rarity: Rarity.Rare,
         noPotatoSwap: false,
@@ -1545,7 +1545,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-karambit-ice.img",
         },
     }),
-    karambit_case_hardened: defineMeleeSkin("karambit", { // above kniefs
+    karambit_case_hardened: defineMeleeSkin("karambit", { // above knives
         name: "Karambit case hardened",
         rarity: Rarity.Rare,
         noPotatoSwap: false,
@@ -1613,6 +1613,10 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-bayonet-m9-autotronic.img",
+            pos: {
+                x: -4.5,
+                y: -38.5,
+            },
         },
     }),
     bayonet_m9_vanilla: defineMeleeSkin("bayonet", {
@@ -1625,6 +1629,10 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-bayonet-m9-vanilla.img",
+            pos: {
+                x: -4.5,
+                y: -38.5,
+            },
         },
     }),
     bayonet_m9_pink_crystal: defineMeleeSkin("bayonet", {
@@ -1637,6 +1645,10 @@ const SkinDefs: Record<string, MeleeDef> = {
         },
         worldImg: {
             sprite: "loot-melee-bayonet-m9-pink-crystal.img",
+            pos: {
+                x: -4.5,
+                y: -38.5,
+            },
         },
     }),
     wakizashi_rust: defineMeleeSkin("wakizashi", {
@@ -1707,7 +1719,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-huntsman-blackwater.img",
         },
     }),
-    huntsman_ice: defineMeleeSkin("huntsman", { //above kniefs 
+    huntsman_ice: defineMeleeSkin("huntsman", { //above knives 
         name: "Huntsman Ice",
         rarity: Rarity.Rare,
         noPotatoSwap: false,
@@ -1718,7 +1730,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-huntsman-ice.img",
         },
     }),
-    huntsman_purple: defineMeleeSkin("huntsman", { //above kniefs 
+    huntsman_purple: defineMeleeSkin("huntsman", { //above knives 
         name: "Huntsman Purple",
         rarity: Rarity.Rare,
         noPotatoSwap: false,
@@ -1729,7 +1741,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-huntsman-purple.img",
         },
     }),
-    huntsman_pink: defineMeleeSkin("huntsman", { // above kniefs 
+    huntsman_pink: defineMeleeSkin("huntsman", { // above knives 
         name: "Huntsman Pink",
         rarity: Rarity.Rare,
         noPotatoSwap: false,
@@ -1832,7 +1844,7 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-bowie-redtiger.img",
         },
     }),
-    bowie_ice: defineMeleeSkin("bowie", { //above kniefs ddddddd
+    bowie_ice: defineMeleeSkin("bowie", { //above knives ddddddd
         name: "Bowie Ice",
         rarity: Rarity.Rare,
         noPotatoSwap: false,
