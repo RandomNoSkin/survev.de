@@ -1413,7 +1413,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x3d0030,
         },
     }),
@@ -1432,7 +1432,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x001a0a,
         },
     }),
@@ -1451,7 +1451,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xcc0000,
         },
     }),
@@ -1470,7 +1470,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-Ruin.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x111111,
         },
     }),
@@ -1490,7 +1490,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xddaa00,
         },
     }),
@@ -1509,7 +1509,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x2a0a5a,
         },
     }),
@@ -1529,7 +1529,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-Dotexe.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x000000,
         },
     }),
@@ -1549,7 +1549,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-Twilight.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x000000,
         },
     }),
@@ -1569,7 +1569,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-Sortablue.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x2e3592,
         },
     }),
@@ -1588,7 +1588,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xbe89ab,
         },
     }),
@@ -1607,7 +1607,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x000000,
         },
     }),
@@ -1627,7 +1627,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xffffff,
         },
     }),
@@ -1646,7 +1646,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xf8c137,
         },
     }),
@@ -1686,7 +1686,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x72cc85,
         },
     }),
@@ -1727,7 +1727,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x909090,
         },
     }),
@@ -1748,7 +1748,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x6441a4,
         },
     }),
@@ -1767,7 +1767,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xbfcee4,
         },
     }),
@@ -1806,7 +1806,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xffffff,
         },
     }),
@@ -1825,7 +1825,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x000000,
         },
     }),
@@ -1844,7 +1844,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x8e8ee8,
         },
     }),
@@ -1863,7 +1863,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x5e0c0c,
         },
     }),
@@ -1882,7 +1882,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x5e0c0c,
         },
     }),
@@ -1902,7 +1902,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xea899a,
         },
     }),
@@ -1922,7 +1922,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-02.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xff9914,
         },
     }),
@@ -1942,7 +1942,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x5b384f,
         },
     }),
@@ -1962,7 +1962,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xa49ad6,
         },
     }),
@@ -1982,7 +1982,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x2e36ce,
         },
     }),
@@ -2001,7 +2001,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             backpackSprite: "player-circle-base-01.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0x380921,
         },
     }),
@@ -3214,7 +3214,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSprite: "player-accessory-luminize.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xb9aef8,
         },
     }),
@@ -3239,7 +3239,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             chestInnerOutline: [3, 4],
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xf03a62,
         },
     }),
