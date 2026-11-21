@@ -356,7 +356,7 @@ export const _allowedEmotes = [
 ];
 
 export interface UnlockDef {
-    readonly type: "unlock";
+    type: "unlock";
     name: string;
     unlocks: string[];
     free?: boolean;
@@ -395,9 +395,9 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "crosshair_101",
             "crosshair_102",
             "crosshair_109",
+            "crosshair_118",
             "crosshair_124",
             "crosshair_125",
-            "crosshair_118",
             "crosshair_136",
             "crosshair_158",
             "crosshair_160",
@@ -407,7 +407,9 @@ export const UnlockDefs: Record<UnlockDefKey, UnlockDef> = {
             "crosshair_181",
             "crosshair_184",
             "crosshair_godak",
+            "emote_antisocial",
             "emote_thumbsup",
+            "emote_sadboffy",
             "emote_sadface",
             "emote_happyface",
             "emote_boffy",

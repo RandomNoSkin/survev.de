@@ -1,7 +1,7 @@
 import $ from "jquery";
 import slugify from "slugify";
 import { EmotesDefs } from "../../../../shared/defs/gameObjects/emoteDefs.ts";
-import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig.ts";
+import { getItemPrice, getItemRarity } from "../../../../shared/defs/shop/shopConfig.ts";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { GameConfig, MapId, type TeamMode } from "../../../../shared/gameConfig.ts";
 import {

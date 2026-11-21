@@ -1,3 +1,4 @@
+import type { ArenaStreakSettings } from "../../shared/defs/modes/arenaStreakDefs";
 import { randomUUID } from "crypto";
 import type { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -6,12 +7,14 @@ import {
     DEFAULT_CUSTOM_LOADOUT,
     MAX_EXTRA_CUSTOM_LOADOUTS,
     validateCustomLoadout,
-} from "../../shared/defs/customLoadout";
-import type { CustomLoadoutConfig } from "../../shared/defs/customLoadout";
-import { validateCustomMap } from "../../shared/defs/customMap";
-import { validateWeaponStats, WEAPON_STATS_NAME_MAX_LEN } from "../../shared/defs/weaponStats";
+} from "../../shared/defs/lobby/customLoadout";
+import type { CustomLoadoutConfig } from "../../shared/defs/lobby/customLoadout";
+import { validateCustomMap } from "../../shared/defs/lobby/customMap";
+import { validateWeaponStats, WEAPON_STATS_NAME_MAX_LEN } from "../../shared/defs/lobby/weaponStats";
 import { type MapDef, MapDefs } from "../../shared/defs/mapDefs";
-import { gunGameMapScale } from "../../shared/defs/gunGameDefs";
+import { gunGameMapScale } from "../../shared/defs/modes/gunGameDefs";
+import type { ArenaLoadout } from "../../shared/defs/modes/arenaDefs";
+import { getJoinArenaLoadouts, getJoinArenaStreaks } from "./api/db/arena";
 import { GameMode, TeamMode } from "../../shared/gameConfig";
 import type { FindGameError } from "../../shared/types/api";
 import type { RoleTag } from "../../shared/types/user";
@@ -25,6 +28,7 @@ import {
     type PrivateLobbyMenuPlayer,
     type PrivateLobbyPlayGameMsg,
     type PublicLobby,
+    LOBBY_SPECIAL_MODES,
     PRIVATE_LOBBY_PLAYER_LIMIT_MAX,
     type PublicLobbyDetails,
     type RoomData,
@@ -605,11 +609,31 @@ export class Room {
         this.setProps(pending.props);
     }
 
-    /** Team size / count for the selected mode - solo while Gun Game is on. */
+    /**
+     * The arena mode the lobby plays (Gun Game, Domination), if any: the owner's "Game
+     * Modes" pick, else the picked mode itself when it is one (an arena mode in the
+     * region's mode list - anyone can pick that one, it runs with the same rules).
+     */
+    private get specialGameMode(): GameMode | undefined {
+        const own = this.data.specialMode;
+        if (own !== undefined && LOBBY_SPECIAL_MODES[own]) return own;
+        const picked = (this.privateLobbyMenu.server.modesByRegion[this.data.region] ?? [])[this.data.gameModeIdx]?.gameMode;
+        return picked && LOBBY_SPECIAL_MODES[picked as GameMode] ? (picked as GameMode) : undefined;
+    }
+
+    /** The special mode's settings (map, teams) - see specialGameMode. */
+    private get specialMode() {
+        const mode = this.specialGameMode;
+        return mode !== undefined ? LOBBY_SPECIAL_MODES[mode] : undefined;
+    }
+
+    /** Team size / count for the selected mode - or the special mode's (Gun Game: solo,
+     *  Domination: two teams). */
     private applyModeSize() {
         const mode = (this.privateLobbyMenu.server.modesByRegion[this.data.region] ?? [])[this.data.gameModeIdx];
-        this.data.teamSize = this.data.gunGame ? TeamMode.Solo : (mode?.teamMode ?? TeamMode.Solo);
-        this.data.teamCount = Math.max(1, Math.floor(this.data.maxPlayers / this.data.teamSize));
+        const special = this.specialMode;
+        this.data.teamSize = special ? special.teamSize : (mode?.teamMode ?? TeamMode.Solo);
+        this.data.teamCount = special?.teams ?? Math.max(1, Math.floor(this.data.maxPlayers / this.data.teamSize));
     }
 
     setProps(props: ClientRoomData) {
@@ -635,10 +659,13 @@ export class Room {
 
         const mode = modes[gameModeIdx];
         const owner = !!this.leader?.owner;
-        this.data.gunGame = owner && !!props.gunGame;
+        this.data.specialMode = owner && props.specialMode !== undefined && LOBBY_SPECIAL_MODES[props.specialMode as GameMode]
+            ? (props.specialMode as GameMode)
+            : undefined;
         this.data.xpEnabled = owner && typeof props.xpEnabled === "boolean" ? props.xpEnabled : undefined;
-        // Gun Game plays on its own map, everyone for themselves
-        const mapDef = (this.data.gunGame ? MapDefs.gungame : MapDefs[mode.mapName as keyof typeof MapDefs]) as MapDef;
+        // a special mode plays on its own map
+        const special = this.specialMode;
+        const mapDef = MapDefs[(special?.mapName ?? mode.mapName) as keyof typeof MapDefs] as MapDef;
 
         // player limit: the leader may move the mode's capacity, but never below the
         // players already in teams (nobody gets pushed out by it); a mode switch
@@ -919,6 +946,18 @@ export class Room {
             return;
         }
 
+        // arena modes: everyone's saved arena loadouts (checked against their unlocks)
+        const special = this.specialMode;
+        const specialGameMode = this.specialGameMode;
+        const arenaLoadouts = new Map<Player, ArenaLoadout[]>();
+        const arenaStreaks = new Map<Player, ArenaStreakSettings>();
+        if (specialGameMode === GameMode.Domination) {
+            for (const p of regularPlayers) {
+                arenaLoadouts.set(p, await getJoinArenaLoadouts(p.userId));
+                arenaStreaks.set(p, await getJoinArenaStreaks(p.userId));
+            }
+        }
+
         // group regular players by their assigned team slot, preserving join order;
         // each bucket lands in its own in-game Group (see Game.addGroupedJoinTokens)
         const teamBuckets = new Map<number, Player[]>();
@@ -943,6 +982,8 @@ export class Room {
                     roleTag: p.roleTag,
                     loadout: loadouts.find((l) => l.userId == p.userId)?.loadout,
                     customLoadout: this.getPlayerCustomLoadout(p),
+                    arenaLoadouts: arenaLoadouts.get(p),
+                    arenaStreaks: arenaStreaks.get(p),
                 } satisfies FindGamePrivateBody["playerData"][0];
             }),
         );
@@ -969,14 +1010,13 @@ export class Room {
         const customLoadoutEnabled =
             this.data.advancedSettings && this.data.customLoadoutEnabled;
 
-        const gunGame = !!this.data.gunGame && !!this.leader?.owner;
         const res = await this.privateLobbyMenu.server.createPrivateGame({
-            mapName: gunGame ? "gungame" : mode.mapName,
-            teamMode: gunGame ? TeamMode.Solo : mode.teamMode,
-            gameMode: gunGame ? GameMode.GunGame : mode.gameMode,
+            mapName: special ? special.mapName : mode.mapName,
+            teamMode: special ? special.teamMode : mode.teamMode,
+            gameMode: special ? specialGameMode : mode.gameMode,
             xpEnabled: this.leader?.owner ? this.data.xpEnabled : undefined,
             // Gun Game: the map grows / shrinks with the player limit
-            mapScale: gunGame ? gunGameMapScale(this.data.maxPlayers) : undefined,
+            mapScale: specialGameMode === GameMode.GunGame ? gunGameMapScale(this.data.maxPlayers) : undefined,
             region,
             version: data.version,
             teams,
@@ -991,9 +1031,9 @@ export class Room {
                 this.data.advancedSettings && this.data.weaponStatsEnabled && this.leaderHasPremium()
                     ? this.data.weaponStats
                     : undefined,
-            // Gun Game brings its own map
+            // special modes bring their own map
             customMap:
-                !gunGame && this.data.advancedSettings && this.data.customMapEnabled && this.leaderHasPremium()
+                !special && this.data.advancedSettings && this.data.customMapEnabled && this.leaderHasPremium()
                     ? this.data.customMap
                     : undefined,
         });
@@ -1100,11 +1140,11 @@ export class Room {
             this.data.customMapEnabled = false;
             this.data.weaponStatsEnabled = false;
         }
-        // owner settings (Gun Game, XP) only while a site owner leads the lobby
+        // owner settings (Game Modes, XP) only while a site owner leads the lobby
         const owner = !!this.leader?.owner;
         this.data.leaderOwner = owner;
-        if (!owner && this.leader && (this.data.gunGame || this.data.xpEnabled !== undefined)) {
-            this.data.gunGame = false;
+        if (!owner && this.leader && (this.data.specialMode !== undefined || this.data.xpEnabled !== undefined)) {
+            this.data.specialMode = undefined;
             this.data.xpEnabled = undefined;
             this.applyModeSize();
         }

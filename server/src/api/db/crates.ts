@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { type CrateType, keyOpensCrate, rollCrate } from "../../../../shared/defs/crateConfig";
+import { type CrateType, keyOpensCrate, rollCrate } from "../../../../shared/defs/shop/crateConfig";
 import type { OpenCrateResponse } from "../../../../shared/types/user";
 import { ItemStatus } from "../../../../shared/utils/loadout";
 import { db } from "./index";

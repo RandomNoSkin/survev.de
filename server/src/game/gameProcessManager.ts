@@ -38,6 +38,8 @@ class GameProcess implements GameData {
     process: ChildProcess;
 
     canJoin = true;
+    /** the biggest party that still fits together (Domination: a side's free room) */
+    partyRoom: number | undefined = undefined;
     isPrivate = false;
     publicSpectating = true;
     creating = false;
@@ -125,6 +127,7 @@ class GameProcess implements GameData {
                 }
                 case ProcessMsgType.UpdateData:
                     this.canJoin = msg.canJoin;
+                    this.partyRoom = msg.partyRoom;
                     this.isPrivate = msg.isPrivate;
                     this.publicSpectating = msg.publicSpectating;
                     this.teamMode = msg.teamMode;
@@ -535,6 +538,8 @@ export class GameProcessManager implements GameManager {
                     !proc.isPrivate &&
                     (proc.canJoin || proc.creating) &&
                     proc.avaliableSlots > 0 &&
+                    // a party only where it fits together (Domination: on one side)
+                    (proc.partyRoom === undefined || proc.partyRoom >= body.playerData.length) &&
                     proc.teamMode === body.teamMode &&
                     proc.gameMode === (body.gameMode ?? GameMode.Standard) &&
                     proc.mapName === body.mapName

@@ -1,7 +1,7 @@
 import $ from "jquery";
 import { GameObjectDefs } from "../../../../shared/defs/register.ts";
 import { UnlockDefs } from "../../../../shared/defs/gameObjects/unlockDefs";
-import { getItemPrice, getItemRarity } from "../../../../shared/defs/shopConfig";
+import { getItemPrice, getItemRarity } from "../../../../shared/defs/shop/shopConfig";
 import { helpers } from "../../helpers";
 import { loadSkinsAtlas } from "../../ui/skinsAtlas";
 

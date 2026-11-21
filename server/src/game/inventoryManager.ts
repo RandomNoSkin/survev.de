@@ -72,13 +72,10 @@ export class InventoryManager {
         const bagLevel = this.player.getGearLevel(this.player.backpack);
         let amount = this.bagSizes[item][bagLevel];
         if (this.player.hasPerk("flak_jacket")) {
-            if (item === "frag") {
-                amount += PerkProperties.flak_jacket.fragBonus;
-            } else if (item === "mirv") {
-                amount += PerkProperties.flak_jacket.mirvBonus;
-            }
+            amount += PerkProperties.flak_jacket.bonuses[item] ?? 0;
         }
-        return amount;
+        // a GameMode's own limit (the arena: at most 4 grenades)
+        return this.player.game.rules?.itemCap?.(this.player, item, amount) ?? amount;
     }
 
     enforceMaxCapacity(item: InventoryItem) {

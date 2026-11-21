@@ -18,7 +18,7 @@ import {
     isCustomMapSpawnable,
     isLootItem,
     validateCustomMap,
-} from "../../../shared/defs/customMap";
+} from "../../../shared/defs/lobby/customMap";
 import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
 import { GameObjectDefs } from "../../../shared/defs/register";
 import { collider } from "../../../shared/utils/collider";

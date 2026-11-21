@@ -1,3 +1,6 @@
+import type { InventoryItem } from "../../gameConfig.ts";
+import type { BaseLootDef } from "./itemTypes.ts";
+
 export const PerkProperties = {
     leadership: {
         minBoost: 100,
@@ -15,8 +18,10 @@ export const PerkProperties = {
         scale: 0.1,
         damageReduction: 0.1,
         explosionDamageReduction: 0.9,
-        fragBonus: 3,
-        mirvBonus: 2,
+        bonuses: {
+            frag: 3,
+            mirv: 2,
+        } as Partial<Record<InventoryItem, number>>,
     },
     amped_explosives: {
         throwableRangeMult: 1.75,
@@ -27,6 +32,7 @@ export const PerkProperties = {
     },
     small_arms: {
         scale: -0.25,
+        gunEquipSpeed: 1,
     },
     splinter: {
         mainDamageMult: 0.6,
@@ -42,6 +48,18 @@ export const PerkProperties = {
     final_bugle: {
         bonusDamageMult: 1.08,
         scaleOnDeath: 0.2,
+        effectRange: 60,
+        hasteDuration: 5,
+    },
+    chambered: {
+        damageMult: 1.25,
+    },
+    martyrdom: {
+        projectileCount: 12,
+        projectileMaxVel: 5,
+    },
+    targeting: {
+        damageMult: 1.25,
     },
     broken_arrow: {
         bonusAirstrikes: 2,
@@ -56,9 +74,18 @@ export const PerkProperties = {
             strobe: 5,
         } as const,
     },
+    windwalk: {
+        maxTriggerDistance: 5, // max distance at which a bullet can trigger windwalk
+        hasteDuration: 3,
+    },
     gotw: {
         scale: 0.2,
         healthRegen: 1, // per second
+    },
+    takedown: {
+        hpReward: 25,
+        boostReward: 25,
+        hasteDuration: 3,
     },
     lifeline: {
         decayMult: 0.75, // Adrenaline decay multiplier
@@ -68,16 +95,45 @@ export const PerkProperties = {
         speedBoost: 1,
     },
     combat_stims: {
-        bonusDamageMult: 1.12,
+        bonusDamageMult: 1.15,
         healPercent: 0.06,
+        effectDuration: 5,
     },
     tree_climbing: {
         waterSpeedBoost: 2,
     },
+    scavenger: {
+        lootTableConf: {
+            tier: "tier_world",
+            min: 1,
+            max: 1,
+            props: {},
+        },
+    },
+    scavenger_adv: {
+        lootTableConf: {
+            tier: "tier_scavenger_adv",
+            min: 1,
+            max: 1,
+            props: {},
+        },
+    },
+    pirate: {
+        minCount: 3,
+        maxCount: 4,
+        tier: "tier_pirate",
+        rareChance: 0.12,
+        rareTier: "tier_pirate_rare",
+    },
     bonus_9mm: {
         spreadMul: 1.1,
-        speedMult: 1.25,
-        distanceMult: 1.25,
+        speedMult: 1.2,
+        distanceMult: 1.2,
+    },
+    bonus_45: {
+        empoweredChance: 0.166,
+        empoweredDamageMult: 1.25,
+        empoweredSpeedMult: 1.2,
     },
     rare_potato: {
         quality: 1,
@@ -85,6 +141,18 @@ export const PerkProperties = {
     high_velocity: {
         speedMult: 1.4,
         distanceMult: 1.3,
+    },
+    trick_chatty: {
+        minInterval: 5,
+        maxInterval: 15,
+    },
+    trick_drain: {
+        bleedTickRateMult: 3,
+    },
+    bonus_assault: {
+        speedMult: 1.1,
+        // bonusDamageMult: 1.08
+        // TODO: weaponManager rewrite, damageMult is sourced from ammoBonusDamageMult rn
     },
     // map of ammo type to perk that boosts that ammo
     ammoBonuses: {
@@ -94,7 +162,7 @@ export const PerkProperties = {
         "12gauge": ["treat_12g"],
         "45acp": ["bonus_45"],
     } as Record<string, string[]>,
-    ammoBonusDamageMult: 1.08,
+    ammoBonusDamageMult: 1.12,
     // Classless perk list (effectively all class perks in Cobalt, minus martyrdom)
     classless: {
         perkPool: [
@@ -114,19 +182,8 @@ export const PerkProperties = {
     },
 };
 
-export interface PerkDef {
-    readonly type: "perk";
-    name: string;
-    lootImg: {
-        sprite: string;
-        tint: number;
-        border: string;
-        borderTint: number;
-        scale: number;
-    };
-    sound: {
-        pickup: string;
-    };
+export interface PerkDef extends BaseLootDef {
+    type: "perk";
     emoteOnPickup?: string;
 }
 
@@ -234,6 +291,20 @@ export const PerkDefs: Record<string, PerkDef> = {
         type: "perk",
         lootImg: {
             sprite: "loot-perk-endless-ammo.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-03.img",
+            borderTint: 0xffffff,
+            scale: 0.275,
+        },
+        sound: {
+            pickup: "perk_pickup_01",
+        },
+    },
+    quickswitch: {
+        name: "Quickswitch",
+        type: "perk",
+        lootImg: {
+            sprite: "loot-perk-quickswitch.img",
             tint: 0xffffff,
             border: "loot-circle-outer-03.img",
             borderTint: 0xffffff,

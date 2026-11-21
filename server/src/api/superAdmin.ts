@@ -8,6 +8,7 @@ import path from "node:path";
 import { z } from "zod";
 import { Config } from "../config";
 import { logModerationAction } from "../utils/serverHelpers";
+import { readConfigFile, writeConfigText } from "../utils/configFile";
 import { ServerLogger } from "../utils/logger";
 import { server } from "./apiServer";
 import { db } from "./db";
@@ -212,6 +213,60 @@ app.post("/api/regions/:id/games/:gameId/stop", async (c) => {
     const ok = await region.sendDashboardGameCmd(gameId, { action: "stop" });
     if (ok) logger.warn(`Game ${gameId} on ${region.id} stopped via super admin`);
     return c.json({ ok });
+});
+
+// ---- Config (every region's game server + this API host) ----
+// The mode list applies live (a region's game server takes it, the API reloads that
+// region's modes for the site info); the whole file as text applies on a restart.
+
+const API_TARGET = "api";
+
+app.get("/api/config", (c) => c.json({ targets: [API_TARGET, ...Object.keys(server.regions)] }));
+
+app.get("/api/config/:target", async (c) => {
+    const target = c.req.param("target");
+    if (target === API_TARGET) return c.json({ target, ...(await readConfigFile()), live: false });
+    const region = getRegion(target);
+    if (!region) return c.json({ error: "unknown target" }, 404);
+    const data = await region.getConfigFile();
+    if (!data) return c.json({ error: "region offline" }, 502);
+    return c.json({ target, ...data, live: true });
+});
+
+app.post("/api/config/:target/modes", async (c) => {
+    const region = getRegion(c.req.param("target"));
+    if (!region) return c.json({ error: "modes only per region (the game servers run them)" }, 400);
+    const body = await c.req.json().catch(() => null);
+    const res = await region.setModes(body?.modes);
+    if (res?.error) return c.json({ error: res.error }, 400);
+    await server.refreshRegionModesOf(region.id);
+    logger.warn(`modes of ${region.id} changed via super admin`);
+    logModerationAction("Super admin: modes changed", [
+        { name: "Region", value: region.id },
+        { name: "Modes", value: (res.modes ?? []).map((m: { mapName: string; enabled: boolean }) => `${m.mapName}${m.enabled ? "" : " (off)"}`).join(", ") || "-" },
+    ]);
+    return c.json({ ok: true, modes: res.modes });
+});
+
+app.post("/api/config/:target/text", async (c) => {
+    const target = c.req.param("target");
+    const body = await c.req.json().catch(() => null);
+    const text = typeof body?.text === "string" ? body.text : "";
+    let res: { ok?: boolean; error?: string; backup?: string };
+    if (target === API_TARGET) {
+        res = await writeConfigText(text);
+    } else {
+        const region = getRegion(target);
+        if (!region) return c.json({ error: "unknown target" }, 404);
+        res = await region.setConfigText(text);
+    }
+    if (!res?.ok) return c.json({ error: res?.error ?? "failed" }, 400);
+    logger.warn(`config file of ${target} replaced via super admin (applies on restart)`);
+    logModerationAction("Super admin: config file replaced", [
+        { name: "Target", value: target },
+        { name: "Size", value: `${Buffer.byteLength(text)} bytes (applies on restart)` },
+    ]);
+    return c.json({ ok: true, backup: res.backup });
 });
 
 // ---- Logs ----

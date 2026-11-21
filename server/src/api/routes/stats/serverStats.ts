@@ -33,12 +33,15 @@ interface Filters {
 }
 
 /** WHERE for a time window plus the page's filters (all values bound, never inlined). */
-function whereFor(from: number | null, to: number, f: Filters): SQL {
+function whereFor(from: number | null, to: number, f: Filters, withArena = false): SQL {
     const conds: SQL[] = [sql`created_at < to_timestamp(${to / 1000})`];
     if (from !== null) conds.push(sql`created_at >= to_timestamp(${from / 1000})`);
     if (f.teamMode !== undefined) conds.push(sql`team_mode = ${f.teamMode}`);
     if (f.region !== undefined) conds.push(sql`region = ${f.region}`);
     if (f.mapId !== undefined) conds.push(sql`map_id = ${f.mapId}`);
+    // all maps: the battle royale only (the arena modes' games are no "game" there) -
+    // `withArena`: the per map table, which lists them on their own
+    else if (!withArena) conds.push(sql`game_mode = 0`);
     return sql.join(conds, sql` AND `);
 }
 
@@ -204,7 +207,7 @@ async function computeHistorical(req: {
             prevWhere ? metrics(prevWhere) : Promise.resolve(null),
             metrics(where, "team_mode"),
             metrics(where, "region"),
-            metrics(where, "map_id"),
+            metrics(whereFor(range.from, range.to, filters, true), "map_id"),
             timeseries(where, range.bucket),
             prevWhere ? timeseries(prevWhere, range.bucket) : Promise.resolve([]),
             db.execute(sql`
@@ -294,7 +297,7 @@ serverStatsRouter.post(
     validateParams(zServerStatsRequest),
     async (c) => {
         const req = c.req.valid("json");
-        const key = `serverstats:v5:${req.period}:${req.season ?? ""}:${req.month ?? ""}:${req.compare ?? ""}:${req.teamMode ?? ""}:${req.region ?? ""}:${req.mapId ?? ""}`;
+        const key = `serverstats:v6:${req.period}:${req.season ?? ""}:${req.month ?? ""}:${req.compare ?? ""}:${req.teamMode ?? ""}:${req.region ?? ""}:${req.mapId ?? ""}`;
 
         let historical = await getCached(key);
         if (!historical) {

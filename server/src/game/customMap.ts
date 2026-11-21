@@ -4,7 +4,7 @@ import {
     customMapCategory,
     effectiveCustomMap,
     validateCustomMap,
-} from "../../../shared/defs/customMap";
+} from "../../../shared/defs/lobby/customMap";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
 import { GameConfig } from "../../../shared/gameConfig";

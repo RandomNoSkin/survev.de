@@ -186,6 +186,7 @@ export class Pass {
                 two_vs_two: "index-play-2v2-duo",
                 scrims:     "index-play-scrims-solo",
                 gungame:    "index-play-gungame-solo",
+                domination: "index-play-domination-solo",
             };
             const onWord = this.localization.translate("pass-xp-boost-on") || "on";
             const text = activeEvents

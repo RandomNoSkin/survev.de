@@ -1,4 +1,5 @@
 import { Rarity } from "../../gameConfig.ts";
+import type { BaseLoadoutItem } from "./itemTypes.ts";
 
 export enum EmoteCategory {
     Locked,
@@ -11,12 +12,8 @@ export enum EmoteCategory {
     Default,
 }
 
-export interface EmoteDef {
-    readonly type: "emote";
-    name?: string;
-    rarity?: Rarity;
-    /** When true, this item can appear in the Golden Fries daily shop. */
-    shop?: boolean;
+export interface EmoteDef extends BaseLoadoutItem {
+    type: "emote";
     texture: string;
     sound: string;
     channel: string;
@@ -305,6 +302,16 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         name: "Boffy",
         rarity: Rarity.Common,
         texture: "face-boffy.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
+    emote_sadboffy: {
+        type: "emote",
+        name: "Sad Boffy",
+        rarity: Rarity.Common,
+        texture: "face-sadboffy.img",
         sound: "emote_01",
         channel: "ui",
         teamOnly: false,
@@ -2022,6 +2029,79 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         channel: "ui",
         teamOnly: false,
         category: EmoteCategory.Other,
-    }
+    },
 
+    emote_antisocial: {
+        type: "emote",
+        name: "Antisocial",
+        rarity: Rarity.Common,
+        texture: "antisocial.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    },
+
+    // Pass 2
+
+    emote_timeout: {
+        type: "emote",
+        name: "Timeout!",
+        rarity: Rarity.Uncommon,
+        texture: "timeout.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    },
+    emote_traumatizedface: {
+        type: "emote",
+        name: "Traumatized Face",
+        rarity: Rarity.Rare,
+        texture: "face-traumatized.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
+    emote_bruh: {
+        type: "emote",
+        name: "b r u h",
+        rarity: Rarity.Uncommon,
+        texture: "bruh.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Other,
+    },
+    emote_flatteredface: {
+        type: "emote",
+        name: "Flattered Face",
+        rarity: Rarity.Rare,
+        texture: "face-flattered.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
+    emote_salutingface: {
+        type: "emote",
+        name: "Saluting Face",
+        rarity: Rarity.Uncommon,
+        texture: "face-salute.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
+    emote_screamingface: {
+        type: "emote",
+        name: "Screaming Face",
+        rarity: Rarity.Rare,
+        texture: "face-screaming.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+    },
 };

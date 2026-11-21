@@ -1,6 +1,6 @@
 import $ from "jquery";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
-import { getItemRarity } from "../../../shared/defs/shopConfig";
+import { getItemRarity } from "../../../shared/defs/shop/shopConfig";
 import type { ShopOffer } from "../../../shared/types/user";
 import { cosmeticStats, formatOwnerPercent } from "../../../shared/utils/cosmeticStats";
 import type { Account } from "../account";

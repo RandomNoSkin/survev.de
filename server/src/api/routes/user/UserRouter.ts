@@ -191,10 +191,11 @@ import {
     type ClanStatsResponse,
     zClanLeagueRequest,
     zClanIdOptRequest,
+    zClanPoolDistributeRequest,
     zClanPoolGiveRequest,
     type ClanViewResponse,
 } from "../../../../../shared/utils/clan";
-import { clanIdOf, getClanLeague, getClanStats, giveFromPool } from "../../db/clanStats";
+import { clanIdOf, getClanLeague, getClanStats, giveFromPool, giveManyFromPool } from "../../db/clanStats";
 import {
     cancelInvite,
     createClan,
@@ -217,8 +218,10 @@ import {
 import { openCrate } from "../../db/crates";
 import { dumpItem } from "../../db/dump";
 import { buyShopOffer, getShopForUser } from "../../db/shop";
-import { isCrateType } from "../../../../../shared/defs/crateConfig";
+import { isCrateType } from "../../../../../shared/defs/shop/crateConfig";
 import { signReplayToken } from "../../replayToken";
+import { getArenaProfile, saveArenaLoadout, saveArenaStreaks } from "../../db/arena";
+import { type ArenaProfileResponse, zArenaLoadoutRequest, zArenaStreaks } from "../../../../../shared/utils/arena";
 import type { Context } from "../../index";
 import {
     getTimeUntilNextUsernameChange,
@@ -582,28 +585,58 @@ UserRouter.post("/clan/role", validateParams(zClanRoleRequest), async (c) => {
     return c.json<ClanActionResponse>(await setMemberRole(user.id, slug, role), 200);
 });
 
+/** The arena menu: level, kills per weapon, unlocks, the saved loadouts. */
+UserRouter.post("/arena", async (c) => {
+    const user = c.get("user")!;
+    return c.json<ArenaProfileResponse>(await getArenaProfile(user.id), 200);
+});
+
+/** Saves one arena loadout slot (locked items fall back to the default's). */
+UserRouter.post("/arena/loadout", validateParams(zArenaLoadoutRequest), async (c) => {
+    const user = c.get("user")!;
+    const { slot, loadout } = c.req.valid("json");
+    return c.json({ loadout: await saveArenaLoadout(user.id, slot, loadout) }, 200);
+});
+
+/** Saves the kill streak picks (locked variants fall back to the defaults). */
+UserRouter.post("/arena/streaks", validateParams(zArenaStreaks), async (c) => {
+    const user = c.get("user")!;
+    return c.json({ streaks: await saveArenaStreaks(user.id, c.req.valid("json")) }, 200);
+});
+
 /** Any clan as other players see it (league / clan list popup). */
 UserRouter.post("/clan/view", validateParams(zClanIdRequest), async (c) => {
     return c.json<ClanViewResponse>(await getClanView(c.req.valid("json").clanId), 200);
 });
 
-/** This week's stats of a clan (default: your own). */
+/** A week's stats of a clan (default: your own, this week). */
 UserRouter.post("/clan/stats", validateParams(zClanIdOptRequest), async (c) => {
     const user = c.get("user")!;
-    const clanId = c.req.valid("json").clanId ?? (await clanIdOf(user.id));
+    const { clanId: reqClanId, week } = c.req.valid("json");
+    const ownClanId = await clanIdOf(user.id);
+    const clanId = reqClanId ?? ownClanId;
     if (!clanId) return c.json({ error: "not_member" }, 404);
-    return c.json<ClanStatsResponse>(await getClanStats(clanId), 200);
+    return c.json<ClanStatsResponse>(await getClanStats(clanId, week, clanId === ownClanId), 200);
 });
 
+/** A week's league (default: this week). */
 UserRouter.post("/clan/league", validateParams(zClanLeagueRequest), async (c) => {
-    return c.json<ClanLeagueResponse>(await getClanLeague(c.req.valid("json").metric), 200);
+    const { metric, week } = c.req.valid("json");
+    return c.json<ClanLeagueResponse>(await getClanLeague(metric, week), 200);
 });
 
 /** Owner hands league reward keys from the clan pool to a member. */
+/** Owner / co-owner shares out a week's keys as suggested (several gifts, all or none). */
+UserRouter.post("/clan/pool/distribute", validateParams(zClanPoolDistributeRequest), async (c) => {
+    const user = c.get("user")!;
+    const { week, gifts } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await giveManyFromPool(user.id, gifts, week), 200);
+});
+
 UserRouter.post("/clan/pool/give", validateParams(zClanPoolGiveRequest), async (c) => {
     const user = c.get("user")!;
-    const { slug, keyType, amount } = c.req.valid("json");
-    return c.json<ClanActionResponse>(await giveFromPool(user.id, slug, keyType, amount), 200);
+    const { slug, keyType, amount, week } = c.req.valid("json");
+    return c.json<ClanActionResponse>(await giveFromPool(user.id, slug, keyType, amount, week), 200);
 });
 
 UserRouter.post("/clan/leave", async (c) => {

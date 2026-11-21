@@ -7,8 +7,8 @@ import {
     getKeyTypes,
     keyOpensCrate,
     rollCrate,
-} from "../../shared/defs/crateConfig.ts";
-import { getItemCategory, getItemPrice, getItemRarity } from "../../shared/defs/shopConfig.ts";
+} from "../../shared/defs/shop/crateConfig.ts";
+import { getItemCategory, getItemPrice, getItemRarity } from "../../shared/defs/shop/shopConfig.ts";
 
 test("keys open their own crate and every weaker one", () => {
     expect(getKeyTypes()).toStrictEqual(["key_wooden", "key_soviet", "key_airdrop"]);

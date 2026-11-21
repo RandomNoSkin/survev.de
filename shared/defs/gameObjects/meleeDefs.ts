@@ -1,16 +1,11 @@
 import { Rarity } from "../../gameConfig.ts";
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
+import type { BaseLoadoutItem, BaseWeaponDef } from "./itemTypes.ts";
 
-export interface MeleeDef {
-    readonly type: "melee";
+export interface MeleeDef extends BaseWeaponDef, BaseLoadoutItem {
+    type: "melee";
     name: string;
-    /** When true, this item can appear in the Golden Fries daily shop. */
-    shop?: boolean;
-    perk?: string;
-    // Discord snowflake as a string - a JS number would lose precision.
-    creatorDiscordId?: string;
-    quality: number;
     autoAttack: boolean;
     switchDelay: number;
     damage: number;
@@ -26,38 +21,37 @@ export interface MeleeDef {
         equip: number;
         attack?: number;
     };
-    anim: {
-        idlePose: string;
-        attackAnims: string[];
-        attackSequence?: string[];
+    anim:
+        & {
+            idlePose: string;
+            attackAnims: string[];
+            attackSequence?: string[];
+        }
+        & ({
+            deployAnimTime: number;
+            deployAnims: string[];
+        } | {
+            deployAnimTime?: undefined;
+            deployAnims?: undefined;
+        })
+        & ({
+            idleAnimTime: number;
+            idleAnims: string[];
+        } | {
+            idleAnimTime?: undefined;
+            idleAnims?: undefined;
+        });
+    sound: {
+        swing: string;
+        deploy: string;
+        playerHit: string;
+        playerHit2?: string;
+        pickup: string;
+        idle?: string;
+        bullet?: string;
     };
-    sound: Record<string, string>;
-    //  {
-    //     swing: string
-    //     deploy: string
-    //     playerHit: string
-    //     playerHit2?: string
-    //     pickup?: string
-    //     bullet?: string
-    // }
-    lootImg: {
-        sprite: string;
-        scale: number;
-        rad?: number;
-        tint: number;
-        border?: string;
-        borderTint?: number;
-        rot?: number;
-        mirror?: boolean;
-        innerScale?: number;
-    };
-    baseType?: string;
-    rarity?: number;
-    lore?: string;
-    noPotatoSwap?: boolean;
-    noDropOnDeath?: boolean;
-    worldImg?: Img;
-    hipImg?: Img;
+    worldImg?: MeleeImg;
+    hipImg?: MeleeImg;
     reflectSurface?: {
         equipped: {
             p0: Vec2;
@@ -72,7 +66,7 @@ export interface MeleeDef {
     stonePiercing?: boolean;
 }
 
-export interface Img {
+interface MeleeImg {
     sprite: string;
     pos: Vec2;
     rot: number;
@@ -87,7 +81,7 @@ export interface Img {
 }
 
 function defineMeleeSkin(baseType: string, params: DeepPartial<MeleeDef>): MeleeDef {
-    return util.mergeDeep({}, BaseDefs[baseType], params);
+    return util.mergeDeep({}, BaseDefs[baseType], { baseType }, params);
 }
 
 const BaseDefs: Record<string, MeleeDef> = {
@@ -116,6 +110,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             attackAnims: ["fists"],
         },
         sound: {
+            pickup: "none",
             swing: "punch_swing_01",
             deploy: "stow_weapon_01",
             playerHit: "punch_hit_01",
@@ -123,7 +118,6 @@ const BaseDefs: Record<string, MeleeDef> = {
         lootImg: {
             sprite: "loot-weapon-fists.img",
             scale: 0.3,
-            rad: 25,
             tint: 0xff00,
         },
     },
@@ -153,12 +147,17 @@ const BaseDefs: Record<string, MeleeDef> = {
         anim: {
             idlePose: "fists",
             attackAnims: ["fists", "fists"],
+            deployAnims: ["knuckles_spin", "knuckles_slam"],
+            deployAnimTime: 0.65,
+            idleAnims: ["knuckles_bash"],
+            idleAnimTime: 0.7,
         },
         sound: {
             pickup: "frag_pickup_01",
             swing: "punch_swing_01",
             deploy: "knuckles_deploy_01",
             playerHit: "punch_hit_01",
+            idle: "knuckles_bash_01",
         },
         lootImg: {
             sprite: "loot-melee-knuckles-rusted.img",
@@ -166,7 +165,6 @@ const BaseDefs: Record<string, MeleeDef> = {
             border: "loot-circle-outer-02.img",
             borderTint: 0xffffff,
             scale: 0.3,
-            rad: 25,
             rot: 0.785,
         },
         worldImg: {
@@ -263,7 +261,11 @@ const BaseDefs: Record<string, MeleeDef> = {
         },
         anim: {
             idlePose: "slash",
-            attackAnims: ["slash", "fists"],
+            attackAnims: ["slash", "stab"],
+            deployAnims: ["karambit_spin", "karambit_rapidSpin"],
+            deployAnimTime: 0.65,
+            idleAnims: ["karambit_frontSpin", "karambit_backSpin"],
+            idleAnimTime: 0.85,
         },
         sound: {
             pickup: "frag_pickup_01",
@@ -319,6 +321,10 @@ const BaseDefs: Record<string, MeleeDef> = {
         anim: {
             idlePose: "fists",
             attackAnims: ["cut", "thrust"],
+            deployAnims: ["bayonet_unsheathe"],
+            deployAnimTime: 0.65,
+            idleAnims: ["knife_inspect"],
+            idleAnimTime: 1.15,
         },
         sound: {
             pickup: "frag_pickup_01",
@@ -427,6 +433,10 @@ const BaseDefs: Record<string, MeleeDef> = {
         anim: {
             idlePose: "fists",
             attackAnims: ["cut", "thrust"],
+            deployAnims: ["huntsman_catch"],
+            deployAnimTime: 0.675,
+            idleAnims: ["knife_inspect"],
+            idleAnimTime: 1.15,
         },
         sound: {
             pickup: "frag_pickup_01",
@@ -1220,7 +1230,7 @@ const BaseDefs: Record<string, MeleeDef> = {
             },
             rad: 1.5,
             damageTimes: [0.12],
-            cooldownTime: 0.35,
+            cooldownTime: 0.3,
         },
         speed: {
             equip: 1.3,
@@ -1319,7 +1329,7 @@ const BaseDefs: Record<string, MeleeDef> = {
         cleave: true,
         autoAttack: false,
         switchDelay: 0.25,
-        damage: 30,
+        damage: 25,
         obstacleDamage: 1,
         attack: {
             offset: {
@@ -1410,14 +1420,23 @@ const SkinDefs: Record<string, MeleeDef> = {
             sprite: "loot-melee-knuckles-oldman.img",
         },
     }),
+    karambit_borealis: defineMeleeSkin("karambit", {
+        name: "Karambit Borealis",
+        rarity: Rarity.Epic,
+        lore: "Rend the skies asunder.",
+        noPotatoSwap: false,
+        lootImg: {
+            sprite: "loot-melee-karambit-borealis.img",
+        },
+        worldImg: {
+            sprite: "loot-melee-karambit-borealis.img",
+        },
+    }),
     karambit_rugged: defineMeleeSkin("karambit", {
         name: "Karambit Rugged",
         rarity: Rarity.Rare,
+        lore: "What's your favourite knife trick?",
         noPotatoSwap: false,
-        anim: {
-            idlePose: "slash",
-            attackAnims: ["slash", "fists"],
-        },
         lootImg: {
             sprite: "loot-melee-karambit-rugged.img",
         },
@@ -1540,6 +1559,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     bayonet_rugged: defineMeleeSkin("bayonet", {
         name: "Bayonet Rugged",
         rarity: Rarity.Rare,
+        lore: "Can't go wrong with the ol' reliable.",
         noPotatoSwap: false,
         lootImg: {
             sprite: "loot-melee-bayonet-rugged.img",
@@ -1551,6 +1571,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     bayonet_woodland: defineMeleeSkin("bayonet", {
         name: "Bayonet Woodland",
         rarity: Rarity.Epic,
+        lore: "The woods have left their mark on a lethal weapon.",
         noPotatoSwap: false,
         lootImg: {
             sprite: "loot-melee-bayonet-woodland.img",
@@ -1654,6 +1675,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     huntsman_rugged: defineMeleeSkin("huntsman", {
         name: "Huntsman Rugged",
         rarity: Rarity.Rare,
+        lore: "Always bet on black.",
         noPotatoSwap: false,
         lootImg: {
             sprite: "loot-melee-huntsman-rugged.img",
@@ -1665,6 +1687,7 @@ const SkinDefs: Record<string, MeleeDef> = {
     huntsman_burnished: defineMeleeSkin("huntsman", {
         name: "Huntsman Burnished",
         rarity: Rarity.Epic,
+        lore: "Bury them with style.",
         noPotatoSwap: false,
         lootImg: {
             sprite: "loot-melee-huntsman-burnished.img",
@@ -1946,7 +1969,6 @@ const SkinDefs: Record<string, MeleeDef> = {
     cutlass_gold: defineMeleeSkin("cutlass", {
         name: "Gold Cutlass",
         noPotatoSwap: true,
-        damage: 35,
         // perk: "pirate",
         lootImg: { sprite: "loot-melee-cutlass-gold.img" },
         worldImg: { sprite: "loot-melee-cutlass-gold.img" },

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, lt } from "drizzle-orm";
-import { TRADE_EVENT_TTL_MS } from "../../../../shared/defs/shopConfig";
+import { TRADE_EVENT_TTL_MS } from "../../../../shared/defs/shop/shopConfig";
 import type { TradeEvent, TradeEventKind } from "../../../../shared/types/user";
 import { db } from "./index";
 import { tradeEventsTable } from "./schema";

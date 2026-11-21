@@ -6,12 +6,12 @@ import {
     DEFAULT_CUSTOM_LOADOUT,
     MAX_EXTRA_CUSTOM_LOADOUTS,
     validateCustomLoadout,
-} from "../../../shared/defs/customLoadout";
+} from "../../../shared/defs/lobby/customLoadout";
 import { type RoleDef, RoleDefs } from "../../../shared/defs/gameObjects/roleDefs";
-import { gunGameMapScale } from "../../../shared/defs/gunGameDefs";
+import { gunGameMapScale } from "../../../shared/defs/modes/gunGameDefs";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import { GameObjectDefs } from "../../../shared/defs/register";
-import { GameConfig } from "../../../shared/gameConfig";
+import { GameConfig, GameMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
 import type { FindGameMatchData } from "../../../shared/types/api";
 import type {
@@ -1367,6 +1367,10 @@ export class PrivateLobbyMenu {
             id: "general",
             label: this.localization.translate("index-private-lobby-tab-general"),
         });
+        // owner only (the server enforces it too): Gun Game, Domination
+        if (this.roomData.leaderOwner && this.isLeader) {
+            tabs.push({ id: "gameModes", label: "Game Modes" });
+        }
         if (this.getArenaModeRoles().length >= 2 && !this.roomData.customLoadoutEnabled) {
             tabs.push({
                 id: "arenaRoles",
@@ -1428,7 +1432,31 @@ export class PrivateLobbyMenu {
             case "lobbyCode":
                 this.settingsContent.append(this.renderShareCodeTab());
                 break;
+            case "gameModes":
+                this.settingsContent.append(this.renderGameModesTab());
+                break;
         }
+    }
+
+    /** "Game Modes" tab (owner only): play a mode with its own map and rules instead of
+     *  the selected one. */
+    renderGameModesTab() {
+        const wrapper = $("<div/>", { class: "private-lobby-general-settings" });
+        const modes: Array<[GameMode | undefined, string, string]> = [
+            [undefined, "Selected mode", "The mode picked above, on its own map."],
+            [GameMode.GunGame, "Gun Game", "Everyone for themselves: every kill moves you up a ladder of guns. The map grows with the player limit."],
+            [GameMode.Domination, "Domination", "Two teams of up to 6 hold the zones A, B and C. Players join with their arena loadout - put them into the two teams."],
+        ];
+        for (const [mode, label, hint] of modes) {
+            const row = this.renderSettingRow(label, this.roomData.specialMode === mode, this.isLeader, () => {
+                if (this.roomData.specialMode === mode) return;
+                this.roomData.specialMode = mode;
+                this.sendMessage("setRoomProps", this.roomData);
+                this.refreshUi();
+            });
+            wrapper.append(row, $("<div/>", { class: "private-lobby-setting-hint private-lobby-mode-hint", text: hint }));
+        }
+        return wrapper;
     }
 
     /** "General" tab: lobby-wide settings the leader can toggle. */
@@ -1506,18 +1534,6 @@ export class PrivateLobbyMenu {
         // (leaderOwner) - other members don't, even in an owner's lobby. The server
         // enforces it either way.
         if (this.roomData.leaderOwner && this.isLeader) {
-            wrapper.append(
-                this.renderSettingRow(
-                    "Gun Game (own map, free-for-all)",
-                    !!this.roomData.gunGame,
-                    this.isLeader,
-                    () => {
-                        this.roomData.gunGame = !this.roomData.gunGame;
-                        this.sendMessage("setRoomProps", this.roomData);
-                        this.refreshUi();
-                    },
-                ),
-            );
             wrapper.append(
                 this.renderSettingRow(
                     "Matches earn XP",
@@ -1677,7 +1693,7 @@ export class PrivateLobbyMenu {
             text: this.roomData.playerLimit !== undefined ? ` (mode: ${modeMax})` : "",
         }));
         // Gun Game sizes its map to the player limit
-        if (this.roomData.gunGame) {
+        if (this.roomData.specialMode === GameMode.GunGame) {
             label.append($("<span/>", {
                 class: "private-lobby-setting-hint",
                 text: ` · map size ${Math.round(gunGameMapScale(value) * 100)}%`,

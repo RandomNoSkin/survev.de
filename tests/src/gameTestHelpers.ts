@@ -21,7 +21,8 @@ export function createGame(teamMode: TeamMode, mapName: MapDefKey, gameMode?: Ga
     // don't need. Run the synchronous essentials here so the game actually ticks:
     // generate the map and flip allowJoin, otherwise Game.update() early-returns
     // (`if (!this.allowJoin) return`) and nothing progresses (revive, bleed, kills...).
-    game.map.init();
+    // (as Game.init: a mode that resets its map later gets a seeded one)
+    game.map.init(game.rules?.seededMap ? Math.floor(Math.random() * 1e9) + 1 : undefined);
     game.allowJoin = true;
     return game;
 }

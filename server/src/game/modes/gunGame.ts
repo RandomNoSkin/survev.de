@@ -1,26 +1,34 @@
 import { GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
 import { GameObjectDefs } from "../../../../shared/defs/register";
-import { type GunCategory, gunCategory } from "../../../../shared/defs/gunCategories";
+import { type GunCategory, gunCategory } from "../../../../shared/defs/gameObjects/gunCategories";
 import {
+    GUN_GAME_COUNTDOWN_S,
     GUN_GAME_EXCLUDED_GUNS,
+    GUN_GAME_FULL_COUNTDOWN_S,
+    GUN_GAME_MIN_PLAYERS,
+    GUN_GAME_PRIVATE_WAIT_S,
+    GUN_GAME_WARMUP_GUNS,
     GUN_GAME_IGNORED_LOOT_TIERS,
     GUN_GAME_POOL_MAP,
     GUN_GAME_GEAR,
     GUN_GAME_LADDER_SHAPE,
+    gunGameMapScale,
     GUN_GAME_MELEE,
+    GUN_GAME_PERKS,
     GUN_GAME_RESPAWN_DELAY_S,
+    GUN_GAME_SPAWN_CANDIDATES,
+    GUN_GAME_SPAWN_TARGET_DIST,
     GUN_GAME_SPAWN_PROTECTION_S,
     GUN_GAME_TIME_LIMIT_S,
-} from "../../../../shared/defs/gunGameDefs";
+} from "../../../../shared/defs/modes/gunGameDefs";
 import { MapDefs } from "../../../../shared/defs/mapDefs";
 import { GameConfig, type InventoryItem } from "../../../../shared/gameConfig";
-import * as net from "../../../../shared/net/net";
+import type * as net from "../../../../shared/net/net";
 import { ObjectType } from "../../../../shared/net/objectSerializeFns";
-import { v2 } from "../../../../shared/utils/v2";
-import type { Game } from "../game";
+import { type Vec2, v2 } from "../../../../shared/utils/v2";
 import type { DamageParams } from "../objects/gameObject";
 import type { Player } from "../objects/player";
-import type { ModeRules } from "./modeRules";
+import { RespawnRules } from "./respawnRules";
 
 /**
  * Guns a ladder may draw from, by category: the ones found on GUN_GAME_POOL_MAP's loot
@@ -73,25 +81,40 @@ export function buildGunGameLadder(random: () => number = Math.random): string[]
 /**
  * Gun Game (GameMode.GunGame): every kill moves the killer one step up a ladder of
  * guns drawn at random for this match; a melee kill also moves the victim one step
- * down. Killed players are gone for a moment and respawn - nobody really dies. The
- * first kill made on the last step (the melee) wins; when the time limit runs out the
- * highest step wins.
+ * down. Killed players watch their killer for a moment and respawn - nobody really
+ * dies (see RespawnRules). The first kill made on the last step (the sledgehammer)
+ * wins; when the time limit runs out the highest step wins.
+ *
+ * Before that, a warmup: until GUN_GAME_MIN_PLAYERS are in, everyone plays with random
+ * guns and nothing counts; then a countdown, a new map sized for the players in,
+ * everyone respawns on step 1 and the clock starts. Late joiners start on the lowest
+ * step of the match.
  */
-export class GunGame implements ModeRules {
-    readonly skipsGas = true;
+export class GunGame extends RespawnRules {
     readonly ladder = buildGunGameLadder();
 
-    private levels = new Map<Player, number>();
-    /** game clock (s) a hidden player respawns at */
-    private respawnAt = new Map<Player, number>();
-    /** game clock (s) until which a player takes no damage */
-    private protectedUntil = new Map<Player, number>();
-    private clock = 0;
-    private winner: Player | undefined;
-    /** levels changed (or someone joined / left) since the last ModeStandingsMsg */
-    private standingsDirty = true;
+    protected readonly settings = {
+        respawnDelay: GUN_GAME_RESPAWN_DELAY_S,
+        spawnProtection: GUN_GAME_SPAWN_PROTECTION_S,
+        timeLimit: GUN_GAME_TIME_LIMIT_S,
+        minPlayers: GUN_GAME_MIN_PLAYERS,
+        countdown: GUN_GAME_COUNTDOWN_S,
+        fullCountdown: GUN_GAME_FULL_COUNTDOWN_S,
+        privateWait: GUN_GAME_PRIVATE_WAIT_S,
+    };
 
-    constructor(readonly game: Game) {}
+    private levels = new Map<Player, number>();
+    /** the melee each player brought in their loadout - carried until the last step */
+    private ownMelee = new Map<Player, string>();
+    private winner: Player | undefined;
+
+    /** A new map sized for the players in, everyone back on step 1. */
+    protected onMatchStart(players: Player[]): void {
+        this.winner = undefined;
+        this.game.map.regenerate(undefined, gunGameMapScale(players.length));
+        this.clearLoot();
+        for (const p of players) this.levels.set(p, 0);
+    }
 
     levelOf(player: Player): number {
         return this.levels.get(player) ?? 0;
@@ -102,138 +125,151 @@ export class GunGame implements ModeRules {
     }
 
     onJoin(player: Player): void {
-        this.levels.set(player, 0);
+        // late joiners start on the lowest step anyone is on
+        const others = this.activePlayers().filter((p) => p !== player && this.levels.has(p));
+        this.levels.set(player, this.running && others.length ? Math.min(...others.map((p) => this.levelOf(p))) : 0);
         this.standingsDirty = true;
-        // the ladder decides the weapons; ammo never runs out
-        player.addPerk("endless_ammo", false);
+        this.ownMelee.set(player, player.weapons[GameConfig.WeaponSlot.Melee].type || "fists");
+        // the ladder decides the weapons; ammo never runs out, kills heal a bit
+        for (const perk of GUN_GAME_PERKS) player.addPerk(perk, false);
+        this.giveSpawnItems(player);
+    }
+
+    protected giveSpawnItems(player: Player): void {
         this.giveGear(player);
         this.giveLevelWeapons(player);
     }
 
-    /** Level 3 armor and the scopes (GUN_GAME_GEAR) - the same for everyone. */
+    /** Armor, scopes and heals (GUN_GAME_GEAR) - the same for everyone, refilled on respawn. */
     private giveGear(player: Player): void {
         player.helmet = GUN_GAME_GEAR.helmet;
         player.chest = GUN_GAME_GEAR.chest;
         for (const scope of GUN_GAME_GEAR.scopes) player.invManager.set(scope as InventoryItem, 1);
+        for (const [item, count] of Object.entries(GUN_GAME_GEAR.heals)) {
+            player.invManager.set(item as InventoryItem, count);
+        }
         player.inventoryDirty = true;
         player.setDirty();
     }
 
-    /** Slot 0: the step's gun (none on the melee step); the melee is always carried. */
+    /** Slot 0: the step's gun (none on the last step); the melee slot: the player's own
+     *  melee, the sledgehammer on the last step. */
     private giveLevelWeapons(player: Player): void {
+        if (!this.running) {
+            this.giveWarmupWeapons(player);
+            return;
+        }
         const wm = player.weaponManager;
         const type = this.ladder[this.levelOf(player)];
         const gun = GunDefs[type] as { maxClip: number } | undefined;
         wm.setWeapon(GameConfig.WeaponSlot.Primary, gun ? type : "", gun ? gun.maxClip : 0);
         wm.setWeapon(GameConfig.WeaponSlot.Secondary, "", 0);
-        wm.setWeapon(GameConfig.WeaponSlot.Melee, GUN_GAME_MELEE, 0);
+        wm.setWeapon(GameConfig.WeaponSlot.Melee, gun ? (this.ownMelee.get(player) ?? "fists") : GUN_GAME_MELEE, 0);
         wm.setWeapon(GameConfig.WeaponSlot.Throwable, "", 0);
         wm.setCurWeapIndex(gun ? GameConfig.WeaponSlot.Primary : GameConfig.WeaponSlot.Melee, true, true, true, false);
         player.weapsDirty = true;
         player.setDirty();
     }
 
+    /** Warmup: GUN_GAME_WARMUP_GUNS different random guns from the pool + the own melee. */
+    private giveWarmupWeapons(player: Player): void {
+        const wm = player.weaponManager;
+        const pool = [...gunPool().values()].flat();
+        const guns: string[] = [];
+        while (guns.length < GUN_GAME_WARMUP_GUNS && pool.length) {
+            guns.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+        }
+        const slots = [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary];
+        slots.forEach((slot, i) => {
+            const gun = GunDefs[guns[i]] as { maxClip: number } | undefined;
+            wm.setWeapon(slot, gun ? guns[i] : "", gun ? gun.maxClip : 0);
+        });
+        wm.setWeapon(GameConfig.WeaponSlot.Melee, this.ownMelee.get(player) ?? "fists", 0);
+        wm.setWeapon(GameConfig.WeaponSlot.Throwable, "", 0);
+        wm.setCurWeapIndex(GameConfig.WeaponSlot.Primary, true, true, true, false);
+        player.weapsDirty = true;
+        player.setDirty();
+    }
+
     handleDeath(victim: Player, params: DamageParams): boolean {
         if (this.respawnAt.has(victim)) return true;
+        // warmup: only the respawn, nothing counts
+        if (!this.running) {
+            const source = params.source?.__type === ObjectType.Player && params.source !== victim
+                ? (params.source as Player)
+                : undefined;
+            this.broadcastKill(victim, params, source);
+            this.hideUntilRespawn(victim, undefined);
+            return true;
+        }
 
-        const credit = params.killCreditSource ?? params.source;
-        const killer = credit?.__type === ObjectType.Player && credit !== victim ? (credit as Player) : undefined;
         const meleeKill = GameObjectDefs.typeToDefSafe(params.gameSourceType ?? "")?.type === "melee";
+        const credit = params.killCreditSource ?? params.source;
+        const selfKill = !(credit?.__type === ObjectType.Player && credit !== victim);
+        // anti kill steal: killing yourself (own grenade, barrel, ...) costs a step, and
+        // the last one who hurt you gets the kill - a full kill, it also wins on the last step
+        const { killer, stolen } = this.resolveKiller(victim, params);
+        if (selfKill) {
+            this.levels.set(victim, Math.max(0, this.levelOf(victim) - 1));
+            this.standingsDirty = true;
+        }
 
         if (killer) {
-            killer.kills++;
-            killer.killedIds.push(victim.matchDataId);
+            this.countKill(killer, victim, params);
             if (meleeKill) this.levels.set(victim, Math.max(0, this.levelOf(victim) - 1));
             this.standingsDirty = true;
-            if (this.levelOf(killer) >= this.lastLevel && meleeKill) {
+            if (this.levelOf(killer) >= this.lastLevel && (meleeKill || stolen)) {
                 this.winner = killer;
             } else {
                 this.levels.set(killer, Math.min(this.lastLevel, this.levelOf(killer) + 1));
                 this.giveLevelWeapons(killer);
             }
-            this.game.playerBarn.killLeaderDirty = true;
-            this.game.logKillFeedEntry({
-                ts: Date.now(),
-                killerName: killer.name,
-                killerUserId: killer.userId ?? "",
-                victimName: victim.name,
-                victimUserId: victim.userId ?? "",
-                weapon: params.gameSourceType ?? params.mapSourceType ?? "unknown",
-            });
         }
 
-        const killMsg = new net.KillMsg();
-        killMsg.damageType = params.damageType;
-        killMsg.itemSourceType = params.gameSourceType ?? "";
-        killMsg.mapSourceType = params.mapSourceType ?? "";
-        killMsg.targetId = victim.__id;
-        killMsg.killed = true;
-        if (killer) {
-            killMsg.killCreditId = killer.__id;
-            killMsg.killerKills = killer.kills;
-        }
-        if (params.source?.__type === ObjectType.Player) killMsg.killerId = params.source.__id;
-        this.game.broadcastMsg(net.MsgType.Kill, killMsg);
-
-        // gone for a moment: hidden, no inputs, no damage - see update() for the respawn
-        this.respawnAt.set(victim, this.clock + GUN_GAME_RESPAWN_DELAY_S);
-        victim.shootHold = false;
-        victim.moveLeft = victim.moveRight = victim.moveUp = victim.moveDown = false;
-        victim.cancelAction();
-        victim.setDirty();
+        this.broadcastKill(victim, params, killer);
+        this.hideUntilRespawn(victim, killer);
         return true;
     }
 
-    private respawn(player: Player): void {
-        this.respawnAt.delete(player);
-        this.protectedUntil.set(player, this.clock + GUN_GAME_SPAWN_PROTECTION_S);
-        v2.set(player.pos, this.game.map.getSpawnPos(player.group, player.team));
-        player.layer = 0;
-        player.health = 100;
-        player.boost = 0;
-        player.lastDamagedBy = undefined;
-        this.game.grid.updateObject(player);
-        this.giveGear(player);
-        this.giveLevelWeapons(player);
-    }
-
-    isProtected(player: Player): boolean {
-        return this.respawnAt.has(player) || (this.protectedUntil.get(player) ?? 0) > this.clock;
-    }
-
-    blocksInput(player: Player): boolean {
-        return this.respawnAt.has(player);
-    }
-
-    isHidden(player: Player): boolean {
-        return this.respawnAt.has(player);
-    }
-
-    update(dt: number): void {
-        this.clock += dt;
-        for (const [player, at] of this.respawnAt) {
-            if (player.disconnected) this.respawnAt.delete(player);
-            else if (at <= this.clock) this.respawn(player);
+    /** A spot near the fight: of a few candidates (each at least minSpawnRad from
+     *  everyone), the one whose nearest opponent is closest to SPAWN_TARGET_DIST; the
+     *  match start (`spread`): anywhere. */
+    spawnPos(player: Player, spread = false): Vec2 {
+        const map = this.game.map;
+        if (spread) return map.getSpawnPos();
+        const opponents = this.game.playerBarn.livingPlayers.filter(
+            (p) => p !== player && !p.disconnected && !this.respawnAt.has(p),
+        );
+        let best = map.getSpawnPos();
+        if (!opponents.length) return best;
+        let bestScore = Infinity;
+        for (let i = 0; i < GUN_GAME_SPAWN_CANDIDATES; i++) {
+            const pos = i === 0 ? best : map.getSpawnPos();
+            let nearest = Infinity;
+            for (const p of opponents) nearest = Math.min(nearest, v2.distance(p.pos, pos));
+            const score = Math.abs(nearest - GUN_GAME_SPAWN_TARGET_DIST);
+            if (score < bestScore) {
+                best = pos;
+                bestScore = score;
+            }
         }
-        if (this.standingsDirty) {
-            this.standingsDirty = false;
-            const msg = new net.ModeStandingsMsg();
-            msg.entries = this.ranking()
-                .filter((p) => !p.disconnected)
-                .slice(0, 255)
-                .map((p) => ({ playerId: p.__id, score: this.levelOf(p) + 1 }));
-            this.game.broadcastMsg(net.MsgType.ModeStandings, msg);
-        }
+        return best;
+    }
+
+    protected fillStandings(msg: net.ModeStandingsMsg): void {
+        msg.entries = this.ranking()
+            .filter((p) => !p.disconnected)
+            .slice(0, 255)
+            .map((p) => ({ playerId: p.__id, score: this.levelOf(p) + 1 }));
     }
 
     checkGameEnd(): boolean {
-        if (!this.game.started) return false;
+        if (!this.game.started || !this.running) return false;
         if (!this.winner) {
-            const timeUp = this.game.startedTime >= GUN_GAME_TIME_LIMIT_S;
             // the last one left once nobody can join anymore
             const joinTime = this.game.map.mapDef.gameMode.joinTime ?? 60;
             const alone = this.game.playerBarn.livingPlayers.length <= 1 && this.game.startedTime >= joinTime;
-            if (!timeUp && !alone) return false;
+            if (!this.timeUp && !alone) return false;
             this.winner = this.ranking()[0];
         }
         const winner = this.winner;

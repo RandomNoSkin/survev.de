@@ -63,7 +63,6 @@ export class Obstacle extends BaseGameObject {
         open: boolean;
         canUse: boolean;
         locked: boolean;
-        hinge: Vec2;
         closedOri: number;
         closedPos: Vec2;
         openOneWay: number;
@@ -178,7 +177,6 @@ export class Obstacle extends BaseGameObject {
             this.door = {
                 open: false,
                 canUse: def.door.canUse,
-                hinge: def.hinge!,
                 closedPos: v2.copy(this.pos),
                 closedOri: this.ori,
                 openDelay: def.door.openDelay ?? 0,
@@ -435,7 +433,10 @@ export class Obstacle extends BaseGameObject {
         this.scale = this.minScale;
         this.updateCollider();
 
-        if (def.destroyType) {
+        // a called in crate (the arena's flares): the mode's loot - and no opened crate left
+        const modeLoot = this.game.rules?.obstacleLoot?.(this);
+
+        if (def.destroyType && !modeLoot) {
             let destroyType: string;
             // in cobalt, class shells need to spawn a pod that corresponds to the player's class (role)
             if (
@@ -467,7 +468,14 @@ export class Obstacle extends BaseGameObject {
         }
 
         // custom maps can change which pools an object rolls
-        const loot: Array<(typeof def.loot)[number]> = [
+        // (a GameMode without world loot: nothing - the arena only has what players drop)
+        // (a called in crate: what the mode puts in - the arena's airdrop weapon / armor)
+        for (const item of modeLoot ?? []) {
+            const dropped = this.game.lootBarn.addLootWithoutAmmo(item, v2.add(lootPos, v2.mul(v2.randomUnit(), 0.6)), this.layer, 1);
+            const gun = dropped && GameObjectDefs.typeToDefSafe(item);
+            if (dropped && gun?.type === "gun") dropped.clip = gun.maxClip;
+        }
+        const loot: Array<(typeof def.loot)[number]> = modeLoot || this.game.rules?.noWorldLoot ? [] : [
             ...(this.game.map.customMap?.objectLoot[this.type]?.map((l) => ({ ...l, props: {} })) ?? def.loot),
         ];
 
@@ -563,6 +571,14 @@ export class Obstacle extends BaseGameObject {
 
                 if (coldet.test(this.collider, collision)) {
                     obj.kill(params);
+                }
+            }
+        }
+
+        if (def.isDecalAnchor && this.parentBuilding) {
+            for (const obj of this.parentBuilding.childObjects) {
+                if (obj.__type === ObjectType.Decal && v2.eq(obj.pos, this.pos, 0.01)) {
+                    obj.lifeTime = 0;
                 }
             }
         }

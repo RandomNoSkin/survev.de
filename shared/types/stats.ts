@@ -102,6 +102,12 @@ export type MatchData = {
 // User Stats
 //
 export const ALL_MAPS = "-1";
+/**
+ * The arena modes' maps (Gun Game, Domination - a new arena mode: add its map here).
+ * "All maps" on the stats pages leaves them out: their dozens of kills a match would
+ * skew every battle royale number - each one shows on its own when picked.
+ */
+export const ARENA_MAP_IDS: number[] = [MapId.GunGame, MapId.Domination];
 const VALID_MAP_IDS = Object.values(MapId)
     .filter((id) => typeof id === "number")
     .map((id) => id.toString()) as [string, ...string[]];

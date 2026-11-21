@@ -7,6 +7,7 @@ import { GameObjectDefs } from "../../shared/defs/register.ts";
 import * as net from "../../shared/net/net.ts";
 import { device } from "./device.ts";
 import { getOutfitIconUrl } from "./ui/loadoutIcon.ts";
+import { util } from "../../shared/utils/util.ts";
 
 const truncateCanvas = document.createElement("canvas");
 
@@ -136,6 +137,11 @@ export const helpers = {
                     : "PREM";
         return `<span class="username-${roleTag}-tag">[${label}]</span> ${escaped}`;
     },
+    measureText(str: string, font: string) {
+        const context = truncateCanvas.getContext("2d")!;
+        context.font = font;
+        return context.measureText(str).width;
+    },
     truncateString: function(str: string, font: string, maxWidthPixels: number) {
         const context = truncateCanvas.getContext("2d")!;
         context.font = font;
@@ -179,32 +185,10 @@ export const helpers = {
             elem.webkitRequestFullscreen?.();
         }
     },
-    copyTextToClipboard: function(text: string) {
-        try {
-            const $temp = $<HTMLInputElement>("<input>");
-            $("body").append($temp);
-            $temp.val(text);
-
-            if (device.os == "ios") {
-                const el = $temp.get(0)!;
-                const editable = el.contentEditable;
-                const readOnly = el.readOnly;
-                el.contentEditable = "true";
-                el.readOnly = true;
-                const range = document.createRange();
-                range.selectNodeContents(el);
-                const sel = window.getSelection()!;
-                sel.removeAllRanges();
-                sel.addRange(range);
-                el.setSelectionRange(0, 999999);
-                el.contentEditable = editable;
-                el.readOnly = readOnly;
-            } else {
-                $temp.trigger("select");
-            }
-            document.execCommand("copy");
-            $temp.remove();
-        } catch (_e) {}
+    copyTextToClipboard: async function(text: string) {
+        navigator.clipboard.writeText(text).catch(err => {
+            console.error("Failed to copy text to clipboard", err);
+        });
     },
     formatTime(time: number) {
         const minutes = Math.floor(time / 60) % 60;
@@ -253,21 +237,20 @@ export const helpers = {
                 const outfitDef = def as OutfitDef;
                 const lootImg = outfitDef.lootImg;
 
-                // Skins with their own dedicated loadout art (resurviv skins +
-                // classic surviv shirts) already look right — use it directly.
+                // Always render the full in-game character preview (body + backpack +
+                // fists + accessory) so every skin looks like it does in game.
+                const iconUrl = getOutfitIconUrl(gameType);
+                if (iconUrl) {
+                    return iconUrl;
+                }
+
+                // Not composable (atlas not ready yet, or a costume/ghillie skin):
+                // skins with their own dedicated loot art use that.
                 const usesGenericShirt =
                     lootImg.sprite === "loot-shirt-01.img" ||
                     lootImg.sprite === "loot-shirt-outfitBase.img";
                 if (!usesGenericShirt) {
                     return `img/loot/${lootImg.sprite.slice(0, -4)}.svg`;
-                }
-
-                // Otherwise render a full in-game character preview (body + backpack +
-                // fists + accessory) so the skin looks like it does in game, the same
-                // way the hand-drawn resurviv icons do.
-                const iconUrl = getOutfitIconUrl(gameType);
-                if (iconUrl) {
-                    return iconUrl;
                 }
 
                 // Atlas not ready yet (or a costume/ghillie skin): fall back to a shirt

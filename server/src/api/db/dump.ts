@@ -4,7 +4,7 @@ import {
     DUMP_VALUE,
     getItemCategory,
     MARKET_LISTING_TTL_MS,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type { DumpItemResponse } from "../../../../shared/types/user";
 import { archiveSales } from "./crates";
 import { getGoldenFries } from "./goldenFries";

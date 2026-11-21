@@ -48,7 +48,7 @@
                         %>
                         <div class='match-link-stat-name match-link-stat-name-lg'><%= modeText %> Rank</div>
                         <div class='match-link-stat-value match-link-stat-value-lg'>
-                            <span class='match-link-stat-rank match-link-stat-<%= env.games[i].summary.rank %>'>#<%= env.games[i].summary.rank %></span>
+                            <span class='match-link-stat-rank match-link-stat-<%= env.games[i].summary.rank %>'><%= env.games[i].summary.rank === 999 ? 'SPEC' : '#' + env.games[i].summary.rank %></span>
                             /<%= env.games[i].summary.team_total || 80 %>
                         </div>
                     </div>

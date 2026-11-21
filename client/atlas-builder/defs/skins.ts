@@ -48,9 +48,12 @@ function skinSprites(): string[] {
 
         const img = outfit.skinImg;
         // The layers buildOutfitContent draws. footSprite is not among them.
+        const handSprites = typeof img.handSprite === "string"
+            ? [img.handSprite]
+            : [img.handSprite.left, img.handSprite.right];
         for (const sprite of [
             img.baseSprite,
-            img.handSprite,
+            ...handSprites,
             img.backpackSprite,
             img.frontSprite,
         ]) {
@@ -70,7 +73,5 @@ function skinSprites(): string[] {
 }
 
 export const SkinsAtlas: AtlasDef = {
-    // Same as the loadout atlas: too many colors for 256-color quantization.
-    compress: false,
     images: skinSprites(),
 };

@@ -35,6 +35,7 @@ class Region {
     data: (typeof Config)["regions"][string];
     playerCount = 0;
     gameCount = 0;
+    modeGames: RegionData["modeGames"] = [];
     verifiedOnly = false;
 
     lastUpdateTime = Date.now();
@@ -287,6 +288,19 @@ class Region {
         return data ?? { error: "find_game_by_id_failed" };
     }
 
+    /** The game server's config file (text) and running mode list - the super admin editor. */
+    async getConfigFile(): Promise<any | null> {
+        return (await this.fetch<any>("api/dashboard/get_config", {})) ?? null;
+    }
+
+    async setModes(modes: unknown): Promise<any> {
+        return (await this.fetch<any>("api/dashboard/set_modes", { modes })) ?? { error: "region offline" };
+    }
+
+    async setConfigText(text: string): Promise<any> {
+        return (await this.fetch<any>("api/dashboard/set_config_text", { text })) ?? { error: "region offline" };
+    }
+
     async getModes(): Promise<any[]> {
         const data = await this.fetch<{ data: any[] }>("api/get_modes", {
             region: this.id,
@@ -298,6 +312,7 @@ class Region {
 interface RegionData {
     playerCount: number;
     gameCount: number;
+    modeGames: Array<{ mapName: string; games: number; players: number; warmupPlayers: number }>;
 }
 
 export class ApiServer {
@@ -346,6 +361,8 @@ export class ApiServer {
             data.pops[region] = {
                 playerCount: this.regions[region].playerCount,
                 gameCount: this.regions[region].gameCount,
+                // (an old report: nothing - better than counts that are long gone)
+                modeGames: Date.now() - this.regions[region].lastUpdateTime < 60_000 ? this.regions[region].modeGames : [],
                 l10n: Config.regions[region].l10n,
             };
         }
@@ -360,6 +377,7 @@ export class ApiServer {
         }
         region.playerCount = regionData.playerCount;
         region.gameCount = regionData.gameCount;
+        region.modeGames = regionData.modeGames ?? [];
         region.lastUpdateTime = Date.now();
     }
 
@@ -518,6 +536,17 @@ export class ApiServer {
         gameId: string,
     ): Promise<GameViewMeta | null> {
         return (await this.regions[region]?.streamReplayGameMeta(gameId)) ?? null;
+    }
+
+    /** One region's modes again (after the dashboard changed them). */
+    async refreshRegionModesOf(regionId: string) {
+        const region = this.regions[regionId];
+        if (!region) return;
+        try {
+            this.modesByRegion[regionId] = await region.getModes();
+        } catch (err) {
+            this.logger.warn("refreshRegionModesOf failed for region", regionId, err);
+        }
     }
 
     async refreshRegionModes() {

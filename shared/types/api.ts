@@ -53,6 +53,7 @@ export type FindGameError =
     | "behind_proxy"
     | "invalid_captcha"
     | "kicked_by_admin"
+    | "kicked_afk"
     | "player_not_verified"
     | "invalid_map"
     | "invalid_team_mode"
@@ -89,6 +90,8 @@ export interface SiteInfoRes {
         mapName: string;
         teamMode: TeamMode;
         enabled: boolean;
+        /** shown in the client's arena view (see Config.modes) */
+        arena?: boolean;
     }>;
     modesByRegion: Record<
         string,
@@ -96,6 +99,7 @@ export interface SiteInfoRes {
             mapName: string;
             teamMode: TeamMode;
             enabled: boolean;
+            arena?: boolean;
         }>
     >;
     clientTheme: MapDefKey;
@@ -104,6 +108,8 @@ export interface SiteInfoRes {
         {
             playerCount: number;
             gameCount: number;
+            /** the public arena mode games per map: how many, players in, players in the warmup */
+            modeGames?: Array<{ mapName: string; games: number; players: number; warmupPlayers: number }>;
             l10n: string;
         }
     >;

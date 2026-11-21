@@ -1,9 +1,10 @@
+import { GameMode, TeamMode } from "../gameConfig";
 // /api/private_lobby_v2 websocket msgs typing
 
 import { z } from "zod";
-import type { CustomLoadoutConfig } from "../defs/customLoadout";
-import type { CustomMapConfig } from "../defs/customMap";
-import type { WeaponStats } from "../defs/weaponStats";
+import type { CustomLoadoutConfig } from "../defs/lobby/customLoadout";
+import type { CustomMapConfig } from "../defs/lobby/customMap";
+import type { WeaponStats } from "../defs/lobby/weaponStats";
 import type { FindGameMatchData } from "./api";
 import type { RoleTag } from "./user";
 
@@ -76,8 +77,9 @@ export interface RoomData {
     leaderPremium?: boolean;
     /** Server-set: the leader is a site owner - may use the owner settings below. */
     leaderOwner?: boolean;
-    /** Owner only: play Gun Game (its own map, free-for-all) instead of the selected mode. */
-    gunGame?: boolean;
+    /** Owner only ("Game Modes" tab): play this GameMode on its own map (Gun Game,
+     *  Domination - see LOBBY_SPECIAL_MODES) instead of the selected mode. */
+    specialMode?: GameMode;
     /** Owner only: whether matches earn XP. Undefined = the default (no XP with Advanced Settings). */
     xpEnabled?: boolean;
 }
@@ -239,9 +241,19 @@ export const zClientRoomData = z.object({
     weaponStats: z.any().optional(),
     weaponStatsName: z.string().optional(),
     playerLimit: z.number().optional(),
-    gunGame: z.boolean().optional(),
+    specialMode: z.number().int().optional(),
     xpEnabled: z.boolean().optional(),
 });
+
+/** The GameModes a lobby can play instead of its selected mode: their map and teams. */
+export const LOBBY_SPECIAL_MODES: Partial<
+    Record<GameMode, { mapName: string; teamMode: TeamMode; teamSize: number; teams?: number }>
+> = {
+    // everyone for themselves
+    [GameMode.GunGame]: { mapName: "gungame", teamMode: TeamMode.Solo, teamSize: 1 },
+    // two teams (groups) of up to 6
+    [GameMode.Domination]: { mapName: "domination", teamMode: TeamMode.Squad, teamSize: 6, teams: 2 },
+};
 
 export type ClientRoomData = z.infer<typeof zClientRoomData>;
 

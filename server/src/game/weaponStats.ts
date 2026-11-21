@@ -2,7 +2,7 @@ import type { BulletDef } from "../../../shared/defs/gameObjects/bulletDefs";
 import type { GunDef } from "../../../shared/defs/gameObjects/gunDefs";
 import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs";
 import { GameObjectDefs } from "../../../shared/defs/register";
-import { type WeaponStatOverride, type WeaponStats, weaponSkinBase } from "../../../shared/defs/weaponStats";
+import { type WeaponStatOverride, type WeaponStats, weaponSkinBase } from "../../../shared/defs/lobby/weaponStats";
 
 /** Ammo in the clip goes over the network as a uint8. */
 const MAX_CLIP = 255;

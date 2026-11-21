@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Constants } from "../../shared/net/net";
-import { MARKET_MAX_PRICE } from "../defs/shopConfig";
+import { MARKET_MAX_PRICE } from "../defs/shop/shopConfig";
 import { type Item, ItemStatus, type Loadout, loadoutSchema } from "../utils/loadout";
 
 export type ProfileResponse =

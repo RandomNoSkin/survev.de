@@ -1,5 +1,5 @@
 import $ from "jquery";
-import { CrateDefs, type CrateType } from "../../../shared/defs/crateConfig";
+import { CrateDefs, type CrateType } from "../../../shared/defs/shop/crateConfig";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import {
     getItemCategory,
@@ -9,7 +9,7 @@ import {
     MARKET_LIST_COOLDOWN_MS,
     MARKET_LISTING_TTL_MS,
     type ShopCategory,
-} from "../../../shared/defs/shopConfig";
+} from "../../../shared/defs/shop/shopConfig";
 import type {
     MarketListing,
     MarketListResponse,

@@ -2,13 +2,18 @@ import { describe, expect, test, vi } from "vitest";
 
 // no DB in tests: lobby members have no stored loadouts
 vi.mock("../../server/src/api/db/loadouts.ts", () => ({ getOwnedLoadouts: async () => [] }));
+// no DB: everyone plays the default arena loadout
+vi.mock("../../server/src/api/db/arena.ts", () => ({
+    getJoinArenaLoadouts: async () => [{ primary: "hk416", pistol: "p30l", throwable: "frag", perk: "takedown" }],
+    getJoinArenaStreaks: async () => ({ airdrop: "flare_gun", juggernaut: "m134", airdropWeapon: "m249", brokenArrow: false }),
+}));
 
 import { Config } from "../../server/src/config.ts";
 // load order as in the real server: apiServer creates the PrivateLobbyMenu while loading,
 // so importing privateLobby first would hit it mid-definition (import cycle via auth)
 import "../../server/src/api/apiServer.ts";
 import { Player, PrivateLobbyMenu, Room } from "../../server/src/privateLobby.ts";
-import { gunGameMapScale } from "../../shared/defs/gunGameDefs.ts";
+import { gunGameMapScale } from "../../shared/defs/modes/gunGameDefs.ts";
 import { MapDefs } from "../../shared/defs/mapDefs.ts";
 import { GameMode, MapId, TeamMode } from "../../shared/gameConfig.ts";
 import type { ClientRoomData } from "../../shared/types/privateLobby.ts";
@@ -19,6 +24,9 @@ const MODES = [
     { mapName: "local", teamMode: TeamMode.Solo, enabled: true },
     { mapName: "two_vs_two", teamMode: TeamMode.Duo, enabled: true },
     { mapName: "comp", teamMode: TeamMode.Squad, enabled: true },
+    // the arena client's modes (anyone can pick those)
+    { mapName: "gungame", teamMode: TeamMode.Solo, gameMode: GameMode.GunGame, arena: true, enabled: true },
+    { mapName: "domination", teamMode: TeamMode.Squad, gameMode: GameMode.Domination, arena: true, enabled: true },
 ];
 
 function lobby(modeIdx = 0) {
@@ -55,9 +63,9 @@ describe("member lobby (leader is not an owner)", () => {
         const { room, join, createPrivateGame } = lobby(2);
         join();
         join();
-        set(room, { gunGame: true, xpEnabled: false });
+        set(room, { specialMode: GameMode.GunGame, xpEnabled: false });
         expect(room.data.leaderOwner).toBe(false);
-        expect(room.data.gunGame).toBe(false);
+        expect(room.data.specialMode).toBeUndefined();
         expect(room.data.xpEnabled).toBeUndefined();
         expect(room.data.teamSize).toBe(TeamMode.Squad);
 
@@ -107,9 +115,9 @@ describe("owner lobby", () => {
         const { room, join, createPrivateGame } = lobby(2);
         join({ owner: true });
         join();
-        set(room, { gunGame: true });
+        set(room, { specialMode: GameMode.GunGame });
         expect(room.data.leaderOwner).toBe(true);
-        expect(room.data.gunGame).toBe(true);
+        expect(room.data.specialMode).toBe(GameMode.GunGame);
         expect(room.data.teamSize).toBe(1);
         expect(room.data.modeMaxPlayers).toBe(MapDefs.gungame.gameMode.maxPlayers);
 
@@ -124,7 +132,7 @@ describe("owner lobby", () => {
     test("Gun Game: a bigger player limit makes a bigger map", async () => {
         const { room, join, createPrivateGame } = lobby(0);
         join({ owner: true });
-        set(room, { gunGame: true });
+        set(room, { specialMode: GameMode.GunGame });
         set(room, { playerLimit: 20 });
         expect(room.data.maxPlayers).toBe(20);
         await start(room);
@@ -150,20 +158,73 @@ describe("owner lobby", () => {
         const { room, join } = lobby(2);
         join({ owner: true });
         const member = join();
-        set(room, { gunGame: true, xpEnabled: false });
-        expect(room.data.gunGame).toBe(true);
+        set(room, { specialMode: GameMode.GunGame, xpEnabled: false });
+        expect(room.data.specialMode).toBe(GameMode.GunGame);
         room.promote(member.playerId);
         expect(room.data.leaderOwner).toBe(false);
-        expect(room.data.gunGame).toBe(false);
+        expect(room.data.specialMode).toBeUndefined();
         expect(room.data.xpEnabled).toBeUndefined();
         expect(room.data.teamSize).toBe(TeamMode.Squad);
+    });
+
+    test("Domination: its own map, two teams (groups) of six as the lobby split them", async () => {
+        const { room, join, createPrivateGame } = lobby(2);
+        const owner = join({ owner: true });
+        const others = [join(), join(), join()];
+        set(room, { specialMode: GameMode.Domination });
+        expect(room.data.teamSize).toBe(6);
+        expect(room.data.teamCount).toBe(2);
+        expect(room.data.modeMaxPlayers).toBe(MapDefs.domination.gameMode.maxPlayers);
+        // two in each team
+        room.assignTeam(others[1].playerId, 1);
+        room.assignTeam(others[2].playerId, 1);
+
+        await start(room);
+        const body = createPrivateGame.mock.calls[0][0];
+        expect(body.mapName).toBe("domination");
+        expect(body.gameMode).toBe(GameMode.Domination);
+        expect(body.teamMode).toBe(TeamMode.Squad);
+        // one in-game group per lobby team
+        expect(body.teams.map((t: unknown[]) => t.length)).toStrictEqual([2, 2]);
+        expect(body.teams.flat()[0].arenaLoadouts[0].primary).toBe("hk416");
+        expect(owner).toBeDefined();
+    });
+
+    test("an arena mode picked from the mode list (no owner needed) runs with its own rules", async () => {
+        const { room, join, createPrivateGame } = lobby(4);
+        const players = [join(), join(), join()];
+        expect(room.data.teamSize).toBe(6);
+        expect(room.data.teamCount).toBe(2);
+        room.assignTeam(players[2].playerId, 1);
+        await start(room);
+        const body = createPrivateGame.mock.calls[0][0];
+        expect(body.mapName).toBe("domination");
+        expect(body.gameMode).toBe(GameMode.Domination);
+        expect(body.teams.map((t: unknown[]) => t.length)).toStrictEqual([2, 1]);
+        expect(body.teams.flat()[0].arenaLoadouts[0].primary).toBe("hk416");
+
+        // Gun Game too: its map grows with the player limit
+        const gg = lobby(3);
+        gg.join();
+        gg.join();
+        await start(gg.room);
+        const ggBody = gg.createPrivateGame.mock.calls[0][0];
+        expect(ggBody.gameMode).toBe(GameMode.GunGame);
+        expect(ggBody.mapScale).toBe(gunGameMapScale(gg.room.data.maxPlayers));
+    });
+
+    test("members don't get the Game Modes", () => {
+        const { room, join } = lobby(0);
+        join();
+        set(room, { specialMode: GameMode.Domination });
+        expect(room.data.specialMode).toBeUndefined();
     });
 
     test("turning Gun Game off again plays the selected mode", async () => {
         const { room, join, createPrivateGame } = lobby(1);
         join({ owner: true });
-        set(room, { gunGame: true });
-        set(room, { gunGame: false });
+        set(room, { specialMode: GameMode.GunGame });
+        set(room, { specialMode: undefined });
         expect(room.data.teamSize).toBe(TeamMode.Duo);
         await start(room);
         const body = createPrivateGame.mock.calls[0][0];

@@ -20,7 +20,7 @@ import {
     MARKET_LISTING_TTL_MS,
     MARKET_MAX_PRICE,
     type ShopCategory,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     Auction,
     AuctionListResponse,

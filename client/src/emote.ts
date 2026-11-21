@@ -115,6 +115,9 @@ function isAngleBetween(target: number, angle1: number, angle2: number) {
 export class EmoteBarn {
     gameElem = $("#ui-game");
     disable = false;
+    /** the game respawns its players (the arena modes): dead / watching the killer
+     *  disables the emotes only until the respawn */
+    respawns = false;
     activePlayer: Player | null = null;
     /** Pings that arrived before the first frame knew the active player (the pings
      *  still on the map are re-sent in a joiner's very first update) - shown then. */
@@ -236,7 +239,7 @@ export class EmoteBarn {
     ) {
         this.triggerPing = () => {
             if (this.activePlayer) {
-                let worldPos: Vec2;
+                let worldPos: Vec2 | undefined;
                 // Determine if this is going to be a team ping or an emote
                 if (this.emoteSelector.ping && !this.emoteWheelsGreyed) {
                     const pingData = PingDefs[this.emoteSelector.ping];
@@ -296,8 +299,8 @@ export class EmoteBarn {
             this.bigmapCollision.on("touchend", (e) => {
                 e.stopPropagation();
                 this.bigmapPingPos = {
-                    x: e.originalEvent?.changedTouches[0].pageX!,
-                    y: e.originalEvent?.changedTouches[0].pageY!,
+                    x: e.originalEvent!.changedTouches[0].pageX,
+                    y: e.originalEvent!.changedTouches[0].pageY,
                 };
                 this.emoteScreenPos = v2.create(
                     this.camera.m_screenWidth / 2,
@@ -321,8 +324,8 @@ export class EmoteBarn {
             this.emoteElems.on("touchstart", (e) => {
                 e.stopPropagation();
                 this.emoteTouchedPos = {
-                    x: e.originalEvent?.changedTouches[0].pageX!,
-                    y: e.originalEvent?.changedTouches[0].pageY!,
+                    x: e.originalEvent!.changedTouches[0].pageX,
+                    y: e.originalEvent!.changedTouches[0].pageY,
                 };
             });
             // Reset wheel
@@ -620,7 +623,7 @@ export class EmoteBarn {
                 // made before we joined: just the map marker, no sound/indicator
                 if (ping.restoredLife !== undefined) return;
                 let indicator: Indicator | null = null;
-                let pingSound = pingData.sound!;
+                let pingSound = pingData.sound;
                 if (ping.type == "ping_airdrop") {
                     indicator = this.pingIndicators[airdropIdx].ping;
                 } else if (ping.type == "ping_airstrike") {
@@ -653,12 +656,12 @@ export class EmoteBarn {
 
                 if (factionMode || ping.type != "ping_airstrike") {
                     // Pings always play at full volume
-                    this.audioManager.playSound(pingSound, {
+                    this.audioManager.playSound(pingSound!, {
                         channel: "ui",
                     });
                 } else {
                     // If we're too far from an air strike ping in non-faction mode, reduce the ping sound
-                    this.audioManager.playSound(pingSound, {
+                    this.audioManager.playSound(pingSound!, {
                         channel: "ui",
                         fallOff: 1,
                         soundPos: ping.pos,
@@ -766,7 +769,7 @@ export class EmoteBarn {
 
                     // Colorize if defined
                     const ammo = GameObjectDefs.typeToDefSafe((lootDef as GunDef).ammo) as AmmoDef;
-                    e.circleOuter.tint = ammo ? ammo.lootImg.tintDark! : 0;
+                    e.circleOuter.tint = ammo ? ammo.lootImg.tintDark : 0;
 
                     // Rotate if defined
                     if (lootDef.lootImg.rot) {
@@ -888,9 +891,16 @@ export class EmoteBarn {
             this.pendingPings = [];
             for (const { ping, factionMode } of pending) this.addPing(ping, factionMode);
         }
-        if ((localId != player.__id || !!player.m_netData.m_dead) && !this.disable) {
-            this.m_free();
+        const notPlaying = localId != player.__id || !!player.m_netData.m_dead;
+        if (notPlaying && !this.disable) {
+            // a respawn mode: only until the respawn (the touch handlers stay bound)
+            if (this.respawns) this.inputReset();
+            else this.m_free();
             this.disable = true;
+        } else if (!notPlaying && this.disable && this.respawns) {
+            // back in the game after the respawn
+            this.disable = false;
+            this.inputReset();
         }
 
         const perkModeDisable = map.perkMode && !player.m_netData.m_role;

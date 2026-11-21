@@ -132,9 +132,11 @@ export class BulletBarn {
         const bulletDef = GameObjectDefs.typeToDefSafe(params.bulletType) as BulletDef;
         if (bulletDef.addFlare) {
             this.game.planeBarn.addAirdrop(params.pos, true);
+            this.game.rules?.onAirdropCalled?.(params.playerId, params.pos, false);
         }
         if(bulletDef.addSupplyFlare){
             this.game.planeBarn.addSupplyDrop(params.pos, true, "supply_crate_01");
+            this.game.rules?.onAirdropCalled?.(params.playerId, params.pos, true);
         }
 
         return bullet;
@@ -405,8 +407,12 @@ export class Bullet {
 
         this.checkForCollisions(posOld);
 
-        // Check if bullet has reached the maximun distance
-        if (math.eqAbs(this.distanceTraveled, this.distance, 0.001)) {
+        // Check if bullet has reached the maximun distance - also when its own path (from
+        // startPos) is used up: a bounced bullet carries the distance travelled before the
+        // bounce (initialDistanceTraveled), so with a short clipped distance (a USAS shot
+        // aimed at a barrel: just the bit left to the cursor) the total never matched and
+        // the bullet stood still forever instead of exploding
+        if (math.eqAbs(this.distanceTraveled, this.distance, 0.001) || distLeft - moveDist <= 0.001) {
             this.alive = false;
             // Explosive rounds peter out
             if (this.onHitFx === "explosion_rounds") {
@@ -570,12 +576,12 @@ export class Bullet {
                 }
 
                 if (
-                    obj.hasPerk("windwalk") &&
-                    obj.hasteType != GameConfig.HasteType.Windwalk && // can't stack windwalk
-                    v2.distance(this.pos, obj.pos) <= 5 &&
-                    this.player?.teamId !== obj.teamId // bullet shooter or its teammates cant give the shooter winwalk
+                    obj.hasPerk("windwalk")
+                    && obj.hasteType != GameConfig.HasteType.Windwalk // can't stack windwalk
+                    && v2.distance(this.pos, obj.pos) <= PerkProperties.windwalk.maxTriggerDistance
+                    && this.player?.teamId !== obj.teamId // bullet shooter or its teammates cant give the shooter winwalk
                 ) {
-                    obj.giveHaste(GameConfig.HasteType.Windwalk, 3);
+                    obj.giveHaste(GameConfig.HasteType.Windwalk, PerkProperties.windwalk.hasteDuration);
                 }
 
                 let panCollision = null;
@@ -819,7 +825,7 @@ export class Bullet {
 
                     let multiplier = 1;
                     if (isHighValueTarget) {
-                        multiplier *= 1.25;
+                        multiplier *= PerkProperties.targeting.damageMult;
                     }
 
                     const bulletDef = GameObjectDefs.typeToDefSafe(this.bulletType) as BulletDef;

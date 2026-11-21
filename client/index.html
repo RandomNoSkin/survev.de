@@ -421,6 +421,25 @@
                 <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
               </div>
             </div>
+            <!-- 5th / 6th: arena teams of 6 (Domination) -->
+            <div class="ui-team-member ui-bg-standard" data-id="4">
+              <div class="ui-team-member-name"></div>
+              <div class="ui-team-member-color ui-background-green"></div>
+              <div class="ui-team-member-status"></div>
+              <div class="ui-team-member-health">
+                <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
+              </div>
+            </div>
+            <div class="ui-team-member ui-bg-standard" data-id="5">
+              <div class="ui-team-member-name"></div>
+              <div class="ui-team-member-color ui-background-lightblue"></div>
+              <div class="ui-team-member-status"></div>
+              <div class="ui-team-member-health">
+                <div class="ui-bar-inner ui-health-actual"></div>
+                <div class="ui-team-member-boost"><div class="ui-team-member-boost-fill"></div></div>
+              </div>
+            </div>
           </div>
           <div id="hud-wrap-fpsCounter" class="hud-drag-wrapper hud-numeric-readout hud-corner-readout">FPS: <span id="ui-fps-counter">0</span></div>
           <div id="hud-wrap-pingCounter" class="hud-drag-wrapper hud-numeric-readout hud-corner-readout">Ping: <span id="ui-ping-counter">0</span>ms</div>
@@ -456,6 +475,8 @@
             </div>
           </div>
         </div>
+        <!-- Arena modes: the kill streak box, right of the gas timer above the minimap (ui/modes/dominationHud.ts); movable in the HUD editor -->
+        <div id="hud-wrap-killstreak" class="js-ui-map-hidden hud-drag-wrapper"></div>
         <div id="ui-kill-leader-container">
           <div id="ui-kill-leader-wrapper" class="js-ui-map-hidden js-ui-hud-show hide-on-mobile">
             <div id="hud-wrap-killLeader" class="hud-drag-wrapper">
@@ -487,6 +508,10 @@
             </div>
             <div class="ui-kill-counter-header" data-l10n="game-kills">Kills</div>
           </div>
+        </div>
+        <!-- Domination: score bar + zones + status, under the scope row (ui/modes/dominationHud.ts); movable in the HUD editor -->
+        <div id="ui-domination-wrapper" class="js-ui-map-hidden">
+          <div id="hud-wrap-domination" class="hud-drag-wrapper"></div>
         </div>
         <div id="ui-top-center-scopes-wrapper">
           <div id="ui-top-center-scopes" class="click-through js-ui-map-hidden hud-drag-wrapper">
@@ -693,14 +718,27 @@
         <div id="ui-spectate-options-wrapper">
           <div id="ui-spectate-options" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
             <div id="ui-spectate-buttons" class="ui-bg-standard">
+              <!-- held, not clicked (UiManager): no leaving by a slip; on top,
+                   apart from the rest. The others: order / on-off in the HUD editor
+                   (specButtons.ts) - next / previous are off by default (arrow keys) -->
+              <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" title="Hold to leave the game"><span class="spec-leave-fill"></span><span class="spec-leave-text" data-l10n="game-leave-game">Leave Game</span></a>
               <a class="menu-option btn-darken" id="btn-spectate-next-player" data-l10n="game-next-teammate">Next Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-prev-player" data-l10n="game-previous-teammate">Previous Teammate</a>
               <a class="menu-option btn-darken" id="btn-spectate-view-stats" data-l10n="game-view-match-stats">View Match Stats</a>
               <a class="menu-option btn-darken" id="btn-spectate-advanced" style="display: none;">Advanced Spectator</a>
-              <a class="menu-option btn-darken btn-quit" id="btn-spectate-quit" data-l10n="game-leave-game">Leave Game</a>
             </div>
+            <div id="ui-spectate-stats" class="ui-bg-standard">
+              <div id="ui-spectate-stats-header" data-l10n="game-your-results">Your Results</div>
+              <table id="ui-spectate-stats-table">
+                <tbody id="ui-spectate-stats-data">
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <!-- advanced spectator's options: placed on its own in the HUD editor -->
+          <div id="ui-spectate-adv-wrap" class="ui-spectate-mode js-ui-hud-show click-through hud-drag-wrapper">
             <div id="ui-spectate-advanced-options" class="ui-bg-standard" style="display: none;">
-              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">▾ Options</a>
+              <a class="menu-option btn-darken spectate-adv-collapse" id="btn-adv-collapse">Options ▸</a>
               <div id="ui-spectate-advanced-list">
                 <div class="spectate-adv-section">Camera</div>
                 <div class="spectate-adv-grid">
@@ -734,13 +772,6 @@
                   <a class="menu-option btn-darken spectate-adv-toggle" id="btn-adv-crosshair">Crosshair</a>
                 </div>
               </div>
-            </div>
-            <div id="ui-spectate-stats" class="ui-bg-standard">
-              <div id="ui-spectate-stats-header" data-l10n="game-your-results">Your Results</div>
-              <table id="ui-spectate-stats-table">
-                <tbody id="ui-spectate-stats-data">
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
@@ -938,9 +969,14 @@
             </div>
             <div class="account-overview">
               <div class="account-details-user account-details-block">
-                <div id="btn-social" class="account-social-btn" style="display:none" title="Social">
-                  <div id="social-alert-main" class="account-alert-main account-alert"></div>
-                  <span data-l10n="index-social">Social</span>
+                <div id="start-top-pills">
+                  <!-- switches the main menu between battle royale and multiplayer (the arena
+                       modes) - it names the other side (main.ts applyView) -->
+                  <div id="btn-client-view" class="client-view-btn">Multiplayer</div>
+                  <div id="btn-social" class="account-social-btn" style="display:none" title="Social">
+                    <div id="social-alert-main" class="account-alert-main account-alert"></div>
+                    <span data-l10n="index-social">Social</span>
+                  </div>
                 </div>
                 <div class="account-details">
                   <div class="account-avatar"></div>
@@ -1020,6 +1056,7 @@
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-1" data-l10n="index-play-duo">Play Duo</a>
                   <a class="btn-green btn-darken menu-option" id="btn-start-mode-2" data-l10n="index-play-squad">Play Squad</a>
                 </div>
+                <div id="view-no-modes" style="display: none;">No multiplayer modes are running on this server right now - check back soon!</div>
                 <!-- a 4th mode (e.g. Gun Game), hidden unless the region has one -->
                 <a class="btn-green btn-darken menu-option" id="btn-start-mode-3" data-l10n="index-play-gungame-solo" style="display: none;">Play Gun Game</a>
                 <div class="btns-double-row">
@@ -1033,6 +1070,9 @@
                 <!--<div id="btn-help" class="menu-option btn-darken" data-l10n="index-how-to-play">How to Play</div>-->
 
                 <a class="btn-green btn-darken menu-option" id="btn-spectator-menu">Spectate</a>
+                <!-- multiplayer only: loadouts, level, unlocks (ui/arenaMenu.ts) -->
+                <a class="btn-green btn-darken menu-option arena-view-only" id="btn-arena-loadouts">Arena Loadouts</a>
+                <a class="arena-view-only arena-tutorial-link" id="btn-arena-tutorial">How does Multiplayer work?</a>
                 <div id="start-help">
                   <h1 data-l10n="index-controls">Controls</h1>
                   <p><span class="help-action" data-l10n="index-movement"></span>: <span class="help-control" data-l10n="index-movement-ctrl"></span></p>
@@ -1255,9 +1295,7 @@
                   <div id="pass-loading-spinner"></div>
                 </div>
                 <div id="pass-block" class="pass-column menu-block">
-                  <div class="right-column-toggle news-toggle">
-                    <div class="account-alert"></div>
-                  </div>
+                  <div class="right-column-toggle arena-progress-toggle" title="Arena progress"></div>
                   <div id="pass-name">
                     <span id="pass-name-text"></span>
                   </div>
@@ -1355,6 +1393,12 @@
                     </div>
                   </div>
                 </div>
+              </div>
+              <!-- multiplayer: arena level and unlocks (ui/arenaMenu.ts ArenaProgressPanel); the
+                   pass and this toggle into each other -->
+              <div id="arena-progress-wrapper" style="display: none;">
+                <div class="right-column-toggle pass-toggle" title="Battle pass"></div>
+                <div id="arena-progress-block" class="pass-column menu-block"></div>
               </div>
               <div id="news-wrapper" style="display: none!important;">
                 <div class="right-column-toggle pass-toggle" style="display: block!important;"></div>
@@ -2308,7 +2352,7 @@
       // load a cached background image as earlier as possible
       // so we dont have to wait for API to reply to show a background
       const config = JSON.parse(localStorage.getItem("surviv_config") || "{}");
-      const bgImg = config.cachedBgImg || "img/main_splash.png";
+      const bgImg = config.cachedBgImg || "img/splashes/main.webp";
       const bg = document.getElementById("background");
       if (bg) {
           bg.style.backgroundImage = `url(${bgImg})`;

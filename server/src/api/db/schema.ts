@@ -1211,7 +1211,7 @@ export const tradeSalesArchiveTable = pgTable(
 );
 
 // Crate loot settings edited in the moderation dashboard (one row per crate). null
-// columns fall back to the defaults in shared/defs/crateConfig.ts.
+// columns fall back to the defaults in shared/defs/shop/crateConfig.ts.
 export const crateSettingsTable = pgTable("crate_settings", {
     crate: text("crate").primaryKey(),
     pool: json("pool").$type<string[] | null>(),
@@ -1349,6 +1349,27 @@ export const clanWeekRewardsTable = pgTable(
     ],
 );
 
+// Keys handed out of a clan's reward pool, with the league week they were won in (null:
+// keys of no known week - from before this log, or added by an admin), so the owner can
+// share out each week among the players of that week and see who got what.
+export const clanKeyGiftsTable = pgTable(
+    "clan_key_gifts",
+    {
+        id: serial("id").primaryKey(),
+        clanId: integer("clan_id")
+            .notNull()
+            .references(() => clansTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+        week: text("week"),
+        // who got the keys / who gave them (no FK: the log outlives deleted accounts)
+        userId: text("user_id").notNull(),
+        giverId: text("giver_id").notNull(),
+        keyType: text("key_type").notNull(),
+        amount: integer("amount").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (table) => [index("clan_key_gifts_clan_idx").on(table.clanId, table.week)],
+);
+
 // Weekly activity goals that were paid (one row per week and clan) - the lock against
 // paying twice. Tier 1-3 = average games per active player reached 50 / 100 / 150.
 export const clanWeekGoalsTable = pgTable(
@@ -1383,4 +1404,56 @@ export const playerWeekStatsTable = pgTable(
         kills: integer("kills").notNull().default(0),
     },
     (table) => [primaryKey({ columns: [table.week, table.userId, table.mode] })],
+);
+
+// ── Arena (Domination, ...): progression and loadouts, see shared/defs/modes/arenaDefs.ts ──
+
+// A player's arena XP (the level follows from it, see arenaLevelFromXp).
+export const arenaProgressTable = pgTable("arena_progress", {
+    userId: text("user_id")
+        .primaryKey()
+        .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    xp: integer("xp").notNull().default(0),
+});
+
+// Kills per weapon that count for the arena weapon challenges (arena modes, Gun Game, Comp).
+export const arenaWeaponKillsTable = pgTable(
+    "arena_weapon_kills",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+        weaponType: text("weapon_type").notNull(),
+        kills: integer("kills").notNull().default(0),
+    },
+    (table) => [primaryKey({ columns: [table.userId, table.weaponType] })],
+);
+
+// The kill streak picks (shared/defs/modes/arenaStreakDefs.ts ArenaStreakSettings).
+export const arenaStreaksTable = pgTable("arena_streaks", {
+    userId: text("user_id")
+        .primaryKey()
+        .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    airdrop: text("airdrop").notNull(),
+    juggernaut: text("juggernaut").notNull(),
+    airdropWeapon: text("airdrop_weapon").notNull(),
+    brokenArrow: boolean("broken_arrow").notNull().default(false),
+    /** the tiers switched off, comma separated (see ArenaStreakSettings.off) */
+    off: text("off").notNull().default(""),
+});
+
+// The saved arena loadouts (slot 0..ARENA_LOADOUT_SLOTS-1).
+export const arenaLoadoutsTable = pgTable(
+    "arena_loadouts",
+    {
+        userId: text("user_id")
+            .notNull()
+            .references(() => usersTable.id, { onDelete: "cascade", onUpdate: "cascade" }),
+        slot: integer("slot").notNull(),
+        primary: text("primary").notNull(),
+        pistol: text("pistol").notNull(),
+        throwable: text("throwable").notNull(),
+        perk: text("perk").notNull(),
+    },
+    (table) => [primaryKey({ columns: [table.userId, table.slot] })],
 );

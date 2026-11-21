@@ -904,6 +904,11 @@ export interface LocalData {
     health: number;
     zoom: number;
     boost: number;
+    action: {
+        time: number;
+        duration: number;
+        targetId: number;
+    };
     scope: string;
     curWeapIdx: number;
     inventory: Record<string, number>;
@@ -926,18 +931,12 @@ export interface LocalDataWithDirty extends LocalData {
     boostDirty: boolean;
     zoomDirty: boolean;
     actionDirty: boolean;
-    action: {
-        time: number;
-        duration: number;
-        targetId: number;
-    };
     inventoryDirty: boolean;
     weapsDirty: boolean;
     spectatorCountDirty: boolean;
     aimDirty: boolean;
 }
 
-// the non-optional properties are used by both server and client
 export interface PlayerStatus {
     playerId?: number;
     pos: Vec2;

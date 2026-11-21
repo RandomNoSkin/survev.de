@@ -1,7 +1,9 @@
 import * as PIXI from "pixi.js-legacy";
-import { applyLobbyRules, CUSTOM_MAP_COLORS } from "../../shared/defs/customMap.ts";
+import { applyLobbyRules, CUSTOM_MAP_COLORS } from "../../shared/defs/lobby/customMap.ts";
 import { type MapDef, type MapDefKey, MapDefs } from "../../shared/defs/mapDefs.ts";
-import type { BuildingDef, ObstacleDef } from "../../shared/defs/mapObjectsTyping.ts";
+import type { BuildingDef } from "../../shared/defs/mapObjects/buildings/buildingDefs.ts";
+import type { ObstacleDef } from "../../shared/defs/mapObjects/obstacles/obstacleDefs.ts";
+import type { SurfaceData, SurfaceType } from "../../shared/defs/mapObjectsTyping.ts";
 import { MapObjectDefs } from "../../shared/defs/register.ts";
 import { GameConfig } from "../../shared/gameConfig.ts";
 import type { GroundPatch, MapMsg } from "../../shared/net/mapMsg.ts";
@@ -20,7 +22,7 @@ import { v2, type Vec2 } from "../../shared/utils/v2.ts";
 import type { Ambiance } from "./ambiance.ts";
 import type { AudioManager } from "./audioManager.ts";
 import type { Camera } from "./camera.ts";
-import type { DebugRenderOpts } from "./config.ts";
+import type { DebugRendererOpts } from "./config.ts";
 import { renderSpline } from "./debug/debugHelpers.ts";
 import { debugLines } from "./debug/debugLines.ts";
 import { device } from "./device.ts";
@@ -275,7 +277,7 @@ export class Map {
         renderer: Renderer,
         camera: Camera,
         _smokeParticles: SmokeParticle[],
-        debug: DebugRenderOpts,
+        debug: DebugRendererOpts,
     ) {
         const obstacles = this.m_obstaclePool.m_getPool();
         for (let i = 0; i < obstacles.length; i++) {
@@ -517,9 +519,8 @@ export class Map {
             color: number;
             collider: Collider;
         }> = [];
-        if ((def as BuildingDef).map?.shapes !== undefined) {
-            // @ts-expect-error stfu
-            shapes = (def as BuildingDef).map?.shapes;
+        if (def.map && "shapes" in def.map && def.map.shapes) {
+            shapes = def.map.shapes;
         } else {
             let col = null;
             if (
@@ -558,6 +559,7 @@ export class Map {
                 }
                 screenScale *= math.min(device.pixelRatio, 2);
             }
+            screenScale = math.max(screenScale, 1);
             const scale = this.height / screenScale;
 
             // Background
@@ -682,7 +684,7 @@ export class Map {
                     resolution: 1,
                 });
             }
-            mapRender.scale = new PIXI.Point(
+            mapRender.scale.set(
                 screenScale / this.height,
                 screenScale / this.height,
             );
@@ -708,7 +710,24 @@ export class Map {
     }
 
     getGroundSurface(pos: Vec2, layer: number) {
-        const groundSurface = (type: string, data: Record<string, any> = {}) => {
+        type Surface = {
+            type: "water";
+            data: {
+                waterColor: number;
+                rippleColor: number;
+                isBright?: boolean;
+                river?: River;
+            };
+        } | {
+            type: Exclude<SurfaceType, "water">;
+            data: {
+                waterColor?: number;
+                rippleColor?: number;
+                isBright?: boolean;
+                river?: River;
+            };
+        };
+        const groundSurface = (type: SurfaceType, data: SurfaceData & { river?: River } = {}) => {
             if (type == "water") {
                 const mapColors = this.getMapDef().biome.colors;
                 const isLake = data.river?.looped ?? false;
@@ -726,10 +745,7 @@ export class Map {
             return {
                 type,
                 data,
-            } as {
-                type: string;
-                data: Required<typeof data>;
-            };
+            } as Surface;
         };
 
         // Check decals

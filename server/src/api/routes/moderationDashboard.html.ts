@@ -1256,6 +1256,11 @@ function playerIpCell(p, fallbackLabel) {
   return name + slug;
 }
 
+/** a placement - spectators are saved as rank 999 */
+function rankText(r) {
+  return Number(r) === 999 ? 'SPEC' : '#' + r;
+}
+
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1809,7 +1814,7 @@ function renderXpUserDetail(data) {
       <td>\${esc(g.mapName)} · \${mode}\${g.removed ? ' ' + modBadge('removed') : ''}</td>
       <td>\${g.kills}</td>
       <td>\${g.damage}</td>
-      <td>\${g.rank}</td>
+      <td>\${rankText(g.rank)}</td>
       <td>\${fmtSecs(g.timeAlive)}</td>
       <td><strong>\${g.xp.toLocaleString()}</strong></td>
       <td style="white-space:nowrap;">\${navLink(hReplays(g.gameId), 'replay', { title: 'Find the replay of this game' })} · \${adminNavLink(hChatGame(g.gameId, null), 'chat', { title: 'Open this game\\\'s chat' })}</td>
@@ -2097,7 +2102,7 @@ function xpGameRowHtml(g, i) {
     '<td>' + (g.players != null ? g.players : '–') + '</td>' +
     '<td>' + g.kills + '</td>' +
     '<td>' + g.damage + '</td>' +
-    '<td>' + g.rank + '</td>' +
+    '<td>' + rankText(g.rank) + '</td>' +
     '<td>' + fmtSecs(g.timeAlive) + '</td>' +
     '<td><strong>' + g.xp.toLocaleString() + '</strong></td>' +
     '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + modBadge(g.modStatus) + '</span></td>' +
@@ -2156,7 +2161,7 @@ function renderGameRoster(data) {
       '<td>' + p.assists + '</td>' +
       '<td>' + p.damage + '</td>' +
       '<td>' + p.damageTaken + '</td>' +
-      '<td>' + p.rank + '</td>' +
+      '<td>' + rankText(p.rank) + '</td>' +
       '<td>' + fmtSecs(p.timeAlive) + '</td>' +
       '<td><strong>' + p.xp.toLocaleString() + '</strong></td>' +
       '<td><span class="xp-modcell" data-key="' + esc(key) + '">' + badge + '</span></td>' +
@@ -2525,7 +2530,7 @@ function renderLbPlayer(data, name) {
       '<td>' + esc(g.mapName) + ' · ' + mode + (g.removed ? ' ' + modBadge('removed') : '') + '</td>' +
       '<td>' + g.kills + '</td>' +
       '<td>' + g.damage + '</td>' +
-      '<td>' + g.rank + '</td>' +
+      '<td>' + rankText(g.rank) + '</td>' +
       '<td>' + fmtSecs(g.timeAlive) + '</td>' +
       '<td style="white-space:nowrap;">' + navLink(hReplays(g.gameId), 'replay', { title: 'Open in the Replays tab' }) + '</td>' +
       '</tr>';
@@ -3937,7 +3942,7 @@ async function loadCrates() {
   document.getElementById('crate-editors').innerHTML = crateData.crates.map(renderCrateEditor).join('');
 }
 
-/** Chances of a draft - the same maths as the server (shared/defs/crateConfig.ts). */
+/** Chances of a draft - the same maths as the server (shared/defs/shop/crateConfig.ts). */
 function crateDraftChances(d) {
   const groups = {};
   for (const t of new Set(d.custom ? d.pool : crateData.autoPool)) {
@@ -4986,6 +4991,22 @@ function renderAccountDetail(data) {
       <tbody>\${xpRows || '<tr><td colspan="5" class="empty">No passes.</td></tr>'}</tbody></table>
     </div>\`;
 
+  const ar = data.arena || { xp: 0, level: 1, challengeKills: 0, challengeWeapons: 0, loadouts: 0 };
+  const arenaCard = \`
+    <div class="detail-card" style="margin-top:12px;" data-card="arena">
+      <h3>Arena Progress <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(multiplayer: level unlocks, weapon challenges, loadouts)</span></h3>
+      <div class="kv-row"><span class="kv-key">Level:</span><span class="kv-val">\${ar.level}</span></div>
+      <div class="kv-row"><span class="kv-key">Challenge kills:</span><span class="kv-val">\${ar.challengeKills.toLocaleString()} <span style="color:var(--text-muted);">with \${ar.challengeWeapons} weapon(s)</span></span></div>
+      <div class="kv-row"><span class="kv-key">Saved loadouts:</span><span class="kv-val">\${ar.loadouts}</span></div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-dim);">XP</span>
+        <input type="number" id="arena-xp" value="\${ar.xp}" min="0" style="width:110px;background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-family:inherit;">
+        <button class="btn btn-blue btn-sm" onclick="accArena('set_xp')">Set XP</button>
+        <button class="btn btn-gray btn-sm" onclick="accArena('reset_kills')" title="The weapon challenges start over (their unlocks are gone)">Reset challenge kills</button>
+        <button class="btn btn-red btn-sm" onclick="accArena('reset_all')" title="XP, challenge kills, saved loadouts and kill streak picks">Reset everything</button>
+      </div>
+    </div>\`;
+
   const gpCard = \`
     <div class="detail-card" style="margin-top:12px;" data-card="gp">
       <h3 style="display:flex;align-items:center;gap:8px;">GP History
@@ -5029,7 +5050,7 @@ function renderAccountDetail(data) {
     <td style="font-size:11px;white-space:nowrap;">\${fmtDate(m.createdAt)}</td>
     <td>\${esc(m.mapId||'?')}</td>
     <td>\${esc(m.teamMode||'?')}</td>
-    <td>#\${m.rank}</td>
+    <td>\${rankText(m.rank)}</td>
     <td>\${m.kills}</td>
     <td>\${m.damageDealt}</td>
     <td>\${m.timeAlive}s</td>
@@ -5041,7 +5062,7 @@ function renderAccountDetail(data) {
       <tbody>\${matchRows || '<tr><td colspan="7" class="empty">No matches.</td></tr>'}</tbody></table>
     </div>\`;
 
-  document.getElementById('account-modal-body').innerHTML = identity + xpCard + gpCard + giveCard + removeCard + matchCard;
+  document.getElementById('account-modal-body').innerHTML = identity + xpCard + arenaCard + gpCard + giveCard + removeCard + matchCard;
   applyCardCollapse();
   renderGiveQueue();
   loadAccountGp(u.slug, 'all');
@@ -5210,6 +5231,19 @@ async function doRevertGp(id) {
   } catch (e) {
     toast('Revert failed: ' + e.message, true);
   }
+}
+
+async function accArena(action) {
+  const xp = parseInt(document.getElementById('arena-xp').value, 10) || 0;
+  const what = action === 'set_xp' ? 'Set the arena XP to ' + xp + '?'
+    : action === 'reset_kills' ? 'Reset all weapon challenge kills? The challenge unlocks are gone.'
+    : 'Reset ALL arena progress (XP, challenge kills, saved loadouts, kill streak picks)?';
+  if (!confirm(what)) return;
+  try {
+    await post('/api/account/arena', { slug: currentAccountSlug, action, xp });
+    toast('Arena progress updated');
+    openAccountDetail(currentAccountSlug);
+  } catch (e) { toast('Error: ' + e.message, true); }
 }
 
 async function accSetXp(passType) {

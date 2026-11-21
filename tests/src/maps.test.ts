@@ -1,6 +1,7 @@
 import "./testHelpers.ts";
 import fs from "node:fs";
 import Path from "node:path";
+import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { Atlases } from "../../client/atlas-builder/atlasDefs.ts";
 import { AtlasManager, imageFolder } from "../../client/atlas-builder/atlasBuilder.ts";
@@ -16,7 +17,7 @@ const maps = Object.keys(MapDefs);
 describe("Atlas rebuild detection", () => {
     test("renaming a sprite file changes the atlas hash even when the bytes are identical", () => {
         const originalLoadout = Atlases.loadout;
-        const manager = new AtlasManager();
+        const manager = new AtlasManager(false);
 
         try {
             const realExists = fs.existsSync.bind(fs);
@@ -26,7 +27,6 @@ describe("Atlas rebuild detection", () => {
             vi.spyOn(fs, "readFileSync").mockImplementation(() => Buffer.from("same-content"));
 
             Atlases.loadout = {
-                compress: false,
                 images: [
                     "player/player-base-outfitTwilight.svg",
                     "player/player-base-outfitRuin.svg",
@@ -35,7 +35,6 @@ describe("Atlas rebuild detection", () => {
             const twilightHash = manager.hashAtlas("loadout");
 
             Atlases.loadout = {
-                compress: false,
                 images: [
                     "player/player-base-outfitRuin.svg",
                     "player/player-base-outfitTwilight.svg",
@@ -262,5 +261,10 @@ describe.for(maps)("Map %s", (map) => {
             diff.size,
             `Map ${map} is missing ${[...diff].join(", ")} sprites on its atlases`,
         ).toBe(0);
+    });
+
+    test("splash img exists", () => {
+        const file = path.join(import.meta.dirname, `../../client/public/${mapDef.desc.backgroundImg}`);
+        expect(fs.existsSync(file), `File ${file} should exist`).toBeTruthy();
     });
 });

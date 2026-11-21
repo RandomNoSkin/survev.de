@@ -2,7 +2,7 @@ import { and, desc, eq, gte, ilike, inArray, ne, type SQL, sql } from "drizzle-o
 import {
     getItemCategory,
     MARKET_LISTING_TTL_MS,
-} from "../../../../shared/defs/shopConfig";
+} from "../../../../shared/defs/shop/shopConfig";
 import type {
     GiftFriesResponse,
     GiftItemResponse,

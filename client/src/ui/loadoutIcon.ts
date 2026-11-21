@@ -89,8 +89,10 @@ function buildOutfitContent(def: OutfitDef): PIXI.Container | null {
     if (img.frontSprite && !img.aboveHand) {
         addLayer(content, img.frontSprite, 0xffffff, fp.x, fp.y, FRONT_SCALE);
     }
-    addLayer(content, img.handSprite, img.handTint, HAND_L.x, HAND_L.y, HAND_SCALE);
-    addLayer(content, img.handSprite, img.handTint, HAND_R.x, HAND_R.y, HAND_SCALE);
+    const handL = typeof img.handSprite === "string" ? img.handSprite : img.handSprite.left;
+    const handR = typeof img.handSprite === "string" ? img.handSprite : img.handSprite.right;
+    addLayer(content, handL, img.handTint, HAND_L.x, HAND_L.y, HAND_SCALE);
+    addLayer(content, handR, img.handTint, HAND_R.x, HAND_R.y, HAND_SCALE);
     if (img.frontSprite && img.aboveHand) {
         addLayer(content, img.frontSprite, 0xffffff, fp.x, fp.y, FRONT_SCALE);
     }

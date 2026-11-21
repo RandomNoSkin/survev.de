@@ -16,7 +16,7 @@ export class GameOverMsg implements AbstractMsg {
         s.writeUint8(this.teamId);
         s.writeUint8(this.teamRank);
         s.writeUint8(this.rank);
-        s.writeUint8(+this.gameOver);
+        s.writeUint8(this.gameOver ? 1 : 0);
         s.writeUint8(this.winningTeamId);
         s.writeUint8(+this.spectator);
         s.writeUint8(+this.betterStats);
@@ -33,7 +33,7 @@ export class GameOverMsg implements AbstractMsg {
         this.teamId = s.readUint8();
         this.teamRank = s.readUint8();
         this.rank = s.readUint8();
-        this.gameOver = s.readUint8() as unknown as boolean;
+        this.gameOver = !!s.readUint8();
         this.winningTeamId = s.readUint8();
         this.spectator = s.readUint8() as unknown as boolean;
         this.betterStats = s.readUint8() as unknown as boolean;

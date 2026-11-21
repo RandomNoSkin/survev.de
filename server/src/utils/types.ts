@@ -1,11 +1,13 @@
+import { ARENA_LOADOUT_SLOTS } from "../../../shared/defs/modes/arenaDefs";
+import { zArenaLoadout, zArenaStreaks } from "../../../shared/utils/arena";
 import { z } from "zod";
-import type { CustomLoadoutConfig } from "../../../shared/defs/customLoadout";
+import type { CustomLoadoutConfig } from "../../../shared/defs/lobby/customLoadout";
 import type { MapDefs } from "../../../shared/defs/mapDefs";
 import { type GameMode, TeamMode } from "../../../shared/gameConfig";
 import type { FindGameError } from "../../../shared/types/api";
 import { PRIVATE_LOBBY_PLAYER_LIMIT_MAX, zCustomLoadoutConfig } from "../../../shared/types/privateLobby";
-import { type CustomMapConfig, validateCustomMap } from "../../../shared/defs/customMap";
-import { type WeaponStats, validateWeaponStats } from "../../../shared/defs/weaponStats";
+import { type CustomMapConfig, validateCustomMap } from "../../../shared/defs/lobby/customMap";
+import { type WeaponStats, validateWeaponStats } from "../../../shared/defs/lobby/weaponStats";
 import { type DisplayRoleTag, zRoleTag } from "../../../shared/types/user";
 import { loadoutSchema } from "../../../shared/utils/loadout";
 import type { MatchDataTable } from "../api/db/schema";
@@ -25,6 +27,13 @@ export const zUpdateRegionBody = z.object({
         playerCount: z.number(),
         // Default keeps older game servers (that don't send it yet) valid during rollout.
         gameCount: z.number().default(0),
+        /** the public arena mode games per map (the menu shows them to draw players in) */
+        modeGames: z.array(z.object({
+            mapName: z.string(),
+            games: z.number(),
+            players: z.number(),
+            warmupPlayers: z.number(),
+        })).default([]),
     }),
 });
 export type UpdateRegionBody = z.infer<typeof zUpdateRegionBody>;
@@ -69,6 +78,9 @@ export interface SaveGameBody {
             userId?: string;
         }[];
     };
+    /** Arena progression of the logged-in players: arena XP (arena modes) and the kills
+     *  per weapon that count for the weapon challenges (arena modes, Gun Game, Comp). */
+    arena?: { userId: string; xp: number; weaponKills: Record<string, number> }[];
     /** Clean 1v1 kills between two accounts (local mode) - profile "1v1" stats. */
     duels?: {
         gameId: string;
@@ -132,6 +144,8 @@ export interface GameData {
     gameMode: GameMode;
     mapName: string;
     canJoin: boolean;
+    /** The biggest party that can still join together (Domination: room on one side); undefined: no limit. */
+    partyRoom?: number;
     /** Isolated match created from a private lobby; joined via tokens, not public matchmaking (see `canJoin`). */
     isPrivate: boolean;
     /** Private lobby "Public Spectating" toggle; when false, hidden from `/api/game_infos`. Default true. */
@@ -170,6 +184,10 @@ export const zFindGamePrivateBody = z.object({
             customLoadout: zCustomLoadoutConfig.optional(),
             /** Staff watching from the dashboard: an invisible spectator (see Player.stealth). */
             stealth: z.boolean().optional(),
+            /** Arena modes: the player's saved loadouts (checked against their unlocks by the API). */
+            arenaLoadouts: z.array(zArenaLoadout).max(ARENA_LOADOUT_SLOTS).optional(),
+            /** Arena modes: the player's kill streak picks. */
+            arenaStreaks: zArenaStreaks.optional(),
         }),
     ),
 });
@@ -187,6 +205,10 @@ const zPrivateLobbyPlayerData = z.object({
     customLoadout: zCustomLoadoutConfig.optional(),
     /** An admin watching the lobby invisibly (see Player.stealth). */
     stealth: z.boolean().optional(),
+    /** Arena modes: the player's saved loadouts (checked against their unlocks by the API). */
+    arenaLoadouts: z.array(zArenaLoadout).max(ARENA_LOADOUT_SLOTS).optional(),
+    /** Arena modes: the player's kill streak picks. */
+    arenaStreaks: zArenaStreaks.optional(),
 });
 
 /** Body for spinning up a fully isolated match from a private lobby; `teams` groups players that should land in the same in-game Group. */

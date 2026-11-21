@@ -1,12 +1,12 @@
+import { FactionTeam } from "../../gameConfig.ts";
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
+import type { BaseWeaponDef } from "./itemTypes.ts";
 
-export interface GunDef {
-    readonly type: "gun";
-    name: string;
-    quality?: number;
-    aimAssist?:boolean;
-    autoSwitch?:boolean;
+export interface GunDef extends BaseWeaponDef {
+    type: "gun";
+    aimAssist?: boolean;
+    autoSwitch?: boolean;
     fireMode: "auto" | "single" | "burst" | "dual";
     secondFireMode?: "auto" | "single" | "burst" | "dual";
     caseTiming: "shoot" | "reload";
@@ -39,16 +39,6 @@ export interface GunDef {
         equip: number;
         attack: number;
     };
-    lootImg: {
-        sprite: string;
-        tint: number;
-        border: string;
-        borderTint: number;
-        scale: number;
-        innerScale?: number;
-        rot?: number;
-        mirror?: boolean;
-    };
     worldImg: {
         sprite: string;
         scale: Vec2;
@@ -80,7 +70,7 @@ export interface GunDef {
         cycle?: string;
         pull?: string;
         shootLast?: string;
-        shootTeam?: Record<string, string>;
+        shootTeam?: Record<FactionTeam, string>;
         shootAlt?: string;
         fallOff?: number;
         reloadAlt?: string;
@@ -90,8 +80,6 @@ export interface GunDef {
     pistol?: boolean;
     dualOffset?: number;
     ammoInfinite?: boolean;
-    noPotatoSwap?: boolean;
-    noDrop?: boolean;
     burstDelay?: number;
     burstCount?: number;
     dualWieldType?: string;
@@ -128,7 +116,7 @@ export interface GunDef {
 }
 
 function defineGunSkin(baseType: string, params: DeepPartial<GunDef>): GunDef {
-    return util.mergeDeep({}, BaseDefs[baseType], params);
+    return util.mergeDeep({}, BaseDefs[baseType], { baseType }, params);
 }
 
 export const BaseDefs: Record<string, GunDef> = {
@@ -142,8 +130,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 90,
         maxClip: 40,
         maxReload: 40,
-        extendedClip: 40,
-        extendedReload: 40,
+        extendedClip: 60,
+        extendedReload: 60,
         reloadTime: 2,
         fireDelay: 0.08,
         switchDelay: 0.75,
@@ -430,8 +418,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 90,
         maxClip: 18,
         maxReload: 18,
-        extendedClip: 40,
-        extendedReload: 40,
+        extendedClip: 27,
+        extendedReload: 27,
         reloadTime: 1.8,
         fireDelay: 0.055,
         switchDelay: 0.75,
@@ -1029,8 +1017,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 50,
         maxClip: 10,
         maxReload: 10,
-        extendedClip: 20,
-        extendedReload: 20,
+        extendedClip: 14,
+        extendedReload: 14,
         reloadTime: 2.7,
         fireDelay: 0.23,
         switchDelay: 0.75,
@@ -1432,8 +1420,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 150,
         maxClip: 150,
         maxReload: 150,
-        extendedClip: 250,
-        extendedReload: 250,
+        extendedClip: 200,
+        extendedReload: 200,
         reloadTime: 6,
         fireDelay: 0.09,
         switchDelay: 0.75,
@@ -1538,7 +1526,7 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 50,
         maxClip: 2, 
         maxReload: 2, 
-        extendedClip: 8,
+        extendedClip: 3,
         extendedReload: 1,
         reloadTime: 1.6, 
         fireDelay: 0.13,
@@ -1589,8 +1577,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 156,
         maxClip: 13,
         maxReload: 13,
-        extendedClip: 26,
-        extendedReload: 26,
+        extendedClip: 20,
+        extendedReload: 20,
         reloadTime: 1.6, 
         fireDelay: 0.12, 
         switchDelay: 0.75,
@@ -1638,8 +1626,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 20,
         maxClip: 1,
         maxReload: 1,
-        extendedClip: 5,
-        extendedReload: 5,
+        extendedClip: 1,
+        extendedReload: 1,
         reloadTime: 0.4,
         fireDelay: 0.8,
         switchDelay: 0.65,
@@ -1748,8 +1736,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 30,
         maxClip: 10,
         maxReload: 10,
-        extendedClip: 15,
-        extendedReload: 15,
+        extendedClip: 10,
+        extendedReload: 10,
         reloadTime: 2.7,
         fireDelay: 1.5,
         switchDelay: 1,
@@ -1801,8 +1789,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 20,
         maxClip: 5,
         maxReload: 5,
-        extendedClip: 7,
-        extendedReload: 7,
+        extendedClip: 5,
+        extendedReload: 5,
         reloadTime: 3.6,
         fireDelay: 1.5,
         switchDelay: 1,
@@ -1855,7 +1843,7 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 16,
         maxClip: 3,
         maxReload: 1,
-        extendedClip: 1,
+        extendedClip: 4,
         extendedReload: 1,
         reloadTime: 1.4,
         fireDelay: 0.35,
@@ -2047,8 +2035,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 40,
         maxClip: 8,
         maxReload: 8,
-        extendedClip: 8,
-        extendedReload: 8,
+        extendedClip: 13,
+        extendedReload: 13,
         reloadTime: 2.1,
         fireDelay: 0.2,
         switchDelay: 0.17,
@@ -2201,8 +2189,9 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 10,
         maxClip: 2,
         maxReload: 2,
-        extendedClip: 2,
-        extendedReload: 2,
+        // Firepower: 3 shells (4 was too much)
+        extendedClip: 3,
+        extendedReload: 3,
         reloadTime: 1.5,
         fireDelay: 0.2,
         switchDelay: 0.3,
@@ -2605,8 +2594,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 10,
         maxClip: 3,
         maxReload: 3,
-        extendedClip: 20,
-        extendedReload: 20,
+        extendedClip: 6,
+        extendedReload: 6,
         reloadTime: 2.9,
         fireDelay: 0.5,
         switchDelay: 0.75,
@@ -3210,8 +3199,8 @@ export const BaseDefs: Record<string, GunDef> = {
         pistol: true,
         maxClip: 5,
         maxReload: 5,
-        extendedClip: 5,
-        extendedReload: 5,
+        extendedClip: 7,
+        extendedReload: 7,
         reloadTime: 0.9,
         fireDelay: 0.24,
         switchDelay: 0.14,
@@ -3259,8 +3248,8 @@ export const BaseDefs: Record<string, GunDef> = {
         pistol: true,
         maxClip: 10,
         maxReload: 10,
-        extendedClip: 10,
-        extendedReload: 10,
+        extendedClip: 14,
+        extendedReload: 14,
         reloadTime: 1.7,
         fireDelay: 0.16,
         switchDelay: 0.3,
@@ -3309,8 +3298,8 @@ export const BaseDefs: Record<string, GunDef> = {
         pistol: true,
         maxClip: 6,
         maxReload: 6,
-        extendedClip: 6,
-        extendedReload: 6,
+        extendedClip: 8,
+        extendedReload: 8,
         reloadTime: 2,
         fireDelay: 0.11,
         switchDelay: 0.3,
@@ -3358,8 +3347,8 @@ export const BaseDefs: Record<string, GunDef> = {
         pistol: true,
         maxClip: 12,
         maxReload: 12,
-        extendedClip: 12,
-        extendedReload: 12,
+        extendedClip: 16,
+        extendedReload: 16,
         reloadTime: 4,
         fireDelay: 0.09,
         switchDelay: 0.3,
@@ -3660,8 +3649,8 @@ export const BaseDefs: Record<string, GunDef> = {
         ammoSpawnCount: 30,
         maxClip: 6,
         maxReload: 6,
-        extendedClip: 8,
-        extendedReload: 8,
+        extendedClip: 6,
+        extendedReload: 6,
         reloadTime: 3.55,
         fireDelay: 0.925,
         switchDelay: 1,
@@ -3712,8 +3701,8 @@ export const BaseDefs: Record<string, GunDef> = {
         pistol: true,
         maxClip: 5,
         maxReload: 5,
-        extendedClip: 5,
-        extendedReload: 5,
+        extendedClip: 7,
+        extendedReload: 7,
         reloadTime: 2.7,
         fireDelay: 0.65,
         switchDelay: 0.3,
@@ -4209,7 +4198,7 @@ export const BaseDefs: Record<string, GunDef> = {
         reloadTime: 5.8,
         fireDelay: 0.07,
         switchDelay: 0.75,
-        barrelLength: 4.5,
+        barrelLength: 5,
         barrelOffset: 0,
         recoilTime: 1e10,
         moveSpread: 4,
@@ -4231,7 +4220,7 @@ export const BaseDefs: Record<string, GunDef> = {
             sprite: "gun-potato-lmg-top-01.img",
             scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
-            gunOffset: { x: -30, y: 1.75 },
+            gunOffset: { x: -40, y: 1.75 },
             recoil: 1,
         },
         particle: {
@@ -4298,7 +4287,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
         sound: {
             shoot: "bugle_01",
-            shootTeam: { 1: "bugle_01", 2: "bugle_02" },
+            shootTeam: { [FactionTeam.Red]: "bugle_01", [FactionTeam.Blue]: "bugle_02" },
             shootAlt: "bugle_03",
             reload: "",
             pickup: "stow_weapon_01",
@@ -4995,6 +4984,7 @@ export const ModifiedGunDefs: Record<string, GunDef> = {
     modified_m249: defineGunSkin("m249", {
         name: "M249 [+]",
         backpackFed: true,
+        maxClip: 0,
         upgraded: undefined,
         modifiedSound: "m249_01",
         lootImg: {

@@ -68,6 +68,8 @@ export class WeaponManager {
 
     meleeAttacks: number[] = [];
 
+    meleeAnimCooldown = 0;
+
     cookingThrowable = false;
     cookTicker = 0;
 
@@ -177,12 +179,11 @@ export class WeaponManager {
             }
 
             if (
-                swappingToGun &&
-                // @ts-expect-error All combinations of non-identical non-zero values (including undefined)
-                //                  give NaN or a number not equal to 1, meaning that this correctly checks
-                //                  for two identical non-zero numerical deploy groups
-                curWeaponDef.deployGroup / nextWeaponDef.deployGroup === 1 &&
-                curWeapon.cooldown > 0
+                swappingToGun
+                && nextWeaponDef.deployGroup !== undefined
+                && (curWeaponDef as GunDef).deployGroup !== undefined
+                && nextWeaponDef.deployGroup === (curWeaponDef as GunDef).deployGroup
+                && curWeapon.cooldown > 0
             ) {
                 effectiveSwitchDelay = nextWeaponDef.switchDelay;
             } else if (nextWeaponDef.type === "melee") {
@@ -221,6 +222,14 @@ export class WeaponManager {
 
         if (idx === this.curWeapIdx && WeaponSlot[idx] == "gun") {
             this.offHand = false;
+        }
+
+        const deployedWeaponType = this.weapons[idx].type;
+        if (
+            deployedWeaponType
+            && (this.player.game.weaponStats.def(deployedWeaponType) as MeleeDef | undefined)?.type === "melee"
+        ) {
+            this.playMeleeDeployAnim();
         }
 
         this.player.setDirty();
@@ -263,6 +272,13 @@ export class WeaponManager {
                     weaponDef?.type === "melee" ||
                     weaponDef?.type === "throwable",
             );
+        }
+        if (
+            isMelee
+            && (this.player.animType === GameConfig.Anim.DeployMelee
+                || this.player.animType === GameConfig.Anim.IdleMelee)
+        ) {
+            this.player.cancelAnim();
         }
 
         // can't wear pan if you're replacing it with another melee
@@ -346,6 +362,8 @@ export class WeaponManager {
         player.freeSwitchTimer -= dt;
 
         player.recoilTicker += dt;
+
+        this.meleeAnimCooldown -= dt;
 
         for (let i = 0; i < this.weapons.length; i++) {
             this.weapons[i].cooldown -= dt;
@@ -494,6 +512,28 @@ export class WeaponManager {
                 i--;
             }
         }
+    }
+
+    playMeleeDeployAnim() {
+        if (this.player.animType !== GameConfig.Anim.None) return;
+        if (this.player.curWeapIdx !== GameConfig.WeaponSlot.Melee) return;
+        const def = GameObjectDefs.typeToDef(this.activeWeapon, "melee");
+        if (!def.anim.deployAnims?.length) return;
+        if (this.player.downed) return;
+
+        this.player.playAnim(GameConfig.Anim.DeployMelee, def.anim.deployAnimTime + 0.1);
+    }
+
+    playMeleeIdleAnim() {
+        if (this.player.animType !== GameConfig.Anim.None) return;
+        if (this.player.curWeapIdx !== GameConfig.WeaponSlot.Melee) return;
+        if (this.meleeAnimCooldown > 0) return;
+        const def = GameObjectDefs.typeToDef(this.activeWeapon, "melee");
+        if (!def.anim.idleAnims?.length) return;
+        if (this.player.downed) return;
+
+        this.player.playAnim(GameConfig.Anim.IdleMelee, def.anim.idleAnimTime + 0.1);
+        this.meleeAnimCooldown = def.anim.idleAnimTime + 1;
     }
 
     getAmmoStats(weaponDef: GunDef): {
@@ -856,6 +896,23 @@ export class WeaponManager {
 
         let item = weap.type;
 
+        // (the arena: the rounds stay in the dropped gun, not in the backpack)
+        if (this.player.game.rules?.lootKeepsClip) {
+            const rounds = this.isInfinite(weaponDef) ? 0 : weaponAmmoCount;
+            if (weaponDef.isDual) {
+                item = item.replace("_dual", "");
+                const first = this.player.dropLoot(item, 0, true);
+                if (first) first.clip = Math.ceil(rounds / 2);
+                const second = this.player.dropLoot(item, 0, true);
+                if (second) second.clip = Math.floor(rounds / 2);
+            } else {
+                const loot = this.player.dropLoot(item, 0, true);
+                if (loot) loot.clip = rounds;
+            }
+            this.player.weapsDirty = true;
+            return;
+        }
+
         let amountToDrop = 0;
         if (!this.isInfinite(weaponDef)) {
             const res = this.player.invManager.give(
@@ -978,12 +1035,12 @@ export class WeaponManager {
         // backpackFed guns (e.g. M249 / "M249 [+]") feed from backpack ammo, so
         // without the endless_ammo/arena perk they still need inventory ammo to
         // fire; with infinite ammo they fire freely even on an empty clip/backpack.
-        if (
-            weapon.ammo <= 0 &&
-            (!itemDef.backpackFed ||
-                (!isInfinite &&
-                    !this.player.invManager.has(itemDef.ammo as InventoryItem)))
-        ) {
+        // (a backpack-fed gun's clip doesn't count: it never goes down, so ammo that
+        // got into it - an upgrade used to fill it - meant endless shots)
+        const outOfAmmo = itemDef.backpackFed
+            ? !isInfinite && !this.player.invManager.has(itemDef.ammo as InventoryItem)
+            : weapon.ammo <= 0;
+        if (outOfAmmo) {
             return;
         }
 
@@ -1114,7 +1171,7 @@ export class WeaponManager {
         }
 
         if (shouldApplyChambered) {
-            damageMult *= 1.25;
+            damageMult *= PerkProperties.chambered.damageMult;
         }
 
         //
@@ -1175,10 +1232,22 @@ export class WeaponManager {
             distanceMult *= PerkProperties.high_velocity.distanceMult;
         }
 
+        if (this.player.hasPerk("bonus_assault")) {
+            speedMult *= PerkProperties.bonus_assault.speedMult;
+        }
+
         const jitter = itemDef.jitter ?? 0.25;
 
+        const bonus45 = itemDef.ammo === "45acp" && this.player.hasPerk("bonus_45");
+
         for (let i = 0; i < bulletCount; i++) {
-            const deviation = firstShotAccuracy
+            const empowered45 = bonus45 && Math.random() < PerkProperties.bonus_45.empoweredChance;
+            if (empowered45) {
+                damageMult *= PerkProperties.bonus_45.empoweredDamageMult;
+                speedMult *= PerkProperties.bonus_45.empoweredSpeedMult;
+            }
+
+            const deviation = (empowered45 || firstShotAccuracy)
                 ? 0
                 : util.random(-0.5, 0.5) * (spread || 0);
             const shotDir = v2.rotate(direction, math.deg2rad(deviation));
@@ -1232,7 +1301,7 @@ export class WeaponManager {
                 shotOffhand: offHand,
                 trailSaturated: shouldApplyChambered || saturated,
                 trailSmall: false,
-                trailThick: shouldApplyChambered,
+                trailThick: shouldApplyChambered || empowered45,
                 reflectCount: 0,
                 splinter: hasSplinter,
                 apRounds: hasApRounds,
@@ -1324,7 +1393,7 @@ export class WeaponManager {
                     projDef.fuseTime,
                     GameConfig.DamageType.Player,
                     projectileDirection,
-                    undefined,
+                    this.activeWeapon,
                     undefined,
                     projectileVelocityZ,
                 );
@@ -2246,11 +2315,21 @@ export class WeaponManager {
         }
 
         this.player.invManager.take("construction_item", cost);
-        this.player.weaponManager.setWeapon(
-            playerCurWeapIdx,
-            weapon.upgraded.gun,
-            upgradedWeaponDef.maxClip,
-        );
+        if (upgradedWeaponDef.backpackFed) {
+            // feeds from the backpack (M249 [+]): no free full clip - what was loaded
+            // goes back into the backpack
+            const loaded = this.weapons[playerCurWeapIdx].ammo;
+            if (loaded > 0 && this.player.invManager.isValid(upgradedWeaponDef.ammo)) {
+                this.player.invManager.giveAndDrop(upgradedWeaponDef.ammo, loaded);
+            }
+            this.player.weaponManager.setWeapon(playerCurWeapIdx, weapon.upgraded.gun, 0);
+        } else {
+            this.player.weaponManager.setWeapon(
+                playerCurWeapIdx,
+                weapon.upgraded.gun,
+                upgradedWeaponDef.maxClip,
+            );
+        }
 
         pickupMsg.type = net.PickupMsgType.WeaponUpgraded;
         this.player.msgsToSend.push({

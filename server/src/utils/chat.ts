@@ -255,6 +255,21 @@ export class Chat{
     }
 
     adminCommands: Record<string, (args: string[]) => void> = {
+        // /skipwaiting [seconds]: a GameMode's warmup (Gun Game, Domination) stops waiting
+        // for players - the countdown to the match starts (10 s by default)
+        skipwaiting: (args) => {
+            const rules = this.game.rules;
+            const seconds = Math.max(1, Math.min(120, Math.round(Number(args[0]) || 10)));
+            if (!rules?.skipWaiting) {
+                this.sendCmdFeedback("This game has no warmup to skip", "#ff4444");
+                return;
+            }
+            if (!rules.skipWaiting(seconds)) {
+                this.sendCmdFeedback("The match is already running", "#ff4444");
+                return;
+            }
+            this.sendCmdFeedback(`Waiting skipped - the match starts in ${seconds}s`, "#7fcf5a");
+        },
         announce: (args) => {
             const text = args[0];
             const color = args[2];

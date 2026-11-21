@@ -13,11 +13,11 @@ import {
     CUSTOM_LOADOUT_SCOPES,
     type CustomLoadoutConfig,
     DEFAULT_CUSTOM_LOADOUT,
-} from "../../../shared/defs/customLoadout";
+} from "../../../shared/defs/lobby/customLoadout";
 import { type GunDef, GunDefs } from "../../../shared/defs/gameObjects/gunDefs";
-import { type GunCategory as SharedGunCategory, gunCategory } from "../../../shared/defs/gunCategories";
+import { type GunCategory as SharedGunCategory, gunCategory } from "../../../shared/defs/gameObjects/gunCategories";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
-import { skinLabel, weaponSkinBase, weaponVariantLabel } from "../../../shared/defs/weaponStats";
+import { skinLabel, weaponSkinBase, weaponVariantLabel } from "../../../shared/defs/lobby/weaponStats";
 import { GameConfig, type InventoryItem } from "../../../shared/gameConfig";
 import { helpers } from "../helpers";
 import type { Localization } from "./localization";
