@@ -2,7 +2,6 @@ import * as PIXI from "pixi.js-legacy";
 import type { LootDef } from "../../../shared/defs/gameObjectDefs.ts";
 import type { AmmoDef } from "../../../shared/defs/gameObjects/gearDefs.ts";
 import type { GunDef } from "../../../shared/defs/gameObjects/gunDefs.ts";
-import type { MeleeDef } from "../../../shared/defs/gameObjects/meleeDefs.ts";
 import type { XPDef } from "../../../shared/defs/gameObjects/xpDefs.ts";
 import { GameObjectDefs } from "../../../shared/defs/register.ts";
 import { GameConfig } from "../../../shared/gameConfig.ts";
@@ -12,15 +11,16 @@ import { util } from "../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import type { AudioManager } from "../audioManager.ts";
 import type { Camera } from "../camera.ts";
-import type { DebugRenderOpts } from "../config.ts";
+import type { DebugRendererOpts } from "../config.ts";
 import { debugLines } from "../debug/debugLines.ts";
 import { device } from "../device.ts";
 import type { Map } from "../map.ts";
 import type { Renderer } from "../renderer.ts";
 import { getOutfitLootTexture } from "../ui/loadoutIcon.ts";
-import { Pool } from "./objectPool.ts";
+
+import { AbstractObject, Pool } from "./objectPool.ts";
 import type { Emitter, ParticleBarn } from "./particles.ts";
-import type { AbstractObject, Player } from "./player.ts";
+import type { Player } from "./player.ts";
 
 export class Loot implements AbstractObject {
     __id!: number;
@@ -112,21 +112,16 @@ export class Loot implements AbstractObject {
                 this.playDropSfx = true;
             }
 
-            this.rad = GameConfig.lootRadius[itemDef.type as keyof typeof GameConfig.lootRadius];
-            this.imgScale = itemDef.lootImg?.scale * 1.25;
+            this.rad = GameConfig.lootRadius[itemDef.type];
+            this.imgScale = itemDef.lootImg.scale * 1.25;
 
-            const innerScale = (itemDef as { lootImg: { innerScale?: number } }).lootImg.innerScale
+            const innerScale = itemDef.lootImg.innerScale
                 || 0.8;
             this.sprite.scale.set(innerScale, innerScale);
 
-            // In-game outfit loot shows the full composed character (like the
-            // loadout menu) instead of a plain shirt, for skins without their own
-            // dedicated loot art.
-            const usesGenericShirt =
-                itemDef.type === "outfit" &&
-                (itemDef.lootImg.sprite === "loot-shirt-01.img" ||
-                    itemDef.lootImg.sprite === "loot-shirt-outfitBase.img");
-            const outfitTex = usesGenericShirt
+            // In-game outfit loot always shows the full composed character (like the
+            // loadout menu). Costumes/ghillie (or atlas not ready) fall back to the loot art.
+            const outfitTex = itemDef.type === "outfit"
                 ? getOutfitLootTexture(this.type, ctx.renderer.game.m_pixi.renderer)
                 : null;
             if (outfitTex) {
@@ -144,7 +139,7 @@ export class Loot implements AbstractObject {
             }
             const ammo = GameObjectDefs.typeToDefSafe((itemDef as GunDef).ammo) as AmmoDef;
             if (ammo) {
-                this.container.tint = ammo.lootImg.tintDark!;
+                this.container.tint = ammo.lootImg.tintDark;
             } else if (itemDef.lootImg.borderTint) {
                 this.container.tint = itemDef.lootImg.borderTint;
             } else {
@@ -158,10 +153,10 @@ export class Loot implements AbstractObject {
                 });
             }
 
-            this.sprite.rotation = (itemDef as MeleeDef)?.lootImg?.rot
-                ? (itemDef as MeleeDef).lootImg.rot!
+            this.sprite.rotation = itemDef.lootImg.rot
+                ? itemDef.lootImg.rot!
                 : 0;
-            this.sprite.scale.x = (itemDef as MeleeDef).lootImg.mirror
+            this.sprite.scale.x = itemDef.lootImg.mirror
                 ? -innerScale
                 : innerScale;
 
@@ -195,7 +190,7 @@ export class LootBarn {
         map: Map,
         audioManager: AudioManager,
         camera: Camera,
-        debug: DebugRenderOpts,
+        debug: DebugRendererOpts,
     ) {
         this.closestLoot = null;
         let closestDist = Number.MAX_VALUE;
@@ -228,7 +223,7 @@ export class LootBarn {
                     map.lootDropSfxIds.push(loot.__id);
                     loot.playDropSfx = false;
                     const itemDef = GameObjectDefs.typeToDef(loot.type, "xp");
-                    audioManager.playSound(itemDef.sound?.drop, {
+                    audioManager.playSound(itemDef.sound.drop, {
                         channel: "sfx",
                         soundPos: loot.pos,
                         layer: loot.layer,

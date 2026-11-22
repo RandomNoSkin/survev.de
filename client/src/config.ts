@@ -33,7 +33,7 @@ export const debugToolsConfig = {
     preventGameStart: false,
 };
 
-export const debugRenderConfig = {
+export const debugRendererConfig = {
     enabled: false,
     players: false,
     obstacles: false,
@@ -48,6 +48,7 @@ export const debugRenderConfig = {
         ceiling: false,
         floors: false,
         minimap: false,
+        goreRegion: false,
     },
     structures: {
         buildingBounds: false,
@@ -81,7 +82,7 @@ export const debugHUDConfig = {
     },
 };
 
-export type DebugRenderOpts = typeof debugRenderConfig;
+export type DebugRendererOpts = typeof debugRendererConfig;
 
 /**
  * Per-element HUD customization (position/visibility/opacity/click) - see
@@ -120,6 +121,10 @@ export const BuildingEditorConfig = {
     object: "house_red_01",
     map: "main" as MapDefKey,
     grid: true,
+    layer: 0,
+    ori: 0,
+    hideCeilings: false,
+    showGrid: true,
 };
 
 const defaultConfig = {
@@ -159,6 +164,7 @@ const defaultConfig = {
     customMaps: [] as CustomMapConfig[],
     weaponStatsProfiles: [] as WeaponStatsProfile[],
     teamAutoFill: true,
+    clientTheme: "main" as MapDefKey,
     language: "en" as Locale,
     prerollGamesPlayed: 0,
     totalGamesPlayed: 0,
@@ -192,7 +198,7 @@ const defaultConfig = {
      *  it belongs to (guards against cross-account false triggers on one device). */
     goldenFriesSeen: 0,
     goldenFriesSeenSlug: "",
-    cachedBgImg: "img/main_splash.png",
+    cachedBgImg: "img/splashes/main.webp",
     /** The last pass state get_pass returned, per account (slug) - shown right away on
      *  the next visit instead of a spinner, then updated once get_pass answers. */
     cachedPass: null as { slug: string; pass: unknown; quests: unknown[] } | null,
@@ -220,7 +226,7 @@ const defaultConfig = {
     uncapFps: false,
     /* STRIP_FROM_PROD_CLIENT:START */
     debugTools: debugToolsConfig,
-    debugRenderer: debugRenderConfig,
+    debugRenderer: debugRendererConfig,
     /* STRIP_FROM_PROD_CLIENT:END */
     debugHUD: debugHUDConfig,
     buildingEditor: BuildingEditorConfig,
@@ -241,7 +247,8 @@ export class ConfigManager {
             try {
                 data = JSON.parse(strConfig);
             } catch (_e) {}
-            this.config = util.mergeDeep({}, defaultConfig, data);
+            // (cast: DeepPartial can't map the nullable object entries like cachedPass)
+            this.config = util.mergeDeep<ConfigType>({}, defaultConfig as never, data);
             this.checkUpgradeConfig();
             this.onModified();
             this.loaded = true;

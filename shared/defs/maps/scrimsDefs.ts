@@ -19,7 +19,7 @@ export const mapDef: PartialMapDef = {
         icon: "",
         buttonCss: "",
         buttonText: "scrims",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     assets: {
         audio: [
@@ -31,7 +31,7 @@ export const mapDef: PartialMapDef = {
             { name: "log_11", channel: "sfx" },
             { name: "log_12", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
+        atlases: ["loadout", "shared", "main", "woods", "savannah", "beach", "desert"],
     },
     biome: {
         colors: {

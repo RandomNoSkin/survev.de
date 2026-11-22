@@ -1,22 +1,24 @@
-import { util } from "../../utils/util.ts";
+import { type DeepPartial, util } from "../../utils/util.ts";
+import type { BaseLootDef, LootImg } from "./itemTypes.ts";
 
-function defineSkin(baseType: string, params: unknown) {
-    return util.mergeDeep({}, BaseDefs[baseType], { baseType }, params);
+type GearDef = HealDef | AmmoDef | BoostDef | BackpackDef | HelmetDef | ChestDef;
+
+function defineSkin<T extends GearDef>(baseType: string, params: DeepPartial<T>): T {
+    return util.mergeDeep<T>({}, BaseDefs[baseType] as T, { baseType } as T, params);
 }
 
-export interface ChestDef {
-    readonly type: "chest";
-    name: string;
-    noDrop?: boolean;
-    level: number;
+export interface BaseGearDef extends BaseLootDef {
+    level: 0 | 1 | 2 | 3 | 4;
+    hasDesc?: boolean;
+    desc?: string;
+}
+
+export interface ChestDef extends BaseGearDef {
+    type: "chest";
     damageReduction: number;
     skinImg: {
         baseTint: number;
         baseSprite: string;
-    };
-    lootImg: LootImg;
-    sound: {
-        pickup: string;
     };
 }
 
@@ -104,13 +106,10 @@ const ChestDefs: Record<string, ChestDef> = {
     },
 };
 
-export interface HelmetDef {
-    name: string;
+export interface HelmetDef extends BaseGearDef {
+    type: "helmet";
     perk?: string;
     role?: string;
-    type: "helmet";
-    noDrop?: boolean;
-    level: number;
     damageReduction: number;
     skinImg: {
         baseTint: number;
@@ -118,11 +117,6 @@ export interface HelmetDef {
         baseTintBlue: number;
         baseSprite: string;
         spriteScale?: number;
-    };
-
-    lootImg: LootImg;
-    sound: {
-        pickup: string;
     };
 }
 
@@ -217,16 +211,11 @@ const HelmetDefs: Record<string, HelmetDef> = {
     },
 };
 
-export interface BackpackDef {
-    name: string;
+export interface BackpackDef extends BaseGearDef {
     type: "backpack";
-    level: number;
     playerRad: number;
     tint: number;
-    lootImg: LootImg;
-    sound: {
-        pickup: string;
-    };
+    maxPerks?: number;
 }
 
 const BackpackDefs: Record<string, BackpackDef> = {
@@ -298,15 +287,33 @@ const BackpackDefs: Record<string, BackpackDef> = {
             pickup: "pack_pickup_01",
         },
     },
+    backpack04: {
+        name: "Tactical Pack",
+        type: "backpack",
+        level: 4,
+        tint: 0x666633,
+        playerRad: 1,
+        lootImg: {
+            sprite: "loot-pack-04.img",
+            tint: 0xffffff,
+            border: "loot-circle-outer-01.img",
+            borderTint: 0,
+            scale: 0.2,
+        },
+        sound: {
+            pickup: "pack_pickup_01",
+        },
+    },
 };
 
-export interface BoostDef {
-    name: string;
+export interface BoostDef extends BaseLootDef {
     type: "boost";
     useTime: number;
     boost: number;
-    lootImg: LootImg;
-    sound: Sound;
+    sound: {
+        pickup: string;
+        use: string;
+    };
     emitter: string;
     aura: {
         sprite: string;
@@ -361,35 +368,20 @@ const BoostDefs: Record<string, BoostDef> = {
     },
 };
 
-export interface HealDef {
-    name: string;
+export interface HealDef extends BaseLootDef {
     type: "heal";
     useTime: number;
     heal: number;
     maxHeal: number;
-    lootImg: LootImg;
-    sound: Sound;
+    sound: {
+        pickup: string;
+        use: string;
+    };
     emitter: string;
     aura: {
         sprite: string;
         tint: number;
     };
-}
-
-// shared
-export interface LootImg {
-    sprite: string;
-    scale: number;
-    tint: number;
-    border?: string;
-    borderTint?: number;
-    tintDark?: number;
-    innerScale?: number;
-}
-
-export interface Sound {
-    pickup: string;
-    use: string;
 }
 
 const HealDefs: Record<string, HealDef> = {
@@ -441,16 +433,14 @@ const HealDefs: Record<string, HealDef> = {
     },
 };
 
-export interface AmmoDef {
-    name: string;
+export interface AmmoDef extends BaseLootDef {
     type: "ammo";
     special?: boolean;
     minStackSize: number;
-    lootImg: LootImg;
-    sound: {
-        pickup: string;
-    };
     hideUi?: boolean;
+    lootImg: LootImg & {
+        tintDark: number;
+    };
 }
 
 const AmmoDefs: Record<string, AmmoDef> = {
@@ -612,14 +602,9 @@ const BaseDefs = {
     ...ChestDefs,
 };
 
-export interface ScopeDef {
-    name: string;
-    readonly type: "scope";
+export interface ScopeDef extends BaseLootDef {
+    type: "scope";
     level: number;
-    lootImg: LootImg;
-    sound: {
-        pickup: string;
-    };
 }
 
 const ScopeDefs: Record<string, ScopeDef> = {
@@ -959,13 +944,19 @@ const SkinDefs = {
             rot: 0.5 * Math.PI,
         },
     }),
+
+    backpack04_cloud: defineSkin("backpack04", {
+        name: "Experimental Pack",
+        hasDesc: true,
+        desc: "You can equip an extra perk.",
+        maxPerks: 2,
+        lootImg: { sprite: "loot-pack-04-cloud.img" },
+    }),
 };
 
 // Shared with the client; move them somewhere
 export const GEAR_TYPES = ["chest", "helmet", "backpack"] as const;
 export const SCOPE_LEVELS = Object.keys(ScopeDefs);
-
-type GearDef = HealDef | AmmoDef | BoostDef | BackpackDef | HelmetDef | ChestDef;
 
 export const GearDefs: Record<string, GearDef> = {
     ...BaseDefs,

@@ -2,11 +2,12 @@ import { resolve } from "node:path";
 import { defineConfig, loadEnv, type Plugin, type ServerOptions } from "vite";
 import stripBlockPlugin from "vite-plugin-strip-block";
 import { getConfig } from "../config.ts";
-import { version } from "../package.json";
+import pkgJson from "../package.json" with { type: "json" };
 import { GIT_VERSION } from "../server/src/utils/gitRevision.ts";
 import { atlasBuilderPlugin } from "./atlas-builder/vitePlugin.ts";
 import { codefendPlugin } from "./vite-plugins/codefendPlugin.ts";
 import { ejsPlugin } from "./vite-plugins/ejsPlugin.ts";
+import { svgoPlugin } from "./vite-plugins/svgoPlugin.ts";
 
 export default defineConfig(({ mode }) => {
     const viteEnv = loadEnv(mode, process.cwd(), "VITE_");
@@ -23,12 +24,16 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_DEBUG_CSS_LINK = isDev
         ? `<link href='css/dev.css' rel="stylesheet" />`
         : "";
-    process.env.VITE_GAME_VERSION = version;
+    process.env.VITE_GAME_VERSION = pkgJson.version;
 
     process.env.VITE_SPELLSYNC_PROJECT_ID = Config.secrets.SPELLSYNC_PROJECT_ID;
     process.env.VITE_SPELLSYNC_PUBLIC_TOKEN = Config.secrets.SPELLSYNC_PUBLIC_TOKEN;
 
-    const plugins: Plugin[] = [ejsPlugin(), ...atlasBuilderPlugin()];
+    const plugins: Plugin[] = [
+        ejsPlugin(),
+        ...atlasBuilderPlugin(mode === "production"),
+        svgoPlugin(),
+    ];
 
     if (!isDev) {
         plugins.push(codefendPlugin());
@@ -98,7 +103,7 @@ export default defineConfig(({ mode }) => {
         build: {
             target: "es2022",
             chunkSizeWarningLimit: 2000,
-            rollupOptions: {
+            rolldownOptions: {
                 input: {
                     main: resolve(import.meta.dirname, "index.html"),
                     stats: resolve(import.meta.dirname, "stats/index.html"),

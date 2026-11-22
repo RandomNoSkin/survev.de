@@ -20,7 +20,7 @@ export const mapDef: PartialMapDef = {
         icon: "img/gui/gas.svg",
         buttonCss: "btn-mode-faction",
         buttonText: "2v2",
-        backgroundImg: "img/main_splash.png",
+        backgroundImg: "img/splashes/main.webp",
     },
     biome: {
         colors: {

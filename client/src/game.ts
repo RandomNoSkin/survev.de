@@ -12,7 +12,7 @@ import { type Vec2, v2 } from "../../shared/utils/v2";
 import type { Ambiance } from "./ambiance";
 import type { AudioManager } from "./audioManager";
 import { Camera } from "./camera";
-import type { ConfigManager, DebugRenderOpts } from "./config";
+import type { ConfigManager, DebugRendererOpts } from "./config";
 import { DebugHUD } from "./debug/debugHUD";
 import { debugLines } from "./debug/debugLines";
 
@@ -608,11 +608,11 @@ export class Game {
         }
         this.chatUi.update(dt);
 
-        let debug: DebugRenderOpts;
+        let debug: DebugRendererOpts;
         if (IS_DEV) {
             debug = this.m_config.get("debugRenderer")!;
         } else {
-            debug = {} as DebugRenderOpts;
+            debug = {} as DebugRendererOpts;
         }
 
         const smokeParticles = this.m_smokeBarn.m_particles;
@@ -1438,7 +1438,7 @@ export class Game {
         this.m_render(dt, debug);
     }
 
-    m_render(dt: number, debug: DebugRenderOpts) {
+    m_render(dt: number, debug: DebugRendererOpts) {
         const grassColor = this.m_map.mapLoaded
             ? this.m_map.getMapDef().biome.colors.grass
             : 0x80af49;
@@ -1859,6 +1859,7 @@ export class Game {
                     this.m_canvasMode,
                     this.m_particleBarn,
                 );
+                this.m_ambience.setMap(this.m_map.mapName, this.m_audioManager);
                 this.m_resourceManager.loadMapAssets(this.m_map.mapName);
                 // objects from other maps (custom maps) need those maps' sprites and
                 // sounds. Placed ones here; whatever spawns later (airdrop crates) is
@@ -2196,7 +2197,7 @@ export class Game {
                 );
                 if (localTeamId == msg.winningTeamId) {
                     this.m_wonGame = true;
-                    this.victoryMusic = this.m_audioManager.playSound("menu_music", {
+                    this.victoryMusic = this.m_audioManager.playSound(this.m_map.getMapDef().biome.ambience.music, {
                         channel: "music",
                         delay: 1300,
                         forceStart: true,

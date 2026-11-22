@@ -290,8 +290,6 @@ export class UiManager {
         gasSafeZone: PIXI.Container;
         airstrikeZones: PIXI.Container;
         mapSprites: PIXI.Container;
-        teammates: PIXI.Container;
-        player: PIXI.Container;
         border: PIXI.Graphics;
     };
 
@@ -665,19 +663,15 @@ export class UiManager {
             gasSafeZone: this.gasSafeZoneRenderer.display,
             airstrikeZones: planeBarn.airstrikeZoneContainer,
             mapSprites: this.mapSpriteBarn.container,
-            teammates: new PIXI.Container(),
-            player: new PIXI.Container(),
             border: new PIXI.Graphics(),
         };
 
-        this.mapSprite.anchor = new PIXI.Point(0.5, 0.5) as PIXI.ObservablePoint;
+        this.mapSprite.anchor.set(0.5, 0.5);
         this.container.addChild(this.mapSprite);
         this.container.addChild(this.display.gas);
         this.container.addChild(this.display.gasSafeZone);
         this.container.addChild(this.display.airstrikeZones);
         this.container.addChild(this.display.mapSprites);
-        this.container.addChild(this.display.teammates);
-        this.container.addChild(this.display.player);
         this.container.addChild(this.display.border);
 
         const minimapMargin = this.getMinimapMargin();
@@ -701,8 +695,6 @@ export class UiManager {
                 "src",
                 muteAudio ? this.muteOffImg : this.muteOnImg,
             );
-            // @ts-expect-error why assing it to null?
-            muteAudio = null;
         });
         this.teamMemberHealthBarWidth = parseInt(
             $(".ui-team-member-health").find(".ui-bar-inner").css("width"),
@@ -1240,7 +1232,7 @@ export class UiManager {
                     texture = roleDef.mapIcon!.dead;
                 }
             } else if (playerStatus.downed) {
-                texture = sameGroup ? "player-map-inner.img" : "player-map-downed.img";
+                texture = sameGroup ? "player-group-downed.img" : "player-map-downed.img";
             }
             let tint = sameGroup
                 ? playerBarn.getGroupColor(playerId)
@@ -1490,7 +1482,7 @@ export class UiManager {
         return v2.create(xPos, yPos);
     }
 
-    getWorldPosFromMapPos(screenPos: Vec2, map: Map, camera: Camera): Vec2 {
+    getWorldPosFromMapPos(screenPos: Vec2, map: Map, camera: Camera): Vec2 | undefined {
         let insideMap = false;
         if (this.bigmapDisplayed) {
             const xBuffer = (camera.m_screenWidth - this.mapSprite.width) / 2;
@@ -1525,8 +1517,7 @@ export class UiManager {
                 ((mapOrigin.y - screenPos.y) / this.mapSprite.height) * map.height;
             return v2.create(xWorldPos, yWorldPos);
         }
-        // @ts-expect-error why? just why?
-        return false;
+        return undefined;
     }
 
     hideAll() {
@@ -1559,10 +1550,6 @@ export class UiManager {
 
     clearUI() {
         this.m_pieTimer.stop();
-        // @ts-expect-error not used anywhere, should be removed, I think.
-        this.curAction = {
-            type: Action.None,
-        };
         this.displayMapLarge(true);
         this.displayMiniMap();
         this.clearStatsElems();

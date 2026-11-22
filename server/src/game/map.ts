@@ -2,11 +2,9 @@ import { styleText } from "util";
 import { type MapDef, MapDefs } from "../../../shared/defs/mapDefs";
 import { RawMapObjectDefs } from "../../../shared/defs/mapObjectDefs";
 import { MapObjectDefs } from "../../../shared/defs/register.ts";
-import type {
-    BuildingDef,
-    ObstacleDef,
-    StructureDef,
-} from "../../../shared/defs/mapObjectsTyping";
+import type { BuildingDef } from "../../../shared/defs/mapObjects/buildings/buildingDefs.ts";
+import type { ObstacleDef } from "../../../shared/defs/mapObjects/obstacles/obstacleDefs.ts";
+import type { StructureDef } from "../../../shared/defs/mapObjects/structureDefs.ts";
 import type { MapId } from "../../../shared/gameConfig.ts";
 import { GameConfig, TeamMode } from "../../../shared/gameConfig";
 import * as net from "../../../shared/net/net";
@@ -267,7 +265,12 @@ export class GameMap {
     genLootCount = 0;
     /** performance.now() after which custom map generation stops placing objects; 0 = no limit. */
     genDeadline = 0;
-    riverDescs!: MapRiverData[];
+    riverDescs!: Array<
+        MapRiverData & {
+            noRiverObjs?: boolean;
+            aabb?: AABB;
+        }
+    >;
     riverMasks!: Array<{ pos: Vec2; rad: number }>;
     normalRivers!: Array<River & { looped: false }>;
     lakes!: Array<River & { looped: true }>;
@@ -865,6 +868,7 @@ export class GameMap {
                     width: widths[i],
                     points: riverPoints,
                     looped: false,
+                    noRiverObjs: false,
                 });
                 return true;
             });
@@ -1200,7 +1204,10 @@ export class GameMap {
                 stone_03: 0.9,
                 bush_04: 0.4,
             };
-            for (const river of this.terrain.rivers) {
+            for (let i = 0; i < this.terrain.rivers.length; i++) {
+                const river = this.terrain.rivers[i];
+                const desc = this.riverDescs[i];
+                if (desc.noRiverObjs) continue;
                 const riverArea = this.riverAreas.get(river)!.water / 1000;
 
                 for (const type in riverObjs) {
@@ -2353,8 +2360,8 @@ export class GameMap {
         return obstacle;
     }
 
-    genOutfitObstacle(type: string, player: Player) {
-        const def = MapObjectDefs.typeToDef(type) as ObstacleDef;
+    genOutfitObstacle(type: string, player: Player, scale?: number) {
+        const def = MapObjectDefs.typeToDef(type, "obstacle");
 
         const obstacle = new Obstacle(
             this.game,
@@ -2362,7 +2369,7 @@ export class GameMap {
             type,
             player.layer,
             0,
-            def.scale.createMax,
+            scale ?? def.scale.createMax,
             undefined,
             undefined,
             true,
@@ -2485,7 +2492,7 @@ export class GameMap {
 
         ori = ori ?? def.ori ?? util.randomInt(0, 3);
 
-        const structure = new Structure(this.game, type, pos, layer, ori);
+        const structure = new Structure(this.game, type, pos, layer, ori, parentId);
         this.game.objectRegister.register(structure);
         this.structures.push(structure);
 
@@ -3038,46 +3045,45 @@ export class GameMap {
     isOnWater(pos: Vec2, layer: number) {
         const objs = this.game.grid.intersectPos(pos);
 
-        // Check decals
-        for (let i = 0; i < objs.length; i++) {
-            const decal = objs[i];
-            if (decal.__type !== ObjectType.Decal) continue;
-            if (!decal.surface) {
-                continue;
-            }
-
-            if (
-                util.sameLayer(decal.layer, layer) &&
-                collider.intersectCircle(decal.collider!, pos, 0.0001)
-            ) {
-                return decal.surface === "water";
-            }
-        }
-
-        // Check buildings
         let surface = null;
         let zIdx = 0;
         const onStairs = layer & 0x2;
 
         for (let i = 0; i < objs.length; i++) {
-            const building = objs[i];
-            if (building.__type !== ObjectType.Building) continue;
-            if (building.zIdx < zIdx) {
+            const obj = objs[i];
+
+            // Check decals
+            if (obj.__type === ObjectType.Decal) {
+                if (!obj.surface) {
+                    continue;
+                }
+                if (
+                    util.sameLayer(obj.layer, layer)
+                    && collider.intersectCircle(obj.collider!, pos, 0.0001)
+                ) {
+                    return obj.surface === "water";
+                }
+                continue;
+            }
+
+            // Check buildings
+            if (obj.__type !== ObjectType.Building) continue;
+            if (obj.zIdx < zIdx) {
                 continue;
             }
             // Prioritize layer0 building surfaces when on stairs
             if (
-                (building.layer !== layer && !onStairs) ||
-                (building.layer === 1 && onStairs)
+                (obj.layer !== layer && !onStairs)
+                || (obj.layer === 1 && onStairs)
             ) {
                 continue;
             }
-            for (let j = 0; j < building.surfaces.length; j++) {
-                const s = building.surfaces[j];
+            for (let j = 0; j < obj.surfaces.length; j++) {
+                const s = obj.surfaces[j];
                 for (let k = 0; k < s.colliders.length; k++) {
                     const res = collider.intersectCircle(s.colliders[k], pos, 0.0001);
                     if (res) {
-                        zIdx = building.zIdx;
+                        zIdx = obj.zIdx;
                         surface = s;
                         break;
                     }
@@ -3089,23 +3095,14 @@ export class GameMap {
             return surface.type === "water";
         }
 
-        // Static terrain (shore + river water). For the common ground layer this is an
-        // O(1) baked-grid lookup instead of a ~256-vertex point-in-polygon every tick per
-        // player; only boundary ("Mixed") cells fall through to the exact test below. The
-        // grid bakes rivers as water, which matches the `layer !== 1` rule, so it is only
-        // consulted for that case (layer === 1 ignores rivers entirely).
+        // Check rivers
         if (layer !== 1) {
-            const cell = this._surfaceAt(pos);
-            if (cell === SURFACE_WATER) return true;
-            if (cell === SURFACE_LAND) return false;
-            // SURFACE_MIXED → exact test below
-
             const { rivers } = this.terrain;
             for (let i = 0; i < rivers.length; i++) {
                 const river = rivers[i];
                 if (
-                    coldet.testPointAabb(pos, river.aabb.min, river.aabb.max) &&
-                    math.pointInsidePolygon(pos, river.waterPoly)
+                    coldet.testPointAabb(pos, river.aabb.min, river.aabb.max)
+                    && math.pointInsidePolygon(pos, river.waterPoly)
                 ) {
                     return true;
                 }

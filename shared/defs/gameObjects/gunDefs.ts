@@ -1,12 +1,12 @@
+import { FactionTeam } from "../../gameConfig.ts";
 import { type DeepPartial, util } from "../../utils/util.ts";
 import type { Vec2 } from "../../utils/v2.ts";
+import type { BaseWeaponDef } from "./itemTypes.ts";
 
-export interface GunDef {
-    readonly type: "gun";
-    name: string;
-    quality?: number;
-    aimAssist?:boolean;
-    autoSwitch?:boolean;
+export interface GunDef extends BaseWeaponDef {
+    type: "gun";
+    aimAssist?: boolean;
+    autoSwitch?: boolean;
     fireMode: "auto" | "single" | "burst" | "dual";
     secondFireMode?: "auto" | "single" | "burst" | "dual";
     caseTiming: "shoot" | "reload";
@@ -39,16 +39,6 @@ export interface GunDef {
         equip: number;
         attack: number;
     };
-    lootImg: {
-        sprite: string;
-        tint: number;
-        border: string;
-        borderTint: number;
-        scale: number;
-        innerScale?: number;
-        rot?: number;
-        mirror?: boolean;
-    };
     worldImg: {
         sprite: string;
         scale: Vec2;
@@ -80,7 +70,7 @@ export interface GunDef {
         cycle?: string;
         pull?: string;
         shootLast?: string;
-        shootTeam?: Record<string, string>;
+        shootTeam?: Record<FactionTeam, string>;
         shootAlt?: string;
         fallOff?: number;
         reloadAlt?: string;
@@ -90,8 +80,6 @@ export interface GunDef {
     pistol?: boolean;
     dualOffset?: number;
     ammoInfinite?: boolean;
-    noPotatoSwap?: boolean;
-    noDrop?: boolean;
     burstDelay?: number;
     burstCount?: number;
     dualWieldType?: string;
@@ -128,7 +116,7 @@ export interface GunDef {
 }
 
 function defineGunSkin(baseType: string, params: DeepPartial<GunDef>): GunDef {
-    return util.mergeDeep({}, BaseDefs[baseType], params);
+    return util.mergeDeep({}, BaseDefs[baseType], { baseType }, params);
 }
 
 export const BaseDefs: Record<string, GunDef> = {
@@ -4210,7 +4198,7 @@ export const BaseDefs: Record<string, GunDef> = {
         reloadTime: 5.8,
         fireDelay: 0.07,
         switchDelay: 0.75,
-        barrelLength: 4.5,
+        barrelLength: 5,
         barrelOffset: 0,
         recoilTime: 1e10,
         moveSpread: 4,
@@ -4232,7 +4220,7 @@ export const BaseDefs: Record<string, GunDef> = {
             sprite: "gun-potato-lmg-top-01.img",
             scale: { x: 0.5, y: 0.5 },
             tint: 0xffffff,
-            gunOffset: { x: -30, y: 1.75 },
+            gunOffset: { x: -40, y: 1.75 },
             recoil: 1,
         },
         particle: {
@@ -4299,7 +4287,7 @@ export const BaseDefs: Record<string, GunDef> = {
         },
         sound: {
             shoot: "bugle_01",
-            shootTeam: { 1: "bugle_01", 2: "bugle_02" },
+            shootTeam: { [FactionTeam.Red]: "bugle_01", [FactionTeam.Blue]: "bugle_02" },
             shootAlt: "bugle_03",
             reload: "",
             pickup: "stow_weapon_01",

@@ -6,13 +6,12 @@ import type { PartialMapDef } from "./baseDefs.ts";
 import { Faction } from "./factionDefs.ts";
 
 const mapDef: PartialMapDef = {
-    mapId: GameConfig.MapId.Faction,
+    mapId: GameConfig.MapId.FactionPotato,
     desc: {
         name: "Potato vs Tomato",
         icon: "img/gui/star.svg",
         buttonCss: "btn-mode-faction-potato",
         buttonText: "50v50",
-        backgroundImg: "img/main_splash_0_7_0.png",
     },
     assets: {
         audio: [
@@ -87,7 +86,7 @@ const mapDef: PartialMapDef = {
             { name: "vault_change_03", channel: "sfx" },
             { name: "watering_01", channel: "sfx" },
         ],
-        atlases: ["gradient", "loadout", "shared", "faction", "potato"],
+        atlases: ["loadout", "shared", "faction", "potato"],
     },
     biome: {
         particles: { camera: "falling_pvt" },
@@ -102,7 +101,7 @@ const mapDef: PartialMapDef = {
     gameConfig: {
         planes: {
             crates: [
-                { name: "airdrop_crate_03po", weight: 110 },
+                { name: "airdrop_crate_03po", weight: 1110 },
                 { name: "airdrop_crate_03dev", weight: 1 },
             ],
         },
@@ -297,7 +296,7 @@ const mapDef: PartialMapDef = {
             { name: "m4a1", count: 1, weight: 3 },
             { name: "grozas", count: 1, weight: 3 },
             { name: "awc", count: 1, weight: 2.25 },
-            { name: "tier_airdrop_potato", weight: 2.25 },
+            { name: "tier_airdrop_potato", count: 1, weight: 2.25 },
             { name: "garand", count: 1, weight: 2 },
             { name: "ots38_dual", count: 1, weight: 2 },
             { name: "spas16", count: 1, weight: 2 },
@@ -383,4 +382,4 @@ const mapDef: PartialMapDef = {
     /* STRIP_FROM_PROD_CLIENT:END */
 };
 
-export const factionPotato = util.mergeDeep({}, Faction, mapDef) as MapDef;
+export const FactionPotato = util.mergeDeep({}, Faction, mapDef) as MapDef;

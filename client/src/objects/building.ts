@@ -1,8 +1,8 @@
 import * as PIXI from "pixi.js-legacy";
 
-import type { BuildingDef } from "../../../shared/defs/mapObjectsTyping.ts";
+import type { FloorImage } from "../../../shared/defs/mapObjects/buildings/buildingDefs.ts";
+import type { SurfaceData, SurfaceType } from "../../../shared/defs/mapObjectsTyping.ts";
 import { MapObjectDefs } from "../../../shared/defs/register.ts";
-import type { FloorImage } from "../../../shared/defs/types/building.ts";
 import type { ObjectData, ObjectType } from "../../../shared/net/objectSerializeFns.ts";
 import type { Collider } from "../../../shared/utils/coldet.ts";
 import { collider } from "../../../shared/utils/collider.ts";
@@ -13,7 +13,7 @@ import { util } from "../../../shared/utils/util.ts";
 import { v2, type Vec2 } from "../../../shared/utils/v2.ts";
 import type { AudioManager } from "../audioManager.ts";
 import type { Camera } from "../camera.ts";
-import type { DebugRenderOpts } from "../config.ts";
+import type { DebugRendererOpts } from "../config.ts";
 import {
     renderBridge,
     renderMapBuildingBounds,
@@ -25,9 +25,10 @@ import type { Ctx } from "../game.ts";
 import type { SoundHandle } from "../lib/createJS.ts";
 import type { Map } from "../map.ts";
 import type { Renderer } from "../renderer.ts";
+import type { AbstractObject } from "./objectPool.ts";
 import type { Obstacle } from "./obstacle.ts";
 import type { Emitter, ParticleBarn } from "./particles.ts";
-import type { AbstractObject, Player } from "./player.ts";
+import type { Player } from "./player.ts";
 
 function step(cur: number, target: number, rate: number) {
     const delta = target - cur;
@@ -103,14 +104,19 @@ export class Building implements AbstractObject {
             zoomOut?: Collider | null;
         }>;
         type?: string;
-        vision: BuildingDef["ceiling"]["vision"];
+        vision: {
+            dist: number;
+            width: number;
+            linger: number;
+            fadeRate: number;
+        };
         visionTicker: number;
         fadeAlpha: number;
     };
 
     surfaces!: Array<{
-        type: string;
-        data: Record<string, unknown>;
+        type: SurfaceType;
+        data: SurfaceData;
         colliders: Collider[];
     }>;
 
@@ -231,13 +237,13 @@ export class Building implements AbstractObject {
             this.zIdx = def.zIdx || 0;
 
             // Create floor surfaces
-            this.surfaces = [] as this["surfaces"];
+            this.surfaces = [];
             for (let i = 0; i < def.floor.surfaces.length; i++) {
                 const surfaceDef = def.floor.surfaces[i];
-                const surface = {
+                const surface: this["surfaces"][0] = {
                     type: surfaceDef.type,
                     data: surfaceDef.data || {},
-                    colliders: [] as this["surfaces"][number]["colliders"],
+                    colliders: [],
                 };
                 for (let j = 0; j < surfaceDef.collision.length; j++) {
                     surface.colliders.push(
@@ -385,7 +391,7 @@ export class Building implements AbstractObject {
         activePlayer: Player,
         renderer: Renderer,
         camera: Camera,
-        debug: DebugRenderOpts,
+        debug: DebugRendererOpts,
     ) {
         // Puzzle effects
         if (this.hasPuzzle) {
@@ -411,7 +417,7 @@ export class Building implements AbstractObject {
                         }
                     }
                 }
-                audioManager.playSound(def.puzzle?.sound.fail!, {
+                audioManager.playSound(def.puzzle!.sound.fail, {
                     channel: "sfx",
                     soundPos: nearestObj.pos,
                     layer: nearestObj.layer,
@@ -424,7 +430,7 @@ export class Building implements AbstractObject {
                 map.solvedPuzzleIds.push(this.__id);
                 this.playedSolvedPuzzleFx = true;
                 if (!this.isNew && def.puzzle?.sound.complete != "none") {
-                    audioManager.playSound(def.puzzle?.sound.complete!, {
+                    audioManager.playSound(def.puzzle!.sound.complete, {
                         channel: "sfx",
                         soundPos: this.pos,
                         layer: this.layer,
@@ -462,7 +468,7 @@ export class Building implements AbstractObject {
 
         // Determine ceiling visibility
         this.ceiling.visionTicker -= dt;
-        const vision = this.ceiling.vision!;
+        const vision = this.ceiling.vision;
 
         let canSeeInside = false;
         for (let i = 0; i < this.ceiling.zoomRegions.length; i++) {
@@ -476,8 +482,8 @@ export class Building implements AbstractObject {
                     activePlayer.m_pos,
                     activePlayer.layer,
                     0.5,
-                    vision.width! * 2,
-                    vision.dist!,
+                    vision.width * 2,
+                    vision.dist,
                     5,
                     debug.buildings?.ceiling,
                     debugLines,
@@ -493,7 +499,7 @@ export class Building implements AbstractObject {
             canSeeInside = true;
         }
         if (canSeeInside) {
-            this.ceiling.visionTicker = vision.linger! + 0.0001;
+            this.ceiling.visionTicker = vision.linger + 0.0001;
         }
 
         // @NOTE: This will not allow for revealing any ceilings while
@@ -506,7 +512,7 @@ export class Building implements AbstractObject {
         const ceilingStep = step(
             this.ceiling.fadeAlpha,
             visible ? 0 : 1,
-            dt * (visible ? 12 : (vision.fadeRate ?? 1)),
+            dt * (visible ? 12 : vision.fadeRate),
         );
         this.ceiling.fadeAlpha += ceilingStep;
 
@@ -670,7 +676,7 @@ export class Building implements AbstractObject {
         sprite.alpha = sprite.imgAlpha * alpha;
     }
 
-    render(_camera: Camera, debug: DebugRenderOpts, layer: number) {
+    render(_camera: Camera, debug: DebugRendererOpts, layer: number) {
         if (IS_DEV && layer === this.layer) {
             if (debug.buildings?.buildingBounds) {
                 renderMapBuildingBounds(this);
@@ -684,8 +690,8 @@ export class Building implements AbstractObject {
             if (debug.buildings?.waterEdge) {
                 renderWaterEdge(this);
             }
+            const def = MapObjectDefs.typeToDef(this.type, "building");
             if (debug.buildings?.minimap) {
-                const def = MapObjectDefs.typeToDef(this.type, "building");
                 if (def.map && def.map.display) {
                     const scale = def.map.scale ?? 1;
                     if (def.map.shapes) {
@@ -732,6 +738,13 @@ export class Building implements AbstractObject {
                         debugLines.addCollider(colliders[j], 0xff0000, 0);
                     }
                 }
+            }
+            if (debug.buildings?.goreRegion && def.goreRegion) {
+                debugLines.addCollider(
+                    collider.transform(def.goreRegion, this.pos, this.rot, this.scale),
+                    0xff0000,
+                    0.2,
+                );
             }
         }
     }
