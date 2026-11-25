@@ -3,6 +3,7 @@ import { ResistIndicator } from "./ui/modes/resistIndicator";
 import * as PIXI from "pixi.js-legacy";
 import { GameObjectDefs } from "../../shared/defs/register.ts";
 import { RoleDefs } from "../../shared/defs/gameObjects/roleDefs";
+import { ARENA_INFINITE_LOADOUT_AMMO, ARENA_WEAPON_POINTS } from "../../shared/defs/modes/arenaDefs";
 import { GameConfig, GameMode, Input, TeamMode, WeaponSlot } from "../../shared/gameConfig";
 import * as net from "../../shared/net/net";
 import { ObjectType } from "../../shared/net/objectSerializeFns";
@@ -1786,6 +1787,9 @@ export class Game {
                 this.onJoin();
                 this.teamMode = msg.teamMode;
                 this.m_uiManager.setGunGameLadder(msg.gameMode === GameMode.GunGame ? msg.modeTypes : null);
+                this.m_ui2Manager.infiniteAmmoGuns = msg.gameMode === GameMode.Domination && ARENA_INFINITE_LOADOUT_AMMO
+                    ? new Set(Object.keys(ARENA_WEAPON_POINTS))
+                    : null;
                 this.m_uiManager.setGameMode(
                     msg.gameMode !== GameMode.Standard,
                     msg.gameMode === GameMode.GunGame ? "Gun Game" : msg.gameMode === GameMode.Domination ? "Domination" : "",

@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import { type Domination, isHardCover, splitIntoTeams } from "../../server/src/game/modes/domination.ts";
 import type { Player } from "../../server/src/game/objects/player.ts";
-import { ARENA_AFK_KICK_S, ARENA_BOOST_RESIST, ARENA_MAX_THROWABLES, ARENA_SPAWN_AMMO_MULT, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S, ARENA_CHALLENGES, ARENA_REVIVE_HEALTH, ARENA_REVIVE_S, ARENA_GEAR, ARENA_LEVEL_UNLOCKS, ARENA_PERKS, ARENA_STARTER_ITEMS } from "../../shared/defs/modes/arenaDefs.ts";
+import { ARENA_AFK_KICK_S, ARENA_BOOST_RESIST, ARENA_MAX_THROWABLES, ARENA_INFINITE_LOADOUT_AMMO, ARENA_OUT_OF_COMBAT_HEAL_MULT, ARENA_OUT_OF_COMBAT_S, ARENA_CHALLENGES, ARENA_REVIVE_HEALTH, ARENA_REVIVE_S, ARENA_GEAR, ARENA_LEVEL_UNLOCKS, ARENA_PERKS, ARENA_STARTER_ITEMS } from "../../shared/defs/modes/arenaDefs.ts";
 import { ARENA_FAST_REVIVE_S, ARENA_SELF_REVIVE_S } from "../../shared/defs/modes/arenaPerkDefs.ts";
+import { ARENA_AIRDROP_GUN_RESERVE_MAGS } from "../../shared/defs/modes/arenaStreakDefs.ts";
 import {
     DOMINATION_CAPTURE_S,
     DOMINATION_COVER_MIN,
@@ -231,6 +232,13 @@ describe("domination", () => {
         // armor: the supply flare's crate (better armor)
         expect(rules.allowsPickup(p, "helmet03")).toBe(true);
         expect(rules.allowsPickup(p, "backpack03")).toBe(false);
+        // a melee someone dropped - not while the airdrop flare is in the melee slot
+        pickup("machete");
+        expect(p.weapons[GameConfig.WeaponSlot.Melee].type).toBe("machete");
+        p.weaponManager.setWeapon(GameConfig.WeaponSlot.Melee, "flare_gun", 1);
+        expect(rules.allowsPickup(p, "katana")).toBe(false);
+        // no M9, OT-38, M93R in a loadout (single or dual)
+        for (const g of ["m9", "m9_dual", "ot38", "ot38_dual", "m93r", "m93r_dual"]) expect(arenaFitsSlot(g, "pistol"), g).toBe(false);
     });
 
     test("the loadout picked while waiting is the one of the next spawn (also the match start)", () => {
@@ -509,42 +517,45 @@ describe("domination", () => {
         expect(rules.sideOf(red[0])).not.toBe(rules.sideOf(blue[0]));
     });
 
-    test("a gun keeps the rounds it was dropped with - no ammo to the backpack, none on the ground", () => {
-        const { game, red, blue } = domination(1);
+    test("loadout guns drop on death only (with their rounds) - never by hand or a swap; an airdrop gun has a few magazines, goes with its owner", () => {
+        const { game, rules, red, blue } = domination(1);
         const [r] = red;
         const [b] = blue;
         const primary = GameConfig.WeaponSlot.Primary;
-        // dying with 7 rounds in the main gun
+        const guns = () => game.lootBarn.loots.filter((l) => !l.destroyed && GameObjectDefs.typeToDefSafe(l.type)?.type === "gun");
         b.weapons[primary].ammo = 7;
         kill(b, r);
-        const gun = game.lootBarn.loots.find((l) => !l.destroyed && l.type === "hk416")!;
-        expect(gun.clip).toBe(7);
+        expect(guns().map((l) => l.type).sort()).toStrictEqual(["hk416", "p30l"]);
+        expect(guns().find((l) => l.type === "hk416")!.clip).toBe(7);
+        for (const l of guns()) l.destroy();
+        // by hand: neither guns nor armor
+        expect(rules.canDrop(r, r.weapons[primary].type)).toBe(false);
+        expect(rules.canDrop(r, r.helmet)).toBe(false);
+        expect(rules.canDrop(r, r.chest)).toBe(false);
+        expect(rules.canDrop(r, "bandage")).toBe(true);
 
-        // dropping by hand: 3 rounds stay in it, the backpack gets nothing
-        r.weapons[primary].ammo = 3;
-        const ammoBefore = r.invManager.get("556mm");
-        r.weaponManager.dropGun(primary);
-        expect(r.invManager.get("556mm")).toBe(ammoBefore);
-        const dropped = game.lootBarn.loots.find((l) => !l.destroyed && l.type === "hk416" && l !== gun)!;
-        expect(dropped.clip).toBe(3);
-        r.pickupLoot(dropped);
-        expect(r.weapons[primary].type).toBe("hk416");
-        expect(r.weapons[primary].ammo).toBe(3);
-        expect(r.invManager.get("556mm")).toBe(ammoBefore);
-
-        // a swap on pickup: the one carried lies there with its rounds
-        expect(gun.clip).toBe(7);
-        r.weapons[primary].ammo = 12;
-        const ak = game.lootBarn.addLootWithoutAmmo("ak47", r.pos, 0, 1)!;
-        ak.clip = 5;
-        r.pickupLoot(ak);
-        expect(r.weapons[primary].type).toBe("ak47");
-        expect(r.weapons[primary].ammo).toBe(5);
-        const swapped = game.lootBarn.loots.find((l) => !l.destroyed && l.type === "hk416" && l !== gun)!;
-        expect(swapped.clip).toBe(12);
-        const ammo = game.lootBarn.loots.filter((l) => !l.destroyed && GameObjectDefs.typeToDefSafe(l.type)?.type === "ammo");
-        expect(ammo).toHaveLength(0);
-        expect(r.invManager.get("556mm")).toBe(ammoBefore);
+        // an airdrop gun picked up in place of the one in hand: that one is just gone
+        r.weaponManager.setCurWeapIndex(primary);
+        const awc = game.lootBarn.addLootWithoutAmmo("awc", v2.copy(r.pos), 0, 1)!;
+        awc.clip = GunDefs.awc.maxClip;
+        r.pickupLoot(awc);
+        expect(r.weapons[primary].type).toBe("awc");
+        expect(guns()).toHaveLength(0);
+        // its magazines in the backpack - not endless, a kill gives nothing
+        const ammo = GunDefs.awc.ammo as never;
+        expect(r.invManager.get(ammo)).toBe(GunDefs.awc.maxClip * ARENA_AIRDROP_GUN_RESERVE_MAGS);
+        expect(r.weaponManager.isInfinite(GunDefs.awc)).toBe(false);
+        r.weapons[primary].ammo = 0;
+        r.weaponManager.reload(primary);
+        expect(r.invManager.get(ammo)).toBeLessThan(GunDefs.awc.maxClip * ARENA_AIRDROP_GUN_RESERVE_MAGS);
+        const left = r.invManager.get(ammo);
+        tick(game, DOMINATION_RESPAWN_DELAY_S + DOMINATION_SPAWN_PROTECTION_S + 0.2);
+        kill(b, r);
+        expect(r.invManager.get(ammo)).toBe(left);
+        // and dead: it goes with its owner (the loadout's second gun drops)
+        for (const l of guns()) l.destroy();
+        kill(r, b);
+        expect(guns().map((l) => l.type)).toStrictEqual([r.arenaLoadouts[0]?.pistol ?? "p30l"]);
     });
 
     test("3 throwables of the loadout's kind; another kind picked up replaces them", () => {
@@ -702,7 +713,8 @@ describe("domination", () => {
         expect(ARENA_STARTER_ITEMS).toContain("takedown");
         expect(ARENA_PERKS).not.toContain("scavenger");
         const levelOf = (perk: string) => Number(Object.entries(ARENA_LEVEL_UNLOCKS).find(([, items]) => items.includes(perk))?.[0]);
-        const order = ["aoe_heal", "endless_ammo", "firepower", "flak_jacket", "windwalk", "self_revive", "steelskin", "bonus_assault"];
+        expect(ARENA_PERKS).not.toContain("endless_ammo");
+        const order = ["aoe_heal", "firepower", "flak_jacket", "windwalk", "self_revive", "steelskin", "bonus_assault"];
         for (let i = 1; i < order.length; i++) expect(levelOf(order[i])).toBeGreaterThan(levelOf(order[i - 1]));
         expect(ARENA_CHALLENGES.broken_arrow).toStrictEqual({ kills: 50, with: { weapon: "strobe" } });
         // every arena perk can be unlocked somehow
@@ -1051,18 +1063,18 @@ describe("domination", () => {
         expect(data.arenaStreaks).toStrictEqual(streaks);
     });
 
-    test("spawn ammo: twice what the guns drop with in the battle royale (one ammo type adds up)", () => {
+    test("spawn ammo: none - the loadout's guns never run out (and show as endless)", () => {
         const { red } = domination(1);
         const [r] = red;
-        const main = GunDefs[r.weapons[GameConfig.WeaponSlot.Primary].type];
-        const second = GunDefs[r.weapons[GameConfig.WeaponSlot.Secondary].type];
-        const mult = (g: typeof main) => (g.pistol ? 4 : g.ammo === "12gauge" ? 3 : ARENA_SPAWN_AMMO_MULT);
-        const expected = (ammo: string) => Math.min(
-            r.invManager.getMaxCapacity(ammo as never),
-            [main, second].filter((g) => g?.ammo === ammo).reduce((n, g) => n + g.ammoSpawnCount * mult(g), 0),
-        );
-        expect(r.invManager.get(main.ammo as never)).toBe(expected(main.ammo));
-        expect(r.invManager.get(second.ammo as never)).toBe(expected(second.ammo));
+        expect(ARENA_INFINITE_LOADOUT_AMMO).toBe(true);
+        for (const slot of [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary]) {
+            const gun = GunDefs[r.weapons[slot].type];
+            expect(r.invManager.get(gun.ammo as never)).toBe(0);
+            expect(r.weaponManager.isInfinite(gun)).toBe(true);
+            r.weapons[slot].ammo = 0;
+            r.weaponManager.reload(slot);
+            expect(r.weapons[slot].ammo).toBeGreaterThan(0);
+        }
     });
 
     test("at most 4 grenades - whatever the level 2 backpack holds", () => {

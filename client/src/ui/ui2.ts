@@ -316,6 +316,9 @@ export class UiManager2 {
      *  never has its own messages fade out from under the player while they're reading
      *  it. Kill feed entries (`outline: false`) are unaffected either way. */
     chatOpen = false;
+    /** Guns that never run out in this game (Domination: the loadout's, see
+     *  ARENA_INFINITE_LOADOUT_AMMO) - set on join, shown as ∞. */
+    infiniteAmmoGuns: ReadonlySet<string> | null = null;
 
     // DOM
     dom = {
@@ -1037,7 +1040,7 @@ export class UiManager2 {
         const isInfiniteAmmo =
             !!gunDef &&
             (gunDef.ammoInfinite ||
-                ((activePlayer.m_hasPerk("endless_ammo") || activePlayer.m_hasPerk("arena")) &&
+                ((activePlayer.m_hasPerk("endless_ammo") || activePlayer.m_hasPerk("arena") || !!this.infiniteAmmoGuns?.has(ge.type)) &&
                     !gunDef.ignoreEndlessAmmo));
         // backpackFed guns (e.g. M249) show their backpack ammo as the "current"
         // count; with infinite ammo show ∞ instead of the (now irrelevant) count.

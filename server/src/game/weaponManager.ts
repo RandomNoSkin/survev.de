@@ -564,7 +564,8 @@ export class WeaponManager {
             !weaponDef.ignoreEndlessAmmo &&
             (weaponDef.ammoInfinite ||
                 this.player.hasPerk("endless_ammo") ||
-                this.player.hasPerk("arena"))
+                this.player.hasPerk("arena") ||
+                !!this.player.game.rules?.infiniteAmmo?.(this.player, weaponDef))
         );
     }
 

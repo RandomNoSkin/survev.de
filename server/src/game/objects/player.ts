@@ -6109,7 +6109,13 @@ export class Player extends BaseGameObject {
                             ) // verifies the old gun and new gun are the same
                         );
                         if (shouldDrop) {
-                            this.weaponManager.dropGun(newGunIdx);
+                            // (a mode where guns don't drop: the old one is just gone)
+                            const oldType = this.weapons[newGunIdx].type;
+                            if (this.game.rules?.canDrop && !this.game.rules.canDrop(this, oldType)) {
+                                this.weaponManager.setWeapon(newGunIdx, "", 0);
+                            } else {
+                                this.weaponManager.dropGun(newGunIdx);
+                            }
                         }
                     }
 
@@ -6122,6 +6128,7 @@ export class Player extends BaseGameObject {
                         newAmmo = Math.min(biggest, newAmmo + (obj.clip ?? 0));
                     }
                     this.weaponManager.setWeapon(newGunIdx, gunType, newAmmo);
+                    this.game.rules?.onGunPickup?.(this, gunType);
 
                     // always select primary slot if melee is selected
                     if (

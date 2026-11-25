@@ -8,10 +8,8 @@ import { ObjectType } from "../../shared/net/objectSerializeFns.ts";
 import { collider } from "../../shared/utils/collider.ts";
 import {
     ARENA_BOOST_RESIST,
-    ARENA_KILL_AMMO_FRACTION,
     ARENA_PERKS,
     ARENA_REVIVE_HEALTH,
-    ARENA_SPAWN_AMMO_MULT,
     ARENA_TAKEDOWN,
     ARENA_WINDWALK_SPEED_FACTOR,
 } from "../../shared/defs/modes/arenaDefs.ts";
@@ -134,18 +132,22 @@ describe("arena perks", () => {
         expect(r.hasteType).toBe(GameConfig.HasteType.Takedown);
     });
 
-    test("every kill gives ammo back (no Scavenger any more) - the victim drops no ammo, no grenades", () => {
+    test("no Scavenger: the loadout's guns never run dry - a kill gives no ammo, the victim drops no ammo, grenades", () => {
         const { game, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
         expect(ARENA_PERKS).not.toContain("scavenger");
-        // (the main gun's ammo, some of it shot)
-        const ammo = GunDefs[r.weapons[0].type].ammo as "556mm";
-        const full = r.invManager.get(ammo);
-        r.invManager.set(ammo, 10);
+        const slot = GameConfig.WeaponSlot.Primary;
+        const gun = r.weapons[slot].type;
+        const ammo = GunDefs[gun].ammo as "556mm";
+        // nothing in the backpack for it - and a reload fills the magazine anyway
+        expect(r.invManager.get(ammo)).toBe(0);
+        expect(r.weaponManager.isInfinite(GunDefs[gun])).toBe(true);
+        r.weapons[slot].ammo = 0;
+        r.weaponManager.reload(slot);
+        expect(r.weapons[slot].ammo).toBe(GunDefs[gun].maxClip);
         shoot(b, r, 1000);
-        const expected = Math.min(full, 10 + Math.ceil(GunDefs[r.weapons[0].type].ammoSpawnCount * ARENA_SPAWN_AMMO_MULT * ARENA_KILL_AMMO_FRACTION));
-        expect(r.invManager.get(ammo)).toBe(expected);
+        expect(r.invManager.get(ammo)).toBe(0);
         const lying = game.lootBarn.loots.filter((l) => !l.destroyed).map((l) => l.type);
         expect(lying).not.toContain("frag");
         expect(lying).not.toContain(ammo);
@@ -173,18 +175,6 @@ describe("arena perks", () => {
         expect(rules.damageReduction(mate, { damageType: 0, dir: v2.create(1, 0) } as never)).toBeCloseTo(ARENA_BOOST_RESIST.soda.reduction);
     });
 
-    test("Endless Ammo: a reload fills the magazine without taking ammo from the backpack", () => {
-        const { rules, red } = domination();
-        const [p] = red;
-        withPerk(rules, p, "endless_ammo");
-        const slot = GameConfig.WeaponSlot.Primary;
-        p.weapons[slot].ammo = 0;
-        const backpack = p.invManager.get("556mm");
-        p.weaponManager.reload(slot);
-        expect(p.weapons[slot].ammo).toBe(GunDefs.hk416.maxClip);
-        expect(p.invManager.get("556mm")).toBe(backpack);
-    });
-
     test("Firepower: spawns with the extended magazine (and reloads into it)", () => {
         const { rules, red } = domination();
         const [p] = red;
@@ -195,50 +185,6 @@ describe("arena perks", () => {
         p.weapons[slot].ammo = 0;
         p.weaponManager.reload(slot);
         expect(p.weapons[slot].ammo).toBe(GunDefs.hk416.extendedClip);
-    });
-
-    test("Firepower: a dropped gun keeps its big magazine for everyone - without Firepower only until the next reload", () => {
-        const { game, rules, red, blue } = domination();
-        const [fp] = red;
-        const [plain] = blue;
-        withPerk(rules, fp, "firepower");
-        const slot = GameConfig.WeaponSlot.Primary;
-        const big = GunDefs.hk416.extendedClip;
-        const normal = GunDefs.hk416.maxClip;
-        expect(fp.weapons[slot].ammo).toBe(big);
-        // dropped by the Firepower player, picked up by one without
-        fp.weaponManager.dropGun(slot);
-        const gun = game.lootBarn.loots.find((l) => !l.destroyed && l.type === "hk416")!;
-        expect(gun.clip).toBe(big);
-        plain.weaponManager.setWeapon(slot, "", 0);
-        const backpack = plain.invManager.get("556mm");
-        plain.pickupLoot(gun);
-        expect(plain.weapons[slot].ammo).toBe(big);
-        expect(plain.invManager.get("556mm")).toBe(backpack);
-        // a full (over-full) magazine: no reload, nothing taken or given
-        plain.weaponManager.setCurWeapIndex(slot);
-        plain.weaponManager.tryReload();
-        expect(plain.actionType).not.toBe(GameConfig.Action.Reload);
-        plain.weaponManager.reload(slot);
-        expect(plain.weapons[slot].ammo).toBe(big);
-        expect(plain.invManager.get("556mm")).toBe(backpack);
-        // shot down below the usual magazine: the reload fills only that
-        plain.weapons[slot].ammo = 5;
-        plain.weaponManager.reload(slot);
-        expect(plain.weapons[slot].ammo).toBe(normal);
-        expect(plain.invManager.get("556mm")).toBe(backpack - (normal - 5));
-
-        // and the other way: a Firepower player picks up a normal one - its rounds, then the big reload
-        withPerk(rules, plain, "takedown");
-        plain.weapons[slot].ammo = 7;
-        plain.weaponManager.dropGun(slot);
-        const small = game.lootBarn.loots.find((l) => !l.destroyed && l.type === "hk416")!;
-        expect(small.clip).toBe(7);
-        fp.weaponManager.setWeapon(slot, "", 0);
-        fp.pickupLoot(small);
-        expect(fp.weapons[slot].ammo).toBe(7);
-        fp.weaponManager.reload(slot);
-        expect(fp.weapons[slot].ammo).toBe(big);
     });
 
     test("Windwalk: an enemy bullet flying past gives a burst of speed", () => {

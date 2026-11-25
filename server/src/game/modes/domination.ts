@@ -1,6 +1,8 @@
 import { gunCategory } from "../../../../shared/defs/gameObjects/gunCategories";
 import {
     ARENA_GEAR,
+    ARENA_INFINITE_LOADOUT_AMMO,
+    ARENA_WEAPON_POINTS,
     ARENA_MAX_THROWABLES,
     ARENA_SPAWN_AMMO_BY_CATEGORY,
     ARENA_SPAWN_AMMO_MULT,
@@ -12,7 +14,9 @@ import {
     ARENA_XP,
 } from "../../../../shared/defs/modes/arenaDefs";
 import {
+    ARENA_AIRDROP_GUN_RESERVE_MAGS,
     ARENA_AIRDROP_TIME_FACTOR,
+    ARENA_AIRDROP_WEAPONS,
     ARENA_DEFAULT_STREAKS,
     ARENA_JUGGERNAUTS,
     ARENA_STREAK_ITEMS,
@@ -59,7 +63,7 @@ import {
     DOMINATION_ZONE_RAD,
     DOMINATION_ZONES,
 } from "../../../../shared/defs/modes/dominationDefs";
-import { GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
+import { type GunDef, GunDefs } from "../../../../shared/defs/gameObjects/gunDefs";
 import { GameConfig, type InventoryItem } from "../../../../shared/gameConfig";
 import { ArenaLoadoutAction } from "../../../../shared/net/arenaLoadoutSelectMsg";
 import type * as net from "../../../../shared/net/net";
@@ -210,6 +214,13 @@ export class Domination extends RespawnRules {
     private streakDirty = new Set<Player>();
     /** flares fired: who called which crate where (to fill the crate when it's opened) */
     private calledCrates: Array<{ player: Player; pos: Vec2; supply: boolean }> = [];
+    /** what a Juggernaut had before (its guns, armor and ammo - back when it ends) */
+    private beforeJuggernaut = new Map<Player, {
+        helmet: string;
+        chest: string;
+        guns: Array<{ type: string; ammo: number }>;
+        ammo: Array<[InventoryItem, number]>;
+    }>();
     /** what each player dropped on their last death (cleared on the next one) */
     private drops = new Map<Player, Loot[]>();
     /** in the loadout menu - not respawning before "Enter game" (or DOMINATION_MENU_MAX_S) */
@@ -661,8 +672,9 @@ export class Domination extends RespawnRules {
             const gun = GunDefs[type];
             wm.setWeapon(slot, gun ? type : "", gun ? wm.getAmmoStats(gun).maxClip : 0);
             // its ammo: twice what it drops with in the battle royale (both guns of one
-            // ammo type add up), at most what the backpack holds
-            this.giveGunAmmo(player, type, 1);
+            // ammo type add up), at most what the backpack holds - none when the
+            // loadout's guns never run out (ARENA_INFINITE_LOADOUT_AMMO)
+            if (!ARENA_INFINITE_LOADOUT_AMMO) this.giveGunAmmo(player, type, 1);
         }
         wm.setWeapon(GameConfig.WeaponSlot.Melee, this.ownMelee.get(player) ?? "fists", 0);
         if (player.invManager.isValid(loadout.throwable)) {
@@ -703,6 +715,8 @@ export class Domination extends RespawnRules {
 
     /** A kill: ammo for the killer's guns (ARENA_KILL_AMMO_FRACTION of the spawn ammo each). */
     private giveKillAmmo(killer: Player): void {
+        // (endless loadout guns need none; an airdrop gun has only what it came with)
+        if (ARENA_INFINITE_LOADOUT_AMMO) return;
         if (killer.dead || killer.downed || this.isJuggernaut(killer)) return;
         for (const slot of [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary]) {
             const type = killer.weapons[slot].type;
@@ -915,7 +929,8 @@ export class Domination extends RespawnRules {
         return [...dealt].filter(([, n]) => n >= DOMINATION_ASSIST_MIN_DAMAGE).map(([p]) => p);
     }
 
-    /** A dead player's guns and perk lie where they fell - the only loot there is. */
+    /** A dead player's loadout guns and perk lie where they fell - the only loot there
+     *  is (a kill streak's / the airdrop's guns go with their owner, armor never drops). */
     private dropLoadout(victim: Player): void {
         const lootBarn = this.game.lootBarn;
         const pos = victim.pos;
@@ -928,9 +943,8 @@ export class Domination extends RespawnRules {
         victim.invManager.wipeInventory();
         for (const slot of [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary]) {
             const type = victim.weapons[slot].type;
-            // no ammo next to it - the gun keeps the rounds it had (lootKeepsClip); a kill
-            // streak's gun (Juggernaut) goes with its owner
-            if (type && !ARENA_STREAK_ITEMS.includes(type)) {
+            // no ammo next to it - the gun keeps the rounds it had (lootKeepsClip)
+            if (type && ARENA_WEAPON_POINTS[type] !== undefined) {
                 const loot = lootBarn.addLootWithoutAmmo(type, v2.add(pos, v2.mul(v2.randomUnit(), 0.5)), victim.layer, 1);
                 if (loot) {
                     loot.clip = victim.weapons[slot].ammo;
@@ -962,6 +976,8 @@ export class Domination extends RespawnRules {
         if (this.isJuggernaut(player)) return false;
         const type = (GameObjectDefs.typeToDefSafe(lootType) as { type?: string } | undefined)?.type;
         if (arenaSlotOf(lootType) !== undefined) return true;
+        // a melee someone dropped - not while the airdrop flare sits in the melee slot
+        if (type === "melee") return !ARENA_STREAK_ITEMS.includes(player.weapons[GameConfig.WeaponSlot.Melee].type);
         // armor: the supply flare's crate
         return type === "ammo" || type === "heal" || type === "boost" || type === "helmet" || type === "chest";
     }
@@ -1013,12 +1029,17 @@ export class Domination extends RespawnRules {
         this.sendStreak(killer);
     }
 
-    /** The kill streak key: fires the earned bonus - also while another one runs (a Juggernaut too). */
+    /** The kill streak key: fires the earned bonus - also while another one runs (a Juggernaut
+     *  too). A Juggernaut with nothing to fire: back to the guns / armor from before. */
     useKillstreak(player: Player): boolean {
+        if (!this.running || player.downed || this.respawnAt.has(player) || player.dead) return false;
         const ready = this.streakReady.get(player);
-        if (!ready || !this.running || player.downed || this.respawnAt.has(player) || player.dead) return false;
-        // a second Juggernaut while being one: keep it for later
-        if (ready.tier.kind === "juggernaut" && this.isJuggernaut(player)) return false;
+        // (a second Juggernaut while being one: kept for later)
+        if (!ready || (ready.tier.kind === "juggernaut" && this.isJuggernaut(player))) {
+            if (!this.isJuggernaut(player)) return false;
+            this.leaveJuggernaut(player);
+            return true;
+        }
         this.streakReady.delete(player);
         this.actives(player).set(ready.tier.kind, ready.item);
         this.applyStreak(player, ready.tier.kind, ready.item);
@@ -1041,15 +1062,30 @@ export class Domination extends RespawnRules {
             case "juggernaut": {
                 const jug = ARENA_JUGGERNAUTS[item] ?? { endless: false };
                 player.cancelAction();
-                player.invManager.wipeInventory();
+                // only the guns and the armor change (grenades, heals, scopes stay) - what
+                // was there comes back when it ends (leaveJuggernaut); the ammo goes too, so
+                // the minigun has nothing to reload with
+                const inv = player.invManager;
+                const ammo = (Object.keys(inv.items) as InventoryItem[])
+                    .filter((it) => inv.get(it) > 0 && (GameObjectDefs.typeToDefSafe(it) as { type?: string } | undefined)?.type === "ammo")
+                    .map((it) => [it, inv.get(it)] as [InventoryItem, number]);
+                this.beforeJuggernaut.set(player, {
+                    helmet: player.helmet,
+                    chest: player.chest,
+                    guns: [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary].map((sl) => ({
+                        type: player.weapons[sl].type,
+                        ammo: player.weapons[sl].ammo,
+                    })),
+                    ammo,
+                });
+                for (const [it] of ammo) inv.set(it, 0);
                 player.helmet = jug.helmet ?? ARENA_GEAR.helmet;
                 player.chest = jug.chest ?? ARENA_GEAR.chest;
-                // its gun only - full, nothing to reload with (the endless one never runs dry)
+                // its gun only - full (the endless one never runs dry)
                 if (jug.endless && !player.perks.some((p) => p.type === "endless_ammo" && !p.droppable)) player.addPerk("endless_ammo", false);
                 const gun = GunDefs[item];
                 wm.setWeapon(GameConfig.WeaponSlot.Primary, item, gun ? wm.getAmmoStats(gun).maxClip : 0);
                 wm.setWeapon(GameConfig.WeaponSlot.Secondary, "", 0);
-                wm.setWeapon(GameConfig.WeaponSlot.Throwable, "", 0);
                 wm.setCurWeapIndex(GameConfig.WeaponSlot.Primary, true, true, true, false);
                 break;
             }
@@ -1086,6 +1122,7 @@ export class Domination extends RespawnRules {
         const item = m?.get(kind);
         if (!m || !item) return;
         m.delete(kind);
+        if (kind === "juggernaut") this.beforeJuggernaut.delete(player);
         if (kind === "juggernaut" && ARENA_JUGGERNAUTS[item]?.endless) {
             if (player.perks.some((p) => p.type === "endless_ammo" && !p.droppable)) player.removePerk("endless_ammo");
         }
@@ -1093,6 +1130,33 @@ export class Domination extends RespawnRules {
             player.weaponManager.setWeapon(GameConfig.WeaponSlot.Melee, this.ownMelee.get(player) ?? "fists", 0);
         }
         this.sendStreak(player);
+    }
+
+    /** The Juggernaut is over (the minigun empty, or left with the kill streak key): the
+     *  guns, armor and ammo from before back - and what else runs on top. */
+    private leaveJuggernaut(player: Player): void {
+        const before = this.beforeJuggernaut.get(player);
+        player.cancelAction();
+        this.endStreak(player, "juggernaut");
+        const wm = player.weaponManager;
+        if (before) {
+            player.helmet = before.helmet;
+            player.chest = before.chest;
+            [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary].forEach((sl, i) => {
+                wm.setWeapon(sl, before.guns[i].type, before.guns[i].ammo);
+            });
+            for (const [it, n] of before.ammo) player.invManager.set(it, Math.min(n, player.invManager.getMaxCapacity(it)));
+        } else {
+            // (nothing remembered: the loadout's)
+            this.giveSpawnItems(player);
+        }
+        const hand = [GameConfig.WeaponSlot.Primary, GameConfig.WeaponSlot.Secondary].find((sl) => !!player.weapons[sl].type)
+            ?? GameConfig.WeaponSlot.Melee;
+        wm.setCurWeapIndex(hand, true, true, true, false);
+        this.reapplyStreaks(player);
+        player.inventoryDirty = true;
+        player.weapsDirty = true;
+        player.setDirty();
     }
 
     /** The death: every fired kill streak ends (an earned, unfired one stays). */
@@ -1118,12 +1182,7 @@ export class Domination extends RespawnRules {
             if (jug) {
                 const gun = player.weapons[GameConfig.WeaponSlot.Primary];
                 const done = gun.type !== jug || (!ARENA_JUGGERNAUTS[jug]?.endless && gun.ammo <= 0);
-                if (done && player.actionType !== GameConfig.Action.Reload) {
-                    // the loadout back (and its armor) - and what else runs on top
-                    this.endStreak(player, "juggernaut");
-                    this.giveSpawnItems(player);
-                    this.reapplyStreaks(player);
-                }
+                if (done && player.actionType !== GameConfig.Action.Reload) this.leaveJuggernaut(player);
             }
             const strobe = m.get("airstrike");
             if (strobe && player.invManager.get(strobe as InventoryItem) <= 0 && player.weapons[GameConfig.WeaponSlot.Throwable].type !== strobe) {
@@ -1168,10 +1227,35 @@ export class Domination extends RespawnRules {
         return ARENA_STREAKS[0].options.includes(weapon) ? 0 : usual;
     }
 
-    /** Kill streak items never drop, a Juggernaut drops nothing. */
+    /** Nobody drops guns or armor by hand (or swaps a gun onto the ground - see
+     *  Player.pickupLoot); kill streak items never drop, a Juggernaut drops nothing. */
     canDrop(player: Player, item: string): boolean {
         if (ARENA_STREAK_ITEMS.includes(item)) return false;
+        const type = (GameObjectDefs.typeToDefSafe(item) as { type?: string } | undefined)?.type;
+        if (type === "gun" || type === "helmet" || type === "chest") return false;
         return !this.isJuggernaut(player);
+    }
+
+    /** this game's definitions of the loadout guns (see infiniteAmmo) */
+    private loadoutGunDefs?: Set<unknown>;
+
+    /** The loadout's guns never run out (ARENA_INFINITE_LOADOUT_AMMO) - the airdrop's do. */
+    infiniteAmmo(_player: Player, gunDef: GunDef): boolean {
+        if (!ARENA_INFINITE_LOADOUT_AMMO) return false;
+        // (by definition: weaponStats.def gives the same object for a type every time)
+        this.loadoutGunDefs ??= new Set(Object.keys(ARENA_WEAPON_POINTS).map((t) => this.game.weaponStats.def(t)));
+        return this.loadoutGunDefs.has(gunDef);
+    }
+
+    /** An airdrop gun picked up: a few magazines with it (ARENA_AIRDROP_GUN_RESERVE_MAGS) - all it gets. */
+    onGunPickup(player: Player, gunType: string): void {
+        if (!ARENA_AIRDROP_WEAPONS.includes(gunType)) return;
+        const gun = GunDefs[gunType];
+        if (!gun || !player.invManager.isValid(gun.ammo)) return;
+        const ammo = gun.ammo as InventoryItem;
+        const add = player.weaponManager.getAmmoStats(gun).maxClip * ARENA_AIRDROP_GUN_RESERVE_MAGS;
+        player.invManager.set(ammo, Math.min(player.invManager.getMaxCapacity(ammo), player.invManager.get(ammo) + add));
+        player.inventoryDirty = true;
     }
 
     /** The most kills: the kill leader banner. */

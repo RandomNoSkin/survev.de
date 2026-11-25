@@ -37,7 +37,6 @@ export const ARENA_PERK_DEFS: Record<string, ArenaPerkDef> = {
         description: "Revive teammates almost instantly. Your medical items (and their damage resistance) affect all nearby players.",
         fastRevive: true,
     },
-    endless_ammo: { description: "Guns always reload to full." },
     bonus_assault: {
         description: "Your bullets go straight through vests (helmets still protect).",
         replacesEffect: true,

@@ -125,7 +125,7 @@ describe("kill streaks", () => {
         expect(ready(rules, r)).toBeUndefined();
     });
 
-    test("Juggernaut: a full minigun, level 3 helmet, the usual vest, nothing else - the loadout back once it's empty", () => {
+    test("Juggernaut: a full minigun, level 3 helmet, level 2 vest instead of guns / armor (grenades, heals stay) - all back once it's empty", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
@@ -134,25 +134,30 @@ describe("kill streaks", () => {
         expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("m134");
         expect(r.weapons[GameConfig.WeaponSlot.Primary].ammo).toBe(GunDefs.m134.maxClip);
         expect(r.weapons[GameConfig.WeaponSlot.Secondary].type).toBe("");
-        expect(r.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("");
-        expect([r.helmet, r.chest]).toStrictEqual(["helmet03", ARENA_GEAR.chest]);
+        expect([r.helmet, r.chest]).toStrictEqual(["helmet03", "chest02"]);
         expect(r.invManager.get("762mm")).toBe(0);
-        expect(r.invManager.get("bandage")).toBe(0);
+        // grenades and heals stay
+        expect(r.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("frag");
+        expect(r.invManager.get("frag")).toBeGreaterThan(0);
+        expect(r.invManager.get("bandage")).toBe(ARENA_GEAR.heals.bandage);
         // no picking up guns / armor, nothing to drop
         expect(rules.allowsPickup(r, "ak47")).toBe(false);
         expect(rules.allowsPickup(r, "helmet03")).toBe(false);
         expect(rules.canDrop(r, "m134")).toBe(false);
-        // the magazine empty: the loadout (and its armor) back
+        // the magazine empty: the guns (and the armor) from before back - heals used meanwhile stay used
+        r.invManager.set("bandage", 1);
         r.weapons[GameConfig.WeaponSlot.Primary].ammo = 0;
         tick(game, 0.1);
         expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("hk416");
+        expect(r.weapons[GameConfig.WeaponSlot.Secondary].type).toBe("p30l");
+        expect(r.invManager.get("bandage")).toBe(1);
         expect([r.helmet, r.chest]).toStrictEqual([ARENA_GEAR.helmet, ARENA_GEAR.chest]);
         expect(active(rules, r)).toBeUndefined();
         // a dead Juggernaut drops no minigun
         streakOf(game, rules, r, b, 0);
     });
 
-    test("the endless M249 [+] Juggernaut: default armor, never runs dry, its kills count for Eagle Eye", () => {
+    test("the endless M249 [+] Juggernaut: default helmet, level 2 vest, never runs dry, its kills count for Eagle Eye", () => {
         const { game, rules, red, blue } = domination();
         const [r] = red;
         const [b] = blue;
@@ -160,7 +165,8 @@ describe("kill streaks", () => {
         streakOf(game, rules, r, b, K.juggernaut);
         expect(rules.useKillstreak(r)).toBe(true);
         expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("modified_m249");
-        expect([r.helmet, r.chest]).toStrictEqual([ARENA_GEAR.helmet, ARENA_GEAR.chest]);
+        expect([r.helmet, r.chest]).toStrictEqual([ARENA_GEAR.helmet, "chest02"]);
+        expect(r.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("frag");
         expect(r.weaponManager.isInfinite(GunDefs.modified_m249)).toBe(true);
         tick(game, 0.5);
         expect(active(rules, r)).toBe("modified_m249");
@@ -170,6 +176,32 @@ describe("kill streaks", () => {
         kill(r, b);
         expect(game.lootBarn.loots.filter((l) => !l.destroyed && l.type === "modified_m249")).toHaveLength(0);
         expect(r.perks.some((p) => p.type === "endless_ammo")).toBe(false);
+    });
+
+    test("the kill streak key takes a Juggernaut off (nothing else to fire) - an earned bonus fires first", () => {
+        const { game, rules, red, blue } = domination();
+        const [r] = red;
+        const [b] = blue;
+        r.arenaStreaks = { ...r.arenaStreaks, juggernaut: "modified_m249" };
+        // nothing fired, no Juggernaut: the key does nothing
+        expect(rules.useKillstreak(r)).toBe(false);
+        streakOf(game, rules, r, b, K.juggernaut);
+        expect(rules.useKillstreak(r)).toBe(true);
+        expect(active(rules, r)).toBe("modified_m249");
+        // two kills more: the air strike earned - the key fires that, the Juggernaut stays
+        streakOf(game, rules, r, b, K.airstrike - K.juggernaut);
+        expect(ready(rules, r)).toBe("strobe");
+        expect(rules.useKillstreak(r)).toBe(true);
+        expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("modified_m249");
+        // nothing left to fire: the key ends it - the guns / armor from before, the strobe kept
+        expect(rules.useKillstreak(r)).toBe(true);
+        expect(r.weapons[GameConfig.WeaponSlot.Primary].type).toBe("hk416");
+        expect([r.helmet, r.chest]).toStrictEqual([ARENA_GEAR.helmet, ARENA_GEAR.chest]);
+        expect(r.perks.some((p) => p.type === "endless_ammo")).toBe(false);
+        expect(r.weapons[GameConfig.WeaponSlot.Throwable].type).toBe("strobe");
+        expect(active(rules, r)).toBe("strobe");
+        // and once more: nothing (not a Juggernaut any more)
+        expect(rules.useKillstreak(r)).toBe(false);
     });
 
     test("Eagle Eye (when unlocked): an 8x scope until the death; locked: the tier gives nothing", () => {

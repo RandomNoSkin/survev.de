@@ -209,11 +209,19 @@ export class DominationHud {
             );
         }
         // the ones running
+        // (a Juggernaut with nothing to fire: the key takes it off again - see Domination.useKillstreak)
+        const keyLeaves = !this.streakReady || tierOf(this.streakReady)?.kind === "juggernaut";
         for (const item of this.streakActive) {
+            const leave = keyLeaves && tierOf(item)?.kind === "juggernaut";
             this.streakEl.append(
                 $("<div/>", { class: "dom-streak-row" }).append(
                     $("<div/>", { class: "dom-streak-icon dom-streak-icon-small" }).css("background-image", `url(${arenaIconOf(item)})`),
-                    $("<div/>", { class: "dom-streak-active", text: `${tierOf(item)?.name ?? ""} active` }),
+                    $("<div/>", { class: "dom-streak-active" }).append(
+                        $("<span/>", { text: `${tierOf(item)?.name ?? ""} active${leave ? " · " : ""}` }),
+                        ...(leave
+                            ? [$("<span/>", { class: "dom-streak-key", text: this.streakKeyShown || "?" }), $("<span/>", { text: " leave" })]
+                            : []),
+                    ),
                 ),
             );
         }

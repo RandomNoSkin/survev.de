@@ -94,76 +94,79 @@ export const ARENA_LOADOUT_SLOTS = 3;
  */
 export const ARENA_WEAPON_BUDGET = 100;
 export const ARENA_WEAPON_POINTS: Record<string, number> = {
-    // pistols
-    m9: 10,
+    // (2026-11-22 repricing: from the Comp map's damage per game over 30 days - the
+    // stats page's weapon leaderboard - smoothed toward the old price for guns with
+    // few games; guns without data kept theirs; the shotguns kept theirs too. Origin / S&W 500 set
+    // higher by hand.)
+    // pistols (no M9, OT-38, M93R)
     glock: 10,
-    m1911: 10,
-    ot38: 10,
-    ots38: 10,
-    p30l: 15,
-    colt45: 15,
-    deagle: 30,
-    sw500: 35,
-    // dual pistols
-    m9_dual: 20,
-    ot38_dual: 20,
-    m93r_dual: 25,
+    m1911: 20,
+    ots38: 40,
+    p30l: 30,
+    colt45: 25,
+    deagle: 45,
+    sw500: 70,
+    // dual pistols (none of those either)
     glock_dual: 30,
-    m1911_dual: 35,
-    p30l_dual: 35,
-    colt45_dual: 40,
-    ots38_dual: 45,
-    deagle_dual: 50,
+    m1911_dual: 50,
+    p30l_dual: 40,
+    colt45_dual: 55,
+    ots38_dual: 65,
+    deagle_dual: 55,
     // SMGs
-    m93r: 10,
     mp5: 15,
     mac10: 20,
     ump9: 20,
-    p90: 45,
-    vss: 50,
-    vector: 50,
+    p90: 40,
+    vss: 55,
+    vector: 40,
     scorpion: 55,
     // assault rifles
-    groza: 25,
+    groza: 20,
     hk416: 30,
-    ak47: 40,
-    ak74: 45,
+    ak47: 30,
+    ak74: 50,
     famas: 50,
     m4a1: 50,
-    imbel: 55,
-    scar: 55,
+    imbel: 65,
+    scar: 50,
     an94: 60,
-    grozas: 60,
+    grozas: 55,
     // LMGs
     dp28: 50,
-    bar: 50,
-    qbb97: 55,
+    bar: 55,
+    qbb97: 50,
     l86: 55,
-    m249: 70,
-    pkp: 70,
+    m249: 60,
+    pkp: 65,
     // DMRs
-    mk12: 35,
-    mkg45: 40,
+    mk12: 30,
+    mkg45: 50,
     m39: 40,
-    svd: 45,
-    garand: 55,
+    svd: 65,
+    garand: 65,
     // bolt actions
-    model94: 35,
-    henry: 40,
-    scout_elite: 45,
-    blr: 65,
-    mosin: 70,
-    // shotguns
+    model94: 45,
+    henry: 50,
+    scout_elite: 50,
+    blr: 70,
+    mosin: 75,
+    // shotguns (no M1100) - set by hand: their battle royale numbers undersell them here
     mp220: 45,
-    m1100: 50,
     m870: 50,
     spas16: 50,
-    hawk: 60,
+    hawk: 75,
     saiga: 60,
-    origin: 60,
+    origin: 70,
     m1014: 70,
-    spas12: 75,
+    spas12: 70,
 };
+
+/** The loadout's guns (ARENA_WEAPON_POINTS - also one picked up from a dead player) never
+ *  run out: reloads take nothing from the backpack, and nobody spawns with ammo for them
+ *  (so no Endless Ammo perk in the arena). Guns from elsewhere (the airdrop kill streak's)
+ *  have only the rounds they came with - ARENA_AIRDROP_GUN_RESERVE_MAGS. */
+export const ARENA_INFINITE_LOADOUT_AMMO = true;
 
 /** Everyone has these from the start (level 1) - and every gun of ARENA_WEAPON_POINTS. */
 export const ARENA_STARTER_ITEMS = [
@@ -181,17 +184,16 @@ export const ARENA_STARTER_ITEMS = [
  */
 export const ARENA_LEVEL_UNLOCKS: Record<number, string[]> = {
     2: ["aoe_heal"],
-    3: ["endless_ammo"],
-    4: ["supply_flare_gun"],
-    5: ["firepower"],
-    6: ["flak_jacket"],
-    7: ["windwalk"],
-    8: ["self_revive"],
-    9: ["quickswitch"],
-    10: ["steelskin"],
-    11: ["bonus_assault"],
+    3: ["supply_flare_gun"],
+    4: ["firepower"],
+    5: ["flak_jacket"],
+    6: ["windwalk"],
+    7: ["self_revive"],
+    8: ["quickswitch"],
+    9: ["steelskin"],
+    10: ["bonus_assault"],
 };
-export const ARENA_MAX_LEVEL = 11;
+export const ARENA_MAX_LEVEL = 10;
 
 /** The kills of the endless M249 [+] Juggernaut count under this name (the M249 [+] as a
  *  weapon is just an M249 skin - its kills count for the M249). */

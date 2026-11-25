@@ -25,7 +25,8 @@ export const ARENA_STREAKS: ArenaStreakTier[] = [
     { kind: "airdrop", name: "Airdrop", kills: 2, options: ["flare_gun", "supply_flare_gun"] },
     /** an 8x scope until the death */
     { kind: "eagle_eye", name: "Eagle Eye", kills: 3, options: ["8xscope"] },
-    /** a minigun (or the endless M249 [+]) instead of the loadout, until the magazine is empty */
+    /** a minigun (or the endless M249 [+]) instead of the guns and armor, until the magazine
+     *  is empty (the M249: the death) or the kill streak key is pressed again */
     { kind: "juggernaut", name: "Juggernaut", kills: 5, options: ["m134", "modified_m249"] },
     /** a strobe: an air strike where it lands */
     { kind: "airstrike", name: "Air Strike", kills: 7, options: ["strobe"] },
@@ -35,8 +36,8 @@ export const ARENA_STREAKS: ArenaStreakTier[] = [
 export const ARENA_STREAK_DESCRIPTIONS: Record<string, string> = {
     flare_gun: "A flare gun in your melee slot. Fire it to call in a crate with the weapon you picked below.",
     supply_flare_gun: "A supply flare in your melee slot. Fire it to call in a crate with a level 3 helmet.",
-    m134: "A full M134 and a level 3 helmet - nothing else. You get your loadout back once the minigun is empty.",
-    modified_m249: "An M249 [+] with endless ammo and the normal arena armor, until you die.",
+    m134: "A full M134, a level 3 helmet and a level 2 vest instead of your guns and armor (grenades and heals stay). You get them back once the minigun is empty - or press the kill streak key.",
+    modified_m249: "An M249 [+] with endless ammo and a level 2 vest instead of your guns and armor (grenades and heals stay). Press the kill streak key to get them back.",
     "8xscope": "An 8x scope until you die.",
     strobe: "An IR strobe: throw it to call in an air strike where it lands.",
 };
@@ -46,14 +47,17 @@ export const ARENA_STREAK_ITEMS = ARENA_STREAKS.flatMap((t) => t.options);
 
 /** What a Juggernaut wears and whether its gun never runs dry (then: until the death). */
 export const ARENA_JUGGERNAUTS: Record<string, { helmet?: string; chest?: string; endless: boolean }> = {
-    // a level 3 helmet, the usual arena vest
-    m134: { helmet: "helmet03", endless: false },
-    // the default arena armor (ARENA_GEAR)
-    modified_m249: { endless: true },
+    // a level 3 helmet, a level 2 vest
+    m134: { helmet: "helmet03", chest: "chest02", endless: false },
+    // the arena helmet (ARENA_GEAR), a level 2 vest
+    modified_m249: { chest: "chest02", endless: true },
 };
 
 /** The guns a player can have the flare's airdrop bring (picked in the loadout menu). */
 export const ARENA_AIRDROP_WEAPONS = ["awc", "barrett", "sv98", "usas", "pkm", "scarssr", "vector45", "ash12"];
+/** An airdrop gun comes with a full magazine and this many magazines more in the
+ *  backpack (picked up) - all it ever gets: no ammo from kills, it doesn't drop on death. */
+export const ARENA_AIRDROP_GUN_RESERVE_MAGS = 2;
 /** What the supply flare's crate holds: a better helmet (a level 2 vest was too much). */
 export const ARENA_SUPPLY_DROP_LOOT = ["helmet03"];
 /** Called in crates come this much faster than usual (the plane and the fall). */

@@ -1,3 +1,4 @@
+import type { GunDef } from "../../../../shared/defs/gameObjects/gunDefs";
 import type { Group } from "../group";
 import type { Vec2 } from "../../../../shared/utils/v2";
 import type { DamageParams } from "../objects/gameObject";
@@ -42,7 +43,12 @@ export interface ModeRules {
     hasteSpeed?(player: Player, type: number, usual: number): number;
     /** The speed holding a weapon gives (default: its def's `speed.equip`). */
     equipSpeed?(player: Player, weapon: string, usual: number): number;
-    /** Whether the player may drop this item (default: yes). */
+    /** This gun never runs out for the player (on top of the usual endless ammo). */
+    infiniteAmmo?(player: Player, gunDef: GunDef): boolean;
+    /** The player just picked up a gun (after it went into its slot). */
+    onGunPickup?(player: Player, gunType: string): void;
+    /** Whether the player may drop this item (default: yes) - a gun swapped for a
+     *  picked up one too (then it's just gone). */
     canDrop?(player: Player, item: string): boolean;
     /** What a destroyed obstacle drops instead of its own loot (a called in crate);
      *  undefined: the usual. */
