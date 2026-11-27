@@ -330,6 +330,7 @@ export const _allowedEmotes = [
     "emote_logocloud",
     "emote_ghost_base",
     "emote_ohnah",
+    "emote_steamhappy",
     "emote_pooface",
     "emote_ok",
     "emote_rainbow",

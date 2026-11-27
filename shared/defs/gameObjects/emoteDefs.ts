@@ -1819,6 +1819,18 @@ export const EmotesDefs: Record<string, EmoteDef> = {
         teamOnly: false,
         category: EmoteCategory.Faces,
     },
+    // RESERVED: private cosmetic — DO NOT USE IN PASS
+    emote_steamhappy: {
+        type: "emote",
+        name: "SteamHappy",
+        rarity: Rarity.Mythic,
+        texture: "face-steamhappy.img",
+        sound: "emote_01",
+        channel: "ui",
+        teamOnly: false,
+        category: EmoteCategory.Faces,
+        creatorDiscordId: "873147471910547458",
+    },
     emote_pooface: {
         type: "emote",
         name: "Poo Face",
