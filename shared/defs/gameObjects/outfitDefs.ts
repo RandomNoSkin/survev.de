@@ -3199,6 +3199,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         name: "Luminize",
         noDropOnDeath: true,
         rarity: Rarity.Mythic,
+        creatorDiscordId: "873147471910547458",
         lore: "Wings of pearl and light.",
         skinImg: {
             baseTint: 0xffffff,
@@ -3222,6 +3223,7 @@ const SkinDefs: Record<string, OutfitDef> = {
         name: "Void Flare",
         noDropOnDeath: true,
         rarity: Rarity.Mythic,
+        creatorDiscordId: "873147471910547458",
         lore: "Wings of crimson night.",
         skinImg: {
             baseTint: 0xffffff,
