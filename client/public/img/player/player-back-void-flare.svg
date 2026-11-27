@@ -11,33 +11,7 @@
 
   <path d="M132.925 78.1581C134.873 45.911 110.311 18.188 78.0643 16.2371C45.8173 14.2863 18.0962 38.8463 16.1476 71.0935C14.199 103.341 38.7608 131.064 71.0078 133.015C103.255 134.965 130.976 110.405 132.925 78.1581Z" stroke="url(#packAccentEcl)" stroke-width="5"/>
 
-  <g transform="translate(33.26 92.52) rotate(156.4) scale(0.86)">
-    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
-  </g>
-  <g transform="translate(30.45 83.70) rotate(168.2) scale(0.86)">
-    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
-  </g>
-  <g transform="translate(29.50 74.50) rotate(180) scale(0.86)">
-    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
-  </g>
-  <g transform="translate(30.45 65.30) rotate(191.8) scale(0.86)">
-    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
-  </g>
-  <g transform="translate(33.26 56.48) rotate(203.6) scale(0.86)">
-    <path d="M-8 -3.8 H6 A3.8 3.8 0 0 1 6 3.8 H-8 A3.8 3.8 0 0 1 -8 -3.8 Z" fill="#2E3044" stroke="black" stroke-width="2.6" stroke-linejoin="round"/>
-    <path d="M-6.5 0 C-3 -2.5, 3 -2.5, 6.5 0 C3 2.5, -3 2.5, -6.5 0 Z" fill="#FF4D73" stroke="#8E0F2C" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M-3 0 L3 0" stroke="#FFC2CF" stroke-width="1.2" stroke-linecap="round"/>
-  </g>
-
-  <g transform="translate(38.83 106.62) rotate(228.0)">
+  <g transform="translate(40.0 98.5) rotate(62.0) scale(1.30)">
     <path d="M -1.5 1 L -6.8 8.2 L -3.6 9.2 L 0.5 2 Z" fill="#1B2138" stroke="black" stroke-width="2" stroke-linejoin="round"/>
     <path d="M 1.5 1 L 6.8 8.2 L 3.6 9.2 L -0.5 2 Z" fill="#1B2138" stroke="black" stroke-width="2" stroke-linejoin="round"/>
     <path d="M -1.5 -1.4 L -8.6 -3.8 C -9.2 -1.2, -9.2 1.4, -8.4 3.4 L -1.5 1.8 Z" fill="#2E385C" stroke="black" stroke-width="2.1" stroke-linejoin="round"/>
@@ -45,7 +19,7 @@
     <path d="M -3 0 L -6.5 -0.6 M 3 0 L 6.5 -0.6" stroke="#6475A6" stroke-width="1.2" stroke-linecap="round"/>
     <rect x="-2.2" y="-2.2" width="4.4" height="4.4" rx="1" fill="#3A4670" stroke="black" stroke-width="1.9"/>
   </g>
-  <g transform="translate(38.83 42.38) rotate(312.0)">
+  <g transform="translate(40.0 50.5) rotate(118.0) scale(1.30)">
     <path d="M -1.5 1 L -6.8 8.2 L -3.6 9.2 L 0.5 2 Z" fill="#1B2138" stroke="black" stroke-width="2" stroke-linejoin="round"/>
     <path d="M 1.5 1 L 6.8 8.2 L 3.6 9.2 L -0.5 2 Z" fill="#1B2138" stroke="black" stroke-width="2" stroke-linejoin="round"/>
     <path d="M -1.5 -1.4 L -8.6 -3.8 C -9.2 -1.2, -9.2 1.4, -8.4 3.4 L -1.5 1.8 Z" fill="#2E385C" stroke="black" stroke-width="2.1" stroke-linejoin="round"/>
@@ -54,7 +28,7 @@
     <rect x="-2.2" y="-2.2" width="4.4" height="4.4" rx="1" fill="#3A4670" stroke="black" stroke-width="1.9"/>
   </g>
 
-  <g transform="translate(30.5 74.5)">
+  <g transform="translate(32.0 74.5)">
     <path d="M -11.5 0 L -3.3 -3.0 L 0 -9.5 L 3.3 -3.0 L 11.5 0 L 3.3 3.0 L 0 9.5 L -3.3 3.0 Z" fill="#F5F8FF"/>
     <path d="M 0 -9.5 L 3.3 -3.0 L 11.5 0 L 3.3 3.0 L 0 9.5 L 1.2 1.6 L 3.6 0 L 1.2 -1.6 Z" fill="#8394B2"/>
     <path d="M -11.5 0 L -3.3 -3.0 L 0 -9.5 L 3.3 -3.0 L 11.5 0 L 3.3 3.0 L 0 9.5 L -3.3 3.0 Z" stroke="black" stroke-width="2.4" stroke-linejoin="round"/>

@@ -3213,7 +3213,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             frontSprite: "player-accessory-luminize.img",
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xb9aef8,
         },
     }),
@@ -3237,7 +3237,7 @@ const SkinDefs: Record<string, OutfitDef> = {
             chestInnerOutline: [3, 4],
         },
         lootImg: {
-            sprite: "loot-shirt-outfitBase.img",
+            sprite: "loot-shirt-01.img",
             tint: 0xf03a62,
         },
     }),
